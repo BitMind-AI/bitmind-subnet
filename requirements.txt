@@ -1,1 +1,21 @@
 bittensor
+torch
+scikit-learn
+loguru
+# tensorflow[and-cuda]==2.14.0
+tensorflow
+opencv-python
+numpy
+pillow
+pandas
+diffusers
+transformers
+matplotlib
+kaggle
+torchvision
+torchaudio
+#cudatoolkit
+datasets
+accelerate
+tensorboardx
+tf-keras

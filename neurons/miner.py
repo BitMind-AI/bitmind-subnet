@@ -1,7 +1,7 @@
 # The MIT License (MIT)
 # Copyright © 2023 Yuma Rao
-# TODO(developer): Set your name
-# Copyright © 2023 <your name>
+# developer: dubm
+# Copyright © 2023 Bitmind
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -17,15 +17,24 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+from tensorflow.keras.models import load_model
+from PIL import Image
+import torchvision.transforms as transforms
+import bittensor as bt
+import tensorflow as tf
+import numpy as np
+import torch.nn as nn
+import torch
+import base64
 import time
 import typing
-import bittensor as bt
+import cv2
+import io
 
-# Bittensor Miner Template:
-import template
-
-# import base miner class which takes care of most of the boilerplate
-from template.base.miner import BaseMinerNeuron
+from base_miner.networks.resnet import resnet50
+from bitmind.base.miner import BaseMinerNeuron
+from bitmind.protocol import ImageSynapse
+from bitmind.miner.predict import predict
 
 
 class Miner(BaseMinerNeuron):
@@ -39,31 +48,39 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-
-        # TODO(developer): Anything specific to your use case you can do here
+        self.model = resnet50(num_classes=1)
+        weight_path = 'mining_models/npr_v4.pth'
+        self.model.load_state_dict(torch.load(weight_path, map_location='cpu'))
+        self.model.eval()
 
     async def forward(
-        self, synapse: template.protocol.Dummy
-    ) -> template.protocol.Dummy:
+        self, synapse: ImageSynapse
+    ) -> ImageSynapse:
         """
-        Processes the incoming 'Dummy' synapse by performing a predefined operation on the input data.
-        This method should be replaced with actual logic relevant to the miner's purpose.
+        Processes the incoming ImageSynapse, running each image in the 'images' field through TODO deepfake
+        detection model(s)
 
         Args:
-            synapse (template.protocol.Dummy): The synapse object containing the 'dummy_input' data.
+            synapse (ImageSynapse): The synapse object containing the list of b64 encoded images in the
+            'images' field.
 
         Returns:
-            template.protocol.Dummy: The synapse object with the 'dummy_output' field set to twice the 'dummy_input' value.
+            ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
 
-        The 'forward' function is a placeholder and should be overridden with logic that is appropriate for
-        the miner's intended operation. This method demonstrates a basic transformation of input data.
         """
-        # TODO(developer): Replace with actual implementation logic.
-        synapse.dummy_output = synapse.dummy_input * 2
+        try:
+            image_bytes = base64.b64decode(synapse.image)
+            image = Image.open(io.BytesIO(image_bytes))
+            pred = predict(self.model, image)
+            synapse.prediction = pred
+        except Exception as e:
+            print(e)
+
+        print("PREDICTION:", synapse.prediction)
         return synapse
 
     async def blacklist(
-        self, synapse: template.protocol.Dummy
+        self, synapse: ImageSynapse
     ) -> typing.Tuple[bool, str]:
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
@@ -74,7 +91,7 @@ class Miner(BaseMinerNeuron):
         requests before they are deserialized to avoid wasting resources on requests that will be ignored.
 
         Args:
-            synapse (template.protocol.Dummy): A synapse object constructed from the headers of the incoming request.
+            synapse (ImageSynapse): A synapse object constructed from the headers of the incoming request.
 
         Returns:
             Tuple[bool, str]: A tuple containing a boolean indicating whether the synapse's hotkey is blacklisted,
@@ -94,7 +111,6 @@ class Miner(BaseMinerNeuron):
 
         Otherwise, allow the request to be processed further.
         """
-
         if synapse.dendrite is None or synapse.dendrite.hotkey is None:
             bt.logging.warning("Received a request without a dendrite or hotkey.")
             return True, "Missing dendrite or hotkey"
@@ -124,7 +140,7 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
-    async def priority(self, synapse: template.protocol.Dummy) -> float:
+    async def priority(self, synapse: ImageSynapse) -> float:
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.
@@ -132,7 +148,7 @@ class Miner(BaseMinerNeuron):
         This implementation assigns priority to incoming requests based on the calling entity's stake in the metagraph.
 
         Args:
-            synapse (template.protocol.Dummy): The synapse object that contains metadata about the incoming request.
+            synapse (ImageSynapse): The synapse object that contains metadata about the incoming request.
 
         Returns:
             float: A priority score derived from the stake of the calling entity.
@@ -147,23 +163,29 @@ class Miner(BaseMinerNeuron):
         if synapse.dendrite is None or synapse.dendrite.hotkey is None:
             bt.logging.warning("Received a request without a dendrite or hotkey.")
             return 0.0
-        
+
         # TODO(developer): Define how miners should prioritize requests.
         caller_uid = self.metagraph.hotkeys.index(
             synapse.dendrite.hotkey
         )  # Get the caller index.
-        priority = float(
+
+        prirority = float(
             self.metagraph.S[caller_uid]
         )  # Return the stake as the priority.
         bt.logging.trace(
-            f"Prioritizing {synapse.dendrite.hotkey} with value: {priority}"
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
         )
-        return priority
+        return prirority
+
+    def save_state(self):
+        pass
 
 
 # This is the main function, which runs the miner.
 if __name__ == "__main__":
+    import warnings
+    warnings.filterwarnings("ignore")
     with Miner() as miner:
         while True:
-            bt.logging.info(f"Miner running... {time.time()}")
+            bt.logging.info("Miner running...", time.time())
             time.sleep(5)

@@ -160,6 +160,5 @@ cython_debug/
 #.idea/
 
 testing/
-
-# Editors
-.vscode/settings.json
+data/
+checkpoints/

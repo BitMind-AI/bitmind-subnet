@@ -1,0 +1,1 @@
+pm2 start python --name miner -- neurons/miner.py --netuid 168 --subtensor.network test --wallet.name testnet_vali --wallet.hotkey testnet_miner --axon.port 8091 --blacklist.force_validator_permit True 

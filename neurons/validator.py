@@ -1,7 +1,7 @@
 # The MIT License (MIT)
 # Copyright © 2023 Yuma Rao
-# TODO(developer): Set your name
-# Copyright © 2023 <your name>
+# developer: dubm
+# Copyright © 2023 Bitmind
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -17,18 +17,14 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-
+import bittensor as bt
 import time
 
-# Bittensor
-import bittensor as bt
-
-# Bittensor Validator Template:
-import template
-from template.validator import forward
-
-# import base validator class which takes care of most of the boilerplate
-from template.base.validator import BaseValidatorNeuron
+from bitmind.validator import forward
+from bitmind.base.validator import BaseValidatorNeuron
+from bitmind.random_image_generator import RandomImageGenerator
+from bitmind.image_dataset import ImageDataset
+from bitmind.constants import DATASET_META
 
 
 class Validator(BaseValidatorNeuron):
@@ -46,7 +42,13 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info("load_state()")
         self.load_state()
 
-        # TODO(developer): Anything specific to your use case you can do here
+        print("Loading real datasets")
+        self.real_image_datasets = [
+            ImageDataset(ds['path'], 'test', ds.get('name', None), ds['create_splits'])
+            for ds in DATASET_META['real']
+        ]
+
+        self.random_image_generator = RandomImageGenerator(use_random_diffuser=True, diffuser_name=None)
 
     async def forward(self):
         """
@@ -63,7 +65,9 @@ class Validator(BaseValidatorNeuron):
 
 # The main function parses the configuration and runs the validator.
 if __name__ == "__main__":
+    import warnings
+    warnings.filterwarnings("ignore")
     with Validator() as validator:
         while True:
-            bt.logging.info(f"Validator running... {time.time()}")
+            bt.logging.info("Validator running...", time.time())
             time.sleep(5)
