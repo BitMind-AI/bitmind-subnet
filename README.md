@@ -2,7 +2,7 @@
     <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="200"/>
 </center>
 
-# Bitmind Subnet
+# AI Image Detection Subnet
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
