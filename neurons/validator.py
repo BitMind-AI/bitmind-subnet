@@ -20,6 +20,7 @@
 import bittensor as bt
 import time
 
+from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.random_image_generator import RandomImageGenerator
@@ -49,6 +50,7 @@ class Validator(BaseValidatorNeuron):
         ]
 
         self.random_image_generator = RandomImageGenerator(use_random_diffuser=True, diffuser_name=None)
+        self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):
         """
