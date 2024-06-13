@@ -90,13 +90,9 @@ class BaseValidatorNeuron(BaseNeuron):
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
             try:
-                #self.subtensor.serve_axon(
-                #    netuid=self.config.netuid,
-                #    axon=self.axon,
-                #)
-                
-                self.axon.attach(
-                    forward_fn=self.organic_forward
+                self.subtensor.serve_axon(
+                    netuid=self.config.netuid,
+                    axon=self.axon
                 )
 
                 bt.logging.info(
@@ -148,6 +144,16 @@ class BaseValidatorNeuron(BaseNeuron):
         try:
             while True:
                 bt.logging.info(f"step({self.step}) block({self.block})")
+
+                if self.config.proxy.port:
+                    try:
+                        self.validator_proxy.get_credentials()
+                        bt.logging.info(
+                            "Validator proxy ping to proxy-client successfully"
+                        )
+                    except Exception:
+                        bt.logging.warning("Warning, proxy can't ping to proxy-client.")
+
 
                 # Run multiple forwards concurrently.
                 self.loop.run_until_complete(self.concurrent_forward())
