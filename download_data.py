@@ -13,10 +13,11 @@ def download_datasets(download_mode: str, cache_dir: str):
         cache_dir: huggingface cache directory. ~/.cache/huggingface by default 
     """ 
     os.makedirs(args.cache_dir, exist_ok=True)
-    for dataset_name in datasets_to_download:
-        print(f"Downloading {dataset_name} dataset...")
-        load_dataset(dataset_name, cache_dir=args.cache_dir, )
-        print(f"Downloaded {dataset_name} dataset to {args.cache_dir}")
+    for dataset_type in DATASET_META:
+        for dataset in DATASET_META[dataset_type]:
+            print(f"Downloading {dataset['path']} dataset...")
+            load_dataset(dataset['path'], cache_dir=args.cache_dir, )
+            print(f"Downloaded {dataset['path']} dataset to {args.cache_dir}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Download Hugging Face datasets for validator challenge generation and miner training.')
@@ -28,4 +29,4 @@ if __name__ == '__main__':
     if args.force_redownload:
         download_mode = "force_redownload" 
         
-    main(download_mode, args.cache_dir)
+    download_datasets(download_mode, args.cache_dir)
