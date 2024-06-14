@@ -18,7 +18,7 @@
 
 **IMPORTANT**: If you are new to Bittensor, we suggest you get comfortable with the basics at the [Bittensor Website](https://bittensor.com/) before proceeding to the [Setup](#setup) section.
 
-Introducing Bittensor Subnet X (AI Image Detection Subnet): A Platform for Identifying Generated Media.
+Introducing Bittensor Subnet X (AI Image Detection Subnet): A Platform for Identifying AI Generated Media.
 
 The recent proliferation of generative models capable of creating high qualitiy, convincingly realistic images has brought with it an urgent need for reliable mechanisms for distinguishing between real and fake images. This is a Bittensor subnet that incentivizes innovation in such mechanisms. The quality and reliability of the AI Image Detection Subnet are inherently tied to the incentivized, decentralized nature of Bittensor - decentralization mitigates the centralization risk of single-model approaches in this problem space, and incentivazation facilitates innovation within a rich, competitive ecosystem. Our easy-to-use API and frontend (COMING SOON) democratize access to the collective intelligence of our miner pool, realizing a powerful tool that will help alleviate the issues of misinformation and deception that now pervade modern media and threaten deomocracy at a global scale. 
 
