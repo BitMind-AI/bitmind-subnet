@@ -50,7 +50,7 @@ class Validator(BaseValidatorNeuron):
         ]
 
         self.random_image_generator = RandomImageGenerator(use_random_diffuser=True, diffuser_name=None)
-        self.validator_proxy = ValidatorProxy(self)
+        #self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):
         """
