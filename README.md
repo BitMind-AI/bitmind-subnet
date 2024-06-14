@@ -16,50 +16,51 @@
 
 ## Introduction
 
-**IMPORTANT**: If you are new to Bittensor, please review the [Bittensor Website](https://bittensor.com/) before proceeding to the [Setup](#setup) section.
+**IMPORTANT**: If you are new to Bittensor, we suggest you get comfortable with the basics at the [Bittensor Website](https://bittensor.com/) before proceeding to the [Setup](#setup) section.
+
+Introducing Bittensor Subnet X (AI Image Detection Subnet): A Platform for Identifying Generated Media.
+
+The recent proliferation of generative models capable of creating high qualitiy, convincingly realistic images has brought with it an urgent need for reliable mechanisms for distinguishing between real and fake images. This is a Bittensor subnet that incentivizes innovation in such mechanisms. The quality and reliability of the AI Image Detection Subnet are inherently tied to the incentivized, decentralized nature of Bittensor - decentralization mitigates the centralization risk of single-model approaches in this problem space, and incentivazation facilitates innovation within a rich, competitive ecosystem. 
+
+Our easy-to-use API and frontend (COMING SOON) democratize access to the collective intelligence of our miner pool, the issues of misinformation and deception that now pervade modern media and threaten deomocracy at a global scale. 
 
 
-Introducing Bittensor Subnet X (Deep Fake Image Detection Subnet): A Platform for Identifying and Mitigating Deep Fake Image Content.
+TODO: Add updated subnet architecture diagram
 
-The Deep Fake Image Detection Subnet is at the vanguard of digital authenticity, providing a novel ecosystem  tailored for AI developers and researchers to advance the field of fake content detection. This platform is intricately designed to offer accurate, real-time detection of deep fake images through API usage, leveraging the decentralized Bittensor network. It is a pivotal tool in the quest to ensure the integrity of digital media by facilitating the incentivized detection and mitigation of generated and manipulated content.
+The AI Generated Image Detection Subnet is composed of a suite of state-of-the-art generative and discriminative AI models, and will continuously evolve to cover more generative algorithms. 
 
-Our initiative marks a significant advancement in securing digital environments, addressing the growing concerns over deep fake technology. By iteratively expanding the subnet’s coverage to a wide range of content types, we aim to alleviate the issues of misinformation and digital deception that pervade modern media. The quality and reliability of the Deep Fake Image Detection Subnet are inherently tied to the decentralized nature of the Bittensor network, mitigating the centralization risk of single-model approaches to this problem space.Our easy-to-use frontend acts as an interface to our miner pool, which realizes and democratizes access to a high-fidelity ensemble of predictors.
+- Miners are tasked with running a binary classifier capable of discriminating between real and AI generated images
+    - Our base miner is from the 2024 CVPR Paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
+    - In the interest of helping our miners experiment with different cutting edge strategies, will continue implementing more detection solutions based on recent papers, and release training code and base weights.
+- Our validators are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
+    - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service. 
 
-The Deep Fake Image Detection Subnet employs advanced generative and discriminative AI models to enhance its detection capabilities, continuously evolving to counteract new methods of image manipulation. This approach involves generating and analyzing synthetic data to improve detection algorithms, akin to the strategies used by leading AI researchers.. Our base miner is based on the 2024 CVPR Paper Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection, which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
-
-By harnessing synthetic data, the Deep Fake Image Detection Subnet overcomes traditional data collection challenges, accelerating the development of robust and adaptive AI models. This platform is your gateway to mastering digital authenticity, offering the unique opportunity to train your models with data that captures the intricacies of deep fake detection. With our advanced tools and methodologies, you're not just identifying deep fakes; you're safeguarding the truth, providing a pathway to creating AI models that uphold the highest standards of digital integrity.
-
-Join us at the Deep Fake Image Detection Subnet, your partner in maintaining digital authenticity and leading the fight against misinformation. Be part of the solution and stay at the forefront of innovation with our cutting-edge detection tools – Defending Truth, Empowering the Future!
 
 ## Setup
 
-### Local Subtensor Setup
-
-To run locally follow Bittensor's <a href="https://github.com/opentensor/bittensor-subnet-template/blob/main/docs/running_on_staging.md">Running on Staging docs</a> to get a local version of Bittensor running
-
-- After cloning the subtensor repository (step 3), make sure to checkout the main branch before running the subsequent build step (step 4)<br>
-  `git checkout main`
-- If you're getting `eth-typing` warnings about ChainIds, run:<br>
-  `pip install --force-reinstall eth-utils==2.1.1`
-
 ### Before you proceed
 
-Before you proceed with the installation of the subnet, note the following:
+Before running a validator or miner, note the following:
 
 **IMPORTANT**: We **strongly recommend** before proceeding that you ensure you are running Subtensor locally to minimize chances of outages and improve the latency/connection. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary)
 
-**IMPORTANT:** Make sure you are aware of the minimum compute requirements for bitmind subnet. See the [Minimum compute YAML configuration](./min_compute.yml).
+**IMPORTANT:** Make sure you are aware of the minimum compute requirements for our subnet. See the [Minimum compute YAML configuration](./min_compute.yml).
 
 ### Installation
 
 Before starting make sure you have pm2, nano and any other useful tools installed.
-
+If you don't have them, install `git`, `pip` and a text editor like `nano` or `emacs` if you don't like `vi`
 ```bash
-apt update -y && apt-get install git -y && apt install python3-pip -y && apt install npm -y && npm install pm2@latest -g  && apt install nano
+sudo apt update -y && sudo apt-get install git -y && sudo apt install python3-pip -y && sudo apt install nano
 ```
 
-It is recommended you use a virtual environment to install the necessary requirements.
+Install `pm2` to use our scripts for running miners and validators.
+```bash
+sudo apt install npm -y && sudo npm install pm2@latest -g 
+```
 
+It is recommended you use a virtual environment to install the necessary requirements.<br>
+We like conda. You can get it with this [super quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and use it to create a virtual environment like this:
 ```
 conda create -n deepfake python=3.10 ipython
 conda activate deepfake
@@ -69,36 +70,48 @@ Download the repository, navigate to the folder and then install the necessary r
 
 ```bash
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
-conda create -n bitmind python=3.10 ipython
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
-pip install -r requirements.txt
 pip install -e .
 ```
 
 Prior to proceeding, ensure you have a registered hotkey on subnet XX testnet. If not, run the command
 
 ```bash
-btcli s register --netuid XX --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
+btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
 ```
 
-### Training a Model (more details coming soon)
-
-1. Modify `base_miner/train_miner.py` to improve performance of the base model.
-2. To train, run:
-
-```python
-cd base_miner && python train_miner.py
-```
+### Train
 
 To see performance improvements, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether.
 
-### Model Prediction / Inference
+To train a model, run the following command. The model with the lowest validation accuracy will be saved to `base_miner/checkpoints/<experiment_name>/model_epoch_best.pth`. 
+```python
+cd base_miner && python train_detector.py
+```
+If you prefer a notebook environment, you can instead train a model with `base_miner/train_detector.ipynb`
 
-- `neurons/miner.py` and `bitmind/miner/predict.py` contain code for loading a trained model and predicting on single images
-- More scripts and notebooks for batch predictions and model evaluation coming soon!
+Once you've trained your model, you can evaluate its performance on the test dataset in `base_miner/eval_detector.ipynb`.
 
-## Mining
+
+#### Update Miner Detector Model
+1. Optionally make a backup of the currently active model:
+   ```bash
+   cp mining_models/miner.pth mining_models/miner_<version>.pth
+   ```
+2. Replace the currently active model with your newly trained one. The next forward pass of your miner will load the new model.
+   ```bash
+   cp path/to/your/trained/model_epoch_best.pth mining_models/miner.pth
+   ```
+
+### Predict
+- Prediction logic, specific to the trained model your miner is hosting, resides in `bitmind/miner/predict.py`
+- If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
+- Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
+- Rewards are based on accuracy. The reward from each challenge is binary.
+  
+
+## Mine
 
 You can launch your miners via pm2 using the following command.
 
@@ -113,7 +126,7 @@ pm2 start ./neurons/miner.py --interpreter $HOME/miniconda3/envs/deepfake/bin/py
 ```
 
 
-## Validating
+## Validate
 
 You can launch your validator via pm2 using the following command.
 
