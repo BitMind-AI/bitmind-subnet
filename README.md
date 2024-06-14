@@ -28,7 +28,7 @@ The recent proliferation of generative models capable of creating high qualitiy,
 </center>
 
 
-The AI Generated Image Detection Subnet comprises a suite of state-of-the-art generative and discriminative AI models, and will continuously evolve to cover more generative algorithms. 
+The Bitmind Subnet comprises a suite of state-of-the-art generative and discriminative AI models, and will continuously evolve to cover more generative algorithms. 
 
 - **Miners** are tasked with running a binary classifier capable of discriminating between real and AI generated images
     - Our base miner is from the 2024 CVPR Paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
@@ -36,7 +36,7 @@ The AI Generated Image Detection Subnet comprises a suite of state-of-the-art ge
 - **Validators** are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
     - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service.
 
-Join us at the AI Image Detection Subnet, your partner in maintaining digital authenticity and leading the fight against misinformation. Be part of the solution and stay at the forefront of innovation with our cutting-edge detection tools – Defending Truth, Empowering the Future!
+Join us at the Bitmind AI Image Detection Subnet, your partner in maintaining digital authenticity and leading the fight against misinformation. Defending Truth, Empowering the Future!
 
 ## Status
 
