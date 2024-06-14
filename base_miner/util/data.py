@@ -3,7 +3,6 @@ from typing import List, Tuple, Dict
 
 from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
-from bitmind.image_transforms import base_transforms
 from bitmind.constants import DATASET_META
 
 
@@ -22,7 +21,6 @@ def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
         (real_datasets: Dict[str, ImageDataset], fake_datasets: Dict[str, ImageDataset])
 
     """
-    print(dataset_meta['fake'])
     splits = ['train', 'validation', 'test']
 
     fake_datasets = {split: [] for split in splits}
@@ -58,7 +56,9 @@ def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
 
 def create_real_fake_datasets(
     real_datasets: Dict[str, List[ImageDataset]],
-    fake_datasets: Dict[str, List[ImageDataset]]
+    fake_datasets: Dict[str, List[ImageDataset]],
+    base_transforms: transforms.Compose,
+    data_aug_transforms: transforms.Compose = None,
 ) -> Tuple[RealFakeDataset, ...]:
     """
 
@@ -70,10 +70,15 @@ def create_real_fake_datasets(
         Train, val, and test RealFakeDatasets
 
     """
+    if data_aug_transforms is not None:
+        train_transforms = transforms.Compose(base_transforms.transforms + data_aug_transforms.transforms)
+    else:
+        train_transforms = base_transforms
+
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
         fake_image_datasets=fake_datasets['train'],
-        transforms=base_transforms)
+        transforms=train_transforms)
 
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
