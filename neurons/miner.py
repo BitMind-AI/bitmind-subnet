@@ -48,10 +48,6 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        self.model = resnet50(num_classes=1)
-        weight_path = 'mining_models/miner.pth'
-        self.model.load_state_dict(torch.load(weight_path, map_location='cpu'))
-        self.model.eval()
 
     async def forward(
         self, synapse: ImageSynapse
@@ -69,11 +65,21 @@ class Miner(BaseMinerNeuron):
 
         """
         try:
+            self.model = resnet50(num_classes=1)
+            weight_path = 'mining_models/miner.pth'
+            self.model.load_state_dict(torch.load(weight_path, map_location='cpu'))
+            self.model.eval()
+        except Exception as e:
+            print("Error loading model")
+            print(e)
+
+        try:
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))
             pred = predict(self.model, image)
             synapse.prediction = pred
         except Exception as e:
+            print("Error performing inference")
             print(e)
 
         print("PREDICTION:", synapse.prediction)
