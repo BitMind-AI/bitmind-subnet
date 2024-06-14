@@ -20,20 +20,23 @@
 
 Introducing Bittensor Subnet X (AI Image Detection Subnet): A Platform for Identifying Generated Media.
 
-The recent proliferation of generative models capable of creating high qualitiy, convincingly realistic images has brought with it an urgent need for reliable mechanisms for distinguishing between real and fake images. This is a Bittensor subnet that incentivizes innovation in such mechanisms. The quality and reliability of the AI Image Detection Subnet are inherently tied to the incentivized, decentralized nature of Bittensor - decentralization mitigates the centralization risk of single-model approaches in this problem space, and incentivazation facilitates innovation within a rich, competitive ecosystem. 
-
-Our easy-to-use API and frontend (COMING SOON) democratize access to the collective intelligence of our miner pool, the issues of misinformation and deception that now pervade modern media and threaten deomocracy at a global scale. 
+The recent proliferation of generative models capable of creating high qualitiy, convincingly realistic images has brought with it an urgent need for reliable mechanisms for distinguishing between real and fake images. This is a Bittensor subnet that incentivizes innovation in such mechanisms. The quality and reliability of the AI Image Detection Subnet are inherently tied to the incentivized, decentralized nature of Bittensor - decentralization mitigates the centralization risk of single-model approaches in this problem space, and incentivazation facilitates innovation within a rich, competitive ecosystem. Our easy-to-use API and frontend (COMING SOON) democratize access to the collective intelligence of our miner pool, realizing a powerful tool that will help alleviate the issues of misinformation and deception that now pervade modern media and threaten deomocracy at a global scale. 
 
 
-TODO: Add updated subnet architecture diagram
+<center>
+    <img src="static/Subnet-Arch.png" alt="Subnet Architecture"/>
+</center>
+
 
 The AI Generated Image Detection Subnet is composed of a suite of state-of-the-art generative and discriminative AI models, and will continuously evolve to cover more generative algorithms. 
 
-- Miners are tasked with running a binary classifier capable of discriminating between real and AI generated images
+- **Miners** are tasked with running a binary classifier capable of discriminating between real and AI generated images
     - Our base miner is from the 2024 CVPR Paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
-    - In the interest of helping our miners experiment with different cutting edge strategies, will continue implementing more detection solutions based on recent papers, and release training code and base weights.
-- Our validators are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
-    - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service. 
+    - In the interest of helping our miners experiment with diverse cutting edge strategies, will continue implementing more detection solutions based on recent papers, and release training code and base weights.
+- **Validators** are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
+    - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service.
+
+Join us at the AI Image Detection Subnet, your partner in maintaining digital authenticity and leading the fight against misinformation. Be part of the solution and stay at the forefront of innovation with our cutting-edge detection tools – Defending Truth, Empowering the Future!
 
 ## Status
 
@@ -78,11 +81,27 @@ export PIP_NO_CACHE_DIR=1
 pip install -e .
 ```
 
-Prior to proceeding, ensure you have a registered hotkey on subnet XX testnet. If not, run the command
+### Data
+
+You can download the necessary datasets by running:
+
+```bash
+python download_data.py
+```
+
+- For **validators**, we recommend you do this prior to registering and running your validator. The download can take up to a few hours. Please note the minimum storage requirements specified in `min_compute.yml`. 
+
+- For **miners**, this is only necessary when training a new model. Deployed miner instances do not need access to these datasets. 
+
+
+### Registration
+
+To mine or validate on our subnet, ensure you have a registered hotkey on subnet 168 on testnet. If not, run the command
 
 ```bash
 btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
 ```
+
 
 ## Train
 
@@ -97,7 +116,7 @@ If you prefer a notebook environment, you can instead train a model with `base_m
 Once you've trained your model, you can evaluate its performance on the test dataset in `base_miner/eval_detector.ipynb`.
 
 
-### Update Miner Detector Model
+#### Update Miner Detector Model
 1. Optionally make a backup of the currently active model:
    ```bash
    cp mining_models/miner.pth mining_models/miner_<version>.pth
@@ -108,7 +127,7 @@ Once you've trained your model, you can evaluate its performance on the test dat
    ```
 
 ## Predict
-- Prediction logic, specific to the trained model your miner is hosting, resides in `bitmind/miner/predict.py`
+- Prediction logic specific to the trained model your miner is hosting resides in `bitmind/miner/predict.py`
 - If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
 - Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
 - Rewards are based on accuracy. The reward from each challenge is binary.
