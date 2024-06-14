@@ -28,7 +28,7 @@ The recent proliferation of generative models capable of creating high qualitiy,
 </center>
 
 
-The AI Generated Image Detection Subnet is composed of a suite of state-of-the-art generative and discriminative AI models, and will continuously evolve to cover more generative algorithms. 
+The AI Generated Image Detection Subnet comprises a suite of state-of-the-art generative and discriminative AI models, and will continuously evolve to cover more generative algorithms. 
 
 - **Miners** are tasked with running a binary classifier capable of discriminating between real and AI generated images
     - Our base miner is from the 2024 CVPR Paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
