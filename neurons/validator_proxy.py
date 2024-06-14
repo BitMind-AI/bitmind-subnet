@@ -90,33 +90,6 @@ class ValidatorProxy:
                 status_code=401, detail="Error getting authentication token"
             )
 
-    def organic_reward(
-        self, synapse, response, uid, should_reward, reward_url, timeout
-    ):
-        if (
-            random.random() < self.validator.config.proxy.checking_probability
-            or should_reward
-        ):
-            if callable(reward_url):
-                uids, rewards = reward_url(synapse, [response], [uid])
-            else:
-                (
-                    uids,
-                    rewards,
-                ) = image_generation_subnet.validator.get_reward(
-                    reward_url, synapse, [response], [uid], timeout, self.validator.miner_manager
-                )
-            bt.logging.info(
-                f"Proxy: Updating scores of miners {uids} with rewards {rewards}, should_reward: {should_reward}"
-            )
-                # Scale Reward based on Miner Volume
-            for i, uid in enumerate(uids):
-                if rewards[i] > 0:
-                    rewards[i] = rewards[i] * (
-                        0.6 + 0.4 * self.validator.miner_manager.all_uids_info[uid]["reward_scale"]
-                    )
-            self.validator.miner_manager.update_scores(uids, rewards)
-
     async def forward(self, payload: dict = {}):
         self.authenticate_token(payload["authorization"])
         if "recheck" in payload:
@@ -140,20 +113,19 @@ class ValidatorProxy:
     	    synapse=ImageSynapse(image=payload['image'], prediction=-1),
             deserialize=True
         )
-
+        print(f"[ORGANIC] {predictions}")
         valid_pred_idx = np.array([i for i, v in enumerate(predictions) if v != -1.])
-        valid_preds = np.array(predictions)[valid_pred_idx]
-        valid_pred_uids = np.array(miner_uids)[valid_pred_idx]
-        print(valid_pred_uids)
-        print(valid_preds)
-        if len(valid_preds) > 0:
-            self.proxy_counter.update(is_success=True)
-            self.proxy_counter.save()
-            return list(valid_preds)
-        else:
-            self.proxy_counter.update(is_success=False)
-            self.proxy_counter.save()
-            return HTTPException(status_code=500, detail="No valid response received")
+        if len(valid_pred_idx) > 0:
+            valid_preds = np.array(predictions)[valid_pred_idx]
+            valid_pred_uids = np.array(miner_uids)[valid_pred_idx]
+            if len(valid_preds) > 0:
+                self.proxy_counter.update(is_success=True)
+                self.proxy_counter.save()
+                return list(valid_preds)
+
+        self.proxy_counter.update(is_success=False)
+        self.proxy_counter.save()
+        return HTTPException(status_code=500, detail="No valid response received")
 
     async def get_self(self):
         return self
