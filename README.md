@@ -35,6 +35,10 @@ The AI Generated Image Detection Subnet is composed of a suite of state-of-the-a
 - Our validators are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
     - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service. 
 
+## Status
+
+We are on testnet, uid 168!
+
 
 ## Setup
 
@@ -48,7 +52,6 @@ Before running a validator or miner, note the following:
 
 ### Installation
 
-Before starting make sure you have pm2, nano and any other useful tools installed.
 If you don't have them, install `git`, `pip` and a text editor like `nano` or `emacs` if you don't like `vi`
 ```bash
 sudo apt update -y && sudo apt-get install git -y && sudo apt install python3-pip -y && sudo apt install nano
@@ -59,18 +62,18 @@ Install `pm2` to use our scripts for running miners and validators.
 sudo apt install npm -y && sudo npm install pm2@latest -g 
 ```
 
-It is recommended you use a virtual environment to install the necessary requirements.<br>
+We recommend you use a virtual environment to install the necessary requirements.<br>
 We like conda. You can get it with this [super quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and use it to create a virtual environment like this:
 ```
-conda create -n deepfake python=3.10 ipython
-conda activate deepfake
+conda create -n fakedet python=3.10 ipython
+conda activate fakedet
 ```
 
 Download the repository, navigate to the folder and then install the necessary requirements with the following chained command.
 
 ```bash
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
-conda activate bitmind
+conda activate fakedet
 export PIP_NO_CACHE_DIR=1
 pip install -e .
 ```
@@ -81,7 +84,7 @@ Prior to proceeding, ensure you have a registered hotkey on subnet XX testnet. I
 btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
 ```
 
-### Train
+## Train
 
 To see performance improvements, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether.
 
@@ -94,7 +97,7 @@ If you prefer a notebook environment, you can instead train a model with `base_m
 Once you've trained your model, you can evaluate its performance on the test dataset in `base_miner/eval_detector.ipynb`.
 
 
-#### Update Miner Detector Model
+### Update Miner Detector Model
 1. Optionally make a backup of the currently active model:
    ```bash
    cp mining_models/miner.pth mining_models/miner_<version>.pth
@@ -104,7 +107,7 @@ Once you've trained your model, you can evaluate its performance on the test dat
    cp path/to/your/trained/model_epoch_best.pth mining_models/miner.pth
    ```
 
-### Predict
+## Predict
 - Prediction logic, specific to the trained model your miner is hosting, resides in `bitmind/miner/predict.py`
 - If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
 - Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
@@ -139,6 +142,12 @@ pm2 start ./neurons/validator.py --interpreter $HOME/miniconda3/envs/deepfake/bi
 ```bash
 pm2 start ./neurons/validator.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
 ```
+
+---
+
+### Other Resources
+[Join our Discord!](https://discord.gg/SaFbkGkU)
+
 
 ---
 
