@@ -19,3 +19,4 @@ datasets
 accelerate
 tensorboardx
 tf-keras
+httpx
