@@ -55,17 +55,13 @@ Before running a validator or miner, note the following:
 
 ### Installation
 
-If you don't have them, install `git`, `pip`, `libgl` (for open-cv) and a text editor like `nano` or `emacs` if you don't like `vi`
+1. To install system dependencies like `pm2`, run our install script:
 ```bash
-sudo apt update -y && sudo apt-get install git -y && sudo apt install python3-pip -y && sudo apt install nano && sudo apt install libgl1
+chmod +x install_system_deps.sh
+./install_system_deps.sh
 ```
 
-Install `pm2` to use our scripts for running miners and validators.
-```bash
-sudo apt install npm -y && sudo npm install pm2@latest -g 
-```
-
-We recommend you use a virtual environment to install the necessary requirements.<br>
+2. We recommend you use a virtual environment to install the necessary requirements.<br>
 We like conda. You can get it with this [super quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and use it to create a virtual environment like this:
 ```bash
 conda create -y -n bitmind python=3.10 ipython
@@ -80,7 +76,7 @@ to deactivate, run:
 conda deactivate
 ```
 
-Download the repository, navigate to the folder and then install the necessary requirements with the following chained command.
+3. Download the repository, navigate to the folder and then install the necessary requirements with the following chained command.
 
 ```bash
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
