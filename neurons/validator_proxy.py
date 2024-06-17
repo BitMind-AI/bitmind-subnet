@@ -4,6 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 import bittensor as bt
+import pandas as pd
 import numpy as np
 import uvicorn
 import base64
@@ -14,6 +15,7 @@ import traceback
 import httpx
 import threading
 
+from bitmind.utils.miner_metrics import miner_metrics
 from bitmind.protocol import ImageSynapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
@@ -34,6 +36,12 @@ class ValidatorProxy:
             "/validator_proxy",
             self.forward,
             methods=["POST"],
+            dependencies=[Depends(self.get_self)],
+        )
+        self.app.add_api_route(
+            "/miner_performance",
+            self.miner_performance,
+            methods=["GET"],
             dependencies=[Depends(self.get_self)],
         )
         self.loop = asyncio.get_event_loop()
@@ -126,6 +134,40 @@ class ValidatorProxy:
         self.proxy_counter.update(is_success=False)
         self.proxy_counter.save()
         return HTTPException(status_code=500, detail="No valid response received")
+
+    async def miner_performance(self, payload: dict = {}):
+        self.authenticate_token(payload["authorization"])
+        if "recheck" in payload:
+            bt.logging.info("Rechecking validators")
+            self.get_credentials()
+            return {"message": "done"}
+        bt.logging.info("Received an organic request!")
+
+        metagraph = self.validator.metagraph
+
+        results_file = '../bitmind-subnet/results.csv'
+
+        results_df = pd.read_csv(results_file)
+        results_df.time = pd.to_datetime(results_df.time)
+        results_df = results_df[results_df.pred != -1]
+
+        # TODO: rolling mean for hourly performance
+        #if cutoff_datetime is not None:
+        #    results_df = results_df[results_df.time > pd.to_datetime(cutoff_datetime)]
+
+        metrics_df = miner_metrics(results_df, transpose=False)
+        metrics_df = metrics_df.merge(
+            pd.DataFrame({
+                'miner_uid': list(range(0, len(metagraph.R))),
+                'trust': metagraph.T,
+                'concensus': metagraph.C,
+                'emission': metagraph.E,
+                'incentive': metagraph.I,
+                'rank': metagraph.R}),
+            on='miner_uid')
+
+        return metrics_df.to_json(orient='records')
+        #return HTTPException(status_code=500, detail="No valid response received")
 
     async def get_self(self):
         return self
