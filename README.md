@@ -139,31 +139,31 @@ Once you've trained your model, you can evaluate its performance on the test dat
 
 ## Mine
 
-You can launch your miners via pm2 using the following command.
+You can launch your miners via pm2 using the following command. To stop your miner, you can run `pm2 delete miner`.
 
 ```bash
-pm2 start ./neurons/miner.py --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME> --axon.port <PORT>
+pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME> --axon.port <PORT>
 ```
 
 ### Testnet Example
 
 ```bash
-pm2 start ./neurons/miner.py --interpreter $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
+pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
 ```
 
 
 ## Validate
 
-You can launch your validator via pm2 using the following command.
+You can launch your validator via pm2 using the following command. To stop your validator, you can run `pm2 delete validator`.
 
 ```bash
-pm2 start ./neurons/validator.py --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME>
+pm2 start ./neurons/validator.py --name validator --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME>
 ```
 
 ### Testnet Example
 
 ```bash
-pm2 start ./neurons/validator.py --interpreter  $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
+pm2 start ./neurons/validator.py --name validator --interpreter  $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
 ```
 
 ---
