@@ -1,7 +1,7 @@
 import functools
 import torch
 import torch.nn as nn
-from networks.resnet import resnet50
+from networks.resnet import resnet50, resnet152, resnet101
 from networks.base_model import BaseModel, init_weights
 
 
@@ -47,10 +47,12 @@ class Trainer(BaseModel):
         return True
 
     def set_input(self, batch, device='cuda'):
-        #self.input = input[0].to(self.device)
-        #self.label = input[1].to(self.device).float()
-        keep_idx = [i for i, b in enumerate(batch) if b[0].shape[0] == batch[0][0].shape[0]]
-        #batch = np.array(batch)
+        keep_idx = [
+            i for i, b in enumerate(batch)
+            if isinstance(b[0], torch.Tensor) and
+            isinstance(batch[0][0], torch.Tensor) and
+            b[0].shape[0] == batch[0][0].shape[0]
+        ]
         inputs = torch.stack([b[0] for i, b in enumerate(batch) if i in keep_idx])
         labels = torch.stack([torch.tensor(b[1]) for i, b in enumerate(batch) if i in keep_idx])
         self.input, self.label = inputs.to(device).float(), labels.to(device).float()
