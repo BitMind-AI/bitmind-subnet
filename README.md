@@ -55,28 +55,32 @@ Before running a validator or miner, note the following:
 
 ### Installation
 
-If you don't have them, install `git`, `pip` and a text editor like `nano` or `emacs` if you don't like `vi`
+1. To install system dependencies like `pm2`, run our install script:
 ```bash
-sudo apt update -y && sudo apt-get install git -y && sudo apt install python3-pip -y && sudo apt install nano
+chmod +x install_system_deps.sh
+./install_system_deps.sh
 ```
 
-Install `pm2` to use our scripts for running miners and validators.
-```bash
-sudo apt install npm -y && sudo npm install pm2@latest -g 
-```
-
-We recommend you use a virtual environment to install the necessary requirements.<br>
+2. We recommend you use a virtual environment to install the necessary requirements.<br>
 We like conda. You can get it with this [super quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and use it to create a virtual environment like this:
-```
-conda create -n fakedet python=3.10 ipython
-conda activate fakedet
+```bash
+conda create -y -n bitmind python=3.10 ipython
 ```
 
-Download the repository, navigate to the folder and then install the necessary requirements with the following chained command.
+To activate your virtual environment, run:
+```bash
+conda activate bitmind
+```
+to deactivate, run:
+```bash
+conda deactivate
+```
+
+3. Download the repository, navigate to the folder and then install the necessary requirements with the following chained command.
 
 ```bash
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
-conda activate fakedet
+conda activate bitmind
 export PIP_NO_CACHE_DIR=1
 pip install -e .
 ```
@@ -102,6 +106,35 @@ To mine or validate on our subnet, ensure you have a registered hotkey on subnet
 btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
 ```
 
+
+## Mine
+
+You can launch your miners via pm2 using the following command. To stop your miner, you can run `pm2 delete miner`.
+
+```bash
+pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME> --axon.port <PORT>
+```
+
+### Testnet Example
+
+```bash
+pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
+```
+
+
+## Validate
+
+You can launch your validator via pm2 using the following command. To stop your validator, you can run `pm2 delete validator`.
+
+```bash
+pm2 start ./neurons/validator.py --name validator --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME>
+```
+
+### Testnet Example
+
+```bash
+pm2 start ./neurons/validator.py --name validator --interpreter  $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
+```
 
 ## Train
 
@@ -131,36 +164,7 @@ Once you've trained your model, you can evaluate its performance on the test dat
 - If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
 - Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
 - Rewards are based on accuracy. The reward from each challenge is binary.
-  
 
-## Mine
-
-You can launch your miners via pm2 using the following command.
-
-```bash
-pm2 start ./neurons/miner.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME> --axon.port <PORT>
-```
-
-### Testnet Example
-
-```bash
-pm2 start ./neurons/miner.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
-```
-
-
-## Validate
-
-You can launch your validator via pm2 using the following command.
-
-```bash
-pm2 start ./neurons/validator.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME>
-```
-
-### Testnet Example
-
-```bash
-pm2 start ./neurons/validator.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
-```
 
 ---
 

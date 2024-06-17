@@ -50,7 +50,7 @@ class RealFakeDataset:
                 image = self.transforms(image)
         except Exception as e:
             print(e)
-            print(source.huggingface_dataset_name, index)
+            print(source.huggingface_dataset_path, index)
 
         return image, label
 
