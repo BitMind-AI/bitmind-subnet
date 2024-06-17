@@ -107,36 +107,6 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 ```
 
 
-## Train
-
-To see performance improvements, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether.
-
-To train a model, run the following command. The model with the lowest validation accuracy will be saved to `base_miner/checkpoints/<experiment_name>/model_epoch_best.pth`. 
-```python
-cd base_miner && python train_detector.py
-```
-If you prefer a notebook environment, you can instead train a model with `base_miner/train_detector.ipynb`
-
-Once you've trained your model, you can evaluate its performance on the test dataset in `base_miner/eval_detector.ipynb`.
-
-
-#### Update Miner Detector Model
-1. Optionally make a backup of the currently active model:
-   ```bash
-   cp mining_models/miner.pth mining_models/miner_<version>.pth
-   ```
-2. Replace the currently active model with your newly trained one. The next forward pass of your miner will load the new model.
-   ```bash
-   cp path/to/your/trained/model_epoch_best.pth mining_models/miner.pth
-   ```
-
-## Predict
-- Prediction logic specific to the trained model your miner is hosting resides in `bitmind/miner/predict.py`
-- If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
-- Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
-- Rewards are based on accuracy. The reward from each challenge is binary.
-  
-
 ## Mine
 
 You can launch your miners via pm2 using the following command. To stop your miner, you can run `pm2 delete miner`.
@@ -165,6 +135,36 @@ pm2 start ./neurons/validator.py --name validator --interpreter $CONDA_PREFIX/bi
 ```bash
 pm2 start ./neurons/validator.py --name validator --interpreter  $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
 ```
+
+## Train
+
+To see performance improvements, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether.
+
+To train a model, run the following command. The model with the lowest validation accuracy will be saved to `base_miner/checkpoints/<experiment_name>/model_epoch_best.pth`. 
+```python
+cd base_miner && python train_detector.py
+```
+If you prefer a notebook environment, you can instead train a model with `base_miner/train_detector.ipynb`
+
+Once you've trained your model, you can evaluate its performance on the test dataset in `base_miner/eval_detector.ipynb`.
+
+
+#### Update Miner Detector Model
+1. Optionally make a backup of the currently active model:
+   ```bash
+   cp mining_models/miner.pth mining_models/miner_<version>.pth
+   ```
+2. Replace the currently active model with your newly trained one. The next forward pass of your miner will load the new model.
+   ```bash
+   cp path/to/your/trained/model_epoch_best.pth mining_models/miner.pth
+   ```
+
+## Predict
+- Prediction logic specific to the trained model your miner is hosting resides in `bitmind/miner/predict.py`
+- If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
+- Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
+- Rewards are based on accuracy. The reward from each challenge is binary.
+
 
 ---
 
