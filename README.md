@@ -55,9 +55,9 @@ Before running a validator or miner, note the following:
 
 ### Installation
 
-If you don't have them, install `git`, `pip` and a text editor like `nano` or `emacs` if you don't like `vi`
+If you don't have them, install `git`, `pip`, `libgl` (for open-cv) and a text editor like `nano` or `emacs` if you don't like `vi`
 ```bash
-sudo apt update -y && sudo apt-get install git -y && sudo apt install python3-pip -y && sudo apt install nano
+sudo apt update -y && sudo apt-get install git -y && sudo apt install python3-pip -y && sudo apt install nano && sudo apt install libgl1
 ```
 
 Install `pm2` to use our scripts for running miners and validators.
