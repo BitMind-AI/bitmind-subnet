@@ -67,16 +67,24 @@ sudo apt install npm -y && sudo npm install pm2@latest -g
 
 We recommend you use a virtual environment to install the necessary requirements.<br>
 We like conda. You can get it with this [super quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and use it to create a virtual environment like this:
+```bash
+conda create -y -n bitmind python=3.10 ipython
 ```
-conda create -n fakedet python=3.10 ipython
-conda activate fakedet
+
+To activate your virtual environment, run:
+```bash
+conda activate bitmind
+```
+to deactivate, run:
+```bash
+conda deactivate
 ```
 
 Download the repository, navigate to the folder and then install the necessary requirements with the following chained command.
 
 ```bash
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
-conda activate fakedet
+conda activate bitmind
 export PIP_NO_CACHE_DIR=1
 pip install -e .
 ```
@@ -138,13 +146,13 @@ Once you've trained your model, you can evaluate its performance on the test dat
 You can launch your miners via pm2 using the following command.
 
 ```bash
-pm2 start ./neurons/miner.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME> --axon.port <PORT>
+pm2 start ./neurons/miner.py --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME> --axon.port <PORT>
 ```
 
 ### Testnet Example
 
 ```bash
-pm2 start ./neurons/miner.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
+pm2 start ./neurons/miner.py --interpreter $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
 ```
 
 
@@ -153,13 +161,13 @@ pm2 start ./neurons/miner.py --interpreter $HOME/miniconda3/envs/deepfake/bin/py
 You can launch your validator via pm2 using the following command.
 
 ```bash
-pm2 start ./neurons/validator.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME>
+pm2 start ./neurons/validator.py --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME>
 ```
 
 ### Testnet Example
 
 ```bash
-pm2 start ./neurons/validator.py --interpreter $HOME/miniconda3/envs/deepfake/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
+pm2 start ./neurons/validator.py --interpreter  $CONDA_PREFIX/bin/python3 -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
 ```
 
 ---
