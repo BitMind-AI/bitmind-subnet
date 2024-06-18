@@ -66,7 +66,8 @@ class Miner(BaseMinerNeuron):
         """
         try:
             self.model = resnet50(num_classes=1)
-            weight_path = 'mining_models/miner.pth'
+            weight_path = self.config.neuron.model_path
+            print(f"Loading detector model from {weight_path}")
             self.model.load_state_dict(torch.load(weight_path, map_location='cpu'))
             self.model.eval()
         except Exception as e:

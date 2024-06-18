@@ -131,6 +131,13 @@ def add_miner_args(cls, parser):
     )
 
     parser.add_argument(
+        "--neuron.model_path",
+        type=str,
+        help="Path to the .pth file for your trained model",
+        default="./mining_models/miner.pth",
+    )
+
+    parser.add_argument(
         "--blacklist.force_validator_permit",
         action="store_true",
         help="If set, we will force incoming requests to have a permit.",
