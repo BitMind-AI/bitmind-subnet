@@ -22,21 +22,21 @@ Introducing Bittensor Subnet X (Bitmind Subnet): A Platform for Identifying AI G
 
 The recent proliferation of generative models capable of creating high qualitiy, convincingly realistic images has brought with it an urgent need for reliable mechanisms for distinguishing between real and fake images. This is a Bittensor subnet that incentivizes innovation in such mechanisms. The quality and reliability of the Bitmind Subnet are inherently tied to the incentivized, decentralized nature of Bittensor - decentralization mitigates the centralization risk of single-model approaches in this problem space, and incentivazation facilitates innovation within a rich, competitive ecosystem. Our easy-to-use API and frontend (COMING SOON) democratize access to the collective intelligence of our miner pool, realizing a powerful tool that will help alleviate the issues of misinformation and deception that now pervade modern media and threaten deomocracy at a global scale.
 
+The Bitmind Subnet comprises a suite of state-of-the-art generative and discriminative AI models, and will continually evolve to cover more generative algorithms.
+
+- **Miners** are tasked with running a binary classifier capable of discriminating between real and AI generated images
+    - Our base miner is from the 2024 CVPR Paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
+    - In the interest of helping our miners experiment with diverse cutting edge strategies, will continue implementing detection solutions based on recent papers, and release training code and base weights.
+- **Validators** are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
+    - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service.
+
+Join us at the Bitmind AI Image Detection Subnet, your partner in maintaining digital authenticity and leading the fight against misinformation.
+
 
 <center>
     <img src="static/Subnet-Arch.png" alt="Subnet Architecture"/>
 </center>
 
-
-The Bitmind Subnet comprises a suite of state-of-the-art generative and discriminative AI models, and will continuously evolve to cover more generative algorithms. 
-
-- **Miners** are tasked with running a binary classifier capable of discriminating between real and AI generated images
-    - Our base miner is from the 2024 CVPR Paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
-    - In the interest of helping our miners experiment with diverse cutting edge strategies, will continue implementing more detection solutions based on recent papers, and release training code and base weights.
-- **Validators** are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
-    - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service.
-
-Join us at the Bitmind AI Image Detection Subnet, your partner in maintaining digital authenticity and leading the fight against misinformation.
 
 ## Status
 
