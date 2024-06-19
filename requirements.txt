@@ -19,4 +19,3 @@ accelerate
 tensorboardx
 tf-keras
 httpx
-libstdcxx-ng
