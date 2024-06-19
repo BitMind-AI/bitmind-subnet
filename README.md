@@ -30,8 +30,6 @@ The Bitmind Subnet comprises a suite of state-of-the-art generative and discrimi
 - **Validators** are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
     - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service.
 
-Join us at the Bitmind AI Image Detection Subnet, your partner in maintaining digital authenticity and leading the fight against misinformation.
-
 
 <center>
     <img src="static/Subnet-Arch.png" alt="Subnet Architecture"/>
