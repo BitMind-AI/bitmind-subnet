@@ -13,6 +13,8 @@ def miner_metrics(results_df, transpose=True):
     for image_source in image_sources:
         image_source_df = results_df[results_df.image_source == image_source]
         miner_preds_df = image_source_df.groupby('miner_uid')[['label', 'pred']].agg(list)
+        if miner_preds_df.shape[0] == 0:
+            continue
         perf_df = compute_metrics(miner_preds_df)[['miner_uid', 'accuracy', 'num_predictions']]
         perf_df = perf_df.rename({
             'accuracy': f'{image_source} | accuracy',

@@ -1,1 +1,1 @@
-pm2 start python --name validator -- ./neurons/validator.py --netuid 168 --subtensor.network test --wallet.name testnet_vali --wallet.hotkey default --axon.port 8091 --logging.debug --neuron.vpermit_tao_limit 9 --neuron.axon_on --neuron.network test
+pm2 start python --name validator -- ./neurons/validator.py --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091 --logging.debug --neuron.vpermit_tao_limit 9 --neuron.axon_on --neuron.network test
