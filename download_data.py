@@ -9,19 +9,17 @@ from bitmind.constants import DATASET_META
 
 def download_datasets(download_mode: str, cache_dir: str, max_wait: int = 300):
     """ Downloads the datasets present in datasets.json with exponential backoff
-
-    Args:
         download_mode: either 'force_redownload' or 'use_cache_if_exists'
         cache_dir: huggingface cache directory. ~/.cache/huggingface by default 
     """ 
     os.makedirs(args.cache_dir, exist_ok=True)
     for dataset_type in DATASET_META:
         for dataset in DATASET_META[dataset_type]:
-            retry_wait = 3   # initial wait time in seconds
+            retry_wait = 10   # initial wait time in seconds
             print(f"Downloading {dataset['path']} dataset...")
             while True:
                 try:
-                    load_dataset(dataset['path'], cache_dir=args.cache_dir, )
+                    load_dataset(dataset['path'], cache_dir=args.cache_dir, trust_remote_code=True)
                     break
                 except Exception as e:
                     print(e)
