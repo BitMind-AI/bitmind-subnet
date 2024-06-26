@@ -8,9 +8,9 @@ import time
 import random
 import torch
 
-#from base_miner.util import Logger
-from base_miner.util.data import load_datasets, create_real_fake_datasets
-from base_miner.options import TrainOptions
+from bitmind.image_transforms import base_transforms, random_image_transforms
+from util.data import load_datasets, create_real_fake_datasets
+from options import TrainOptions
 
 
 def seed_torch(seed=1029):
@@ -28,14 +28,14 @@ def seed_torch(seed=1029):
 def main():
     opt = TrainOptions().parse()
     seed_torch(100)
-    
-    #Logger(os.path.join(opt.checkpoints_dir, opt.name, 'log.log'))
-    
+
     train_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "train"))
     val_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "val"))
 
+    # RealFakeDataseta will limit the number of images sampled per dataset to the length of the smallest dataset
     real_datasets, fake_datasets = load_datasets()
-    train_dataset, val_dataset, test_dataset = create_real_fake_datasets(real_datasets, fake_datasets)
+    train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
+        real_datasets, fake_datasets, base_transforms, None) #random_image_transforms)
 
     train_loader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=lambda d: tuple(d))
@@ -44,8 +44,9 @@ def main():
     test_loader = DataLoader(
         test_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=lambda d: tuple(d))
 
-    model = Trainer(opt)
 
+    model = Trainer(opt)
+    display_loss_steps = 10
     early_stopping_epochs = 10
     best_val_acc = 0
     n_epoch_since_improvement = 0
@@ -53,23 +54,25 @@ def main():
 
     print(f'cwd: {os.getcwd()}')
     for epoch in range(opt.niter):
-        for i, data in enumerate(train_loader):
-            model.total_steps += 1
 
+        for step, data in enumerate(train_loader):
             model.set_input(data)
             model.optimize_parameters()
 
-            ts = time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())
-            print(ts, "Train loss: {} at step: {} lr {}".format(model.loss, model.total_steps, model.lr))
-        
+            if step % display_loss_steps == 0:
+                ts = time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())
+                print(f"{ts} | Step: {step} ({model.total_steps}) | Train loss: {model.loss} | lr {model.lr}")
+
             if model.total_steps % opt.loss_freq == 0:
                 train_writer.add_scalar('loss', model.loss, model.total_steps)
-            
+
+            model.total_steps += 1
+
         if epoch % opt.delr_freq == 0 and epoch != 0:
             ts = time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime())
             print(ts, 'changing lr at the end of epoch %d, iters %d' % (epoch, model.total_steps))
             model.adjust_learning_rate()
-    
+
         # Validation
         model.eval()
         acc, ap = validate(model.model, val_loader)[:2]
@@ -86,7 +89,7 @@ def main():
                 break
 
         model.train()
-    
+
     model.eval()
     acc, ap = validate(model.model, test_loader)[:2]
     print("(Test) acc: {}; ap: {}".format(acc, ap))

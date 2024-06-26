@@ -7,12 +7,11 @@ DATASET_META = {
     "real": [
         {"path": "dalle-mini/open-images", "create_splits": False},
         {"path": "merkol/ffhq-256", "create_splits": True},
-        {"path": "jlbaker361/flickr_humans_20k", "create_splits": True},
         {"path": "saitsharipov/CelebA-HQ", "create_splits": True}
     ],
     "fake": [
         {"path": "bitmind/RealVisXL_V4.0_images", "create_splits": True},
-        {"path": "poloclub/diffusiondb", "name": "large_first_10k", "create_splits": True}
+        {"path": "bitmind/stable-diffusion-xl-base-1.0-images", "create_splits": True},
     ]
 }
 
