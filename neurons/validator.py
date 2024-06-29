@@ -30,13 +30,16 @@ from bitmind.constants import DATASET_META
 
 class Validator(BaseValidatorNeuron):
     """
-    Your validator neuron class. You should use this class to define your validator's behavior. In particular, you should replace the forward function with your own logic.
+    The BitMind Validator's `forward` function sends single-image challenges to miners every 30 seconds, where each
+    image has a 50/50 chance of being real or fake. To service this task, the Validator class has two key members -
+    self.real_iamge_dataset and self.random_image_generator. The former is a list of ImageDataset classes, which
+    contain real images. The latter is an ML pipeline that combines an LLM for prompt generation, and a diffusion
+    models that ingest prompts output by this model to produce synthetic iamges.
 
-    This class inherits from the BaseValidatorNeuron class, which in turn inherits from BaseNeuron. The BaseNeuron class takes care of routine tasks such as setting up wallet, subtensor, metagraph, logging directory, parsing config, etc. You can override any of the methods in BaseNeuron if you need to customize the behavior.
-
-    This class provides reasonable default behavior for a validator such as keeping a moving average of the scores of the miners and using them to set weights at the end of each epoch. Additionally, the scores are reset for new hotkeys at the end of each epoch.
+    The BitMind Validator also encapsuluates a ValidatorProxy, which is used to service organic requests from
+    our consumer-facing application. If you wish to participate in this system, run your validator with the
+     --proxy.port argument set to an exposed port on your machine.
     """
-
     def __init__(self, config=None):
         super(Validator, self).__init__(config=config)
 

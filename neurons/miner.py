@@ -38,13 +38,6 @@ from bitmind.miner.predict import predict
 
 
 class Miner(BaseMinerNeuron):
-    """
-    Your miner neuron class. You should use this class to define your miner's behavior. In particular, you should replace the forward function with your own logic. You may also want to override the blacklist and priority functions according to your needs.
-
-    This class inherits from the BaseMinerNeuron class, which in turn inherits from BaseNeuron. The BaseNeuron class takes care of routine tasks such as setting up wallet, subtensor, metagraph, logging directory, parsing config, etc. You can override any of the methods in BaseNeuron if you need to customize the behavior.
-
-    This class provides reasonable default behavior for a miner such as blacklisting unrecognized hotkeys, prioritizing requests based on stake, and forwarding requests to the forward function. If you need to define custom
-    """
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
@@ -53,8 +46,10 @@ class Miner(BaseMinerNeuron):
         self, synapse: ImageSynapse
     ) -> ImageSynapse:
         """
-        Processes the incoming ImageSynapse, running each image in the 'images' field through TODO deepfake
-        detection model(s)
+        Loads the PyTorch binary deepfake classifier from the path specified in --neuron.model_path.
+        Processes the incoming ImageSynapse and passed the image to the loaded model for classification.
+        The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
+        their model file as a means of updating their miner's predictor.
 
         Args:
             synapse (ImageSynapse): The synapse object containing the list of b64 encoded images in the

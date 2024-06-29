@@ -1,9 +1,21 @@
 from collections import defaultdict
 import pandas as pd
 import numpy as np
+from typing import Union
 
 
-def miner_metrics(results_df, transpose=True):
+def miner_metrics(results_df: pd.DataFrame, transpose: bool = True) -> pd.DataFrame:
+    """
+    Calculate and display miner statistics and performance metrics.
+
+    Args:
+        results_df (pd.DataFrame): DataFrame containing miner results with columns
+            ['time', 'miner_uid', 'label', 'pred', 'image_source'].
+        transpose (bool): Whether to transpose the final metrics DataFrame.
+
+    Returns:
+        pd.DataFrame: DataFrame containing miner performance metrics.
+    """
     print(f'Miner Statistics | {results_df.time.min()} - {results_df.time.max()}')
     
     miner_preds_df = results_df.groupby('miner_uid')[['label', 'pred']].agg(list)
@@ -33,7 +45,16 @@ def miner_metrics(results_df, transpose=True):
     return metrics_df
 
 
-def compute_metrics(miner_preds_df):
+def compute_metrics(miner_preds_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute performance metrics for miners.
+
+    Args:
+        miner_preds_df (pd.DataFrame): DataFrame grouped by 'miner_uid' with aggregated lists of 'label' and 'pred'.
+
+    Returns:
+        pd.DataFrame: DataFrame containing accuracy, precision, recall, f-1, and num_predictions
+    """
     perf_data = defaultdict(list)
     perf_data['miner_uid'] = miner_preds_df.index.unique()
     for uid in perf_data['miner_uid']:
