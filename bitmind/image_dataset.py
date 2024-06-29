@@ -96,8 +96,8 @@ class ImageDataset:
         else:
             raise NotImplementedError
 
-        # check for/remove alpha channel if download didnt 404
-        if image is not None and 'A' in image.mode:
+        # emove alpha channel if download didnt 404
+        if image is not None:
             image = image.convert('RGB')
 
         return {
