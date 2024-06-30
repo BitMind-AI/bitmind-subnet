@@ -27,11 +27,21 @@ import pydantic
 import base64
 
 
-def prepare_image_synapse(image):
+def prepare_image_synapse(image: Image):
+    """
+    Prepares an image for use with ImageSynapse object.
+
+    Args:
+        image (Image): The input image to be prepared.
+
+    Returns:
+        ImageSynapse: An instance of ImageSynapse containing the encoded image and a default prediction value.
+    """
     image_bytes = BytesIO()
     image.save(image_bytes, format="JPEG")
     b64_encoded_image = base64.b64encode(image_bytes.getvalue())
     return ImageSynapse(image=b64_encoded_image, prediction=-1.)
+
 
 # ---- miner ----
 # Example usage:

@@ -1,50 +1,9 @@
-from typing import List
-from collections import defaultdict
-from datasets import load_dataset
+from typing import List, Tuple
 from PIL import Image
 from io import BytesIO
-import bittensor as bt
 import numpy as np
-import requests
-import base64
 
-
-def download_image(url):
-    #print(f'downloading {url}')
-    response = requests.get(url)
-    if response.status_code == 200:
-        image_data = BytesIO(response.content)
-        return Image.open(image_data)
-
-    else:
-        #print(f"Failed to download image: {response.status_code}")
-        return None
-
-
-def load_huggingface_dataset(path, split=None, name=None, create_splits=False, download_mode=None):
-    if 'imagefolder' in path:
-        _, directory = path.split(':')
-        dataset = load_dataset(path='imagefolder', data_dir=directory, split='train')
-    else:
-        dataset = load_dataset(path, name=name, download_mode=download_mode)#, split=split)
-
-    if not create_splits:
-        if split is not None:
-            return dataset[split]
-        return dataset
-
-    dataset = dataset.shuffle(seed=42)
-
-    split_dataset = {}
-    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
-    split_dataset['train'] = train_test_split['train']
-    temp_dataset = train_test_split['test']
-
-    # Split the temporary dataset into validation and test
-    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
-    split_dataset['validation'] = val_test_split['train']
-    split_dataset['test'] = val_test_split['test']
-    return split_dataset[split]
+from bitmind.utils.data import load_huggingface_dataset, download_image
 
 
 class ImageDataset:
@@ -57,29 +16,62 @@ class ImageDataset:
         create_splits: bool = False,
         download_mode: str = None
     ):
+        """
+        Args:
+            huggingface_dataset_path (str): Path to the Hugging Face dataset. Can either be to a publicly hosted
+                huggingface datset (<organizatoin>/<datset-name>) or a local directory (imagefolder:<path/to/directory>)
+            huggingface_dataset_split (str): Split of the dataset to load (default: 'train').
+                Make sure to check what splits are available for the datasets you're working with.
+            huggingface_dataset_name (str): Name of the Hugging Face dataset (default: None).
+                Some huggingface datasets provide various subets of different sizes, which can be accessed via thi
+                parameter.
+            create_splits (bool): Whether to create dataset splits (default: False).
+                If the huggingface dataset hasn't been pre-split (i.e., it only contains "Train"), we split it here
+                randomly.
+            download_mode (str): Download mode for the dataset (default: None).
+                can be None or "force_redownload"
+        """
         self.huggingface_dataset_path = huggingface_dataset_path
         self.huggingface_datset_name = huggingface_datset_name
         self.dataset = load_huggingface_dataset(
             huggingface_dataset_path, huggingface_datset_split, huggingface_datset_name, create_splits, download_mode)
         self.sampled_images_idx = []
 
-    def __getitem__(self, index):
-        return self._get_image(index)
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def _get_image(self, index: int):
+    def __getitem__(self, index: int) -> dict:
         """
-        Loads an image from self.dataset. Expects self.dataset[i] to be a dictionary containing
-        either 'image' or 'url' as a key.
-            - The value associated with the 'image' key should be either a PIL image or a
-                b64 string encoding of the image.
-            - The value associated with the 'url' key should be a url that hosts the image
-                (as in dalle-mini/open-images)
+        Get an item (image and ID) from the dataset.
+
+        Args:
+            index (int): Index of the item to retrieve.
 
         Returns:
-            {'image': PIL.image, 'id': str}
+            dict: Dictionary containing 'image' (PIL image) and 'id' (str).
+        """
+        return self._get_image(index)
+
+    def __len__(self) -> int:
+        """
+        Get the length of the dataset.
+
+        Returns:
+            int: Length of the dataset.
+        """
+        return len(self.dataset)
+
+    def _get_image(self, index: int) -> dict:
+        """
+        Load an image from self.dataset. Expects self.dataset[i] to be a dictionary containing either 'image' or 'url'
+        as a key.
+            - The value associated with the 'image' key should be either a PIL image or a b64 string encoding of
+            the image.
+            - The value associated with the 'url' key should be a url that hosts the image (as in
+            dalle-mini/open-images)
+
+        Args:
+            index (int): Index of the image in the dataset.
+
+        Returns:
+            dict: Dictionary containing 'image' (PIL image) and 'id' (str).
         """
         sample = self.dataset[int(index)]
         if 'url' in sample:
@@ -104,8 +96,8 @@ class ImageDataset:
         else:
             raise NotImplementedError
 
-        # check for/remove alpha channel if download didnt 404
-        if image is not None and 'A' in image.mode:
+        # emove alpha channel if download didnt 404
+        if image is not None:
             image = image.convert('RGB')
 
         return {
@@ -113,13 +105,16 @@ class ImageDataset:
             'id': image_id,
         }
 
-    def sample(self, k=1):
+    def sample(self, k: int = 1) -> Tuple[List[dict], List[int]]:
         """
-        Randomly samples k images from self.dataset. Includes retries for failed downloads,
-        in the case that self.dataset contains urls.
+        Randomly sample k images from self.dataset. Includes retries for failed downloads, in the case that
+        self.dataset contains urls.
+
+        Args:
+            k (int): Number of images to sample (default: 1).
 
         Returns:
-            a tuple containing a list of the sampled images and a list of ther indices
+            Tuple[List[dict], List[int]]: A tuple containing a list of sampled images and their indices.
         """
         sampled_images = []
         sampled_idx = []

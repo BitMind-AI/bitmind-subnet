@@ -58,10 +58,15 @@ class RandomImageGenerator:
             bt.logging.info("A random image generation model will be loaded on each generation step.")
             self.diffuser = None
 
-
-    def generate(self, k=1):
+    def generate(self, k: int = 1) -> list:
         """
+        Generates k prompts using self.prompt_generator, then passes those to self.diffuser to generate k images.
 
+        Args:
+            k (int): Number of images to generate.
+
+        Returns:
+            list: List of dictionaries containing 'prompt', 'image', and 'id'.
         """
         if self.use_random_diffuser:
             self.load_random_diffuser()
@@ -88,7 +93,10 @@ class RandomImageGenerator:
 
         return gen_data
 
-    def load_random_diffuser(self):
+    def load_random_diffuser(self) -> None:
+        """
+        Clears GPU memory, then loads a random diffuser model.
+        """
         if self.diffuser is not None:
             bt.logging.info(f"Deleting previous diffuser, freeing memory")
             self.diffuser.to('cpu')
@@ -103,7 +111,16 @@ class RandomImageGenerator:
             diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
         self.diffuser.to("cuda")
 
-    def generate_prompt(self, retry_attempts=10):
+    def generate_prompt(self, retry_attempts: int = 10) -> str:
+        """
+        Generates a prompt for image generation.
+
+        Args:
+            retry_attempts (int): Number of attempts to generate a valid prompt.
+
+        Returns:
+            str: Generated prompt.
+        """
         seed = random.randint(100, 1000000)
         set_seed(seed)
 

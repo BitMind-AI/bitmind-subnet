@@ -39,8 +39,18 @@ from bitmind.image_transforms import random_image_transforms
 async def forward(self):
     """
     The forward function is called by the validator every time step.
-
     It is responsible for querying the network and scoring the responses.
+
+    Steps are:
+    1. Sample miner UIDs
+    2. Get an image. 50/50 chance of:
+        A. REAL (label = 0): Randomly sample a real image from self.real_image_datasets
+        B. FAKE (label = 1): Generate a synthetic image with self.random_image_generator
+    3. Apply random data augmentation to the image
+    4. Base64 encode the image and prepare an ImageSynapse
+    5. Query miner axons
+    6. Log results, including image and miner responses (soon to be W&B)
+    7. Compute rewards and update scores
 
     Args:
         self (:obj:`bittensor.neuron.Neuron`): The neuron object which contains all the necessary state for the validator.
