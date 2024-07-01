@@ -10,8 +10,8 @@ DATASET_META = {
         {"path": "saitsharipov/CelebA-HQ", "create_splits": True}
     ],
     "fake": [
-        {"path": "bitmind/RealVisXL_V4.0_images", "create_splits": True},
-        {"path": "bitmind/stable-diffusion-xl-base-1.0-images", "create_splits": True},
+        {"path": "bitmind/realvis-xl", "create_splits": True},
+        {"path": "bitmind/stable-diffusion-xl", "create_splits": True},
     ]
 }
 
