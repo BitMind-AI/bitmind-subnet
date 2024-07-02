@@ -26,7 +26,7 @@ from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.random_image_generator import RandomImageGenerator
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META, WANDB_PROJECT
+from bitmind.constants import DATASET_META, WANDB_PROJECT, WANDB_ENTITY
 import bitmind
 
 
@@ -86,7 +86,7 @@ class Validator(BaseValidatorNeuron):
         run = wandb.init(
             name=run_name,
             project=WANDB_PROJECT,
-            entity='bitmindai',
+            entity=WANDB_ENTITY,
             config=self.config,
             dir=self.config.full_path,
             reinit=True
