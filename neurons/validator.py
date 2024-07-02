@@ -18,6 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import bittensor as bt
+import wandb
 import time
 
 from neurons.validator_proxy import ValidatorProxy
@@ -25,7 +26,8 @@ from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.random_image_generator import RandomImageGenerator
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META
+from bitmind.constants import DATASET_META, WANDB_PROJECT
+import bitmind
 
 
 class Validator(BaseValidatorNeuron):
@@ -46,6 +48,8 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info("load_state()")
         self.load_state()
 
+        self.init_wandb()
+
         print("Loading real datasets")
         self.real_image_datasets = [
             ImageDataset(ds['path'], 'test', ds.get('name', None), ds['create_splits'])
@@ -64,8 +68,36 @@ class Validator(BaseValidatorNeuron):
         - Rewarding the miners
         - Updating the scores
         """
-        # TODO(developer): Rewrite this function based on your protocol definition.
         return await forward(self)
+
+    def init_wandb(self):
+        if self.config.wandb_off:
+            return
+
+        run_name = f'validator-{self.uid}-{bitmind.__version__}'
+        self.config.run_name = run_name
+        self.config.uid = self.uid
+        self.config.hotkey = self.wallet.hotkey.ss58_address
+        self.config.version = bitmind.__version__
+        self.config.type = self.neuron_type
+
+        # Initialize the wandb run for the single project
+        print("Initializing W&B")
+        run = wandb.init(
+            name=run_name,
+            project=WANDB_PROJECT,
+            entity='bitmindai',
+            config=self.config,
+            dir=self.config.full_path,
+            reinit=True
+        )
+
+        # Sign the run to ensure it's from the correct hotkey
+        signature = self.wallet.hotkey.sign(run.id.encode()).hex()
+        self.config.signature = signature
+        wandb.config.update(self.config, allow_val_change=True)
+
+        bt.logging.success(f"Started wandb run for project '{WANDB_PROJECT}'")
 
 
 # The main function parses the configuration and runs the validator.
