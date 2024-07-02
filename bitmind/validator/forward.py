@@ -88,14 +88,15 @@ async def forward(self):
     # Update the scores based on the rewards. You may want to define your own update_scores function for custom behavior.
     self.update_scores(rewards, miner_uids)
 
-    wandb.log({
-        'image': wandb.Image(sample['image']),
-        'image_source': source_name,
-        'label': label,
-        'miner_uid': miner_uids,
-        'pred': responses,
-        'correct': [
-            np.round(y_hat) == y
-            for y_hat, y in zip(responses, [label]*len(responses))
-        ]
-    })
+    if not self.config.wandb.off:
+        wandb.log({
+            'image': wandb.Image(sample['image']),
+            'image_source': source_name,
+            'label': label,
+            'miner_uid': miner_uids,
+            'pred': responses,
+            'correct': [
+                np.round(y_hat) == y
+                for y_hat, y in zip(responses, [label]*len(responses))
+            ]
+        })
