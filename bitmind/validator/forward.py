@@ -29,6 +29,7 @@ import base64
 import requests
 import joblib
 import os
+import wandb
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.protocol import ImageSynapse, prepare_image_synapse
@@ -81,32 +82,20 @@ async def forward(self):
     )
 
     rewards = get_rewards(label=label, responses=responses)
-
-    results_df = pd.DataFrame({
-        'time': datetime.now(),
-        'miner_uid': miner_uids,
-        'label': [label] * len(miner_uids),
-        'pred': responses,
-        'correct': [
-            np.round(y_hat) == y
-            for y_hat, y in zip(responses, [label]*len(responses))
-        ],
-        'image_id': [sample['id']] * len(miner_uids),
-        'image_source': [source_name] * len(miner_uids)
-    })
-
-    if os.path.exists('results.csv'):
-        results_df.to_csv('results.csv', mode='a', index=False, header=False)
-    else:
-        results_df.to_csv('results.csv', mode='w', index=False, header=True)
-
-    # debug outputs for rewards
-    print(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
-    for i, pred in enumerate(responses):
-        print(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
-
     bt.logging.info(f"Received responses: {responses}")
     bt.logging.info(f"Scored responses: {rewards}")
 
     # Update the scores based on the rewards. You may want to define your own update_scores function for custom behavior.
     self.update_scores(rewards, miner_uids)
+
+    wandb.log({
+        'image': wandb.Image(sample['image']),
+        'image_source': source_name,
+        'label': label,
+        'miner_uid': miner_uids,
+        'pred': responses,
+        'correct': [
+            np.round(y_hat) == y
+            for y_hat, y in zip(responses, [label]*len(responses))
+        ]
+    })
