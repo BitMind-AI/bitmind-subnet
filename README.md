@@ -6,18 +6,17 @@
 
 ## Table of Contents
 
-- [Introduction](#introduction)
-- [Project Structure and Terminology](#project-structure-and-terminology)
-- [Setup](#setup)
-- [Mining](#mining)
-- [Validating](#validating)
-- [License](#license)
+- [Introduction 💡](#introduction)
+- [Project Structure and Terminology 📖](#project-structure-and-terminology)
+- [Setup 🔧](#setup)
+- [Mining ⛏️](#mining)
+- [Validating 🔎](#validating)
+- [License 📄](#license)
 
 ## Introduction
 
 **IMPORTANT**: If you are new to Bittensor, we recommend familiarizing yourself with the basics on the [Bittensor Website](https://bittensor.com/) before proceeding to the [Setup](#setup) section.
 
-## BitMind Subnet Introduction
 ### Identifying AI-Generated Media with a Decentralized Framework
 
 **Overview:**
@@ -57,7 +56,7 @@ We are currently in testnet phase, uid 168.
 
 For real-time discussions, community support, and regular updates, join our Discord server. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
 
-## Project Structure and Terminology 📖
+## Project Structure and Terminology
 
 ### Overview and Terminology
 
@@ -99,7 +98,7 @@ Before diving into the specifics of the directory structure and key components, 
 - **random_image_generator.py**: A utility to select images for processing, capable of using either a diffuser or prompt generator. Supports logging and image caching for efficiency.
 
 
-## Setup 🔧
+## Setup
 
 ### Before you proceed
 
@@ -155,7 +154,7 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ---
 
-## Mining ⛏️
+## Mining
 
 You can launch your miners via pm2 using the following command. To stop your miner, you can run `pm2 delete miner`.
 
@@ -170,7 +169,7 @@ pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python
 ```
 
 
-## Validating 🔎
+## Validating
 
 You can launch your validator via pm2 using the following command. To stop your validator, you can run `pm2 delete validator`.
 
@@ -239,7 +238,7 @@ Another approach, which avoids avoids miner downtime, is to replace the model fi
 
 ---
 
-## License 📄
+## License
 
 This repository is licensed under the MIT License.
 
