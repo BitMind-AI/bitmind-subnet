@@ -13,9 +13,9 @@ matplotlib
 kaggle
 torchvision
 torchaudio
-#cudatoolkit
 datasets
 accelerate
 tensorboardx
 tf-keras
 httpx
+wandb
