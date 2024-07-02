@@ -7,6 +7,7 @@
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [Project Structure and Terminology](#project-structure-and-terminology)
 - [Setup](#setup)
 - [Mining](#mining)
 - [Validating](#validating)
@@ -50,13 +51,55 @@ We are currently in testnet phase, uid 168.
 
 <p align="left">
   <a href="https://discord.gg/bitmind">
-    <img src="static/Join-BitMind-Discord.png" alt="Join us on Discord" width="50%">
+    <img src="static/Join-BitMind-Discord.png" alt="Join us on Discord" width="60%">
   </a>
 </p>
 
 For real-time discussions, community support, and regular updates, join our Discord server. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
 
-## Setup
+## Project Structure and Terminology 📖
+
+### Overview and Terminology
+
+Before diving into the specifics of the directory structure and key components, let's familiarize ourselves with the essential terms used throughout this project. Understanding these terms is crucial for navigating and contributing to the BitMind Subnet effectively. For a more detailed explanation of the terminology, please refer to [Bittensor Building Blocks](https://docs.bittensor.com/learn/bittensor-building-blocks).
+
+- **Synapse**: Acts as a communication bridge between axons (servers) and dendrites (clients), facilitating data flow and processing.
+- **Neuron**: A fundamental unit that includes both an axon and a dendrite, enabling full participation in the network operations.
+
+### Notable Directories
+
+- **bitmind/**: This directory contains the specific implementations of Bittensor operations, which include the key components such as miners, validators, and neurons.
+  - **base/**: Houses base classes for miner, validator, and neuron functionalities, each inheriting from the broader Bittensor framework.
+
+### Key Files and Descriptions
+
+#### bitmind/base/
+- **miner.py**: Responsible for loading models and weights, and handling predictions on images.
+- **validator.py**: Implements core functionality including reward calculation and forwarding operations.
+- **neuron.py**: A class that inherits from the base miner class provided by Bittensor, incorporating both axon and dendrite functionalities.
+
+#### bitmind/validator/
+- **forward.py**: Manages image processing and synapse operations using `ImageSynapse` for 256x256 images. Includes logic for challenge issuance and reward updates based on performance.
+- **proxy.py**: Temporarily unused; intended for handling frontend requests.
+
+#### bitmind/miner/
+- **predict.py**: Handles image transformation and the execution of model processing.
+
+### Utility and API Modules
+
+- **utils/**: Contains mostly boilerplate code necessary for general operations.
+- **api/**: Purely boilerplate, facilitating API interactions.
+
+### Datasets
+
+- **real_fake_dataset**: Utilized by the base miner for training, distinguishing between real and fake images.
+
+### Additional Tools
+
+- **random_image_generator.py**: A utility to select images for processing, capable of using either a diffuser or prompt generator. Supports logging and image caching for efficiency.
+
+
+## Setup 🔧
 
 ### Before you proceed
 
@@ -112,7 +155,7 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ---
 
-## Mine
+## Mining ⛏️
 
 You can launch your miners via pm2 using the following command. To stop your miner, you can run `pm2 delete miner`.
 
@@ -127,7 +170,7 @@ pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python
 ```
 
 
-## Validate
+## Validating 🔎
 
 You can launch your validator via pm2 using the following command. To stop your validator, you can run `pm2 delete validator`.
 
@@ -196,7 +239,7 @@ Another approach, which avoids avoids miner downtime, is to replace the model fi
 
 ---
 
-## License
+## License 📄
 
 This repository is licensed under the MIT License.
 
