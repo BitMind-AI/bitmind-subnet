@@ -71,7 +71,7 @@ class Validator(BaseValidatorNeuron):
         return await forward(self)
 
     def init_wandb(self):
-        if self.config.wandb_off:
+        if self.config.wandb.off:
             return
 
         run_name = f'validator-{self.uid}-{bitmind.__version__}'
