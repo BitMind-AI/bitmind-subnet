@@ -1,26 +1,15 @@
-
 # Synthetic Image Generation
 
-This folder contains files for the implementation of a joint vision-to-language and text-to-image model system that generates highly diverse and realistic images for deepfake detector training.
+## Overview
 
-<<<<<<< HEAD
-image2text_text2image_examples.ipynb :
+This repository contains files for a vision-to-language and text-to-image model pipeline for generating diverse and realistic images that can be used for training deepfake detectors.
 
-Notebook containing related code snippets for
+## Repository Contents
 
--real image captioning using BLIP-2
+- **image2text_text2image_examples.ipynb**
+  - This Jupyter notebook includes code snippets for the following functionalities:
+    - Real image captioning using BLIP-2
+    - Caption summarization with transformer-based large language models (LLMs)
 
--caption summarization using transformer LLM's
-
-=======
-image2text_text2image_examples.ipynb.ipynb :
-
-Notebook containing related code snippets for
--real image captioning using BLIP-2
--caption summarization using transformer LLM's
->>>>>>> origin/deepfake-gen
--synthetic image generation using diffusion model with caption summaries as inputs
-
-1_real_image_to_text_annotation.ipynb :
-
-Pipeline for real image dataset to text caption dataset generation.
+- **1_real_image_to_text_annotation.ipynb**
+  - This pipeline notebook facilitates the generation of a text caption dataset from a real image dataset.
