@@ -3,7 +3,7 @@
 
 This folder contains files for the implementation of a joint vision-to-language and text-to-image model system that generates highly diverse and realistic images for deepfake detector training.
 
-image_annotation_experiments.ipynb :
+**image_annotation_experiments.ipynb :**
 
 Notebook containing related code snippets for
 
@@ -12,6 +12,6 @@ Notebook containing related code snippets for
 -caption summarization using transformer LLM's
 
 
-real_image_to_text_annotation.ipynb :
+**real_image_to_text_annotation.ipynb :**
 
 Pipeline for real image dataset to text caption dataset generation.
