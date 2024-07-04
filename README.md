@@ -20,7 +20,7 @@
 ### Identifying AI-Generated Media with a Decentralized Framework
 
 **Overview:**
-The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. This platform is engineered on a decentralized, incentive-driven framework to enhance trustworthiness and stimulate continuous technological advancement.
+The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images. This platform is engineered on a decentralized, incentive-driven framework to enhance trustworthiness and stimulate continuous technological advancement.
 
 **Purpose:**
 The proliferation of generative AI models has significantly increased the production of high-quality synthetic media, presenting challenges in distinguishing these from authentic content. The BitMind Subnet addresses this challenge by providing robust detection mechanisms to maintain the integrity of digital media.
@@ -74,7 +74,7 @@ Before diving into the specifics of the directory structure and key components, 
 
 #### bitmind/base/
 - **miner.py**: Responsible for loading models and weights, and handling predictions on images.
-- **validator.py**: Implements core functionality including reward calculation and forwarding operations.
+- **validator.py**: Implements core functionality for generating challenges for miners, scoring responses, and setting weights.
 - **neuron.py**: A class that inherits from the base miner class provided by Bittensor, incorporating both axon and dendrite functionalities.
 
 #### bitmind/validator/
@@ -82,12 +82,7 @@ Before diving into the specifics of the directory structure and key components, 
 - **proxy.py**: Temporarily unused; intended for handling frontend requests.
 
 #### bitmind/miner/
-- **predict.py**: Handles image transformation and the execution of model processing.
-
-### Utility and API Modules
-
-- **utils/**: Contains mostly boilerplate code necessary for general operations.
-- **api/**: Purely boilerplate, facilitating API interactions.
+- **predict.py**: Handles image transformation and the execution of model inference.
 
 ### Datasets
 
@@ -95,8 +90,7 @@ Before diving into the specifics of the directory structure and key components, 
 
 ### Additional Tools
 
-- **random_image_generator.py**: A utility to select images for processing, capable of using either a diffuser or prompt generator. Supports logging and image caching for efficiency.
-
+- **random_image_generator.py**: A class that uses a prompt generation model and a suite of diffusion models to produce synthetic images. Supports caching of image/prompt pairs to a local directory.
 
 ## Setup
 
