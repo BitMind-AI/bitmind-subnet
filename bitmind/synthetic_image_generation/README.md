@@ -19,3 +19,7 @@ Notebook containing related code snippets for
 **real_image_to_text_annotation.ipynb :**
 
 Pipeline for real image dataset to text caption dataset generation.
+
+**synthetic_dataset_evaluation.ipynb :**
+
+Evaluation metrics for quantifying realism and diversity of synthetic images.
