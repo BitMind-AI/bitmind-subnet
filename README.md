@@ -67,8 +67,8 @@ Before diving into the specifics of the directory structure and key components, 
 
 ### Notable Directories
 
-- **bitmind/**: This directory contains the specific implementations of Bittensor operations, which include the key components such as miners, validators, and neurons.
-  - **base/**: Houses base classes for miner, validator, and neuron functionalities, each inheriting from the broader Bittensor framework.
+- **bitmind/**: This directory contains the specific implementations of Bittensor operations, which include the key components such as miners, validators, and neurons. This code is used both by validators/miners as well as the base_miner training/eval code.
+  - **base/**: Houses base classes for miner, validator, and neuron functionalities, each inheriting from the broader Bittensor framework. 
 
 ### Key Files and Descriptions
 
