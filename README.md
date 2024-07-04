@@ -4,55 +4,103 @@
 
 # Bitmind Subnet
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
----
+## Table of Contents
 
-- [Introduction](#introduction)
-- [Setup](#setup)
-- [Mining](#mining)
-- [Validating](#validating)
-- [License](#license)
+- [Introduction 💡](#introduction)
+- [Project Structure and Terminology 📖](#project-structure-and-terminology)
+- [Setup 🔧](#setup)
+- [Mining ⛏️](#mining)
+- [Validating 🔎](#validating)
+- [License 📄](#license)
 
 ## Introduction
 
-**IMPORTANT**: If you are new to Bittensor, we suggest you get comfortable with the basics at the [Bittensor Website](https://bittensor.com/) before proceeding to the [Setup](#setup) section.
+**IMPORTANT**: If you are new to Bittensor, we recommend familiarizing yourself with the basics on the [Bittensor Website](https://bittensor.com/) before proceeding to the [Setup](#setup) section.
 
-Introducing Bittensor Subnet X (Bitmind Subnet): A Platform for Identifying AI Generated Media.
+### Identifying AI-Generated Media with a Decentralized Framework
 
-The recent proliferation of generative models capable of creating high qualitiy, convincingly realistic images has brought with it an urgent need for reliable mechanisms for distinguishing between real and fake images. This is a Bittensor subnet that incentivizes innovation in such mechanisms. The quality and reliability of the Bitmind Subnet are inherently tied to the incentivized, decentralized nature of Bittensor - decentralization mitigates the centralization risk of single-model approaches in this problem space, and incentivazation facilitates innovation within a rich, competitive ecosystem. Our easy-to-use API and frontend (COMING SOON) democratize access to the collective intelligence of our miner pool, realizing a powerful tool that will help alleviate the issues of misinformation and deception that now pervade modern media and threaten deomocracy at a global scale.
+**Overview:**
+The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images. This platform is engineered on a decentralized, incentive-driven framework to enhance trustworthiness and stimulate continuous technological advancement.
 
-The Bitmind Subnet comprises a suite of state-of-the-art generative and discriminative AI models, and will continually evolve to cover more generative algorithms.
+**Purpose:**
+The proliferation of generative AI models has significantly increased the production of high-quality synthetic media, presenting challenges in distinguishing these from authentic content. The BitMind Subnet addresses this challenge by providing robust detection mechanisms to maintain the integrity of digital media.
 
-- **Miners** are tasked with running a binary classifier capable of discriminating between real and AI generated images
-    - Our base miner is from the 2024 CVPR Paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), which introduces a novel metric called Neighborhood Pixel Relationships to guide the training of popular Convolutional Neural Networks (CNNs) to learn features specific to artifacts present in generated images.
-    - In the interest of helping our miners experiment with diverse cutting edge strategies, will continue implementing detection solutions based on recent papers, and release training code and base weights.
-- **Validators** are tasked with sending images to miners for classification, with each challenge having a 50/50 chance of containing a real or fake image. Validators run a prompt generation LLM and several image generation models, and sample real images from a pool composed of over 10 million images from several open source datasets.
-    - We will iteratively expand the generative capabilities of validators, as well as the real image sample pool, to increase miner competition and, in turn, the utility of the subnet as a consumer-facing service.
+**Features:**
+- **API and Frontend (Coming Soon):** Accessibility will be broadened through an intuitive API and user interface, facilitating the integration and utilization of our detection technologies.
+- **Model Evolution:** Our platform continuously integrates the latest research and developments in AI to adapt to evolving generative techniques.
 
+**Core Components:**
+- **Miners:** Tasked with running binary classifiers that discern between genuine and AI-generated content.
+    - **Foundation Model:** Based on the insights from the 2024 CVPR paper [*Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection*](https://arxiv.org/abs/2312.10461), our primary model utilizes Neighborhood Pixel Relationships to detect specific discrepancies in AI-generated images.
+    - **Research Integration:** We systematically update our detection models and methodologies in response to emerging academic research, offering resources like training codes and model weights to our community.
+- **Validators:** Responsible for challenging miners with a balanced mix of real and synthetic images, drawn from a diverse pool of sources.
+    - **Resource Expansion:** We are committed to enhancing the validators' capabilities by increasing the diversity and volume of the image pool, which supports rigorous testing and validation processes.
 
-<center>
-    <img src="static/Subnet-Arch.png" alt="Subnet Architecture"/>
-</center>
+**Contribution:**
+Developers and researchers are invited to contribute to the BitMind Subnet, whether by participating in model development, contributing to codebases, or engaging with our community. Your involvement helps improve the efficacy of digital media verification technologies.
 
+**Stay Updated:**
+For upcoming features and community updates, please follow our project repository and join our discussions.
 
-## Status
+![Subnet Architecture](static/Subnet-Arch.png)
 
-We are on testnet, uid 168!
+We are currently in testnet phase, uid 168.
 
-[Join our Discord!](https://discord.gg/SaFbkGkU)
+## Join Our Discord Community
 
----
+<p align="left">
+  <a href="https://discord.gg/bitmind">
+    <img src="static/Join-BitMind-Discord.png" alt="Join us on Discord" width="60%">
+  </a>
+</p>
+
+For real-time discussions, community support, and regular updates, join our Discord server. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
+
+## Project Structure and Terminology
+
+### Overview and Terminology
+
+Before diving into the specifics of the directory structure and key components, let's familiarize ourselves with the essential terms used throughout this project. Understanding these terms is crucial for navigating and contributing to the BitMind Subnet effectively. For a more detailed explanation of the terminology, please refer to [Bittensor Building Blocks](https://docs.bittensor.com/learn/bittensor-building-blocks).
+
+- **Synapse**: Acts as a communication bridge between axons (servers) and dendrites (clients), facilitating data flow and processing.
+- **Neuron**: A fundamental unit that includes both an axon and a dendrite, enabling full participation in the network operations.
+
+### Notable Directories
+
+- **bitmind/**: This directory contains the specific implementations of Bittensor operations, which include the key components such as miners, validators, and neurons. This code is used both by validators/miners as well as the base_miner training/eval code.
+  - **base/**: Houses base classes for miner, validator, and neuron functionalities, each inheriting from the broader Bittensor framework. 
+
+### Key Files and Descriptions
+
+#### bitmind/base/
+- **miner.py**: Responsible for loading models and weights, and handling predictions on images.
+- **validator.py**: Implements core functionality for generating challenges for miners, scoring responses, and setting weights.
+- **neuron.py**: A class that inherits from the base miner class provided by Bittensor, incorporating both axon and dendrite functionalities.
+
+#### bitmind/validator/
+- **forward.py**: Manages image processing and synapse operations using `ImageSynapse` for 256x256 images. Includes logic for challenge issuance and reward updates based on performance.
+- **proxy.py**: Temporarily unused; intended for handling frontend requests.
+
+#### bitmind/miner/
+- **predict.py**: Handles image transformation and the execution of model inference.
+
+### Datasets
+
+- **real_fake_dataset**: Utilized by the base miner for training, distinguishing between real and fake images.
+
+### Additional Tools
+
+- **random_image_generator.py**: A class that uses a prompt generation model and a suite of diffusion models to produce synthetic images. Supports caching of image/prompt pairs to a local directory.
 
 ## Setup
 
 ### Before you proceed
 
-Before running a validator or miner, note the following:
+**Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
 
-**IMPORTANT**: We **strongly recommend** before proceeding that you ensure you are running Subtensor locally to minimize chances of outages and improve the latency/connection. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary)
-
-**IMPORTANT:** Make sure you are aware of the minimum compute requirements for our subnet. See the [Minimum compute YAML configuration](./min_compute.yml). Our base miner model does not require a GPU for inference, but we strongly recommend using a GPU for training.
+**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](./min_compute.yml). A GPU is recommended for training, although not required for basic inference.
 
 ### Installation
 
@@ -102,7 +150,7 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ---
 
-## Mine
+## Mining
 
 You can launch your miners via pm2 using the following command. To stop your miner, you can run `pm2 delete miner`.
 
@@ -117,7 +165,7 @@ pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python
 ```
 
 
-## Validate
+## Validating
 
 You can launch your validator via pm2 using the following command. To stop your validator, you can run `pm2 delete validator`.
 
