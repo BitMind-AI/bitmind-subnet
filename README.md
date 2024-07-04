@@ -1,4 +1,6 @@
-![BitMind Logo](static/Bitmind-Logo.png)
+<center>
+    <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="200"/>
+</center>
 
 # Bitmind Subnet
 
