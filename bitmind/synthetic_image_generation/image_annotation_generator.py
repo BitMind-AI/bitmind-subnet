@@ -16,8 +16,6 @@ from bitmind.constants import DATASET_META
 from bitmind.synthetic_image_generation.utils import image_utils
 from bitmind.synthetic_image_generation.utils import annotation_utils
 
-
-
 class ImageAnnotationGenerator:
     def __init__(self, model_name: str, device: str = 'auto'):
         self.device = torch.device('cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu')
@@ -52,7 +50,7 @@ class ImageAnnotationGenerator:
 
         return description
 
-     def generate_annotation(image_id, dataset_name: str, image: PIL.Image.Image, original_dimensions: tuple, resize: bool, verbose: int):
+    def generate_annotation(self, image_id, dataset_name: str, image: PIL.Image.Image, original_dimensions: tuple, resize: bool, verbose: int):
         """
         Generate a text annotation for a given image.
     
@@ -73,7 +71,7 @@ class ImageAnnotationGenerator:
             if verbose > 1 and image_to_process.size != image.size:
                 print(f"Resized {image_id}: {image.size} to {image_to_process.size}")
     
-        description = generate_description(image_to_process, verbose > 2)
+        description = self.generate_description(image_to_process, verbose > 2)
         annotation = {
             'description': description,
             'original_dataset': dataset_name,
