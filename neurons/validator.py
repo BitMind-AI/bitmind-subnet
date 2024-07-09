@@ -24,6 +24,7 @@ from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.random_image_generator import RandomImageGenerator
+from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 from bitmind.image_dataset import ImageDataset
 from bitmind.constants import DATASET_META
 
@@ -53,6 +54,7 @@ class Validator(BaseValidatorNeuron):
         ]
 
         self.random_image_generator = RandomImageGenerator(use_random_diffuser=True, diffuser_name=None)
+        self.image_annotation_generator = ImageAnnotationGenerator(model_name="Salesforce/blip2-opt-2.7b-coco")
         #self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):
