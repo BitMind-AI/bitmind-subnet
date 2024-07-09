@@ -89,8 +89,7 @@ async def forward(self):
     self.update_scores(rewards, miner_uids)
 
     if not self.config.wandb.off:
-        wandb.log({
-            'image': wandb.Image(sample['image']),
+        wandb_data = {
             'image_source': source_name,
             'label': label,
             'miner_uid': miner_uids,
@@ -99,4 +98,12 @@ async def forward(self):
                 np.round(y_hat) == y
                 for y_hat, y in zip(responses, [label]*len(responses))
             ]
-        })
+        }
+        if label == 1:
+            wandb_data['model'] = source_name
+            wandb_data['image'] = wandb.Image(sample['image'])
+        elif label == 0:
+            wandb_data['dataset'] = source_name
+            wandb_data['image_index'] = sample['id']
+
+        wandb.log(wandb_data)
