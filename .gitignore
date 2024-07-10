@@ -162,5 +162,5 @@ cython_debug/
 testing/
 data/
 checkpoints/
-/synthetic_image_generation/data/*/
+/bitmind/synthetic_image_generation/data/*
 .requirements_installed
