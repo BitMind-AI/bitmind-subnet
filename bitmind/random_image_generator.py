@@ -58,9 +58,10 @@ class RandomImageGenerator:
             bt.logging.info("A random image generation model will be loaded on each generation step.")
             self.diffuser = None
 
-    def generate(self, k: int = 1) -> list:
+    def generate(self, k: int = 1, annotation: dict = None) -> list:
         """
-        Generates k prompts using self.prompt_generator, then passes those to self.diffuser to generate k images.
+        If no annotation is provided, generates k prompts using self.prompt_generator, then passes those to self.diffuser to generate k images.
+        If an annotation is provided, it uses the description field as the prompt.
 
         Args:
             k (int): Number of images to generate.
@@ -71,11 +72,16 @@ class RandomImageGenerator:
         if self.use_random_diffuser:
             self.load_random_diffuser()
 
-        print("Generating prompts...")
-        prompts = [
-            self.generate_prompt()
-            for _ in range(k)
-        ]
+        prompts = []
+        if annotation and 'description' in annotation:
+            print("Using provided annotation as prompt...")
+            prompts = [annotation['description']] * k
+        else:
+            print("Generating prompts...")
+            prompts = [
+                self.generate_prompt()
+                for _ in range(k)
+            ]   
 
         print("Generating images...")
         gen_data = []

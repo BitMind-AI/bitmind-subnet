@@ -80,7 +80,7 @@ class ImageAnnotationGenerator:
         }
         return annotation
 
-    def process_image(self, dataset_dir: str, image_info: dict, dataset_name: str, image_index: int, resize: bool, verbose: int) -> Tuple[Any, float]:
+    def process_image(self, image_info: dict, dataset_name: str, image_index: int, resize: bool, verbose: int) -> Tuple[Any, float]:
         if image_info['image'] is None:
             if verbose > 1:
                 logging.debug(f"Skipping image {image_index} in dataset {dataset_name} due to missing image data.")
@@ -89,7 +89,6 @@ class ImageAnnotationGenerator:
         original_dimensions = image_info['image'].size
         start_time = time.time()
         annotation = self.generate_annotation(image_index, dataset_name, image_info['image'], original_dimensions, resize, verbose)
-        annotation_utils.save_annotation(dataset_dir, image_index, annotation, verbose)
         time_elapsed = time.time() - start_time
 
         if annotation == -1:
@@ -98,32 +97,39 @@ class ImageAnnotationGenerator:
             return None, time_elapsed
 
         return annotation, time_elapsed
+    
+    def generate_annotations(self, real_image_datasets: List[ImageDataset], verbose: int = 0, max_images: int = None, resize_images: bool = False) -> Dict[str, Dict[str, Any]]:
+        """
+        Generates text annotations for images in the given datasets, saves them in a specified directory, 
+        and computes the average per image latency. Returns a dictionary of new annotations and the average latency.
 
-    def generate_annotations(self, real_image_datasets: List[ImageDataset], save_path: str = 'annotations/', verbose: int = 0, max_images: int = None, resize_images: bool = False) -> Tuple[Dict[str, Dict[str, Any]], float]:
+        Parameters:
+            real_image_datasets (List[Any]): Datasets containing images.
+            verbose (int): Verbosity level for process messages (Most verbose = 3).
+            max_images (int): Maximum number of images to annotate.
+            resize_images (bool) : Allow image downsizing before captioning.
+                                Sets max dimensions to (1280, 1280), maintaining aspect ratio.
+    
+        Returns:
+            Tuple[Dict[str, Dict[str, Any]], float]: A tuple containing the annotations dictionary and average latency.
+        """
         annotation_utils.set_logging_level(verbose)
-        annotations_dir = annotation_utils.ensure_save_path(save_path)
         annotations = {}
         total_time = 0
         total_processed_images = 0
-
-        for i, dataset in enumerate(real_image_datasets):
+        for dataset in real_image_datasets:
             dataset_name = dataset.huggingface_dataset_path
-            dataset_dir = annotation_utils.create_annotation_dataset_directory(annotations_dir, dataset_name)
             processed_images = 0
             dataset_time = 0
-
             for j, image_info in enumerate(dataset):
-                annotation, time_elapsed = self.process_image(dataset_dir, image_info, dataset_name, j, resize_images, verbose)
+                annotation, time_elapsed = self.process_image(image_info, dataset_name, j, resize_images, verbose)
                 if annotation is not None:
                     annotations.setdefault(dataset_name, {})[image_info['id']] = annotation
                     total_time += time_elapsed
                     dataset_time += time_elapsed
                     processed_images += 1
-                    if max_images is not None and processed_images >= max_images:
+                    if max_images is not None and len(annotations[dataset_name]) >= max_images:
                         break
-
-            average_latency = annotation_utils.compute_annotation_latency(processed_images, dataset_time, dataset_name)
             total_processed_images += processed_images
-
         overall_average_latency = total_time / total_processed_images if total_processed_images else 0
         return annotations, overall_average_latency

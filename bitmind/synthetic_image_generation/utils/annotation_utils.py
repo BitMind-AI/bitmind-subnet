@@ -40,11 +40,11 @@ def compute_annotation_latency(self, processed_images: int, dataset_time: float,
         return average_latency
     return 0.0
 
-def list_datasets(base_dir: str) -> List[str]:
+def list_datasets(base_dir: str) -> list[str]:
     """List all subdirectories in the base directory."""
     return [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
 
-def load_annotations(base_dir: str, dataset: str) -> List[Dict]:
+def load_annotations(base_dir: str, dataset: str) -> list[dict]:
     """Load annotations from JSON files within a specified directory."""
     annotations = []
     path = os.path.join(base_dir, dataset)

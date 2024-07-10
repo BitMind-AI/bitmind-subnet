@@ -31,6 +31,7 @@ import joblib
 import os
 
 from bitmind.utils.uids import get_random_uids
+from bitmind.utils.data import sample_with_index
 from bitmind.protocol import ImageSynapse, prepare_image_synapse
 from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_image_transforms
@@ -58,18 +59,33 @@ async def forward(self):
     """
     #print(f"k={self.config.neuron.sample_size}")
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-
     if np.random.rand() > 0.5:
         print('sampling real image')
-        real_dataset = self.real_image_datasets[np.random.randint(0, len(self.real_image_datasets))]
+        real_dataset = self.real_image_datasets[np.random.randint(
+            0, len(self.real_image_datasets))
+        ]
         source_name = real_dataset.huggingface_dataset_path
         sample = real_dataset.sample(k=1)[0][0]
         label = 0
     else:
-        print('generating fake image')
-        sample = self.random_image_generator.generate(k=1)[0]
-        source_name = self.random_image_generator.diffuser_name
-        label = 1
+        if self.config.prompt_type == 'annotation':
+            print('generating fake image from annotation of real image')
+            real_dataset = self.real_image_datasets[np.random.randint(
+                0, len(self.real_image_datasets))
+            ]
+            real_sample, image_index = sample_with_index(
+                real_dataset, k=1)[0]
+            annotation = self.image_annotation_generator.process_image(
+                real_sample, source_name, image_index=image_index,
+                resize_images=False, verbose=0
+            )
+            sample = self.random_image_generator.generate(
+                k=1, annotation=annotation)[0]
+            source_name = self.random_image_generator.diffuser_name
+        elif self.config.prompt_type == 'random':
+            print('generating fake image')
+            sample = self.random_image_generator.generate(k=1)[0]
+            source_name = self.random_image_generator.diffuser_name
 
     image = random_image_transforms(sample['image'])
 

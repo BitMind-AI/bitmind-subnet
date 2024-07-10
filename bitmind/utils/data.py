@@ -4,6 +4,7 @@ from PIL import Image
 from io import BytesIO
 import requests
 import datasets
+import random
 
 
 def download_image(url: str) -> Image.Image:
@@ -77,3 +78,8 @@ def load_huggingface_dataset(
     split_dataset['validation'] = val_test_split['train']
     split_dataset['test'] = val_test_split['test']
     return split_dataset[split]
+
+def sample_with_index(dataset, k=1):
+    """ Sample images along with their indices from the dataset. """
+    indices = random.sample(range(len(dataset)), k)
+    return [(dataset[i], i) for i in indices]

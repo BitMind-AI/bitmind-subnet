@@ -198,6 +198,13 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
+        "--neuron.prompt_type",
+        type=str,
+        help="Choose 'annotation' to generate prompts from BLIP-2 annotations of real images, or 'random' for arbitrary prompts.",
+        default='annotation',
+    )
+
+    parser.add_argument(
         "--neuron.disable_set_weights",
         action="store_true",
         help="Disables setting weights.",
