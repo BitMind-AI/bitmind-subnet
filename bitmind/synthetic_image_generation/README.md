@@ -3,6 +3,10 @@
 
 This folder contains files for the implementation of a joint vision-to-language and text-to-image model system that generates highly diverse and realistic images for deepfake detector training.
 
+**data/:**
+
+Directory contaning subdirectories of generated annotations (in /annotations_from_real/) and synthetic images (in /synthetics_from_annotations/).
+
 **annotations/:**
 
 Folder containing subdirectories for each real image dataset. Subdirectories contain JSONs with text annotations of images. The filename of the JSONs correspond to the image index in the associated dataset dictionary.
