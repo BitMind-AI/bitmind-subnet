@@ -60,7 +60,7 @@ async def forward(self):
     #print(f"k={self.config.neuron.sample_size}")
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
     if np.random.rand() > 0.5:
-        print('sampling real image')
+        bt.logging.info('sampling real image')
         real_dataset = self.real_image_datasets[np.random.randint(
             0, len(self.real_image_datasets))
         ]
@@ -69,7 +69,7 @@ async def forward(self):
         label = 0
     else:
         if self.config.prompt_type == 'annotation':
-            print('generating fake image from annotation of real image')
+            bt.logging.info('generating fake image from annotation of real image')
             real_dataset = self.real_image_datasets[np.random.randint(
                 0, len(self.real_image_datasets))
             ]
@@ -83,13 +83,13 @@ async def forward(self):
                 k=1, annotation=annotation)[0]
             source_name = self.random_image_generator.diffuser_name
         elif self.config.prompt_type == 'random':
-            print('generating fake image')
+            bt.logging.info('generating fake image')
             sample = self.random_image_generator.generate(k=1)[0]
             source_name = self.random_image_generator.diffuser_name
 
     image = random_image_transforms(sample['image'])
 
-    print(f"Querying {len(miner_uids)} miners...")
+    bt.logging.info(f"Querying {len(miner_uids)} miners...")
     responses = await self.dendrite(
         axons=[self.metagraph.axons[uid] for uid in miner_uids],
         synapse=prepare_image_synapse(image=image),
@@ -117,9 +117,9 @@ async def forward(self):
         results_df.to_csv('results.csv', mode='w', index=False, header=True)
 
     # debug outputs for rewards
-    print(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
     for i, pred in enumerate(responses):
-        print(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
+        bt.logging.info(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
 
     bt.logging.info(f"Received responses: {responses}")
     bt.logging.info(f"Scored responses: {rewards}")

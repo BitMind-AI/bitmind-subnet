@@ -1,20 +1,14 @@
-import json
-import logging
-import os
-import random
-import time
-from typing import Any, Dict, List, Tuple
-
-import numpy as np
-import PIL
-import torch
 from transformers import AutoProcessor, Blip2ForConditionalGeneration
 from transformers import logging as transformers_logging
+from typing import Any, Dict, List, Tuple
+import bittensor as bt
+import PIL
+import time
+import torch
 
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META
 from bitmind.synthetic_image_generation.utils import image_utils
-from bitmind.synthetic_image_generation.utils import annotation_utils
+
 
 class ImageAnnotationGenerator:
     def __init__(self, model_name: str, device: str = 'auto'):
@@ -22,7 +16,6 @@ class ImageAnnotationGenerator:
         self.processor = AutoProcessor.from_pretrained(model_name)
         self.model = Blip2ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
         self.model.to(self.device)
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
     def generate_description(self, image: PIL.Image.Image, verbose: bool = False) -> str:
         if not verbose:
@@ -37,8 +30,8 @@ class ImageAnnotationGenerator:
             answer = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
 
             if verbose:
-                logging.info(f"{i}. Prompt: {prompt}")
-                logging.info(f"{i}. Answer: {answer}")
+                bt.logging.info(f"{i}. Prompt: {prompt}")
+                bt.logging.info(f"{i}. Answer: {answer}")
 
             if answer:
                 description += answer
@@ -50,7 +43,14 @@ class ImageAnnotationGenerator:
 
         return description
 
-    def generate_annotation(self, image_id, dataset_name: str, image: PIL.Image.Image, original_dimensions: tuple, resize: bool, verbose: int):
+    def generate_annotation(
+            self,
+            image_id,
+            dataset_name: str,
+            image: PIL.Image.Image,
+            original_dimensions: tuple,
+            resize: bool,
+            verbose: int) -> dict:
         """
         Generate a text annotation for a given image.
     
@@ -69,7 +69,7 @@ class ImageAnnotationGenerator:
         if resize:
             image_to_process = image_utils.resize_image(image_to_process, 1280, 1280)
             if verbose > 1 and image_to_process.size != image.size:
-                print(f"Resized {image_id}: {image.size} to {image_to_process.size}")
+                bt.logging.info(f"Resized {image_id}: {image.size} to {image_to_process.size}")
     
         description = self.generate_description(image_to_process, verbose > 2)
         annotation = {
@@ -80,10 +80,17 @@ class ImageAnnotationGenerator:
         }
         return annotation
 
-    def process_image(self, image_info: dict, dataset_name: str, image_index: int, resize: bool, verbose: int) -> Tuple[Any, float]:
+    def process_image(
+            self,
+            image_info: dict,
+            dataset_name: str,
+            image_index: int,
+            resize: bool,
+            verbose: int) -> Tuple[Any, float]:
+
         if image_info['image'] is None:
             if verbose > 1:
-                logging.debug(f"Skipping image {image_index} in dataset {dataset_name} due to missing image data.")
+                bt.logging.debug(f"Skipping image {image_index} in dataset {dataset_name} due to missing image data.")
             return None, 0
 
         original_dimensions = image_info['image'].size
@@ -93,12 +100,18 @@ class ImageAnnotationGenerator:
 
         if annotation == -1:
             if verbose > 1:
-                logging.debug(f"Failed to generate annotation for image {image_index} in dataset {dataset_name}")
+                bt.logging.debug(f"Failed to generate annotation for image {image_index} in dataset {dataset_name}")
             return None, time_elapsed
 
         return annotation, time_elapsed
     
-    def generate_annotations(self, real_image_datasets: List[ImageDataset], verbose: int = 0, max_images: int = None, resize_images: bool = False) -> Dict[str, Dict[str, Any]]:
+    def generate_annotations(
+            self,
+            real_image_datasets:
+            List[ImageDataset],
+            verbose: int = 0,
+            max_images: int = None,
+            resize_images: bool = False) -> Dict[str, Dict[str, Any]]:
         """
         Generates text annotations for images in the given datasets, saves them in a specified directory, 
         and computes the average per image latency. Returns a dictionary of new annotations and the average latency.
@@ -113,7 +126,6 @@ class ImageAnnotationGenerator:
         Returns:
             Tuple[Dict[str, Dict[str, Any]], float]: A tuple containing the annotations dictionary and average latency.
         """
-        annotation_utils.set_logging_level(verbose)
         annotations = {}
         total_time = 0
         total_processed_images = 0

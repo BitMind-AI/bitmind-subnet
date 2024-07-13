@@ -33,7 +33,7 @@ class RandomImageGenerator:
         assert use_random_diffuser or diffuser_name in DIFFUSER_NAMES, 'invalid diffuser name'
 
         if use_random_diffuser and diffuser_name is not None:
-            print("Warning: diffuser_name will be ignored (use_random_diffuser=True)")
+            bt.logging.warning("Warning: diffuser_name will be ignored (use_random_diffuser=True)")
             self.diffuser_name = None
         else:
             self.diffuser_name = diffuser_name
@@ -74,16 +74,16 @@ class RandomImageGenerator:
 
         prompts = []
         if annotation and 'description' in annotation:
-            print("Using provided annotation as prompt...")
+            bt.logging.info("Using provided annotation as prompt...")
             prompts = [annotation['description']] * k
         else:
-            print("Generating prompts...")
+            bt.logging.info("Generating prompts...")
             prompts = [
                 self.generate_prompt()
                 for _ in range(k)
             ]   
 
-        print("Generating images...")
+        bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
             image_name = f"{time.time()}.jpg"
