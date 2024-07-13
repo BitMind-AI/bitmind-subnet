@@ -1,19 +1,9 @@
-import os
-import json
-import gc
-import logging
-import time
-from typing import List
-
-import torch
-from PIL import Image
 from torchvision.transforms import ToPILImage
-from transformers import pipeline
 from diffusers import DiffusionPipeline
+import os
+import torch
 import warnings
 
-import bittensor as bt
-from bitmind.constants import PROMPT_GENERATOR_NAMES, PROMPT_GENERATOR_ARGS, DIFFUSER_NAMES, DIFFUSER_ARGS
 
 class SyntheticImageGenerator:
     def __init__(self, device: str = 'auto'):
@@ -21,10 +11,9 @@ class SyntheticImageGenerator:
         if self.device.type == 'cpu':
             raise RuntimeError("This script requires a GPU because it uses torch.float16.")
 
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
-        import tensorflow as tf 
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+        import tensorflow
 
-        logging.basicConfig(level=logging.INFO)
         warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
 
     def generate_image(self, annotation: dict, diffuser: DiffusionPipeline, save_dir: str):
