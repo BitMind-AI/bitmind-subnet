@@ -14,6 +14,8 @@ class SyntheticImageGenerator:
             raise RuntimeError("This script requires a GPU because it uses torch.float16.")
 
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+        import tensorflow
+
         warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
 
     def generate_image(self, annotation: dict, diffuser: DiffusionPipeline):
