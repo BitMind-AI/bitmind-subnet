@@ -104,7 +104,7 @@ class RandomImageGenerator:
         Clears GPU memory, then loads a random diffuser model.
         """
         if self.diffuser is not None:
-            bt.logging.info(f"Deleting previous diffuser, freeing memory")
+            bt.logging.debug(f"Deleting previous diffuser, freeing memory")
             self.diffuser.to('cpu')
             del self.diffuser
             gc.collect()
