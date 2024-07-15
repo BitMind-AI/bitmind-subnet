@@ -66,7 +66,7 @@ async def forward(self):
         sample = real_dataset.sample(k=1)[0][0] # {'image': PIL Image ,'id': int}
         label = 0
     else:
-        if self.config.prompt_type == 'annotation':
+        if self.config.neuron.prompt_type == 'annotation':
             bt.logging.info('generating fake image from annotation of real image')
             real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
             real_dataset = self.real_image_datasets[real_dataset_index]
@@ -81,10 +81,13 @@ async def forward(self):
             sample = self.random_image_generator.generate(
                 k=1, annotation=annotation)[0] # {'prompt': str, 'image': PIL Image ,'id': int}
             source_name = self.random_image_generator.diffuser_name
-        elif self.config.prompt_type == 'random':
+        elif self.config.neuron.prompt_type == 'random':
             bt.logging.info('generating fake image using prompt_generator')
             sample = self.random_image_generator.generate(k=1)[0]
             source_name = self.random_image_generator.diffuser_name
+        else:
+            bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
+            raise NotImplementedError
 
     image = random_image_transforms(sample['image'])
 
