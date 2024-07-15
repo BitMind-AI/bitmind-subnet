@@ -66,6 +66,7 @@ async def forward(self):
         sample = real_dataset.sample(k=1)[0][0] # {'image': PIL Image ,'id': int}
         label = 0
     else:
+        label = 1
         if self.config.neuron.prompt_type == 'annotation':
             bt.logging.info('generating fake image from annotation of real image')
             real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
