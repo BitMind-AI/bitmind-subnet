@@ -5,6 +5,7 @@ import bittensor as bt
 import PIL
 import time
 import torch
+import gc
 
 from bitmind.image_dataset import ImageDataset
 from bitmind.synthetic_image_generation.utils import image_utils
@@ -13,9 +14,21 @@ from bitmind.synthetic_image_generation.utils import image_utils
 class ImageAnnotationGenerator:
     def __init__(self, model_name: str, device: str = 'auto'):
         self.device = torch.device('cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu')
-        self.processor = AutoProcessor.from_pretrained(model_name)
-        self.model = Blip2ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
+        self.model_name = model_name
+        self.processor = AutoProcessor.from_pretrained(self.model_name)
+        self.model = None
+        self.load_model()
+
+    def load_model(self):
+        self.model = Blip2ForConditionalGeneration.from_pretrained(self.model_name, torch_dtype=torch.float16)
         self.model.to(self.device)
+
+    def clear_gpu(self):
+        bt.logging.debug(f"Clearing GPU memory after generating image annotation")
+        self.model.to('cpu')
+        del self.model
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def generate_description(self, image: PIL.Image.Image, verbose: bool = False) -> str:
         if not verbose:

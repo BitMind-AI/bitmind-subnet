@@ -71,6 +71,7 @@ async def forward(self):
             real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
             real_dataset = self.real_image_datasets[real_dataset_index]
             sample = real_dataset.sample(k=1)[0][0] # {'image': PIL Image ,'id': int}
+            self.image_annotation_generator.load_model()
             annotation = self.image_annotation_generator.process_image(
                 image_info=sample,
                 dataset_name=source_name,
@@ -78,6 +79,7 @@ async def forward(self):
                 resize=False,
                 verbose=0
             )
+            self.image_annotation_generator.clear_gpu()
             sample = self.random_image_generator.generate(
                 k=1, annotation=annotation)[0] # {'prompt': str, 'image': PIL Image ,'id': int}
             source_name = self.random_image_generator.diffuser_name
