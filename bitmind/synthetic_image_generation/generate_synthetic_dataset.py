@@ -1,5 +1,3 @@
-%%time
-
 # Standard library imports
 import sys
 import gc
@@ -34,7 +32,6 @@ from bitmind.image_dataset import ImageDataset
 from utils import image_utils
 from multiprocessing_tasks import generate_images_for_chunk, worker_initializer
 
-%%time
 torch.manual_seed(0)
 random.seed(0)
 np.random.seed(0)
