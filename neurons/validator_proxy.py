@@ -54,7 +54,7 @@ class ValidatorProxy:
     def get_credentials(self):
         with httpx.Client(timeout=httpx.Timeout(30)) as client:
             response = client.post(
-                f"{self.validator.config.proxy.proxy_client_url}/get_credentials",
+                f"{self.validator.config.proxy.proxy_client_url}/get-credentials",
                 json={
                     "postfix": (
                         f":{self.validator.config.proxy.port}/validator_proxy"
@@ -98,8 +98,15 @@ class ValidatorProxy:
                 status_code=401, detail="Error getting authentication token"
             )
 
-    async def forward(self, payload: dict = {}):
-        self.authenticate_token(payload["authorization"])
+    async def forward(self, payload: dict, request):
+        authorization: str = request.headers.get("authorization")
+
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header missing")
+
+        #self.authenticate_token(payload["authorization"])
+        self.authenticate_token(authorization)
+
         if "recheck" in payload:
             bt.logging.info("Rechecking validators")
             self.get_credentials()
@@ -135,8 +142,15 @@ class ValidatorProxy:
         self.proxy_counter.save()
         return HTTPException(status_code=500, detail="No valid response received")
 
-    async def miner_performance(self, payload: dict = {}):
-        self.authenticate_token(payload["authorization"])
+    async def miner_performance(self, payload: dict, request):
+        authorization: str = request.headers.get("authorization")
+
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header missing")
+
+        self.authenticate_token(authorization)
+        #self.authenticate_token(payload["authorization"])
+
         if "recheck" in payload:
             bt.logging.info("Rechecking validators")
             self.get_credentials()
