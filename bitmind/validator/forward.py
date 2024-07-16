@@ -23,16 +23,11 @@ from datetime import datetime
 import bittensor as bt
 import pandas as pd
 import numpy as np
-import time
-import torch
-import base64
-import requests
-import joblib
 import os
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
-from bitmind.protocol import ImageSynapse, prepare_image_synapse
+from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_image_transforms
 
