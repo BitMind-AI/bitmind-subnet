@@ -246,14 +246,14 @@ def add_validator_args(cls, parser):
         "--proxy.port",
         type=int,
         help="The port to run the proxy on.",
-        default=47923, #None
+        default=10913
     )
 
     parser.add_argument(
         "--proxy.proxy_client_url",
         type=str,
         help="The url initialize credentials for proxy.",
-        default="http://0.0.0.0:47927",
+        default="https://subnet-api.bitmindlabs.ai"
     )
 
 
