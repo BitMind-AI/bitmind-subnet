@@ -10,44 +10,62 @@ import time
 import re
 import gc
 import os
+import warnings
 
 from bitmind.constants import (
     PROMPT_GENERATOR_NAMES,
     PROMPT_GENERATOR_ARGS,
     DIFFUSER_NAMES,
-    DIFFUSER_ARGS
+    DIFFUSER_ARGS,
+    PROMPT_TYPES,
+    IMAGE_ANNOTATION_MODEL
 )
+from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
+
+warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import tensorflow
 
 
-class RandomImageGenerator:
+class SyntheticImageGenerator:
 
     def __init__(
         self,
+        prompt_type='random',
         prompt_generator_name=PROMPT_GENERATOR_NAMES[0],
         diffuser_name=DIFFUSER_NAMES[0],
         use_random_diffuser=False,
         image_cache_dir=None
     ):
+        assert prompt_type in PROMPT_TYPES,\
+            f'Invalid prompt type. Options are {prompt_type}'
+        assert prompt_generator_name in PROMPT_GENERATOR_NAMES,\
+            f'Invalid prompt generator name. Options are {PROMPT_GENERATOR_NAMES}'
+        assert use_random_diffuser or diffuser_name in DIFFUSER_NAMES, \
+            f'Invalid diffuser name. Options are {DIFFUSER_NAMES}'
 
-        assert prompt_generator_name in PROMPT_GENERATOR_NAMES, 'invalid prompt generator name'
-        assert use_random_diffuser or diffuser_name in DIFFUSER_NAMES, 'invalid diffuser name'
+        self.use_random_diffuser = use_random_diffuser
+        self.prompt_type = prompt_type
+        self.prompt_generator_name = prompt_generator_name
 
-        if use_random_diffuser and diffuser_name is not None:
+        if self.use_random_diffuser and diffuser_name is not None:
             bt.logging.warning("Warning: diffuser_name will be ignored (use_random_diffuser=True)")
             self.diffuser_name = None
         else:
             self.diffuser_name = diffuser_name
 
-        self.use_random_diffuser = use_random_diffuser
-        self.prompt_generator_name = prompt_generator_name
+        self.image_annotation_generator = None
+        if self.prompt_type == 'annotation':
+            bt.logging.info(f"Loading image captioning ({prompt_generator_name})...")
+            self.prompt_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL)
+        else:
+            bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
+            self.prompt_generator = pipeline(
+                'text-generation', **PROMPT_GENERATOR_ARGS[prompt_generator_name])
 
         self.image_cache_dir = image_cache_dir
         if image_cache_dir is not None:
             os.makedirs(self.image_cache_dir, exist_ok=True)
-
-        bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
-        self.prompt_generator = pipeline(
-            'text-generation', **PROMPT_GENERATOR_ARGS[prompt_generator_name])
 
         if diffuser_name is not None:
             bt.logging.info(f"Loading image generation model ({diffuser_name})...")
@@ -58,10 +76,11 @@ class RandomImageGenerator:
             bt.logging.info("A random image generation model will be loaded on each generation step.")
             self.diffuser = None
 
-    def generate(self, k: int = 1, annotation: dict = None) -> list:
+    def generate(self, k: int = 1, real_images=None) -> list:
         """
-        If no annotation is provided, generates k prompts using self.prompt_generator, then passes those to self.diffuser to generate k images.
-        If an annotation is provided, it uses the description field as the prompt.
+        Generates k synthetic images. If self.prompt_type is 'annotation', a BLIP2 captioning pipeline is used
+        to produce a prompt by captioning a real image. If self.prompt_type is 'random', an LLM is used to generate
+        a random prompt.
 
         Args:
             k (int): Number of images to generate.
@@ -69,19 +88,23 @@ class RandomImageGenerator:
         Returns:
             list: List of dictionaries containing 'prompt', 'image', and 'id'.
         """
+        bt.logging.info("Generating prompts...")
+        if self.prompt_type == 'annotation':
+            self.clear_gpu()  # remove diffuser from gpu
+            prompts = [
+                self.generate_image_caption(real_images[i])
+                for i in range(k)
+            ]
+        elif self.prompt_type == 'random':
+            prompts = [
+                self.generate_random_prompt(retry_attempts=10)
+                for _ in range(k)
+            ]
+        else:
+            raise NotImplementedError
+
         if self.use_random_diffuser:
             self.load_random_diffuser()
-
-        prompts = []
-        if annotation and 'description' in annotation:
-            bt.logging.info("Using provided annotation as prompt...")
-            prompts = [annotation['description']] * k
-        else:
-            bt.logging.info("Generating prompts...")
-            prompts = [
-                self.generate_prompt()
-                for _ in range(k)
-            ]   
 
         bt.logging.info("Generating images...")
         gen_data = []
@@ -99,10 +122,7 @@ class RandomImageGenerator:
 
         return gen_data
 
-    def load_random_diffuser(self) -> None:
-        """
-        Clears GPU memory, then loads a random diffuser model.
-        """
+    def clear_gpu(self):
         if self.diffuser is not None:
             bt.logging.debug(f"Deleting previous diffuser, freeing memory")
             self.diffuser.to('cpu')
@@ -110,6 +130,11 @@ class RandomImageGenerator:
             gc.collect()
             torch.cuda.empty_cache()
 
+    def load_random_diffuser(self) -> None:
+        """
+        Clears GPU memory, then loads a random diffuser model.
+        """
+        self.clear_gpu()
         diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
@@ -117,7 +142,22 @@ class RandomImageGenerator:
             diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
         self.diffuser.to("cuda")
 
-    def generate_prompt(self, retry_attempts: int = 10) -> str:
+    def generate_image_caption(self, image_sample) -> str:
+        """
+
+        """
+        self.prompt_generator.load_model()
+        annotation = self.image_annotation_generator.process_image(
+            image_info=image_sample,
+            dataset_name=image_sample['source'],
+            image_index=image_sample['id'],
+            resize=False,
+            verbose=0
+        )
+        self.image_annotation_generator.clear_gpu()
+        return annotation
+
+    def generate_random_prompt(self, retry_attempts: int = 10) -> str:
         """
         Generates a prompt for image generation.
 

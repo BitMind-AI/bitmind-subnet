@@ -41,6 +41,8 @@ VALIDATOR_MODEL_META = {
     ]
 }
 
+PROMPT_TYPES = ('random', 'annotation')
+
 PROMPT_GENERATOR_ARGS = {
     m['model']: m for m in VALIDATOR_MODEL_META['prompt_generators']
 }
