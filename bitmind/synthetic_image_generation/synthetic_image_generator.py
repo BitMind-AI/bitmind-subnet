@@ -90,7 +90,7 @@ class SyntheticImageGenerator:
         """
         bt.logging.info("Generating prompts...")
         if self.prompt_type == 'annotation':
-            self.clear_gpu()  # remove diffuser from gpu
+
             prompts = [
                 self.generate_image_caption(real_images[i])
                 for i in range(k)
@@ -120,6 +120,8 @@ class SyntheticImageGenerator:
                 path = os.path.join(self.image_cache_dir, image_name)
                 gen_image.save(path)
 
+        self.clear_gpu()  # remove diffuser from gpu
+
         return gen_data
 
     def clear_gpu(self):
@@ -132,9 +134,8 @@ class SyntheticImageGenerator:
 
     def load_random_diffuser(self) -> None:
         """
-        Clears GPU memory, then loads a random diffuser model.
+        loads a random diffuser model.
         """
-        self.clear_gpu()
         diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
@@ -146,16 +147,16 @@ class SyntheticImageGenerator:
         """
 
         """
-        self.prompt_generator.load_model()
+        self.image_annotation_generator.load_model()
         annotation = self.image_annotation_generator.process_image(
             image_info=image_sample,
             dataset_name=image_sample['source'],
             image_index=image_sample['id'],
             resize=False,
             verbose=0
-        )
+        )[0]
         self.image_annotation_generator.clear_gpu()
-        return annotation
+        return annotation['description']
 
     def generate_random_prompt(self, retry_attempts: int = 10) -> str:
         """
