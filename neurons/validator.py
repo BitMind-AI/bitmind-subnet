@@ -24,8 +24,10 @@ from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.random_image_generator import RandomImageGenerator
+from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 from bitmind.image_dataset import ImageDataset
 from bitmind.constants import DATASET_META
+from bitmind.constants import IMAGE_ANNOTATION_MODEL
 
 
 class Validator(BaseValidatorNeuron):
@@ -46,13 +48,14 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info("load_state()")
         self.load_state()
 
-        print("Loading real datasets")
+        bt.logging.info("Loading real datasets")
         self.real_image_datasets = [
             ImageDataset(ds['path'], 'test', ds.get('name', None), ds['create_splits'])
             for ds in DATASET_META['real']
         ]
 
         self.random_image_generator = RandomImageGenerator(use_random_diffuser=True, diffuser_name=None)
+        self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL)
         #self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):

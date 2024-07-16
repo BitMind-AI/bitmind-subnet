@@ -54,3 +54,5 @@ DIFFUSER_ARGS = {
 
 DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 
+IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-2.7b-coco"
+
