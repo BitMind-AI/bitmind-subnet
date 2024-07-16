@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from concurrent.futures import ThreadPoolExecutor
 from starlette.concurrency import run_in_threadpool
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -92,43 +92,42 @@ class ValidatorProxy:
             bt.logging.info("Successfully authenticated token")
             return public_key_bytes
         except Exception as e:
-            print("Exception occured in authenticating token", e, flush=True)
-            print(traceback.print_exc(), flush=True)
+            bt.logging.error(f"Exception occured in authenticating token: {e}")
+            bt.logging.error(traceback.print_exc())
             raise HTTPException(
                 status_code=401, detail="Error getting authentication token"
             )
 
-    async def forward(self, payload: dict, request):
+    async def forward(self, request: Request):
         authorization: str = request.headers.get("authorization")
 
         if not authorization:
             raise HTTPException(status_code=401, detail="Authorization header missing")
 
-        #self.authenticate_token(payload["authorization"])
         self.authenticate_token(authorization)
 
-        if "recheck" in payload:
-            bt.logging.info("Rechecking validators")
-            self.get_credentials()
-            return {"message": "done"}
         bt.logging.info("Received an organic request!")
+
+        payload = await request.json()
+
         if "seed" not in payload:
             payload["seed"] = random.randint(0, 1e9)
 
-        #timeout = model_config["timeout"]
-        #reward_url = model_config["reward_url"]
-
         metagraph = self.validator.metagraph
 
-        # TODO: preprocess image
         miner_uids = get_random_uids(self.validator, k=self.validator.config.neuron.sample_size)
-        print(f"[ORGANIC] Querying {len(miner_uids)} miners...")
+        for uid in miner_uids:
+            print(uid, metagraph.axons[uid].is_serving)
+
+        bt.logging.info(f"[ORGANIC] Querying {len(miner_uids)} miners...")
         predictions = await self.dendrite(
-            axons=[metagraph.axons[uid] for uid in miner_uids],
+            axons=[metagraph.axons[28]], #uid] for uid in miner_uids[:1]],
     	    synapse=ImageSynapse(image=payload['image'], prediction=-1),
             deserialize=True
         )
-        print(f"[ORGANIC] {predictions}")
+
+
+        bt.logging.info(f"[ORGANIC] {predictions}")
         valid_pred_idx = np.array([i for i, v in enumerate(predictions) if v != -1.])
         if len(valid_pred_idx) > 0:
             valid_preds = np.array(predictions)[valid_pred_idx]
@@ -136,25 +135,32 @@ class ValidatorProxy:
             if len(valid_preds) > 0:
                 self.proxy_counter.update(is_success=True)
                 self.proxy_counter.save()
-                return list(valid_preds)
+                data = {
+                    'uids': [int(uid) for uid in valid_pred_uids],
+                    'preds': [float(p) for p in list(valid_preds)],
+                    'ranks': [float(self.validator.metagraph.R[uid]) for uid in valid_pred_uids],
+                    'incentive': [float(self.validator.metagraph.I[uid]) for uid in valid_pred_uids],
+                    'emissions': [float(self.validator.metagraph.E[uid]) for uid in valid_pred_uids]
+                }
+                print(data)
+                return data
 
         self.proxy_counter.update(is_success=False)
         self.proxy_counter.save()
         return HTTPException(status_code=500, detail="No valid response received")
 
-    async def miner_performance(self, payload: dict, request):
+    async def miner_performance(self, request: Request):
         authorization: str = request.headers.get("authorization")
 
         if not authorization:
             raise HTTPException(status_code=401, detail="Authorization header missing")
 
         self.authenticate_token(authorization)
-        #self.authenticate_token(payload["authorization"])
+        #if "recheck" in payload:
+        #    bt.logging.info("Rechecking validators")
+        #    self.get_credentials()
+        #    return {"message": "done"}
 
-        if "recheck" in payload:
-            bt.logging.info("Rechecking validators")
-            self.get_credentials()
-            return {"message": "done"}
         bt.logging.info("Received an organic request!")
 
         metagraph = self.validator.metagraph
