@@ -104,6 +104,7 @@ class ImageDataset:
         return {
             'image': image,
             'id': image_id,
+            'source': self.huggingface_dataset_path
         }
 
     def sample(self, k: int = 1) -> Tuple[List[dict], List[int]]:
