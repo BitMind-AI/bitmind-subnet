@@ -67,20 +67,11 @@ class SyntheticImageGenerator:
         if image_cache_dir is not None:
             os.makedirs(self.image_cache_dir, exist_ok=True)
 
-        if diffuser_name is not None:
-            bt.logging.info(f"Loading image generation model ({diffuser_name})...")
-            self.diffuser = DiffusionPipeline.from_pretrained(
-                diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
-            self.diffuser.to("cuda")
-        else:
-            bt.logging.info("A random image generation model will be loaded on each generation step.")
-            self.diffuser = None
-
     def generate(self, k: int = 1, real_images=None) -> list:
         """
         Generates k synthetic images. If self.prompt_type is 'annotation', a BLIP2 captioning pipeline is used
-        to produce a prompt by captioning a real image. If self.prompt_type is 'random', an LLM is used to generate
-        a random prompt.
+        to produce prompts by captioning real images. If self.prompt_type is 'random', an LLM is used to generate
+        prompts.
 
         Args:
             k (int): Number of images to generate.
@@ -90,7 +81,8 @@ class SyntheticImageGenerator:
         """
         bt.logging.info("Generating prompts...")
         if self.prompt_type == 'annotation':
-
+            if real_images is None:
+                raise ValueError(f"real_images can't be None if self.prompt_type is 'annotation'")
             prompts = [
                 self.generate_image_caption(real_images[i])
                 for i in range(k)
@@ -104,7 +96,9 @@ class SyntheticImageGenerator:
             raise NotImplementedError
 
         if self.use_random_diffuser:
-            self.load_random_diffuser()
+            self.load_diffuser('random')
+        else:
+            self.load_diffuser(self.diffuser_name)
 
         bt.logging.info("Generating images...")
         gen_data = []
@@ -132,11 +126,13 @@ class SyntheticImageGenerator:
             gc.collect()
             torch.cuda.empty_cache()
 
-    def load_random_diffuser(self) -> None:
+    def load_diffuser(self, diffuser_name) -> None:
         """
-        loads a random diffuser model.
+        loads a huggingface diffuser model.
         """
-        diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
+        if diffuser_name == 'random':
+            diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
+
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
         self.diffuser = DiffusionPipeline.from_pretrained(
