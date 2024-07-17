@@ -27,6 +27,7 @@ from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticImageGenerator
 from bitmind.image_dataset import ImageDataset
 from bitmind.constants import DATASET_META, WANDB_PROJECT, WANDB_ENTITY
+import bitmind
 
 
 class Validator(BaseValidatorNeuron):
