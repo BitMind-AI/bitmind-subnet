@@ -24,19 +24,18 @@ import time
 from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
-from bitmind.random_image_generator import RandomImageGenerator
-from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
+from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticImageGenerator
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META, WANDB_PROJECT, WANDB_ENTITY, IMAGE_ANNOTATION_MODEL
-import bitmind
+from bitmind.constants import DATASET_META, WANDB_PROJECT, WANDB_ENTITY
+
 
 class Validator(BaseValidatorNeuron):
     """
     The BitMind Validator's `forward` function sends single-image challenges to miners every 30 seconds, where each
     image has a 50/50 chance of being real or fake. In service of this task, the Validator class has two key members -
-    self.real_iamge_datasets and self.random_image_generator. The former is a list of ImageDataset objects, which
+    self.real_image_datasets and self.synthetic_image_generator. The former is a list of ImageDataset objects, which
     contain real images. The latter is an ML pipeline that combines an LLM for prompt generation and diffusion
-    models that ingest prompts output by the LLM to produce synthetic iamges.
+    models that ingest prompts output by the LLM to produce synthetic images.
 
     The BitMind Validator also encapsuluates a ValidatorProxy, which is used to service organic requests from
     our consumer-facing application. If you wish to participate in this system, run your validator with the
@@ -57,9 +56,9 @@ class Validator(BaseValidatorNeuron):
             for ds in DATASET_META['real']
         ]
 
+        self.synthetic_image_generator = SyntheticImageGenerator(
+            prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
         self.last_responding_miner_uids = []
-        self.random_image_generator = RandomImageGenerator(use_random_diffuser=True, diffuser_name=None)
-        self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL)
         self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):

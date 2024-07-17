@@ -19,9 +19,9 @@ base_transforms = transforms.Compose([
 
 # example data augmentation
 random_image_transforms = transforms.Compose([
-    transforms.RandomResizedCrop(256), 
+    transforms.RandomResizedCrop(256, scale=(0.2, 1.0), ratio=(1.0, 1.0)), 
     transforms.RandomHorizontalFlip(),
     transforms.RandomVerticalFlip(),
-    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2), 
+    #transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2), 
     transforms.RandomRotation(20)
 ])

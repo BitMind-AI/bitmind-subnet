@@ -23,17 +23,12 @@ from datetime import datetime
 import bittensor as bt
 import pandas as pd
 import numpy as np
-import time
-import torch
-import base64
-import requests
-import joblib
 import os
 import wandb
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
-from bitmind.protocol import ImageSynapse, prepare_image_synapse
+from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_image_transforms
 
@@ -70,25 +65,22 @@ async def forward(self):
         label = 1
         if self.config.neuron.prompt_type == 'annotation':
             bt.logging.info('generating fake image from annotation of real image')
+
+            # sample image(s) from real dataset for captioning
             real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
             real_dataset = self.real_image_datasets[real_dataset_index]
-            sample = real_dataset.sample(k=1)[0][0] # {'image': PIL Image ,'id': int}
-            self.image_annotation_generator.load_model()
-            annotation = self.image_annotation_generator.process_image(
-                image_info=sample,
-                dataset_name=source_name,
-                image_index=sample['id'],
-                resize=False,
-                verbose=0
-            )
-            self.image_annotation_generator.clear_gpu()
-            sample = self.random_image_generator.generate(
-                k=1, annotation=annotation)[0] # {'prompt': str, 'image': PIL Image ,'id': int}
-            source_name = self.random_image_generator.diffuser_name
+            images_to_caption = real_dataset.sample(k=1)[0]  # [{'image': PIL Image ,'id': int}, ...]
+
+            # generate captions for the real images, then synthetic images from these captions
+            sample = self.synthetic_image_generator.generate(
+                k=1, real_images=images_to_caption)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+            source_name = self.synthetic_image_generator.diffuser_name
+
         elif self.config.neuron.prompt_type == 'random':
             bt.logging.info('generating fake image using prompt_generator')
-            sample = self.random_image_generator.generate(k=1)[0]
-            source_name = self.random_image_generator.diffuser_name
+            sample = self.synthetic_image_generator.generate(k=1)[0]
+            source_name = self.synthetic_image_generator.diffuser_name
+
         else:
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
             raise NotImplementedError
