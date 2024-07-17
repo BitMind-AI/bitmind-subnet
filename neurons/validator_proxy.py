@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import uvicorn
 import base64
+import json
 import os
 import random
 import asyncio
@@ -115,17 +116,17 @@ class ValidatorProxy:
 
         metagraph = self.validator.metagraph
 
-        miner_uids = get_random_uids(self.validator, k=self.validator.config.neuron.sample_size)
-        for uid in miner_uids:
-            print(uid, metagraph.axons[uid].is_serving)
+        miner_uids = self.validator.last_responding_miner_uids
+        if len(miner_uids) == 0:
+            bt.logging.warning("[ORGANIC] No recent miner uids found, sampling random uids")
+            miner_uids = get_random_uids(self.validator, k=self.validator.config.neuron.sample_size)
 
         bt.logging.info(f"[ORGANIC] Querying {len(miner_uids)} miners...")
         predictions = await self.dendrite(
-            axons=[metagraph.axons[28]], #uid] for uid in miner_uids[:1]],
+            axons=[metagraph.axons[uid] for uid in miner_uids],
     	    synapse=ImageSynapse(image=payload['image'], prediction=-1),
             deserialize=True
         )
-
 
         bt.logging.info(f"[ORGANIC] {predictions}")
         valid_pred_idx = np.array([i for i, v in enumerate(predictions) if v != -1.])
@@ -186,7 +187,7 @@ class ValidatorProxy:
                 'rank': metagraph.R}),
             on='miner_uid')
 
-        return metrics_df.to_json(orient='records')
+        return json.loads(metrics_df.to_json(orient='records'))
         #return HTTPException(status_code=500, detail="No valid response received")
 
     async def get_self(self):
