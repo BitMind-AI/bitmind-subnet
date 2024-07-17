@@ -4,6 +4,8 @@ from PIL import Image
 from io import BytesIO
 import requests
 import datasets
+import random
+import numpy as np
 
 
 def download_image(url: str) -> Image.Image:
@@ -77,3 +79,21 @@ def load_huggingface_dataset(
     split_dataset['validation'] = val_test_split['train']
     split_dataset['test'] = val_test_split['test']
     return split_dataset[split]
+
+def sample_dataset_index_name(image_datasets: list) -> tuple[int, str]:
+    """
+    Randomly selects a dataset index from the provided dataset list and returns the index and source name.
+
+    Parameters
+    ----------
+    image_datasets : list
+        A list of dataset objects to select from.
+
+    Returns
+    -------
+    tuple[int, str]
+        A tuple containing the index of the randomly selected dataset and the source name.
+    """
+    dataset_index = np.random.randint(0, len(image_datasets))
+    source_name = image_datasets[dataset_index].huggingface_dataset_path
+    return dataset_index, source_name

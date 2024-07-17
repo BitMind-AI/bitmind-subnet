@@ -15,12 +15,27 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-
 import os
-import torch
+import subprocess
 import argparse
 import bittensor as bt
-from loguru import logger
+from bitmind.utils.logging import setup_events_logger
+
+
+def is_cuda_available():
+    try:
+        output = subprocess.check_output(["nvidia-smi", "-L"], stderr=subprocess.STDOUT)
+        if "NVIDIA" in output.decode("utf-8"):
+            return "cuda"
+    except Exception:
+        pass
+    try:
+        output = subprocess.check_output(["nvcc", "--version"]).decode("utf-8")
+        if "release" in output:
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
 
 
 def check_config(cls, config: "bt.Config"):
@@ -43,17 +58,10 @@ def check_config(cls, config: "bt.Config"):
 
     if not config.neuron.dont_save_events:
         # Add custom event logger for the events.
-        logger.level("EVENTS", no=38, icon="📝")
-        logger.add(
-            os.path.join(config.neuron.full_path, "events.log"),
-            rotation=config.neuron.events_retention_size,
-            serialize=True,
-            enqueue=True,
-            backtrace=False,
-            diagnose=False,
-            level="EVENTS",
-            format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+        events_logger = setup_events_logger(
+            config.neuron.full_path, config.neuron.events_retention_size
         )
+        bt.logging.register_primary_logger(events_logger.name)
 
 
 def add_args(cls, parser):
@@ -67,7 +75,7 @@ def add_args(cls, parser):
         "--neuron.device",
         type=str,
         help="Device to run on.",
-        default="cuda" if torch.cuda.is_available() else "cpu",
+        default=is_cuda_available(),
     )
 
     parser.add_argument(
@@ -88,7 +96,7 @@ def add_args(cls, parser):
         "--neuron.events_retention_size",
         type=str,
         help="Events retention size.",
-        default="2 GB",
+        default=2 * 1024 * 1024 * 1024,  # 2 GB
     )
 
     parser.add_argument(
@@ -124,17 +132,17 @@ def add_miner_args(cls, parser):
     """Add miner specific arguments to the parser."""
 
     parser.add_argument(
-        "--neuron.name",
-        type=str,
-        help="Trials for this neuron go in neuron.root / (wallet_cold - wallet_hot) / neuron.name. ",
-        default="miner",
-    )
-
-    parser.add_argument(
         "--neuron.model_path",
         type=str,
         help="Path to the .pth file for your trained model",
         default="./mining_models/miner.pth",
+    )
+
+    parser.add_argument(
+        "--neuron.name",
+        type=str,
+        help="Trials for this neuron go in neuron.root / (wallet_cold - wallet_hot) / neuron.name. ",
+        default="miner",
     )
 
     parser.add_argument(
@@ -168,6 +176,13 @@ def add_miner_args(cls, parser):
 
 def add_validator_args(cls, parser):
     """Add validator specific arguments to the parser."""
+
+    parser.add_argument(
+        "--neuron.prompt_type",
+        type=str,
+        help="Choose 'annotation' to generate prompts from BLIP-2 annotations of real images, or 'random' for arbitrary prompts.",
+        default='annotation',
+    )
 
     parser.add_argument(
         "--neuron.name",

@@ -1,6 +1,7 @@
 from typing import List, Tuple
 from PIL import Image
 from io import BytesIO
+import bittensor as bt
 import numpy as np
 
 from bitmind.utils.data import load_huggingface_dataset, download_image
@@ -134,7 +135,7 @@ class ImageDataset:
                     self.sampled_images_idx.append(image_idx)
                     k -= 1
             except Exception as e:
-                print(e)
+                bt.logging.error(e)
                 continue
 
         return sampled_images, sampled_idx
