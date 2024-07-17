@@ -32,9 +32,9 @@ class Validator(BaseValidatorNeuron):
     """
     The BitMind Validator's `forward` function sends single-image challenges to miners every 30 seconds, where each
     image has a 50/50 chance of being real or fake. In service of this task, the Validator class has two key members -
-    self.real_iamge_datasets and self.synthetic_image_generator. The former is a list of ImageDataset objects, which
+    self.real_image_datasets and self.synthetic_image_generator. The former is a list of ImageDataset objects, which
     contain real images. The latter is an ML pipeline that combines an LLM for prompt generation and diffusion
-    models that ingest prompts output by the LLM to produce synthetic iamges.
+    models that ingest prompts output by the LLM to produce synthetic images.
 
     The BitMind Validator also encapsuluates a ValidatorProxy, which is used to service organic requests from
     our consumer-facing application. If you wish to participate in this system, run your validator with the
