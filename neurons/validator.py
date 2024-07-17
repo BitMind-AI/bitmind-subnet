@@ -54,7 +54,8 @@ class Validator(BaseValidatorNeuron):
 
         self.synthetic_image_generator = SyntheticImageGenerator(
             prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
-        #self.validator_proxy = ValidatorProxy(self)
+        self.last_responding_miner_uids = []
+        self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):
         """
