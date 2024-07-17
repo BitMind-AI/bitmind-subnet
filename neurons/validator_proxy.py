@@ -143,7 +143,6 @@ class ValidatorProxy:
                     'incentive': [float(self.validator.metagraph.I[uid]) for uid in valid_pred_uids],
                     'emissions': [float(self.validator.metagraph.E[uid]) for uid in valid_pred_uids]
                 }
-                print(data)
                 return data
 
         self.proxy_counter.update(is_success=False)
