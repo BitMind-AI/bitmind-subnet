@@ -47,7 +47,7 @@ class Miner(BaseMinerNeuron):
     ) -> ImageSynapse:
         """
         Loads the deepfake detection model (a PyTorch binary classifier) from the path specified in --neuron.model_path.
-        Processes the incoming ImageSynapse and passed the image to the loaded model for classification.
+        Processes the incoming ImageSynapse and passes the image to the loaded model for classification.
         The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
         their model file as a means of updating their miner's predictor.
 

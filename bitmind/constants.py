@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 
 WANDB_PROJECT = 'bitmind'
+WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {
     "real": [

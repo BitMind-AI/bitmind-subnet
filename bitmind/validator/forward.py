@@ -24,6 +24,7 @@ import bittensor as bt
 import pandas as pd
 import numpy as np
 import os
+import wandb
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
@@ -94,7 +95,18 @@ async def forward(self):
     )
 
     rewards = get_rewards(label=label, responses=responses)
-
+    
+    # Logging image source and verification details
+    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+    
+    # Logging responses and rewards
+    bt.logging.info(f"Received responses: {responses}")
+    bt.logging.info(f"Scored responses: {rewards}")
+    
+    # Update the scores based on the rewards.
+    self.update_scores(rewards, miner_uids)
+    
+    # Results data preparation
     results_df = pd.DataFrame({
         'time': datetime.now(),
         'miner_uid': miner_uids,
@@ -107,21 +119,38 @@ async def forward(self):
         'image_id': [sample['id']] * len(miner_uids),
         'image_source': [source_name] * len(miner_uids)
     })
-
+    
+    # Append or write the results to CSV
     if os.path.exists('results.csv'):
         results_df.to_csv('results.csv', mode='a', index=False, header=False)
     else:
         results_df.to_csv('results.csv', mode='w', index=False, header=True)
-
-    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+     
+    # W&B data preparation if enabled
+    if not self.config.wandb.off:
+        wandb_data = {
+            'image_source': source_name,
+            'label': label,
+            'miner_uid': miner_uids,
+            'pred': responses,
+            'correct': [
+                np.round(y_hat) == y
+                for y_hat, y in zip(responses, [label]*len(responses))
+            ]
+        }
+        if label == 1:
+            wandb_data['model'] = source_name
+            wandb_data['image'] = wandb.Image(sample['image'])
+        elif label == 0:
+            wandb_data['dataset'] = source_name
+            wandb_data['image_index'] = sample['id']
+            
+        wandb.log(wandb_data)
+            
+    # Track miners who have responded
     self.last_responding_miner_uids = []
     for i, pred in enumerate(responses):
+        # Logging specific prediction details
         if pred != -1:
             bt.logging.info(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
             self.last_responding_miner_uids.append(miner_uids[i])
-
-    bt.logging.info(f"Received responses: {responses}")
-    bt.logging.info(f"Scored responses: {rewards}")
-
-    # Update the scores based on the rewards. You may want to define your own update_scores function for custom behavior.
-    self.update_scores(rewards, miner_uids)
