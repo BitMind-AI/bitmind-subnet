@@ -54,9 +54,10 @@ class Validator(BaseValidatorNeuron):
             for ds in DATASET_META['real']
         ]
 
+        self.last_responding_miner_uids = []
         self.random_image_generator = RandomImageGenerator(use_random_diffuser=True, diffuser_name=None)
         self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL)
-        #self.validator_proxy = ValidatorProxy(self)
+        self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):
         """

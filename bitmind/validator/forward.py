@@ -121,10 +121,12 @@ async def forward(self):
     else:
         results_df.to_csv('results.csv', mode='w', index=False, header=True)
 
-    # debug outputs for rewards
     bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+    self.last_responding_miner_uids = []
     for i, pred in enumerate(responses):
-        bt.logging.info(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
+        if pred != -1:
+            bt.logging.info(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
+            self.last_responding_miner_uids.append(miner_uids[i])
 
     bt.logging.info(f"Received responses: {responses}")
     bt.logging.info(f"Scored responses: {rewards}")

@@ -185,20 +185,6 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
-        "--proxy.port",
-        type=int,
-        help="The port to run the proxy on.",
-        default=47923, #None
-    )
-
-    parser.add_argument(
-        "--proxy.proxy_client_url",
-        type=str,
-        help="The url initialize credentials for proxy.",
-        default="http://0.0.0.0:47927",
-    )
-
-    parser.add_argument(
         "--neuron.name",
         type=str,
         help="Trials for this neuron go in neuron.root / (wallet_cold - wallet_hot) / neuron.name. ",
@@ -269,6 +255,20 @@ def add_validator_args(cls, parser):
         type=str,
         help="The name of the project where you are sending the new run.",
         default="opentensor-dev",
+    )
+
+    parser.add_argument(
+        "--proxy.port",
+        type=int,
+        help="The port to run the proxy on.",
+        default=10913
+    )
+
+    parser.add_argument(
+        "--proxy.proxy_client_url",
+        type=str,
+        help="The url initialize credentials for proxy.",
+        default="https://subnet-api.bitmindlabs.ai"
     )
 
 
