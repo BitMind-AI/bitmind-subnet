@@ -37,12 +37,12 @@ class SyntheticImageGenerator:
         use_random_diffuser=False,
         image_cache_dir=None
     ):
-        assert prompt_type in PROMPT_TYPES,\
-            f'Invalid prompt type. Options are {prompt_type}'
-        assert prompt_generator_name in PROMPT_GENERATOR_NAMES,\
-            f'Invalid prompt generator name. Options are {PROMPT_GENERATOR_NAMES}'
-        assert use_random_diffuser or diffuser_name in DIFFUSER_NAMES, \
-            f'Invalid diffuser name. Options are {DIFFUSER_NAMES}'
+        if prompt_type not in PROMPT_TYPES:
+            raise ValueError(f"Invalid prompt type '{prompt_type}'. Options are {PROMPT_TYPES}")
+        if prompt_generator_name not in PROMPT_GENERATOR_NAMES:
+            raise ValueError(f"Invalid prompt generator name '{prompt_generator_name}'. Options are {PROMPT_GENERATOR_NAMES}")
+        if not use_random_diffuser and diffuser_name not in DIFFUSER_NAMES:
+            raise ValueError(f"Invalid diffuser name '{diffuser_name}'. Options are {DIFFUSER_NAMES}")
 
         self.use_random_diffuser = use_random_diffuser
         self.prompt_type = prompt_type
