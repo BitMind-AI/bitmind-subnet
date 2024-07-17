@@ -32,6 +32,7 @@ import os
 import wandb
 
 from bitmind.utils.uids import get_random_uids
+from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import ImageSynapse, prepare_image_synapse
 from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_image_transforms
@@ -59,22 +60,42 @@ async def forward(self):
     """
     #print(f"k={self.config.neuron.sample_size}")
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-
     if np.random.rand() > 0.5:
-        print('sampling real image')
-        real_dataset = self.real_image_datasets[np.random.randint(0, len(self.real_image_datasets))]
-        source_name = real_dataset.huggingface_dataset_path
-        sample = real_dataset.sample(k=1)[0][0]
+        bt.logging.info('sampling real image')
+        real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
+        real_dataset = self.real_image_datasets[real_dataset_index]
+        sample = real_dataset.sample(k=1)[0][0] # {'image': PIL Image ,'id': int}
         label = 0
     else:
-        print('generating fake image')
-        sample = self.random_image_generator.generate(k=1)[0]
-        source_name = self.random_image_generator.diffuser_name
         label = 1
+        if self.config.neuron.prompt_type == 'annotation':
+            bt.logging.info('generating fake image from annotation of real image')
+            real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
+            real_dataset = self.real_image_datasets[real_dataset_index]
+            sample = real_dataset.sample(k=1)[0][0] # {'image': PIL Image ,'id': int}
+            self.image_annotation_generator.load_model()
+            annotation = self.image_annotation_generator.process_image(
+                image_info=sample,
+                dataset_name=source_name,
+                image_index=sample['id'],
+                resize=False,
+                verbose=0
+            )
+            self.image_annotation_generator.clear_gpu()
+            sample = self.random_image_generator.generate(
+                k=1, annotation=annotation)[0] # {'prompt': str, 'image': PIL Image ,'id': int}
+            source_name = self.random_image_generator.diffuser_name
+        elif self.config.neuron.prompt_type == 'random':
+            bt.logging.info('generating fake image using prompt_generator')
+            sample = self.random_image_generator.generate(k=1)[0]
+            source_name = self.random_image_generator.diffuser_name
+        else:
+            bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
+            raise NotImplementedError
 
     image = random_image_transforms(sample['image'])
 
-    print(f"Querying {len(miner_uids)} miners...")
+    bt.logging.info(f"Querying {len(miner_uids)} miners...")
     responses = await self.dendrite(
         axons=[self.metagraph.axons[uid] for uid in miner_uids],
         synapse=prepare_image_synapse(image=image),
@@ -82,12 +103,38 @@ async def forward(self):
     )
 
     rewards = get_rewards(label=label, responses=responses)
+    
+    # Logging image source and verification details
+    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+    
+    # Logging responses and rewards
     bt.logging.info(f"Received responses: {responses}")
     bt.logging.info(f"Scored responses: {rewards}")
-
-    # Update the scores based on the rewards. You may want to define your own update_scores function for custom behavior.
+    
+    # Update the scores based on the rewards.
     self.update_scores(rewards, miner_uids)
-
+    
+    # Results data preparation
+    results_df = pd.DataFrame({
+        'time': datetime.now(),
+        'miner_uid': miner_uids,
+        'label': [label] * len(miner_uids),
+        'pred': responses,
+        'correct': [
+            np.round(y_hat) == y
+            for y_hat, y in zip(responses, [label]*len(responses))
+        ],
+        'image_id': [sample['id']] * len(miner_uids),
+        'image_source': [source_name] * len(miner_uids)
+    })
+    
+    # Append or write the results to CSV
+    if os.path.exists('results.csv'):
+        results_df.to_csv('results.csv', mode='a', index=False, header=False)
+    else:
+        results_df.to_csv('results.csv', mode='w', index=False, header=True)
+     
+    # W&B data preparation if enabled
     if not self.config.wandb.off:
         wandb_data = {
             'image_source': source_name,
@@ -105,5 +152,13 @@ async def forward(self):
         elif label == 0:
             wandb_data['dataset'] = source_name
             wandb_data['image_index'] = sample['id']
-
+            
         wandb.log(wandb_data)
+            
+    # Track miners who have responded
+    self.last_responding_miner_uids = []
+    for i, pred in enumerate(responses):
+        # Logging specific prediction details
+        if pred != -1:
+            bt.logging.info(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
+            self.last_responding_miner_uids.append(miner_uids[i])
