@@ -105,27 +105,7 @@ async def forward(self):
     
     # Update the scores based on the rewards.
     self.update_scores(rewards, miner_uids)
-    
-    # Results data preparation
-    results_df = pd.DataFrame({
-        'time': datetime.now(),
-        'miner_uid': miner_uids,
-        'label': [label] * len(miner_uids),
-        'pred': responses,
-        'correct': [
-            np.round(y_hat) == y
-            for y_hat, y in zip(responses, [label]*len(responses))
-        ],
-        'image_id': [sample['id']] * len(miner_uids),
-        'image_source': [source_name] * len(miner_uids)
-    })
-    
-    # Append or write the results to CSV
-    if os.path.exists('results.csv'):
-        results_df.to_csv('results.csv', mode='a', index=False, header=False)
-    else:
-        results_df.to_csv('results.csv', mode='w', index=False, header=True)
-     
+
     # W&B data preparation if enabled
     if not self.config.wandb.off:
         wandb_data = {
