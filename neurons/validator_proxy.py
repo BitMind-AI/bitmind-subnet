@@ -140,7 +140,7 @@ class ValidatorProxy:
                     'uids': [int(uid) for uid in valid_pred_uids],
                     'preds': [float(p) for p in list(valid_preds)],
                     'ranks': [float(self.validator.metagraph.R[uid]) for uid in valid_pred_uids],
-                    'incentive': [float(self.validator.metagraph.I[uid]) for uid in valid_pred_uids],
+                    'incentives': [float(self.validator.metagraph.I[uid]) for uid in valid_pred_uids],
                     'emissions': [float(self.validator.metagraph.E[uid]) for uid in valid_pred_uids]
                 }
                 return data
