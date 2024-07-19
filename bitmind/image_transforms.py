@@ -1,4 +1,5 @@
 import torchvision.transforms as transforms
+import torch
 
 
 def CenterCrop():
@@ -7,6 +8,76 @@ def CenterCrop():
         return transforms.CenterCrop(m)(img)
 
     return fn
+
+
+class RandomResizedCropWithParams(transforms.RandomResizedCrop):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.params = None
+
+    def get_params(self, img, scale, ratio):
+        params = super().get_params(img, scale, ratio)
+        self.params = params
+        return params
+
+
+class RandomHorizontalFlipWithParams(transforms.RandomHorizontalFlip):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.params = None
+
+    def forward(self, img):
+        if torch.rand(1) < self.p:
+            self.params = True
+            return transforms.functional.hflip(img)
+        else:
+            self.params = False
+            return img
+
+
+class RandomVerticalFlipWithParams(transforms.RandomVerticalFlip):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.params = None
+
+    def forward(self, img):
+        if torch.rand(1) < self.p:
+            self.params = True
+            return transforms.functional.vflip(img)
+        else:
+            self.params = False
+            return img
+
+
+class RandomRotationWithParams(transforms.RandomRotation):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.params = None
+
+    def forward(self, img):
+        angle = self.get_params(self.degrees)
+        self.params = angle
+        return transforms.functional.rotate(img, angle)
+
+
+class ComposeWithParams:
+    def __init__(self, transforms):
+        self.transforms = transforms
+        self.params = {}
+
+    def __call__(self, img):
+        transform_params = {
+            RandomResizedCropWithParams: 'RandomResizedCrop',
+            RandomHorizontalFlipWithParams: 'RandomHorizontalFlip',
+            RandomVerticalFlipWithParams: 'RandomVerticalFlip',
+            RandomRotationWithParams: 'RandomRotation'
+        }
+
+        for t in self.transforms:
+            img = t(img)
+            if type(t) in transform_params:
+                self.params[transform_params[type(t)]] = t.params
+        return img
 
 
 # transforms to prepare an image for the base miner.
@@ -18,10 +89,9 @@ base_transforms = transforms.Compose([
 ])
 
 # example data augmentation
-random_image_transforms = transforms.Compose([
-    transforms.RandomResizedCrop(256, scale=(0.2, 1.0), ratio=(1.0, 1.0)), 
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomVerticalFlip(),
-    #transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2), 
-    transforms.RandomRotation(20)
+random_image_transforms = ComposeWithParams([
+    RandomResizedCropWithParams(256, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
+    RandomHorizontalFlipWithParams(),
+    RandomVerticalFlipWithParams(),
+    RandomRotationWithParams(20)
 ])

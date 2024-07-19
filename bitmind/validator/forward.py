@@ -86,6 +86,7 @@ async def forward(self):
             raise NotImplementedError
 
     image = random_image_transforms(sample['image'])
+    data_aug_params = random_image_transforms.params
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     responses = await self.dendrite(
@@ -109,6 +110,7 @@ async def forward(self):
     # W&B data preparation if enabled
     if not self.config.wandb.off:
         wandb_data = {
+            'data_aug_params': data_aug_params,
             'image_source': source_name,
             'label': label,
             'miner_uid': miner_uids,
