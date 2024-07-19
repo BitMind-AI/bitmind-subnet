@@ -38,7 +38,7 @@ def is_cuda_available():
     return "cpu"
 
 
-def check_config(cls, config: "bt.Config"):
+def check_config(cls, config: "bt.Config", uid: int = None):
     r"""Checks/validates the config namespace object."""
     bt.logging.check_config(config)
 
@@ -59,7 +59,7 @@ def check_config(cls, config: "bt.Config"):
     if not config.neuron.dont_save_events:
         # Add custom event logger for the events.
         events_logger = setup_events_logger(
-            config.neuron.full_path, config.neuron.events_retention_size
+            config.neuron.full_path, config.neuron.events_retention_size, uid
         )
         bt.logging.register_primary_logger(events_logger.name)
 
