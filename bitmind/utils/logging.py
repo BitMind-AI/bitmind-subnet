@@ -6,7 +6,7 @@ EVENTS_LEVEL_NUM = 38
 DEFAULT_LOG_BACKUP_COUNT = 10
 
 
-def setup_events_logger(full_path, events_retention_size, uid=None):
+def setup_events_logger(full_path, events_retention_size):
     logging.addLevelName(EVENTS_LEVEL_NUM, "EVENT")
 
     logger = logging.getLogger("event")
@@ -18,9 +18,8 @@ def setup_events_logger(full_path, events_retention_size, uid=None):
 
     logging.Logger.event = event
 
-    uid_prefix = f"uid {uid} | " if uid else ""
     formatter = logging.Formatter(
-        uid_prefix + "%(asctime)s | %(levelname)s | %(message)s",
+        "%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 

@@ -39,8 +39,8 @@ class BaseNeuron(ABC):
     neuron_type: str = "BaseNeuron"
 
     @classmethod
-    def check_config(cls, config: "bt.Config", uid: int = None):
-        check_config(cls, config, uid)
+    def check_config(cls, config: "bt.Config"):
+        check_config(cls, config)
 
     @classmethod
     def add_args(cls, parser):
@@ -63,9 +63,20 @@ class BaseNeuron(ABC):
         base_config = copy.deepcopy(config or BaseNeuron.config())
         self.config = self.config()
         self.config.merge(base_config)
+        self.check_config(self.config)
+
+        # Set up logging with the provided configuration.
+        bt.logging.set_config(config=self.config.logging)
 
         # If a gpu is required, set the device to cuda:N (e.g. cuda:0)
         self.device = self.config.neuron.device
+
+        # Log the configuration for reference.
+        bt.logging.info(self.config)
+
+        # Build Bittensor objects
+        # These are core Bittensor classes to interact with the network.
+        bt.logging.info("Setting up bittensor objects.")
 
         # The wallet holds the cryptographic key pairs for the miner.
         if self.config.mock:
@@ -81,23 +92,6 @@ class BaseNeuron(ABC):
             self.subtensor = bt.subtensor(config=self.config)
             self.metagraph = self.subtensor.metagraph(self.config.netuid)
 
-        # Each miner gets a unique identity (UID) in the network for differentiation.
-        self.uid = self.metagraph.hotkeys.index(
-            self.wallet.hotkey.ss58_address
-        )
-
-        self.check_config(self.config, self.uid)
-
-        # Set up logging with the provided configuration.
-        bt.logging.set_config(config=self.config.logging)
-
-        # Log the configuration for reference.
-        bt.logging.info(self.config)
-
-        # Build Bittensor objects
-        # These are core Bittensor classes to interact with the network.
-        bt.logging.info("Setting up bittensor objects.")
-
         bt.logging.info(f"Wallet: {self.wallet}")
         bt.logging.info(f"Subtensor: {self.subtensor}")
         bt.logging.info(f"Metagraph: {self.metagraph}")
@@ -105,6 +99,10 @@ class BaseNeuron(ABC):
         # Check if the miner is registered on the Bittensor network before proceeding further.
         self.check_registered()
 
+        # Each miner gets a unique identity (UID) in the network for differentiation.
+        self.uid = self.metagraph.hotkeys.index(
+            self.wallet.hotkey.ss58_address
+        )
         bt.logging.info(
             f"Running neuron on subnet: {self.config.netuid} with uid {self.uid} using network: {self.subtensor.chain_endpoint}"
         )
