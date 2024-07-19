@@ -73,7 +73,7 @@ class Miner(BaseMinerNeuron):
             bt.logging.error("Error performing inference")
             bt.logging.error(e)
 
-        print("PREDICTION:", synapse.prediction)
+        bt.logging.info("PREDICTION:", synapse.prediction)
         return synapse
 
     async def blacklist(
@@ -184,5 +184,5 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore")
     with Miner() as miner:
         while True:
-            bt.logging.info("Miner running...", time.time())
+            bt.logging.info(f"Miner running | uid {miner.uid} | {time.time()}")
             time.sleep(5)
