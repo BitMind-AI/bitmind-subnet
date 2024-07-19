@@ -33,3 +33,4 @@ def setup_events_logger(full_path, events_retention_size):
     logger.addHandler(file_handler)
 
     return logger
+
