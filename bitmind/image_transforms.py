@@ -66,21 +66,17 @@ class ComposeWithParams:
         self.params = {}
 
     def __call__(self, img):
+        transform_params = {
+            RandomResizedCropWithParams: 'RandomResizedCrop',
+            RandomHorizontalFlipWithParams: 'RandomHorizontalFlip',
+            RandomVerticalFlipWithParams: 'RandomVerticalFlip',
+            RandomRotationWithParams: 'RandomRotation'
+        }
+
         for t in self.transforms:
-            if isinstance(t, RandomResizedCropWithParams):
-                img = t(img)
-                self.params['RandomResizedCrop'] = t.params
-            elif isinstance(t, RandomHorizontalFlipWithParams):
-                img = t(img)
-                self.params['RandomHorizontalFlip'] = t.params
-            elif isinstance(t, RandomVerticalFlipWithParams):
-                img = t(img)
-                self.params['RandomVerticalFlip'] = t.params
-            elif isinstance(t, RandomRotationWithParams):
-                img = t(img)
-                self.params['RandomRotation'] = t.params
-            else:
-                img = t(img)
+            img = t(img)
+            if type(t) in transform_params:
+                self.params[transform_params[type(t)]] = t.params
         return img
 
 
