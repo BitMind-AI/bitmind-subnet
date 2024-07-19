@@ -62,6 +62,12 @@ def check_config(cls, config: "bt.Config"):
             config.neuron.full_path, config.neuron.events_retention_size
         )
         bt.logging.register_primary_logger(events_logger.name)
+        if config.logging.debug:
+            bt.logging.enable_debug()
+        elif config.logging.trace:
+            bt.logging.enable_trace()
+        else:
+            bt.logging.enable_default()
 
 
 def add_args(cls, parser):

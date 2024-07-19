@@ -17,18 +17,12 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from tensorflow.keras.models import load_model
 from PIL import Image
-import torchvision.transforms as transforms
 import bittensor as bt
-import tensorflow as tf
-import numpy as np
-import torch.nn as nn
 import torch
 import base64
 import time
 import typing
-import cv2
 import io
 
 from base_miner.networks.resnet import resnet50
@@ -41,6 +35,7 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
+        self.model = None
 
     async def forward(
         self, synapse: ImageSynapse
@@ -62,12 +57,12 @@ class Miner(BaseMinerNeuron):
         try:
             self.model = resnet50(num_classes=1)
             weight_path = self.config.neuron.model_path
-            print(f"Loading detector model from {weight_path}")
+            bt.logging.info(f"Loading detector model from {weight_path}")
             self.model.load_state_dict(torch.load(weight_path, map_location='cpu'))
             self.model.eval()
         except Exception as e:
-            print("Error loading model")
-            print(e)
+            bt.logging.error("Error loading model")
+            bt.logging.error(e)
 
         try:
             image_bytes = base64.b64decode(synapse.image)
@@ -75,10 +70,10 @@ class Miner(BaseMinerNeuron):
             pred = predict(self.model, image)
             synapse.prediction = pred
         except Exception as e:
-            print("Error performing inference")
-            print(e)
+            bt.logging.error("Error performing inference")
+            bt.logging.error(e)
 
-        print("PREDICTION:", synapse.prediction)
+        bt.logging.info(f"PREDICTION: {synapse.prediction}")
         return synapse
 
     async def blacklist(
@@ -189,5 +184,5 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore")
     with Miner() as miner:
         while True:
-            bt.logging.info("Miner running...", time.time())
+            bt.logging.info(f"Miner running | uid {miner.uid} | {time.time()}")
             time.sleep(5)
