@@ -73,7 +73,7 @@ class Miner(BaseMinerNeuron):
             bt.logging.error("Error performing inference")
             bt.logging.error(e)
 
-        bt.logging.info("PREDICTION:", synapse.prediction)
+        bt.logging.info(f"PREDICTION: {synapse.prediction}")
         return synapse
 
     async def blacklist(
