@@ -97,5 +97,5 @@ random_image_transforms = ComposeWithParams([
     RandomResizedCropWithParams(256, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
     RandomHorizontalFlipWithParams(),
     RandomVerticalFlipWithParams(),
-    RandomRotationWithParams()
+    RandomRotationWithParams(20)
 ])
