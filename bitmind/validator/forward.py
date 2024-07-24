@@ -30,7 +30,7 @@ from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
-from bitmind.image_transforms import random_image_transforms
+from bitmind.image_transforms import random_aug_transforms
 
 
 async def forward(self):
@@ -85,8 +85,8 @@ async def forward(self):
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
             raise NotImplementedError
 
-    image = random_image_transforms(sample['image'])
-    data_aug_params = random_image_transforms.params
+    image = random_aug_transforms(sample['image'])
+    data_aug_params = random_aug_transforms.params
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     responses = await self.dendrite(
