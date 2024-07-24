@@ -1,5 +1,5 @@
-import torchvision.transforms as transforms
 from typing import List, Tuple, Dict
+import torchvision.transforms as transforms
 
 from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
@@ -59,6 +59,7 @@ def create_real_fake_datasets(
     fake_datasets: Dict[str, List[ImageDataset]],
     base_transforms: transforms.Compose,
     data_aug_transforms: transforms.Compose = None,
+    augment_test: bool = False
 ) -> Tuple[RealFakeDataset, ...]:
     """
 
@@ -70,8 +71,11 @@ def create_real_fake_datasets(
         Train, val, and test RealFakeDatasets
 
     """
+    test_transforms = base_transforms
     if data_aug_transforms is not None:
         train_transforms = transforms.Compose(base_transforms.transforms + data_aug_transforms.transforms)
+        if augment_test:
+            test_transforms = train_transforms
     else:
         train_transforms = base_transforms
 
@@ -88,6 +92,7 @@ def create_real_fake_datasets(
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
-        transforms=base_transforms)
+        transforms=test_transforms,
+        )
 
     return train_dataset, val_dataset, test_dataset
