@@ -8,7 +8,7 @@ import time
 import random
 import torch
 
-from bitmind.image_transforms import base_transforms, random_image_transforms
+from bitmind.image_transforms import base_transforms, random_aug_transforms
 from util.data import load_datasets, create_real_fake_datasets
 from options import TrainOptions
 
@@ -35,7 +35,10 @@ def main():
     # RealFakeDataseta will limit the number of images sampled per dataset to the length of the smallest dataset
     real_datasets, fake_datasets = load_datasets()
     train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
-        real_datasets, fake_datasets, base_transforms, None) #random_image_transforms)
+        real_datasets,
+        fake_datasets,
+        base_transforms,
+        train_augmentations=random_aug_transforms)
 
     train_loader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=lambda d: tuple(d))
