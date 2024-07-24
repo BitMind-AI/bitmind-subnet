@@ -57,9 +57,9 @@ def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
 def create_real_fake_datasets(
     real_datasets: Dict[str, List[ImageDataset]],
     fake_datasets: Dict[str, List[ImageDataset]],
-    base_transforms: transforms.Compose,
-    train_augmentations: transforms.Compose = None,
-    test_augmentations: transforms.Compose = None
+    train_transforms: transforms.Compose,
+    val_transforms: transforms.Compose,
+    test_transforms: transforms.Compose,
 ) -> Tuple[RealFakeDataset, ...]:
     """
 
@@ -67,23 +67,13 @@ def create_real_fake_datasets(
         real_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
         fake_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
         base_transforms: transforms to apply to all images
-        train_augmentations: random data augmentation transformations to apply to training dataset
-        test_augmentations: random data augmentation transformations to apply to test dataset, allows evaluation
-            to take into account the augmentation performed by validators on the BitMind subnet.
-
+        train_transforms: transforms to apply to training dataset
+        val_transforms: transforms to apply to val dataset
+        test_transforms: transforms to apply to val dataset
     Returns:
         Train, val, and test RealFakeDatasets
 
     """
-    if train_augmentations is not None:
-        train_transforms = transforms.Compose(base_transforms.transforms + train_augmentations.transforms)
-    else:
-        train_transforms = base_transforms
-
-    if test_augmentations is not None:
-        test_transforms = transforms.Compose(base_transforms.transforms + test_augmentations.transforms)
-    else:
-        test_transforms = base_transforms
 
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
@@ -93,7 +83,7 @@ def create_real_fake_datasets(
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
         fake_image_datasets=fake_datasets['validation'],
-        transforms=base_transforms)
+        transforms=val_transforms)
 
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],

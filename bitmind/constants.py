@@ -42,6 +42,8 @@ VALIDATOR_MODEL_META = {
     ]
 }
 
+TARGET_IMAGE_SIZE = (256, 256)
+
 PROMPT_TYPES = ('random', 'annotation')
 
 PROMPT_GENERATOR_ARGS = {
