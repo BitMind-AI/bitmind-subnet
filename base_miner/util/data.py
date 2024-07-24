@@ -58,26 +58,32 @@ def create_real_fake_datasets(
     real_datasets: Dict[str, List[ImageDataset]],
     fake_datasets: Dict[str, List[ImageDataset]],
     base_transforms: transforms.Compose,
-    data_aug_transforms: transforms.Compose = None,
-    augment_test: bool = False
+    train_augmentations: transforms.Compose = None,
+    test_augmentations: transforms.Compose = None
 ) -> Tuple[RealFakeDataset, ...]:
     """
 
     Args:
         real_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
         fake_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
+        base_transforms: transforms to apply to all images
+        train_augmentations: random data augmentation transformations to apply to training dataset
+        test_augmentations: random data augmentation transformations to apply to test dataset, allows evaluation
+            to take into account the augmentation performed by validators on the BitMind subnet.
 
     Returns:
         Train, val, and test RealFakeDatasets
 
     """
-    test_transforms = base_transforms
-    if data_aug_transforms is not None:
-        train_transforms = transforms.Compose(base_transforms.transforms + data_aug_transforms.transforms)
-        if augment_test:
-            test_transforms = train_transforms
+    if train_augmentations is not None:
+        train_transforms = transforms.Compose(base_transforms.transforms + train_augmentations.transforms)
     else:
         train_transforms = base_transforms
+
+    if test_augmentations is not None:
+        test_transforms = transforms.Compose(base_transforms.transforms + test_augmentations.transforms)
+    else:
+        test_transforms = base_transforms
 
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
@@ -92,7 +98,6 @@ def create_real_fake_datasets(
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
-        transforms=test_transforms,
-        )
+        transforms=test_transforms)
 
     return train_dataset, val_dataset, test_dataset
