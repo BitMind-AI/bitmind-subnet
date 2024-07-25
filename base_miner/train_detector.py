@@ -38,7 +38,9 @@ def main():
         real_datasets,
         fake_datasets,
         base_transforms,
-        train_augmentations=random_aug_transforms)
+        train_transforms=random_aug_transforms,
+        val_transforms=base_transforms,
+        test_transforms=base_transforms)
 
     train_loader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=lambda d: tuple(d))
@@ -46,7 +48,6 @@ def main():
         val_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=lambda d: tuple(d))
     test_loader = DataLoader(
         test_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=lambda d: tuple(d))
-
 
     model = Trainer(opt)
     display_loss_steps = 10
