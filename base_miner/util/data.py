@@ -1,5 +1,5 @@
-import torchvision.transforms as transforms
 from typing import List, Tuple, Dict
+import torchvision.transforms as transforms
 
 from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
@@ -57,23 +57,23 @@ def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
 def create_real_fake_datasets(
     real_datasets: Dict[str, List[ImageDataset]],
     fake_datasets: Dict[str, List[ImageDataset]],
-    base_transforms: transforms.Compose,
-    data_aug_transforms: transforms.Compose = None,
+    train_transforms: transforms.Compose,
+    val_transforms: transforms.Compose,
+    test_transforms: transforms.Compose,
 ) -> Tuple[RealFakeDataset, ...]:
     """
 
     Args:
         real_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
         fake_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
-
+        base_transforms: transforms to apply to all images
+        train_transforms: transforms to apply to training dataset
+        val_transforms: transforms to apply to val dataset
+        test_transforms: transforms to apply to val dataset
     Returns:
         Train, val, and test RealFakeDatasets
 
     """
-    if data_aug_transforms is not None:
-        train_transforms = transforms.Compose(base_transforms.transforms + data_aug_transforms.transforms)
-    else:
-        train_transforms = base_transforms
 
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
@@ -83,11 +83,11 @@ def create_real_fake_datasets(
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
         fake_image_datasets=fake_datasets['validation'],
-        transforms=base_transforms)
+        transforms=val_transforms)
 
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
-        transforms=base_transforms)
+        transforms=test_transforms)
 
     return train_dataset, val_dataset, test_dataset

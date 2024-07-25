@@ -20,11 +20,13 @@
 
 from typing import List
 from pydantic import root_validator, validator
+from torchvision import transforms
 from io import BytesIO
 from PIL import Image
 import bittensor as bt
 import pydantic
 import base64
+import torch
 
 
 def prepare_image_synapse(image: Image):
@@ -37,6 +39,9 @@ def prepare_image_synapse(image: Image):
     Returns:
         ImageSynapse: An instance of ImageSynapse containing the encoded image and a default prediction value.
     """
+    if isinstance(image, torch.Tensor):
+        image = transforms.ToPILImage()(image.cpu().detach())
+
     image_bytes = BytesIO()
     image.save(image_bytes, format="JPEG")
     b64_encoded_image = base64.b64encode(image_bytes.getvalue())

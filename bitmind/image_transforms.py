@@ -1,5 +1,8 @@
+from PIL import Image
 import torchvision.transforms as transforms
 import torch
+
+from bitmind.constants import TARGET_IMAGE_SIZE
 
 
 def CenterCrop():
@@ -60,6 +63,12 @@ class RandomRotationWithParams(transforms.RandomRotation):
         return transforms.functional.rotate(img, angle)
 
 
+class ConvertToRGB:
+    def __call__(self, img):
+        img = img.convert('RGB')
+        return img
+
+
 class ComposeWithParams:
     def __init__(self, transforms):
         self.transforms = transforms
@@ -80,18 +89,20 @@ class ComposeWithParams:
         return img
 
 
-# transforms to prepare an image for the base miner.
+# transforms to prepare an image for the base miner
 base_transforms = transforms.Compose([
+    ConvertToRGB(),
     CenterCrop(),
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Lambda(lambda t: t.expand(3, -1, -1) if t.shape[0] == 1 else t),
+    transforms.Resize(TARGET_IMAGE_SIZE),
+    transforms.ToTensor()
 ])
 
-# example data augmentation
-random_image_transforms = ComposeWithParams([
-    RandomResizedCropWithParams(256, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
+# data augmentation
+random_aug_transforms = ComposeWithParams([
+    ConvertToRGB(),
+    transforms.ToTensor(),
+    RandomRotationWithParams(20, interpolation=transforms.InterpolationMode.BILINEAR),
+    RandomResizedCropWithParams(TARGET_IMAGE_SIZE, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
     RandomHorizontalFlipWithParams(),
-    RandomVerticalFlipWithParams(),
-    RandomRotationWithParams(20)
+    RandomVerticalFlipWithParams()
 ])

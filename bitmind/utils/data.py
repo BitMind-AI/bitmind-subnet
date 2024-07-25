@@ -80,6 +80,7 @@ def load_huggingface_dataset(
     split_dataset['test'] = val_test_split['test']
     return split_dataset[split]
 
+
 def sample_dataset_index_name(image_datasets: list) -> tuple[int, str]:
     """
     Randomly selects a dataset index from the provided dataset list and returns the index and source name.
