@@ -113,7 +113,7 @@ async def forward(self):
             'data_aug_params': data_aug_params,
             'image_source': source_name,
             'label': label,
-            'miner_uid': miner_uids,
+            'miner_uid': list(miner_uids),
             'pred': responses,
             'correct': [
                 np.round(y_hat) == y
