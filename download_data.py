@@ -3,9 +3,33 @@ import argparse
 import time
 import sys
 import os
+import subprocess
+import glob
 
 from bitmind.constants import DATASET_META
 
+def clear_cache(cache_dir):
+    """Clears lock files and incomplete downloads from the cache directory."""
+    # Find lock and incomplete files
+    lock_files = glob.glob(cache_dir + "/*lock")
+    incomplete_files = glob.glob(cache_dir + "/downloads/**/*.incomplete", recursive=True)
+    try:
+        if lock_files:
+            subprocess.run(["rm", *lock_files], check=True)
+        if incomplete_files:
+            for file in incomplete_files:
+                os.remove(file)
+        print("Hugging Face cache cleared successfully.")
+    except Exception as e:
+        print(f"Failed to clear Hugging Face cache: {e}")
+
+def fix_permissions(path):
+    """Attempts to fix permission issues on a given path."""
+    try:
+        subprocess.run(["chmod", "-R", "775", path], check=True)
+        print(f"Fixed permissions for {path}")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to fix permissions for {path}: {e}")
 
 def download_datasets(download_mode: str, cache_dir: str, max_wait: int = 300):
     """ Downloads the datasets present in datasets.json with exponential backoff
@@ -13,9 +37,12 @@ def download_datasets(download_mode: str, cache_dir: str, max_wait: int = 300):
         cache_dir: huggingface cache directory. ~/.cache/huggingface by default 
     """ 
     os.makedirs(args.cache_dir, exist_ok=True)
+    clear_cache(cache_dir)  # Clear the cache of lock and incomplete files.
+
     for dataset_type in DATASET_META:
         for dataset in DATASET_META[dataset_type]:
             retry_wait = 10   # initial wait time in seconds
+            attempts = 0     # initialize attempts counter
             print(f"Downloading {dataset['path']} dataset...")
             while True:
                 try:
@@ -23,12 +50,24 @@ def download_datasets(download_mode: str, cache_dir: str, max_wait: int = 300):
                     break
                 except Exception as e:
                     print(e)
-                    print(f"Error downloading {dataset['path']}. Retrying in {retry_wait}s...")
-                    time.sleep(retry_wait)
+                    if '429' in str(e) or 'ReadTimeoutError' in str(e):
+                        print(f"Rate limit hit or timeout, retrying in {retry_wait}s...")
+                    elif isinstance(e, PermissionError):
+                        file_path = str(e).split(": '")[1].rstrip("'")
+                        print(f"Permission error at {file_path}, attempting to fix...")
+                        fix_permissions(file_path)  # Attempt to fix permissions directly
+                        clear_cache(cache_dir)      # Clear cache to remove any incomplete or locked files
+                    else:
+                        print(f"Unexpected error, stopping retries for {dataset['path']}")
+                        raise e
+                    
                     if retry_wait > max_wait:
-                        print(f"Download failed for {dataset['path']}. Try again later")
+                        print(f"Download failed for {dataset['path']} after {attempts} attempts. Try again later")
                         sys.exit(1)
-                    retry_wait = retry_wait * 2
+
+                    time.sleep(retry_wait)  
+                    retry_wait *= 2  # exponential backoff
+                    attempts += 1
 
             print(f"Downloaded {dataset['path']} dataset to {args.cache_dir}")
 
