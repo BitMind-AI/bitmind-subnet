@@ -37,7 +37,6 @@ def main():
     train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
         real_datasets,
         fake_datasets,
-        base_transforms,
         train_transforms=random_aug_transforms,
         val_transforms=base_transforms,
         test_transforms=base_transforms)
