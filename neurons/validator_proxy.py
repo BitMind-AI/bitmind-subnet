@@ -41,12 +41,6 @@ class ValidatorProxy:
             dependencies=[Depends(self.get_self)],
         )
         self.app.add_api_route(
-            "/miner_performance",
-            self.miner_performance,
-            methods=["GET"],
-            dependencies=[Depends(self.get_self)],
-        )
-        self.app.add_api_route(
             "/healthcheck",
             self.healthcheck,
             methods=["GET"],
