@@ -44,7 +44,7 @@ def download_dataset(dataset_path, download_mode: str, cache_dir: str, max_wait:
     print(f"Downloading {dataset_path} dataset...")
     while True:
         try:
-            load_dataset(
+            dataset = load_dataset(
                 dataset_path,
                 cache_dir=cache_dir,
                 download_mode=download_mode,
@@ -72,6 +72,7 @@ def download_dataset(dataset_path, download_mode: str, cache_dir: str, max_wait:
             attempts += 1
 
     print(f"Downloaded {dataset_path} dataset to {cache_dir}")
+    return dataset
 
 
 if __name__ == '__main__':

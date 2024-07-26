@@ -62,7 +62,7 @@ def load_huggingface_dataset(
         _, directory = path.split(':')
         dataset = load_dataset(path='imagefolder', data_dir=directory, split='train')
     else:
-        download_dataset(path, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
+        dataset = download_dataset(path, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
 
     if not create_splits:
         if split is not None:
