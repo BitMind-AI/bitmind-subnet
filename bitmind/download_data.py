@@ -6,7 +6,7 @@ import os
 import subprocess
 import glob
 
-from constants import DATASET_META, HUGGINGFACE_CACHE_DIR
+from bitmind.constants import DATASET_META, HUGGINGFACE_CACHE_DIR
 
 
 def clear_cache(cache_dir):
