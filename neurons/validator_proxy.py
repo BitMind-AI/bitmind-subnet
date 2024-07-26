@@ -15,6 +15,7 @@ import asyncio
 import traceback
 import httpx
 import threading
+import socket
 
 from bitmind.utils.miner_metrics import miner_metrics
 from bitmind.protocol import ImageSynapse
@@ -40,11 +41,12 @@ class ValidatorProxy:
             dependencies=[Depends(self.get_self)],
         )
         self.app.add_api_route(
-            "/miner_performance",
-            self.miner_performance,
+            "/healthcheck",
+            self.healthcheck,
             methods=["GET"],
             dependencies=[Depends(self.get_self)],
         )
+
         self.loop = asyncio.get_event_loop()
         self.proxy_counter = ProxyCounter(
             os.path.join(self.validator.config.neuron.full_path, "proxy_counter.json")
@@ -99,6 +101,16 @@ class ValidatorProxy:
                 status_code=401, detail="Error getting authentication token"
             )
 
+    async def healthcheck(self, request: Request):
+        authorization: str = request.headers.get("authorization")
+
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header missing")
+
+        self.authenticate_token(authorization)
+        return {'status': 'healthy'}
+
+
     async def forward(self, request: Request):
         authorization: str = request.headers.get("authorization")
 
@@ -141,53 +153,14 @@ class ValidatorProxy:
                     'preds': [float(p) for p in list(valid_preds)],
                     'ranks': [float(self.validator.metagraph.R[uid]) for uid in valid_pred_uids],
                     'incentives': [float(self.validator.metagraph.I[uid]) for uid in valid_pred_uids],
-                    'emissions': [float(self.validator.metagraph.E[uid]) for uid in valid_pred_uids]
+                    'emissions': [float(self.validator.metagraph.E[uid]) for uid in valid_pred_uids],
+                    'fqdn': socket.getfqdn()
                 }
                 return data
 
         self.proxy_counter.update(is_success=False)
         self.proxy_counter.save()
         return HTTPException(status_code=500, detail="No valid response received")
-
-    async def miner_performance(self, request: Request):
-        authorization: str = request.headers.get("authorization")
-
-        if not authorization:
-            raise HTTPException(status_code=401, detail="Authorization header missing")
-
-        self.authenticate_token(authorization)
-        #if "recheck" in payload:
-        #    bt.logging.info("Rechecking validators")
-        #    self.get_credentials()
-        #    return {"message": "done"}
-
-        bt.logging.info("Received an organic request!")
-
-        metagraph = self.validator.metagraph
-
-        results_file = '../bitmind-subnet/results.csv'
-
-        results_df = pd.read_csv(results_file)
-        results_df.time = pd.to_datetime(results_df.time)
-        results_df = results_df[results_df.pred != -1]
-
-        # TODO: rolling mean for hourly performance
-        #if cutoff_datetime is not None:
-        #    results_df = results_df[results_df.time > pd.to_datetime(cutoff_datetime)]
-
-        metrics_df = miner_metrics(results_df, transpose=False)
-        metrics_df = metrics_df.merge(
-            pd.DataFrame({
-                'miner_uid': list(range(0, len(metagraph.R))),
-                'trust': metagraph.T,
-                'concensus': metagraph.C,
-                'emission': metagraph.E,
-                'incentive': metagraph.I,
-                'rank': metagraph.R}),
-            on='miner_uid')
-
-        return json.loads(metrics_df.to_json(orient='records'))
-        #return HTTPException(status_code=500, detail="No valid response received")
 
     async def get_self(self):
         return self
