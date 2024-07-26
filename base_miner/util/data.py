@@ -31,8 +31,8 @@ def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
                 meta['path'],
                 split,
                 meta.get('name', None),
-                meta['create_splits'],
-                meta.get('download_mode', None)
+                create_splits=True,  # temp fix
+                download_mode=meta.get('download_mode', None)
             )
             fake_datasets[split].append(dataset)
             print(f'done, len={len(dataset)}')
