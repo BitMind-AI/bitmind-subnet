@@ -45,6 +45,13 @@ class ValidatorProxy:
             methods=["GET"],
             dependencies=[Depends(self.get_self)],
         )
+        self.app.add_api_route(
+            "/healthcheck",
+            self.healthcheck,
+            methods=["GET"],
+            dependencies=[Depends(self.get_self)],
+        )
+
         self.loop = asyncio.get_event_loop()
         self.proxy_counter = ProxyCounter(
             os.path.join(self.validator.config.neuron.full_path, "proxy_counter.json")
@@ -98,6 +105,16 @@ class ValidatorProxy:
             raise HTTPException(
                 status_code=401, detail="Error getting authentication token"
             )
+
+    async def healthcheck(self, request: Request):
+        authorization: str = request.headers.get("authorization")
+
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header missing")
+
+        self.authenticate_token(authorization)
+        return {'status': 'healthy'}
+
 
     async def forward(self, request: Request):
         authorization: str = request.headers.get("authorization")
