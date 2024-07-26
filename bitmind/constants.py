@@ -1,5 +1,5 @@
-from pathlib import Path
-import json
+import os
+
 
 WANDB_PROJECT = 'bitmind'
 WANDB_ENTITY = 'bitmindai'
@@ -41,6 +41,8 @@ VALIDATOR_MODEL_META = {
         }
     ]
 }
+
+HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
 
 TARGET_IMAGE_SIZE = (256, 256)
 
