@@ -4,8 +4,10 @@ from PIL import Image
 from io import BytesIO
 import requests
 import datasets
-import random
 import numpy as np
+
+from bitmind.download_data import download_dataset
+from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
 
 def download_image(url: str) -> Image.Image:
@@ -60,7 +62,7 @@ def load_huggingface_dataset(
         _, directory = path.split(':')
         dataset = load_dataset(path='imagefolder', data_dir=directory, split='train')
     else:
-        dataset = load_dataset(path, name=name, download_mode=download_mode)#, split=split)
+        download_dataset(path, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
 
     if not create_splits:
         if split is not None:
