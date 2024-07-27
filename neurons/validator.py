@@ -53,7 +53,7 @@ class Validator(BaseValidatorNeuron):
         
         bt.logging.info("Loading real datasets")
         self.real_image_datasets = [
-            ImageDataset(ds['path'], 'test', ds.get('name', None), ds['create_splits'])
+            ImageDataset(ds['path'], 'train', ds.get('name', None), ds['create_splits'])
             for ds in DATASET_META['real']
         ]
 
