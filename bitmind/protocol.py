@@ -1,4 +1,3 @@
-
 # The MIT License (MIT)
 # Copyright © 2023 Yuma Rao
 # developer: dubm
@@ -45,7 +44,7 @@ def prepare_image_synapse(image: Image):
     image_bytes = BytesIO()
     image.save(image_bytes, format="JPEG")
     b64_encoded_image = base64.b64encode(image_bytes.getvalue())
-    return ImageSynapse(image=b64_encoded_image, prediction=-1.)
+    return ImageSynapse(image=b64_encoded_image)
 
 
 # ---- miner ----
@@ -71,7 +70,7 @@ class ImageSynapse(bt.Synapse):
 
     Attributes:
     - image: a bas64 encoded images
-    - predictions: a floats indicating the probabilty that the image is AI generated/modified. 
+    - prediction: a float  indicating the probabilty that the image is AI generated/modified.
         >.5 is considered generated/modified, <= 0.5 is considered real.
     """
 
@@ -79,14 +78,14 @@ class ImageSynapse(bt.Synapse):
     image: str = pydantic.Field(
         title="Image",
         description="A base64 encoded image",
-        allow_mutation=False
+        default=""
     )
 
     # Optional request output, filled by receiving axon.
     prediction: float = pydantic.Field(
         title="Prediction",
         description="Probability that the image is AI generated/modified",
-        allow_mutation=True
+        default=-1.
     )
 
     def deserialize(self) -> List[float]:
