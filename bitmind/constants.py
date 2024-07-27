@@ -1,5 +1,5 @@
-from pathlib import Path
-import json
+import os
+
 
 WANDB_PROJECT = 'bitmind'
 WANDB_ENTITY = 'bitmindai'
@@ -7,7 +7,7 @@ WANDB_ENTITY = 'bitmindai'
 DATASET_META = {
     "real": [
         {"path": "bitmind/open-images-v7", "create_splits": False},
-        {"path": "bitmind/ffhq", "create_splits": False},
+        {"path": "bitmind/ffhq-256", "create_splits": False},
         {"path": "bitmind/celeb-a-hq", "create_splits": False}
     ],
     "fake": [
@@ -41,6 +41,8 @@ VALIDATOR_MODEL_META = {
         }
     ]
 }
+
+HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
 
 TARGET_IMAGE_SIZE = (256, 256)
 

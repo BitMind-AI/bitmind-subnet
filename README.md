@@ -132,7 +132,7 @@ pip install -e .
 You can download the necessary datasets by running:
 
 ```bash
-python download_data.py
+python bitmind/download_data.py
 ```
 
 - For **validators**, we recommend you do this prior to registering and running your validator. The download can take up to a few hours. Please note the minimum storage requirements specified in `min_compute.yml`. 
