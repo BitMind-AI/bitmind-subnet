@@ -7,7 +7,8 @@ WANDB_ENTITY = 'bitmindai'
 DATASET_META = {
     "real": [
         {"path": "bitmind/open-images-v7", "create_splits": False},
-        {"path": "bitmind/ffhq", "create_splits": False},
+        #{"path": "bitmind/ffhq", "create_splits": False},
+        {"path": "merkol/ffhq-256", "create_splits": False},
         {"path": "bitmind/celeb-a-hq", "create_splits": False}
     ],
     "fake": [
