@@ -123,6 +123,7 @@ async def forward(self):
         if label == 1:
             wandb_data['model'] = source_name
             wandb_data['image'] = wandb.Image(sample['image'])
+            wandb_data['prompt'] = sample['prompt']
         elif label == 0:
             wandb_data['dataset'] = source_name
             wandb_data['image_index'] = sample['id']
