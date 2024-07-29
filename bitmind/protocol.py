@@ -17,7 +17,6 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from typing import List
 from pydantic import root_validator, validator
 from torchvision import transforms
 from io import BytesIO
@@ -78,23 +77,25 @@ class ImageSynapse(bt.Synapse):
     image: str = pydantic.Field(
         title="Image",
         description="A base64 encoded image",
-        default=""
+        default="",
+        frozen=False
     )
 
     # Optional request output, filled by receiving axon.
     prediction: float = pydantic.Field(
         title="Prediction",
         description="Probability that the image is AI generated/modified",
-        default=-1.
+        default=-1.,
+        frozen=False
     )
 
-    def deserialize(self) -> List[float]:
+    def deserialize(self) -> float:
         """
         Deserialize the output. This method retrieves the response from
         the miner, deserializes it and returns it as the output of the dendrite.query() call.
 
         Returns:
-        - List[float]: The deserialized response, which in this case is the list of deepfake
+        - float: The deserialized miner prediction
         prediction probabilities
         """
         return self.prediction
