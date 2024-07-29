@@ -34,8 +34,8 @@ The proliferation of generative AI models has significantly increased the produc
 - **Validators:** Responsible for challenging miners with a balanced mix of real and synthetic images, drawn from a diverse pool of sources.
     - **Resource Expansion:** We are committed to enhancing the validators' capabilities by increasing the diversity and volume of the image pool, which supports rigorous testing and validation processes.
 
-
-![Subnet Architecture](static/Subnet-Arch.png)
+**Subnet Architecture Diagram**
+![Subnet Architecture](static/subnet_arch_dark.png)
 
 ## Community
 

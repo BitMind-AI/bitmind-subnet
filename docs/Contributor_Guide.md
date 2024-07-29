@@ -13,38 +13,50 @@ Before you start contributing, make sure to go through our [Setup Guide 🔧](do
 Browse through our [GitHub Issues](https://github.com/bitmind-ai/bitmind-subnet/issues) to find tasks that need help.
 
 #### 3. Fork and Clone the Repository
-Fork the repository by clicking the "Fork" button on the top right of the page. Then, clone your fork to your local machine:
+- Fork the repository by clicking the "Fork" button on the top right of the page. Then, clone your fork to your local machine:
+- Clone your fork to your local machine:
 ```bash
-git clone https://github.com/BitMind-AI/bitmind-subnet.git
+git clone https://github.com/your-username/bitmind-subnet.git
 cd bitmind-subnet
 ```
+- Set the original repository as your 'upstream' remote:
+```bash
+git remote add upstream https://github.com/bitmind-ai/bitmind-subnet.git
+```
+#### 4. Sync Your Fork.
+Before you start making changes, sync your fork with the upstream repository to ensure you have the latest updates:
+```bash
+git fetch upstream
+git checkout main
+git merge upstream/main
+```
 
-#### 4. Create a Branch
+#### 5. Create a Branch
 Create a new branch to work on. It's best to name the branch something descriptive:
 ```
 git checkout -b feature/add-new-detection-model
 ```
 
-#### 5. Make Your Changes
+#### 6. Make Your Changes
 Make changes to the codebase or documentation. Ensure you follow our coding standards (PEP-8) and write tests if you are adding or modifying functionality.
 
-#### 6. Commit Your Changes
+#### 7. Commit Your Changes
 Keep your commits as small as possible and focused on a single aspect of improvement. This approach makes it easier to review and manage:
 ```bash
 git add .
 git commit -m "Add a detailed commit message describing the change"
 ```
 
-#### 7. Push Your Changes
+#### 8. Push Your Changes
 Push your changes to your fork:
 ```bash
 git push origin feature/add-new-detection-model
 ```
 
-####  8. Submit a Pull Request (PR)
+####  9. Submit a Pull Request (PR)
 Go to the Pull Requests tab in the original repository and click "New pull request". Compare branches and make sure you are proposing changes from your branch to the main repository's main branch. Provide a concise description of the changes and reference any related issues.
 
-#### 9. Participate in the Code Review Process
+#### 10. Participate in the Code Review Process
 Once your PR is submitted, other contributors and maintainers will review your changes. Engage in discussions and make any requested adjustments. Your contributions will be merged once they are approved.
 
 #### Code of Conduct
