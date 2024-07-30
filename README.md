@@ -10,7 +10,7 @@ Welcome to the BitMind Subnet! This repository contains all the necessary inform
 
 ## Quick Links
 
-- [Mining Guide 🔧](docs/Mining.md)
+- [Mining Guide 🔨](docs/Mining.md)
 - [Validator Guide 🔧](docs/Validating.md)
 - [Project Structure and Terminology 📖](docs/Glossary.md)
 - [Contributor Guide 🤝](docs/Contributor_Guide.md)
