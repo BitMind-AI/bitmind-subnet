@@ -60,7 +60,15 @@ python bitmind/download_data.py
 
 ### Registration
 
-We are currently on testnet. To mine or validate on our subnet, must have a registered hotkey on subnet 168 on testnet.
+To mine or validate on our subnet, must have a registered hotkey on subnet 168 on testnet.
+
+#### Mainnet
+
+```bash
+btcli s register --netuid 34 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network finney
+```
+
+#### Testnet
 
 ```bash
 btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
