@@ -53,33 +53,48 @@ async def forward(self):
         self (:obj:`bittensor.neuron.Neuron`): The neuron object which contains all the necessary state for the validator.
 
     """
-    #print(f"k={self.config.neuron.sample_size}")
+    wandb_data = {}
+
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
     if np.random.rand() > 0.5:
         bt.logging.info('sampling real image')
-        real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
-        real_dataset = self.real_image_datasets[real_dataset_index]
-        sample = real_dataset.sample(k=1)[0][0] # {'image': PIL Image ,'id': int}
+
         label = 0
+        real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
+        real_dataset = self.real_image_datasets[real_dataset_index]
+        sample = real_dataset.sample(k=1)[0][0]  # {'image': PIL Image ,'id': int}
+
+        wandb_data['dataset'] = source_dataset
+        wandb_data['image_index'] = sample['id']
+
     else:
         label = 1
+
         if self.config.neuron.prompt_type == 'annotation':
             bt.logging.info('generating fake image from annotation of real image')
 
             # sample image(s) from real dataset for captioning
-            real_dataset_index, source_name = sample_dataset_index_name(self.real_image_datasets)
+            real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
             real_dataset = self.real_image_datasets[real_dataset_index]
             images_to_caption = real_dataset.sample(k=1)[0]  # [{'image': PIL Image ,'id': int}, ...]
 
             # generate captions for the real images, then synthetic images from these captions
             sample = self.synthetic_image_generator.generate(
                 k=1, real_images=images_to_caption)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
-            source_name = self.synthetic_image_generator.diffuser_name
+
+            wandb_data['model'] = self.synthetic_image_generator.diffuser_name
+            wandb_data['source_dataset'] = source_dataset
+            wandb_data['source_image_index'] = images_to_caption[0]['id']
+            wandb_data['image'] = wandb.Image(sample['image'])
+            wandb_data['prompt'] = sample['prompt']
 
         elif self.config.neuron.prompt_type == 'random':
             bt.logging.info('generating fake image using prompt_generator')
             sample = self.synthetic_image_generator.generate(k=1)[0]
-            source_name = self.synthetic_image_generator.diffuser_name
+
+            wandb_data['model'] = self.synthetic_image_generator.diffuser_name
+            wandb_data['image'] = wandb.Image(sample['image'])
+            wandb_data['prompt'] = sample['prompt']
 
         else:
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
@@ -95,9 +110,20 @@ async def forward(self):
         deserialize=True
     )
 
+    # update logging data
+    wandb_data['data_aug_params'] = data_aug_params
+    wandb_data['label'] = label
+    wandb_data['miner_uids'] = list(miner_uids)
+    wandb_data['predictions'] = responses
+    wandb_data['correct'] = [
+        np.round(y_hat) == y
+        for y_hat, y in zip(responses, [label] * len(responses))
+    ]
+
     rewards = get_rewards(label=label, responses=responses)
     
     # Logging image source and verification details
+    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['dataset']
     bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
     
     # Logging responses and rewards
@@ -107,29 +133,10 @@ async def forward(self):
     # Update the scores based on the rewards.
     self.update_scores(rewards, miner_uids)
 
-    # W&B data preparation if enabled
+    # W&B logging if enabled
     if not self.config.wandb.off:
-        wandb_data = {
-            'data_aug_params': data_aug_params,
-            'image_source': source_name,
-            'label': label,
-            'miner_uid': list(miner_uids),
-            'pred': responses,
-            'correct': [
-                np.round(y_hat) == y
-                for y_hat, y in zip(responses, [label]*len(responses))
-            ]
-        }
-        if label == 1:
-            wandb_data['model'] = source_name
-            wandb_data['image'] = wandb.Image(sample['image'])
-            wandb_data['prompt'] = sample['prompt']
-        elif label == 0:
-            wandb_data['dataset'] = source_name
-            wandb_data['image_index'] = sample['id']
-            
         wandb.log(wandb_data)
-            
+
     # Track miners who have responded
     self.last_responding_miner_uids = []
     for i, pred in enumerate(responses):
