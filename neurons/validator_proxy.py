@@ -126,7 +126,7 @@ class ValidatorProxy:
 
         metagraph = self.validator.metagraph
         return {
-            'uids': [int(uid) for uid in metagraph.uids],
+            'uids': [str(uid) for uid in metagraph.uids],
             'ranks': [float(r) for r in metagraph.R],
             'incentives': [float(i) for i in metagraph.I],
             'emissions': [float(e) for e in metagraph.E]
