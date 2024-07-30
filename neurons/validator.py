@@ -47,6 +47,9 @@ class Validator(BaseValidatorNeuron):
 
         bt.logging.info("load_state()")
         self.load_state()
+
+        self.last_responding_miner_uids = []
+        self.validator_proxy = ValidatorProxy(self)
         
         bt.logging.info("init_wandb()")
         self.init_wandb()
@@ -59,8 +62,6 @@ class Validator(BaseValidatorNeuron):
 
         self.synthetic_image_generator = SyntheticImageGenerator(
             prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
-        self.last_responding_miner_uids = []
-        self.validator_proxy = ValidatorProxy(self)
 
     async def forward(self):
         """
