@@ -69,6 +69,7 @@ def load_huggingface_dataset(
             return dataset[split]
         return dataset
 
+    # Split data into train, validation, test and return the three splits
     dataset = dataset.shuffle(seed=42)
 
     split_dataset = {}
@@ -80,7 +81,8 @@ def load_huggingface_dataset(
     val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
     split_dataset['validation'] = val_test_split['train']
     split_dataset['test'] = val_test_split['test']
-    return split_dataset[split]
+
+    return split_dataset['train'], split_dataset['validation'], split_dataset['test']
 
 
 def sample_dataset_index_name(image_datasets: list) -> tuple[int, str]:
