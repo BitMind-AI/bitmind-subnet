@@ -31,7 +31,7 @@ We recommend using a Conda virtual environment to install the necessary Python p
 You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and create a virtual environment with this command:
 
 ```bash
-conda create -y -n bitmind python=3.10 ipython
+conda create -y -n bitmind python=3.10 ipython jupyter ipykernel
 ```
 
 To activate your virtual environment, run `conda activate bitmind`. To deactivate, `conda deactivate`.
