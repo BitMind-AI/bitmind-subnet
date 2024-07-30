@@ -60,7 +60,7 @@ Go to the Pull Requests tab in the original repository and click "New pull reque
 Once your PR is submitted, other contributors and maintainers will review your changes. Engage in discussions and make any requested adjustments. Your contributions will be merged once they are approved.
 
 #### Code of Conduct
-We expect all contributors to adhere to our Code of Conduct, ensuring respect and productive collaboration. Please read Code of Conduct to understand the expectations for behavior.
+We expect all contributors to adhere to our [Code of Conduct 📜](Code_of_Conduct.md), ensuring respect and productive collaboration. Please read Code of Conduct to understand the expectations for behavior.
 
 ####  Need Help?
 If you have any questions or need further guidance, don't hesitate to ask for help in our Discord community. We're here to make your contribution process as smooth as possible!
