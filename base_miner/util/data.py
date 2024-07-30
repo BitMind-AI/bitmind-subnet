@@ -5,6 +5,58 @@ from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
 from bitmind.constants import DATASET_META
 
+def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]:
+    """
+    Helper function to load and split dataset into train, validation, and test sets.
+
+    Args:
+        dataset_meta: List containing metadata about the dataset to load.
+
+    Returns:
+        A dictionary with keys == "train", "validation", or "test" strings,
+        and values == List[ImageDataset].
+
+        Dict[str, List[ImageDataset]]
+
+        e.g. given two dataset paths in dataset_meta,
+        {'train': [<ImageDataset object>, <ImageDataset object>],
+        'validation': [<ImageDataset object>, <ImageDataset object>],
+        'test': [<ImageDataset object>, <ImageDataset object>]}
+    """
+    splits = ['train', 'validation', 'test']
+    datasets = {split: [] for split in splits}
+
+    for meta in dataset_meta:
+        print(f"Loading {meta['path']} for all splits... ", end='')
+        dataset = ImageDataset(
+            meta['path'],
+            meta.get('name', None),
+            create_splits=True, # dataset.dataset == (train, val, test) splits from load_huggingface_dataset(...)
+            download_mode=meta.get('download_mode', None)
+        )
+        
+        train_ds, val_ds, test_ds = dataset.dataset
+
+        for split, data in zip(splits, [train_ds, val_ds, test_ds]):
+            # Create a new ImageDataset instance without calling __init__
+            # This avoids calling load_huggingface_dataset(...) and redownloading
+            split_dataset = ImageDataset.__new__(ImageDataset)
+
+            # Assign the appropriate split data
+            split_dataset.dataset = data
+
+            # Copy other attributes from the initial dataset
+            split_dataset.huggingface_dataset_path = dataset.huggingface_dataset_path
+            split_dataset.huggingface_datset_name = dataset.huggingface_datset_name
+            split_dataset.sampled_images_idx = dataset.sampled_images_idx
+
+            # Append to the corresponding split list
+            datasets[split].append(split_dataset)
+
+        split_lengths = ', '.join([f"{split} len={len(datasets[split][0])}" for split in splits])
+        print(f'done, {split_lengths}')
+
+    return datasets
 
 def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
         Dict[str, List[ImageDataset]],
@@ -18,38 +70,11 @@ def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
              to load. See datasets.json.
 
     Returns:
-        (real_datasets: Dict[str, ImageDataset], fake_datasets: Dict[str, ImageDataset])
+        (real_datasets: Dict[str, List[ImageDataset]], fake_datasets: Dict[str, List[ImageDataset]])
 
     """
-    splits = ['train', 'validation', 'test']
-
-    fake_datasets = {split: [] for split in splits}
-    for split in splits:
-        for meta in dataset_meta['fake']:
-            print(f"Loading {meta['path']}[{split}] ... ", end='')
-            dataset = ImageDataset(
-                meta['path'],
-                split,
-                meta.get('name', None),
-                create_splits=True,  # temp fix
-                download_mode=meta.get('download_mode', None)
-            )
-            fake_datasets[split].append(dataset)
-            print(f'done, len={len(dataset)}')
-
-    real_datasets = {split: [] for split in splits}
-    for split in splits:
-        for meta in dataset_meta['real']:
-            print(f"Loading {meta['path']}[{split}] ... ", end='')
-            dataset = ImageDataset(
-                meta['path'],
-                split,
-                meta.get('name', None),
-                create_splits=True,  # temp fix
-                download_mode=meta.get('download_mode', None)
-            )
-            real_datasets[split].append(dataset)
-            print(f'done, len={len(dataset)}')
+    fake_datasets = load_and_split_datasets(dataset_meta['fake'])
+    real_datasets = load_and_split_datasets(dataset_meta['real'])
 
     return real_datasets, fake_datasets
 
