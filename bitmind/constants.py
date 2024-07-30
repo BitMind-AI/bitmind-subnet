@@ -1,7 +1,7 @@
 import os
 
 
-WANDB_PROJECT = 'bitmind'
+WANDB_PROJECT = 'bitmind-subnet'
 WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {

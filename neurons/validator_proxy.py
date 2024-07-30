@@ -126,10 +126,10 @@ class ValidatorProxy:
 
         metagraph = self.validator.metagraph
         return {
-            'uids': metagraph.uids,
-            'ranks': metagraph.R,
-            'incentives': metagraph.I,
-            'emissions': metagraph.E
+            'uids': [str(uid) for uid in metagraph.uids],
+            'ranks': [float(r) for r in metagraph.R],
+            'incentives': [float(i) for i in metagraph.I],
+            'emissions': [float(e) for e in metagraph.E]
         }
 
     async def forward(self, request: Request):
