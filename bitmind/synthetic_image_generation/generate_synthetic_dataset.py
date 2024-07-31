@@ -10,7 +10,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# from transformers import AutoProcessor, Blip2ForConditionalGeneration
 from datasets import load_dataset, Dataset, DatasetDict
 from huggingface_hub import HfApi
 
@@ -100,8 +99,10 @@ def main():
     if args.generate_annotations: 
         start_time = time.time()
         for real_image in dataset:
+            if args.n is not None and image_count >= args.n:
+                break
             annotation = synthetic_image_generator.image_annotation_generator.process_image(
-                image_info=real_image['image'],
+                image_info=real_image,
                 dataset_name=real_image['source'],
                 image_index=real_image['id'],
                 resize=False,
@@ -112,6 +113,8 @@ def main():
             file_path = os.path.join(annotations_dir, f"{real_image['id']}.json")
             with open(file_path, 'w') as f:
                 json.dump(annotation, f)
+
+            image_count += 1
 
         synthetic_image_generator.image_annotation_generator.clear_gpu()
         print(f"{args.n} annotations generated and saved in {time.time() - start_time:.2f} seconds.")
@@ -132,7 +135,8 @@ def main():
                                     cache_dir=HUGGINGFACE_CACHE_DIR,
                                     download_mode="reuse_cache_if_exists",
                                     trust_remote_code=True)
-
+    
+    image_count = 0
     start_time = time.time()
     for annotation in annotations:
         if args.n is not None and image_count >= args.n:
