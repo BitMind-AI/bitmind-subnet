@@ -117,6 +117,7 @@ def main():
         synthetic_image.save(synthetic_images_dir)
         image_count += 1
     print(f"Synthetic images generated in {time.time() - start_time:.2f} seconds.")
+    print(f"Mean synthetic images generation time: {image_count/(time.time() - start_time):.2f} seconds.")
 
     if args.upload_synthetic_images and args.hf_token:
         start_time = time.time()
