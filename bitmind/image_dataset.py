@@ -75,16 +75,18 @@ class ImageDataset:
             dict: Dictionary containing 'image' (PIL image) and 'id' (str).
         """
         sample = self.dataset[int(index)]
-        if 'url' in sample:
-            image = download_image(sample['url'])
-            image_id = sample['url']
+        if 'url' in sample or 'image_url' in sample:
+            key = 'url' if 'url' in sample else 'image_url'
+            image = download_image(sample[key])
+            image_id = sample[key]
         elif 'image' in sample:
             if isinstance(sample['image'], Image.Image):
                 image = sample['image']
             elif isinstance(sample['image'], bytes):
                 image = Image.open(BytesIO(sample['image']))
             else:
-                raise NotImplementedError
+                err_prefix = f"ImageDataset: {self.huggingface_dataset_path}"
+                raise NotImplementedError(f"{err_prefix}: Image data must be either bytes or PIL.image, found: {type(sample['image'])}")
 
             image_id = ''
             if 'name' in sample:
@@ -95,7 +97,8 @@ class ImageDataset:
             image_id = image_id if image_id != '' else index
 
         else:
-            raise NotImplementedError
+            prefix = f"ImageDataset: {self.huggingface_dataset_path}"
+            raise NotImplementedError(f"{err_prefix}: Must contain one of the folowing keys ('image', 'image_url', 'url' ). Keys found : {sample.keys()}")
 
         # emove alpha channel if download didnt 404
         if image is not None:
