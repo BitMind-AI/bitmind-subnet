@@ -28,6 +28,7 @@ def seed_torch(seed=1029):
 def main():
     opt = TrainOptions().parse()
     seed_torch(100)
+    opt.name = "experiment_name"
 
     train_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "train"))
     val_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "val"))
@@ -40,6 +41,8 @@ def main():
         train_transforms=random_aug_transforms,
         val_transforms=base_transforms,
         test_transforms=base_transforms)
+
+    print(f"Done loading datasets.\n\tTrain: {len(train_dataset)}\n\tVal: {len(val_dataset)}\n\tTest: {len(test_dataset)}")
 
     train_loader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=lambda d: tuple(d))
