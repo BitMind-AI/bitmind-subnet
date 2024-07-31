@@ -19,9 +19,17 @@ def parse_arguments():
     """
     Parse command-line arguments for generating synthetic images and annotations from a single real dataset.
 
-    Example Usage:
-        python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0"
-        python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "ffhq256" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0"
+    Example Usage
+        
+    Generate 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0, 
+    upload annotations and images to Hugging Face (fill in token):
+
+    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0"
+        
+    Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0, 
+    upload annotations and images to Hugging Face (fill in token):
+
+    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "ffhq256" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" --hf_token
 
     Arguments:
     --dataset_path (str): Required. Path to the dataset to process.
