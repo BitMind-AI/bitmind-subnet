@@ -16,36 +16,50 @@ from bitmind.utils.data import load_huggingface_dataset
 
 def parse_arguments():
     """
-    Parse command-line arguments for generating synthetic images and annotations from a single real dataset.
+    Parse command-line arguments for generating synthetic images and annotations
+    from a single real dataset.
 
-    Example Usage
-        
-    Generate 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0, 
-    upload annotations and images to Hugging Face (fill in token):
+    Example Usage:
 
-    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" --hf_token
-        
-    Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0, 
-    upload annotations and images to Hugging Face (fill in token):
+    Generate 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0
+    and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
+    actual Hugging Face API token:
 
-    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "ffhq256" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" --hf_token
+    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" \
+    --generate_annotations --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
+    --upload_annotations --upload_synthetic_images --hf_token YOUR_HF_TOKEN --n 10
+
+    Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0
+    and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
+    actual Hugging Face API token:
+    
+    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "ffhq256" \
+    --generate_annotations --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
+    --upload_annotations --upload_synthetic_images --hf_token YOUR_HF_TOKEN
 
     Arguments:
-    --dataset_path (str): Required. Path to the dataset to process.
-    --annotation_source (str): Optional. Source of annotations: 'local' or 'hf' (Hugging Face).
+    --hf_org (str): Required. Hugging Face organization name.
+    --real_image_dataset_name (str): Required. Name of the real image dataset.
     --generate_annotations (bool): Flag to generate annotations; skips if false.
     --diffusion_model (str): Required. Diffusion model to use for image generation.
+    --upload_annotations (bool): Optional. Flag to upload annotations to Hugging Face.
+    --upload_synthetic_images (bool): Optional. Flag to upload synthetic images to Hugging Face.
+    --hf_token (str): Optional. Token for uploading to Hugging Face.
+    --n (int): Optional. Maximum number of annotations and images to generate.
     """
     parser = argparse.ArgumentParser(description='Generate synthetic images and annotations from a real dataset.')
     parser.add_argument('--hf_org', type=str, required=True, help='Hugging Face prg name.')
     parser.add_argument('--real_image_dataset_name', type=str, required=True, help='Real image dataset name.')
-    parser.add_argument('--generate_annotations', type=bool, required=True, action='store_true',
+    parser.add_argument('--generate_annotations', action='store_true', 
                         help='Generate annotations; skip if annotations already exist.')
-    parser.add_argument('--diffusion_model', type=str, required=True, help='Diffusion model to use for image generation.')
-    parser.add_argument('--upload_annotations', type=bool, required=True, default=True, help='Upload annotations to Hugging Face. hf_token arg required.')
-    parser.add_argument('--upload_synthetic_images', type=bool, required=True, default=True, help='Upload synthetic images to Hugging Face. hf_token arg required.')
-    parser.add_argument('--hf_token', type=str, required=False, default=None, help='Token for uploading to Hugging Face.')
-    parser.add_argument('--n', type=int, required=False, default=None, help='Maximum number of annotations and images to generate.')
+    parser.add_argument('--diffusion_model', type=str, required=True, 
+                        help='Diffusion model to use for image generation.')
+    parser.add_argument('--upload_annotations', action='store_true', default=True, 
+                        help='Upload annotations to Hugging Face. hf_token arg required.')
+    parser.add_argument('--upload_synthetic_images', action='store_true', default=True, 
+                        help='Upload synthetic images to Hugging Face. hf_token arg required.')
+    parser.add_argument('--hf_token', type=str, default=None, help='Token for uploading to Hugging Face.')
+    parser.add_argument('--n', type=int, default=None, help='Maximum number of annotations and images to generate.')
 
     return parser.parse_args()
 
