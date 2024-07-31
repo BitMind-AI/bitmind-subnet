@@ -195,8 +195,11 @@ class SyntheticImageGenerator:
             if prompt != "":
                 return prompt
             
-    def generate_image(self, prompt) -> list:
-        image_name = f"{time.time()}.jpg"
+    def generate_image(self, prompt, name = None) -> list:
+        if not name:
+            image_name = f"{time.time()}.jpg"
+        else:
+            image_name = name
         gen_image = self.diffuser(prompt=prompt).images[0]
         image_data = {
             'prompt': prompt,

@@ -72,6 +72,64 @@ def upload_to_huggingface(dataset, repo_name, token):
     api.create_repo(repo_name, repo_type="dataset", private=False, token=token)
     dataset.push_to_hub(repo_name)
 
+def generate_and_save_annotations(dataset, synthetic_image_generator, annotations_dir, limit, batch_size=8):
+    annotations_batch = []
+    image_count = 0
+    start_time = time.time()
+    progress_interval = max(1, limit // 10)  # Update progress every 10% of the limit
+
+    for real_image in dataset:
+        if limit is not None and image_count >= limit:
+            break
+        annotation = synthetic_image_generator.image_annotation_generator.process_image(
+            real_image,
+            resize=False,
+            verbose=0
+        )[0]
+        annotations_batch.append((real_image['id'], annotation))
+
+        if len(annotations_batch) == batch_size or image_count == limit - 1:
+            for image_id, annotation in annotations_batch:
+                file_path = os.path.join(annotations_dir, f"{image_id}.json")
+                with open(file_path, 'w') as f:
+                    json.dump(annotation, f)
+            annotations_batch = []
+
+        image_count += 1
+
+        if image_count % progress_interval == 0 or image_count == limit:
+            print(f"Progress: {image_count}/{limit} annotations generated.")
+
+    synthetic_image_generator.image_annotation_generator.clear_gpu()
+    duration = time.time() - start_time
+    print(f"All {image_count} annotations generated and saved in {duration:.2f} seconds.")
+    print(f"Mean annotation generation time: {duration/image_count:.2f} seconds if any.")
+
+def generate_and_save_synthetic_images(annotations, synthetic_image_generator, synthetic_images_dir, limit, batch_size=8):
+    start_time = time.time()
+    total = min(len(annotations), limit)  # Use the smaller of total annotations or the limit
+    progress_interval = max(1, total // 10)  # Update progress every 10% of total annotations
+
+    with torch.no_grad():  # Use no_grad to reduce memory usage during inference
+        for batch in range(0, total, batch_size):
+            end = min(batch + batch_size, total)
+            for i in range(batch, end):
+                prompt = annotations[i]['description']
+                name = annotations[i]['index']
+                synthetic_image = synthetic_image_generator.generate_image(prompt, name=name)
+
+                filename = f"{name}.png"
+                file_path = os.path.join(synthetic_images_dir, filename)
+                synthetic_image['image'].save(file_path)
+
+            if batch % progress_interval == 0 or batch + batch_size >= total:
+                print(f"Progress: Generated {min(batch + batch_size, total)}/{total} synthetic images.")
+
+    synthetic_image_generator.clear_gpu()
+    duration = time.time() - start_time
+    print(f"All synthetic images generated in {duration:.2f} seconds.")
+    print(f"Mean synthetic images generation time: {duration/max(total, 1):.2f} seconds.")
+
 def main():
     args = parse_arguments()
     hf_dataset_name = f"{args.hf_org}/{args.real_image_dataset_name}"
@@ -86,36 +144,14 @@ def main():
     synthetic_image_generator = SyntheticImageGenerator(
         prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
                 
+    batch_size = 8
+    limit = args.n
+    annotations = []
     image_count = 0
     # Processing loop: Generate annotations and synthetic images
-    if args.generate_annotations: 
-        start_time = time.time()
-        # Load the dataset based on command-line args
+    if args.generate_annotations:
         dataset = ImageDataset(hf_dataset_name, 'train')
-        print(f"Dataset loaded in {time.time() - start_time:.2f} seconds.")
-
-        start_time = time.time()
-        for real_image in dataset:
-            if args.n is not None and image_count >= args.n:
-                break
-            annotation = synthetic_image_generator.image_annotation_generator.process_image(
-                image_info=real_image,
-                dataset_name=real_image['source'],
-                image_index=real_image['id'],
-                resize=False,
-                verbose=0
-            )[0]
-
-            # Save to local dir to using up memory
-            file_path = os.path.join(annotations_dir, f"{real_image['id']}.json")
-            with open(file_path, 'w') as f:
-                json.dump(annotation, f)
-
-            image_count += 1
-
-        synthetic_image_generator.image_annotation_generator.clear_gpu()
-        print(f"{args.n} annotations generated and saved in {time.time() - start_time:.2f} seconds.")
-        print(f"Mean annotation generation time: {args.n/(time.time() - start_time):.2f} seconds.")
+        generate_and_save_annotations(dataset, synthetic_image_generator, annotations_dir, limit, batch_size=batch_size)
 
         # Upload to Hugging Face
         if args.upload_annotations and args.hf_token:
@@ -126,20 +162,12 @@ def main():
             upload_to_huggingface(annotations_dataset, hf_dataset_name+"-annotations", args.hf_token)
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
-    print("Loading annotations from Hugging Face.")
-    annotations = load_huggingface_dataset(hf_dataset_name + "-annotations")
+    else:
+        print("Loading annotations from Hugging Face.")
+        annotations = load_huggingface_dataset(hf_dataset_name + "-annotations", split="train")
 
-    image_count = 0
-    start_time = time.time()
     synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
-    for annotation in annotations:
-        if args.n is not None and image_count >= args.n:
-            break
-        synthetic_image = synthetic_image_generator.generate_image(annotation)
-        filename = f"{annotation['index']}.png"
-        file_path = os.path.join(synthetic_images_dir, filename)
-        synthetic_image.save(synthetic_images_dir)
-        image_count += 1
+    generate_and_save_synthetic_images(annotations, synthetic_image_generator, synthetic_images_dir, limit, batch_size=batch_size)
     
     annotations = []
     synthetic_image_generator.clear_gpu()
