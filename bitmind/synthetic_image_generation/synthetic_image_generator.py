@@ -94,26 +94,21 @@ class SyntheticImageGenerator:
             ]
         else:
             raise NotImplementedError
-
+        
         if self.use_random_diffuser:
             self.load_diffuser('random')
         else:
             self.load_diffuser(self.diffuser_name)
-
+        
         bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
-            image_name = f"{time.time()}.jpg"
-            gen_image = self.diffuser(prompt=prompt).images[0]
-            gen_data.append({
-                'prompt': prompt,
-                'image': gen_image,
-                'id': image_name
-            })
+            image_data = self.generate_image(prompt)
             if self.image_cache_dir is not None:
-                path = os.path.join(self.image_cache_dir, image_name)
-                gen_image.save(path)
-
+                path = os.path.join(self.image_cache_dir, image_data['id'])
+                image_data['image'].save(path)
+            gen_data.append(image_data)
+            
         self.clear_gpu()  # remove diffuser from gpu
 
         return gen_data
@@ -132,7 +127,7 @@ class SyntheticImageGenerator:
         """
         if diffuser_name == 'random':
             diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
-
+        
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
         self.diffuser = DiffusionPipeline.from_pretrained(
@@ -195,3 +190,14 @@ class SyntheticImageGenerator:
             prompt += ', ' + np.random.choice(device, 1)[0]
             if prompt != "":
                 return prompt
+            
+    def generate_image(self, prompt) -> list:
+        image_name = f"{time.time()}.jpg"
+        gen_image = self.diffuser(prompt=prompt).images[0]
+        image_data = {
+            'prompt': prompt,
+            'image': gen_image,
+            'id': image_name
+        }
+        return image_data
+
