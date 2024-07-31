@@ -36,7 +36,8 @@ def load_huggingface_dataset(
     split: Optional[str] = None,
     name: Optional[str] = None,
     create_splits: bool = False,
-    download_mode: Optional[str] = None
+    download_mode: Optional[str] = None,
+    seed: int = 42
 ) -> Union[dict, datasets.Dataset]:
     """
     Load a dataset from Hugging Face or a local directory.
@@ -62,7 +63,7 @@ def load_huggingface_dataset(
         _, directory = path.split(':')
         dataset = load_dataset(path='imagefolder', data_dir=directory, split='train')
     else:
-        dataset = download_dataset(path, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
+        dataset = download_dataset(path, name, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
 
     if not create_splits:
         if split is not None:
@@ -70,18 +71,17 @@ def load_huggingface_dataset(
         return dataset
 
     # Split data into train, validation, test and return the three splits
-    dataset = dataset.shuffle(seed=42)
+    dataset = dataset.shuffle(seed=seed)
 
     split_dataset = {}
-    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
+    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=seed)
     split_dataset['train'] = train_test_split['train']
     temp_dataset = train_test_split['test']
 
     # Split the temporary dataset into validation and test
-    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
+    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=seed)
     split_dataset['validation'] = val_test_split['train']
     split_dataset['test'] = val_test_split['test']
-
     return split_dataset['train'], split_dataset['validation'], split_dataset['test']
 
 

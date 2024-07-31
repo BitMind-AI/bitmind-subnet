@@ -30,7 +30,8 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
         print(f"Loading {meta['path']} for all splits... ", end='')
         dataset = ImageDataset(
             meta['path'],
-            meta.get('name', None),
+            huggingface_datset_split=None,
+            huggingface_datset_name=meta.get('name', None),
             create_splits=True, # dataset.dataset == (train, val, test) splits from load_huggingface_dataset(...)
             download_mode=meta.get('download_mode', None)
         )
