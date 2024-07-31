@@ -13,7 +13,8 @@ from bitmind.constants import (
     DIFFUSER_NAMES,
     DIFFUSER_ARGS,
     PROMPT_TYPES,
-    IMAGE_ANNOTATION_MODEL
+    IMAGE_ANNOTATION_MODEL,
+    TARGET_IMAGE_SIZE
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
@@ -21,7 +22,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 from transformers import pipeline
-from diffusers import DiffusionPipeline
+from diffusers import StableDiffusionPipeline
 from transformers import set_seed
 from datasets import load_dataset
 import bittensor as bt
@@ -135,7 +136,7 @@ class SyntheticImageGenerator:
         
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
-        self.diffuser = DiffusionPipeline.from_pretrained(
+        self.diffuser = StableDiffusionPipeline.from_pretrained(
             diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
         self.diffuser.to("cuda")
 
@@ -197,11 +198,11 @@ class SyntheticImageGenerator:
                 return prompt
             
     def generate_image(self, prompt, name = None) -> list:
-        if not name:
-            image_name = f"{time.time()}.jpg"
-        else:
-            image_name = name
-        gen_image = self.diffuser(prompt=prompt).images[0]
+        # Generate a unique image name based on current time if not provided
+        image_name = name if name else f"{time.time():.0f}.jpg"
+
+        gen_image = self.diffuser(prompt=prompt, height=TARGET_IMAGE_SIZE[0], 
+                                  width=TARGET_IMAGE_SIZE[1]).images[0]
         image_data = {
             'prompt': prompt,
             'image': gen_image,
