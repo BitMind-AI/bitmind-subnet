@@ -15,7 +15,6 @@ from huggingface_hub import HfApi
 
 from synthetic_image_generator import SyntheticImageGenerator
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import HUGGINGFACE_CACHE_DIR
 from bitmind.utils.data import load_huggingface_dataset
 
 def parse_arguments():
@@ -26,12 +25,12 @@ def parse_arguments():
     Example Usage:
 
     Generate 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0
-    and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
-    actual Hugging Face API token:
+    and existing annotations from Hugging Face, upload and images to Hugging Face. 
+    Replace YOUR_HF_TOKEN with your actual Hugging Face API token:
 
     python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" \
     --generate_annotations --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
-    --upload_annotations --upload_synthetic_images --hf_token YOUR_HF_TOKEN --n 10
+    --upload_annotations --upload_synthetic_images --hf_token "YOUR_HF_TOKEN" --n 10
 
     Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0
     and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
@@ -39,7 +38,7 @@ def parse_arguments():
 
     python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "ffhq256" \
     --generate_annotations --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
-    --upload_annotations --upload_synthetic_images --hf_token YOUR_HF_TOKEN
+    --upload_annotations --upload_synthetic_images --hf_token "YOUR_HF_TOKEN"
 
     Arguments:
     --hf_org (str): Required. Hugging Face organization name.
@@ -86,17 +85,17 @@ def main():
 
     synthetic_image_generator = SyntheticImageGenerator(
         prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
-    
-    start_time = time.time()
-    # Load the dataset based on command-line args
-    dataset = ImageDataset(hf_dataset_name, 'train')
-    print(f"Dataset loaded in {time.time() - start_time:.2f} seconds.")
             
     annotations = []
     image_count = 0
 
     # Processing loop: Generate annotations and synthetic images
     if args.generate_annotations: 
+        start_time = time.time()
+        # Load the dataset based on command-line args
+        dataset = ImageDataset(hf_dataset_name, 'train')
+        print(f"Dataset loaded in {time.time() - start_time:.2f} seconds.")
+        
         start_time = time.time()
         for real_image in dataset:
             if args.n is not None and image_count >= args.n:
@@ -126,15 +125,12 @@ def main():
             start_time = time.time()
             annotations_dataset = load_dataset('json', data_files=os.path.join(annotations_dir, '*.json'))
             print("Uploading annotations of" + args.real_image_dataset_name + " to Hugging Face.")
-            upload_to_huggingface(annotations_dataset, hf_dataset_name+"_annotations", args.hf_token)
+            upload_to_huggingface(annotations_dataset, hf_dataset_name+"-annotations", args.hf_token)
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
     else:
-        # Load annotations from Hugging Face
-        annotations = load_huggingface_dataset(args.hf_dataset_path,
-                                    cache_dir=HUGGINGFACE_CACHE_DIR,
-                                    download_mode="reuse_cache_if_exists",
-                                    trust_remote_code=True)
+        print("Loading annotations from Hugging Face.")
+        annotations = load_huggingface_dataset(hf_dataset_name + "-annotations")
     
     image_count = 0
     start_time = time.time()
