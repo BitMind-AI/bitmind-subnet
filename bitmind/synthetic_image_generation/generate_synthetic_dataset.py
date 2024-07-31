@@ -5,6 +5,11 @@ import os
 import sys
 import torch
 import time
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # from transformers import AutoProcessor, Blip2ForConditionalGeneration
 from datasets import load_dataset, Dataset, DatasetDict
 from huggingface_hub import HfApi
@@ -32,7 +37,7 @@ def parse_arguments():
     Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0
     and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
     actual Hugging Face API token:
-    
+
     python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "ffhq256" \
     --generate_annotations --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
     --upload_annotations --upload_synthetic_images --hf_token YOUR_HF_TOKEN
@@ -77,8 +82,8 @@ def main():
     os.makedirs(annotations_dir, exist_ok=True)
     os.makedirs(synthetic_images_dir, exist_ok=True)
 
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+    logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
     synthetic_image_generator = SyntheticImageGenerator(
         prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
@@ -97,7 +102,7 @@ def main():
         for real_image in dataset:
             annotation = synthetic_image_generator.image_annotation_generator.process_image(
                 image_info=real_image['image'],
-                dataset_name=real_image['url'],
+                dataset_name=real_image['source'],
                 image_index=real_image['id'],
                 resize=False,
                 verbose=0
