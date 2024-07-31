@@ -5,12 +5,13 @@ import os
 import sys
 import torch
 import time
+from pathlib import Path
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-from datasets import load_dataset, Dataset, DatasetDict
+from datasets import load_dataset
 from huggingface_hub import HfApi
 
 from synthetic_image_generator import SyntheticImageGenerator
@@ -24,47 +25,56 @@ def parse_arguments():
 
     Example Usage:
 
-    Generate 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0
+    Generate the first 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0
     using existing annotations from Hugging Face, and upload images to Hugging Face.
     Replace YOUR_HF_TOKEN with your actual Hugging Face API token:
 
-    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" \
-    --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
-    --upload_synthetic_images --hf_token "YOUR_HF_TOKEN" --n 10
+    pm2 start python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name  \
+    "celeb-a-hq" --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
+    --upload_synthetic_images --hf_token "YOUR_HF_TOKEN" --start_index 0 --end_index 9
 
     Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0
     and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
     actual Hugging Face API token:
 
-    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "ffhq256" \
-    --generate_annotations --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
-    --upload_annotations --upload_synthetic_images --hf_token "YOUR_HF_TOKEN"
+    pm2 start python generate_synthetic_dataset.py --hf_org "bitmind" \
+    --real_image_dataset_name "ffhq256" \
+    --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
+    --upload_annotations --upload_synthetic_images \ --hf_token "YOUR_HF_TOKEN"
 
     Arguments:
     --hf_org (str): Required. Hugging Face organization name.
     --real_image_dataset_name (str): Required. Name of the real image dataset.
-    --generate_annotations (bool): Flag to generate annotations; skips if false.
     --diffusion_model (str): Required. Diffusion model to use for image generation.
     --upload_annotations (bool): Optional. Flag to upload annotations to Hugging Face.
     --upload_synthetic_images (bool): Optional. Flag to upload synthetic images to Hugging Face.
-    --hf_token (str): Optional. Token for uploading to Hugging Face.
-    --n (int): Optional. Maximum number of annotations and images to generate.
+    --hf_token (str): Required for interfacing with Hugging Face.
+    parser.add_argument('--start_index', type=int, default=0, help='Start index for processing the dataset.')
+    parser.add_argument('--end_index', type=int, default=None, help='End index for processing the dataset.')
     """
     parser = argparse.ArgumentParser(description='Generate synthetic images and annotations from a real dataset.')
-    parser.add_argument('--hf_org', type=str, required=True, help='Hugging Face prg name.')
+    parser.add_argument('--hf_org', type=str, required=True, help='Hugging Face org name.')
     parser.add_argument('--real_image_dataset_name', type=str, required=True, help='Real image dataset name.')
-    parser.add_argument('--generate_annotations', action='store_true', 
-                        help='Generate annotations; skip if annotations already exist.')
     parser.add_argument('--diffusion_model', type=str, required=True, 
                         help='Diffusion model to use for image generation.')
-    parser.add_argument('--upload_annotations', action='store_true', default=True, 
-                        help='Upload annotations to Hugging Face. hf_token arg required.')
-    parser.add_argument('--upload_synthetic_images', action='store_true', default=True, 
-                        help='Upload synthetic images to Hugging Face. hf_token arg required.')
+    parser.add_argument('--upload_annotations', action='store_true', default=False, 
+                        help='Upload annotations to Hugging Face.')
+    parser.add_argument('--upload_synthetic_images', action='store_true', default=False, 
+                        help='Upload synthetic images to Hugging Face.')
     parser.add_argument('--hf_token', type=str, default=None, help='Token for uploading to Hugging Face.')
-    parser.add_argument('--n', type=int, default=None, help='Maximum number of annotations and images to generate.')
+    parser.add_argument('--start_index', type=int, default=0, help='Start index for processing the dataset. Default to the first index.')
+    parser.add_argument('--end_index', type=int, default=None, help='End index for processing the dataset. Default to the last index.')
 
     return parser.parse_args()
+
+def dataset_exists_on_hf(hf_dataset_name, token):
+    """Check if the dataset exists on Hugging Face."""
+    api = HfApi()
+    try:
+        dataset_info = api.dataset_info(hf_dataset_name, token=token)
+        return True
+    except Exception as e:
+        return False
 
 def upload_to_huggingface(dataset, repo_name, token):
     """Uploads the dataset dictionary to Hugging Face."""
@@ -72,15 +82,30 @@ def upload_to_huggingface(dataset, repo_name, token):
     api.create_repo(repo_name, repo_type="dataset", private=False, token=token)
     dataset.push_to_hub(repo_name)
 
-def generate_and_save_annotations(dataset, synthetic_image_generator, annotations_dir, limit, batch_size=8):
+def slice_dataset(dataset, start_index, end_index=None):
+    """
+    Slice the dataset according to provided start and end indices.
+
+    Parameters:
+    dataset (Dataset): The dataset to be sliced.
+    start_index (int): The index of the first element to include in the slice.
+    end_index (int, optional): The index of the last element to include in the slice. If None, slices to the end of the dataset.
+
+    Returns:
+    Dataset: The sliced dataset.
+    """
+    if end_index is not None and end_index < len(dataset):
+        return dataset.select(range(start_index, end_index))
+    else:
+        return dataset.select(range(start_index, len(dataset)))
+
+def generate_and_save_annotations(dataset, synthetic_image_generator, annotations_dir, batch_size=8):
     annotations_batch = []
     image_count = 0
     start_time = time.time()
-    progress_interval = max(1, limit // 10)  # Update progress every 10% of the limit
+    progress_interval = max(1, len(dataset) // 10)  # Update progress every 10% of image chunk
 
     for real_image in dataset:
-        if limit is not None and image_count >= limit:
-            break
         annotation = synthetic_image_generator.image_annotation_generator.process_image(
             real_image,
             resize=False,
@@ -88,7 +113,7 @@ def generate_and_save_annotations(dataset, synthetic_image_generator, annotation
         )[0]
         annotations_batch.append((real_image['id'], annotation))
 
-        if len(annotations_batch) == batch_size or image_count == limit - 1:
+        if len(annotations_batch) == batch_size or image_count == len(dataset) - 1:
             for image_id, annotation in annotations_batch:
                 file_path = os.path.join(annotations_dir, f"{image_id}.json")
                 with open(file_path, 'w') as f:
@@ -97,33 +122,35 @@ def generate_and_save_annotations(dataset, synthetic_image_generator, annotation
 
         image_count += 1
 
-        if image_count % progress_interval == 0 or image_count == limit:
-            print(f"Progress: {image_count}/{limit} annotations generated.")
+        if image_count % progress_interval == 0 or image_count == len(dataset):
+            print(f"Progress: {image_count}/{len(dataset)} annotations generated.")
 
     synthetic_image_generator.image_annotation_generator.clear_gpu()
     duration = time.time() - start_time
     print(f"All {image_count} annotations generated and saved in {duration:.2f} seconds.")
     print(f"Mean annotation generation time: {duration/image_count:.2f} seconds if any.")
 
-def generate_and_save_synthetic_images(annotations, synthetic_image_generator, synthetic_images_dir, limit, batch_size=8):
+def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=8):
     start_time = time.time()
-    total = min(len(annotations), limit)  # Use the smaller of total annotations or the limit
+    annotation_files = sorted(Path(annotations_dir).glob('*.json'))
+    total = len(annotation_files)
     progress_interval = max(1, total // 10)  # Update progress every 10% of total annotations
 
     with torch.no_grad():  # Use no_grad to reduce memory usage during inference
-        for batch in range(0, total, batch_size):
-            end = min(batch + batch_size, total)
-            for i in range(batch, end):
-                prompt = annotations[i]['description']
-                name = annotations[i]['index']
+        for i in range(0, total, batch_size):
+            end = min(i + batch_size, total)
+            for annotation_file in annotation_files[i:end]:
+                with open(annotation_file, 'r') as f:
+                    annotation = json.load(f)
+                prompt = annotation['description']
+                name = annotation['index']
                 synthetic_image = synthetic_image_generator.generate_image(prompt, name=name)
-
                 filename = f"{name}.png"
                 file_path = os.path.join(synthetic_images_dir, filename)
                 synthetic_image['image'].save(file_path)
 
-            if batch % progress_interval == 0 or batch + batch_size >= total:
-                print(f"Progress: Generated {min(batch + batch_size, total)}/{total} synthetic images.")
+            if i % progress_interval == 0 or end >= total:
+                print(f"Progress: Generated {end}/{total} synthetic images.")
 
     synthetic_image_generator.clear_gpu()
     duration = time.time() - start_time
@@ -133,43 +160,55 @@ def generate_and_save_synthetic_images(annotations, synthetic_image_generator, s
 def main():
     args = parse_arguments()
     hf_dataset_name = f"{args.hf_org}/{args.real_image_dataset_name}"
+    hf_annotations_name = f"{hf_dataset_name}-annotations"
+    hf_synthetic_images_name = f"{hf_dataset_name}-{args.diffusion_model}"
     annotations_dir = f'test_data/annotations/{args.real_image_dataset_name}'
     synthetic_images_dir = f'test_data/synthetic_images/{args.real_image_dataset_name}'
     os.makedirs(annotations_dir, exist_ok=True)
     os.makedirs(synthetic_images_dir, exist_ok=True)
 
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
-    logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-
     synthetic_image_generator = SyntheticImageGenerator(
         prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
                 
     batch_size = 8
-    limit = args.n
-    annotations = []
     image_count = 0
-    # Processing loop: Generate annotations and synthetic images
-    if args.generate_annotations:
-        dataset = ImageDataset(hf_dataset_name, 'train')
-        generate_and_save_annotations(dataset, synthetic_image_generator, annotations_dir, limit, batch_size=batch_size)
+
+    # If annotations exist on Hugging Face, load them to disk.
+    if dataset_exists_on_hf(hf_annotations_name, args.hf_token):
+        print("Annotations exist on Hugging Face.")
+        # Check if the annotations are already saved locally
+        if not Path(annotations_dir).is_dir() or not any(Path(annotations_dir).iterdir()):
+            print(f"Downloading annotations from Hugging Face saving annotations to {annotations_dir}.")
+            # Download annotations from Hugging Face
+            all_annotations = load_dataset('json', data_files=hf_annotations_name, split='train', keep_in_memory=False)
+            # Slice specified chunk
+            annotations_chunk = slice_dataset(all_annotations, args.start_index, args.end_index)
+            all_annotations = None
+            annotations_chunk.save_to_disk(annotations_dir)
+            annotations_chunk = None 
+        else:
+            print("Annotations already saved to disk.")
+    else:
+        print("Generating new annotations.")
+        all_images = ImageDataset(hf_dataset_name, 'train')
+        images_chunk = slice_dataset(all_images, start_index=args.start_index, end_index=args.end_index)
+        all_images = None
+        generate_and_save_annotations(images_chunk, synthetic_image_generator, annotations_dir, batch_size=batch_size)
+        images_chunk = None # Free up memory
 
         # Upload to Hugging Face
-        if args.upload_annotations and args.hf_token:
+        if args.hf_token:
+            print("Uploading annotations to HF.")
             print("Loading annotations dataset.")
             start_time = time.time()
             annotations_dataset = load_dataset('json', data_files=os.path.join(annotations_dir, '*.json'))
             print("Uploading annotations of" + args.real_image_dataset_name + " to Hugging Face.")
-            upload_to_huggingface(annotations_dataset, hf_dataset_name+"-annotations", args.hf_token)
+            upload_to_huggingface(annotations_dataset, hf_annotations_name, args.hf_token)
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
-    else:
-        print("Loading annotations from Hugging Face.")
-        annotations = load_huggingface_dataset(hf_dataset_name + "-annotations", split="train")
-
     synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
-    generate_and_save_synthetic_images(annotations, synthetic_image_generator, synthetic_images_dir, limit, batch_size=batch_size)
+    generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=batch_size)
     
-    annotations = []
     synthetic_image_generator.clear_gpu()
     print(f"Synthetic images generated in {time.time() - start_time:.2f} seconds.")
     print(f"Mean synthetic images generation time: {image_count/(time.time() - start_time):.2f} seconds.")
@@ -179,7 +218,7 @@ def main():
         print("Loading synthetic image dataset.")
         synthetic_image_dataset = load_dataset("imagefolder", data_dir=synthetic_images_dir)
         print("Uploading synthetic image mirrors of " + args.real_image_dataset_name + " to Hugging Face.")
-        upload_to_huggingface(synthetic_image_dataset, hf_dataset_name+"_"+args.diffusion_model, args.hf_token)
+        upload_to_huggingface(synthetic_image_dataset, hf_synthetic_images_name, args.hf_token)
         print(f"Synthetic images uploaded in {time.time() - start_time:.2f} seconds.")
 
 if __name__ == "__main__":
