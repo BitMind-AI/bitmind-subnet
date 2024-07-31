@@ -35,7 +35,11 @@ class ImageDataset:
         self.huggingface_dataset_path = huggingface_dataset_path
         self.huggingface_datset_name = huggingface_datset_name
         self.dataset = load_huggingface_dataset(
-            huggingface_dataset_path, huggingface_datset_split, huggingface_datset_name, create_splits, download_mode)
+            huggingface_dataset_path,
+            huggingface_datset_split,
+            huggingface_datset_name,
+            create_splits,
+            download_mode)
         self.sampled_images_idx = []
 
     def __getitem__(self, index: int) -> dict:
