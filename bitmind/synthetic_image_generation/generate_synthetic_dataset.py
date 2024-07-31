@@ -142,6 +142,8 @@ def main():
         file_path = os.path.join(synthetic_images_dir, filename)
         synthetic_image.save(synthetic_images_dir)
         image_count += 1
+    
+    synthetic_image_generator.clear_gpu()
     print(f"Synthetic images generated in {time.time() - start_time:.2f} seconds.")
     print(f"Mean synthetic images generation time: {image_count/(time.time() - start_time):.2f} seconds.")
 
