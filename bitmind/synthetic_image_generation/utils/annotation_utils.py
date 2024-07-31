@@ -2,6 +2,12 @@ import bittensor as bt
 import json
 import os
 
+def ensure_save_path(path: str) -> str:
+    """Ensure that a directory exists; if it does not, create it."""
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
+
 def create_annotation_dataset_directory(base_path: str, dataset_name: str) -> str:
     """Create a directory for a dataset with a safe name, replacing any invalid characters."""
     safe_name = dataset_name.replace("/", "_")
