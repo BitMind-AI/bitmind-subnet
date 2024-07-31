@@ -86,7 +86,6 @@ def main():
     synthetic_image_generator = SyntheticImageGenerator(
         prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
                 
-    annotations = []
     image_count = 0
     # Processing loop: Generate annotations and synthetic images
     if args.generate_annotations: 
@@ -127,9 +126,8 @@ def main():
             upload_to_huggingface(annotations_dataset, hf_dataset_name+"-annotations", args.hf_token)
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
-    else:
-        print("Loading annotations from Hugging Face.")
-        annotations = load_huggingface_dataset(hf_dataset_name + "-annotations")
+    print("Loading annotations from Hugging Face.")
+    annotations = load_huggingface_dataset(hf_dataset_name + "-annotations")
 
     image_count = 0
     start_time = time.time()
@@ -143,6 +141,7 @@ def main():
         synthetic_image.save(synthetic_images_dir)
         image_count += 1
     
+    annotations = []
     synthetic_image_generator.clear_gpu()
     print(f"Synthetic images generated in {time.time() - start_time:.2f} seconds.")
     print(f"Mean synthetic images generation time: {image_count/(time.time() - start_time):.2f} seconds.")
