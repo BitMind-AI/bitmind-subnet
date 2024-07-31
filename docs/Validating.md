@@ -76,6 +76,12 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ## Validating
 
+Before launching your validator, log into wandb by running the following command and pasting your API key when prompted. If you do not have an API key, contact the BitMind team via Discord for support.
+```bash
+wandb login
+```
+
+
 You can launch your validator via pm2 using the following command. To stop your validator, you can run `pm2 delete validator`.
 
 ```bash
