@@ -11,7 +11,6 @@ from huggingface_hub import HfApi
 
 from synthetic_image_generator import SyntheticImageGenerator
 from bitmind.image_dataset import ImageDataset
-from utils.annotation_utils import setup_logging, suppress_tf_logging
 from bitmind.constants import HUGGINGFACE_CACHE_DIR
 from bitmind.utils.data import load_huggingface_dataset
 
@@ -24,7 +23,7 @@ def parse_arguments():
     Generate 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0, 
     upload annotations and images to Hugging Face (fill in token):
 
-    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0"
+    python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name "celeb-a-hq" --generate_annotations True --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" --hf_token
         
     Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0, 
     upload annotations and images to Hugging Face (fill in token):
