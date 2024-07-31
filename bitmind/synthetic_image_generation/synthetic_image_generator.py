@@ -124,6 +124,7 @@ class SyntheticImageGenerator:
             del self.diffuser
             gc.collect()
             torch.cuda.empty_cache()
+            self.diffuser = None
 
     def load_diffuser(self, diffuser_name) -> None:
         """

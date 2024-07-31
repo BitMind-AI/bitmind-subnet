@@ -29,18 +29,19 @@ def parse_arguments():
     using existing annotations from Hugging Face, and upload images to Hugging Face.
     Replace YOUR_HF_TOKEN with your actual Hugging Face API token:
 
-    pm2 start python generate_synthetic_dataset.py --hf_org "bitmind" --real_image_dataset_name  \
-    "celeb-a-hq" --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
-    --upload_synthetic_images --hf_token "YOUR_HF_TOKEN" --start_index 0 --end_index 9
+    pm2 start generate_synthetic_dataset.py --name "first_ten_celebahq" --no-autorestart \
+    -- --hf_org 'bitmind' --real_image_dataset_name 'celeb-a-hq' \
+    --diffusion_model 'stabilityai/stable-diffusion-xl-base-1.0' --upload_synthetic_images \
+    --hf_token 'YOUR_HF_TOKEN' --start_index 0 --end_index 9
 
     Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0
     and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
     actual Hugging Face API token:
 
-    pm2 start python generate_synthetic_dataset.py --hf_org "bitmind" \
-    --real_image_dataset_name "ffhq256" \
+    pm2 start generate_synthetic_dataset.py --name "ffhq256" --no-autorestart \
+    -- --hf_org "bitmind" --real_image_dataset_name "ffhq256" \
     --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
-    --upload_annotations --upload_synthetic_images \ --hf_token "YOUR_HF_TOKEN"
+    --upload_annotations --upload_synthetic_images \ --hf_token "YOUR_HF_TOKEN""
 
     Arguments:
     --hf_org (str): Required. Hugging Face organization name.
@@ -98,6 +99,15 @@ def slice_dataset(dataset, start_index, end_index=None):
         return dataset.select(range(start_index, end_index))
     else:
         return dataset.select(range(start_index, len(dataset)))
+
+def save_as_json(dataset, output_dir):
+    os.makedirs(output_dir, exist_ok=True)  # Ensure directory exists
+    # Iterate through each record in the dataset
+    for i, record in enumerate(dataset):
+        file_path = os.path.join(output_dir, f"{i}.json")
+        # Write the record as a JSON file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(record, f, ensure_ascii=False, indent=4)
 
 def generate_and_save_annotations(dataset, synthetic_image_generator, annotations_dir, batch_size=8):
     annotations_batch = []
@@ -170,7 +180,7 @@ def main():
     synthetic_image_generator = SyntheticImageGenerator(
         prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
                 
-    batch_size = 8
+    batch_size = 4
     image_count = 0
 
     # If annotations exist on Hugging Face, load them to disk.
@@ -178,14 +188,15 @@ def main():
         print("Annotations exist on Hugging Face.")
         # Check if the annotations are already saved locally
         if not Path(annotations_dir).is_dir() or not any(Path(annotations_dir).iterdir()):
-            print(f"Downloading annotations from Hugging Face saving annotations to {annotations_dir}.")
+            print(f"Downloading annotations from {hf_annotations_name} and saving annotations to {annotations_dir}.")
             # Download annotations from Hugging Face
-            all_annotations = load_dataset('json', data_files=hf_annotations_name, split='train', keep_in_memory=False)
+            all_annotations = load_dataset(hf_annotations_name, split='train', keep_in_memory=False)
             # Slice specified chunk
             annotations_chunk = slice_dataset(all_annotations, args.start_index, args.end_index)
             all_annotations = None
-            annotations_chunk.save_to_disk(annotations_dir)
-            annotations_chunk = None 
+             # Save the chunk as JSON files on disk
+            save_as_json(annotations_chunk, annotations_dir)
+            annotations_chunk = None
         else:
             print("Annotations already saved to disk.")
     else:
@@ -197,7 +208,7 @@ def main():
         images_chunk = None # Free up memory
 
         # Upload to Hugging Face
-        if args.hf_token:
+        if args.upload_annotations and args.hf_token:
             print("Uploading annotations to HF.")
             print("Loading annotations dataset.")
             start_time = time.time()
