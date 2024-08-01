@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 import bittensor as bt
 import numpy as np
@@ -87,7 +87,12 @@ class ImageDataset:
             if isinstance(sample['image'], Image.Image):
                 image = sample['image']
             elif isinstance(sample['image'], bytes):
-                image = Image.open(BytesIO(sample['image']))
+                try:
+                    image = Image.open(BytesIO(sample['image']))
+                except UnidentifiedImageError as e:
+                    print("Image missing from URL")
+                    print(e)
+                    raise UnidentifiedImageError
             else:
                 err_prefix = f"ImageDataset: {self.huggingface_dataset_path}"
                 raise NotImplementedError(f"{err_prefix}: Image data must be either bytes or PIL.image, found: {type(sample['image'])}")
