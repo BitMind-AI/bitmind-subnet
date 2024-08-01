@@ -120,6 +120,8 @@ class SyntheticImageGenerator:
     def clear_gpu(self):
         if self.diffuser is not None:
             bt.logging.debug(f"Deleting previous diffuser, freeing memory")
+            if self.diffuser.dtype == torch.float16:
+                self.diffuser = self.diffuser.to(dtype=torch.float32) # cannot use dtype float16 on cpu
             self.diffuser.to('cpu')
             del self.diffuser
             gc.collect()

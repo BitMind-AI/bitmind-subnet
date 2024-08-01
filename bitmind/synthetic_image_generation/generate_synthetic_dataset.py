@@ -138,7 +138,6 @@ def generate_and_save_annotations(dataset, synthetic_image_generator, annotation
     synthetic_image_generator.image_annotation_generator.clear_gpu()
     duration = time.time() - start_time
     print(f"All {image_count} annotations generated and saved in {duration:.2f} seconds.")
-    print(f"Mean annotation generation time: {duration/image_count:.2f} seconds if any.")
 
 def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=8):
     start_time = time.time()
@@ -165,7 +164,7 @@ def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generato
     synthetic_image_generator.clear_gpu()
     duration = time.time() - start_time
     print(f"All synthetic images generated in {duration:.2f} seconds.")
-    print(f"Mean synthetic images generation time: {duration/max(total, 1):.2f} seconds.")
+    print(f"Mean annotation generation time: {max(1, total)/duration:.2f} seconds if any.")
 
 def main():
     args = parse_arguments()
@@ -217,12 +216,11 @@ def main():
             upload_to_huggingface(annotations_dataset, hf_annotations_name, args.hf_token)
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
+    start_time = time.time()
     synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
     generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=batch_size)
     
     synthetic_image_generator.clear_gpu()
-    print(f"Synthetic images generated in {time.time() - start_time:.2f} seconds.")
-    print(f"Mean synthetic images generation time: {image_count/(time.time() - start_time):.2f} seconds.")
 
     if args.upload_synthetic_images and args.hf_token:
         start_time = time.time()
