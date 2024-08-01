@@ -24,6 +24,9 @@ def parse_arguments():
     Parse command-line arguments for generating synthetic images and annotations
     from a single real dataset.
 
+    Before running, authenticate with command line to upload to Hugging Face:
+    huggingface-cli login
+
     Example Usage:
 
     Generate the first 10 mirrors of celeb-a-hq using stabilityai/stable-diffusion-xl-base-1.0
@@ -82,7 +85,7 @@ def upload_to_huggingface(dataset, repo_name, token):
     """Uploads the dataset dictionary to Hugging Face."""
     api = HfApi()
     api.create_repo(repo_name, repo_type="dataset", private=False, token=token)
-    dataset.push_to_hub(repo_name)
+    dataset.push_to_hub(repo_name, use_auth_token=True)
 
 def slice_dataset(dataset, start_index, end_index=None):
     """
@@ -189,7 +192,8 @@ def main():
     args = parse_arguments()
     hf_dataset_name = f"{args.hf_org}/{args.real_image_dataset_name}"
     hf_annotations_name = f"{hf_dataset_name}-annotations"
-    hf_synthetic_images_name = f"{hf_dataset_name}-{args.diffusion_model}"
+    model_name = args.diffusion_model.split('/')[-1]
+    hf_synthetic_images_name = f"{hf_dataset_name}_{model_name}"
     annotations_dir = f'test_data/annotations/{args.real_image_dataset_name}'
     real_image_samples_dir = f'test_data/real_images/{args.real_image_dataset_name}'
     synthetic_images_dir = f'test_data/synthetic_images/{args.real_image_dataset_name}'
