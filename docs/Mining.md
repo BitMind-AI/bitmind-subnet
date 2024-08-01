@@ -15,7 +15,7 @@
 
 **Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
 
-**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](./min_compute.yml). A GPU is recommended for training, although not required for basic inference.
+**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). A GPU is recommended for training, although not required for basic inference.
 
 ### Installation
 
