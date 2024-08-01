@@ -45,16 +45,21 @@ class RealFakeDataset:
             self.reset()
 
         if np.random.rand() > self.fake_prob:
-            source = self.fake_image_datasets[np.random.randint(0, len(self.fake_image_datasets))]
-            image = source[index]['image']
-            label = 1.
+            datasets = self.fake_image_datasets
+            label = 1
         else:
-            source = self.real_image_datasets[np.random.randint(0, len(self.real_image_datasets))]
-            #image = source.sample(1)[0]['image']
+            datasets = self.real_image_datasets
+            label = 0
+
+        source = datasets[np.random.randint(0, len(datasets))]
+        try:
+            image = source[index]['image']
+        except Exception as e:
+            print(e)
+            print(f"Error sampling image index {index} from dataset {source}, performing random sample instead")
             imgs, idx = source.sample(1)
             image = imgs[0]['image']
             index = idx[0]
-            label = 0.
 
         self._history['source'].append(source.huggingface_dataset_path)
         self._history['label'].append(label)
