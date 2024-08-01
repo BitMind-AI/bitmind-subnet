@@ -202,8 +202,7 @@ class SyntheticImageGenerator:
     def generate_image(self, prompt, name = None) -> list:
         # Generate a unique image name based on current time if not provided
         image_name = name if name else f"{time.time():.0f}.jpg"
-
-        gen_image = self.diffuser(prompt=prompt, height=TARGET_IMAGE_SIZE[0], 
+        gen_image = self.diffuser(prompt=prompt, height=TARGET_IMAGE_SIZE[0],
                                   width=TARGET_IMAGE_SIZE[1]).images[0]
         image_data = {
             'prompt': prompt,

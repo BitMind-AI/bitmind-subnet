@@ -89,7 +89,7 @@ class ImageAnnotationGenerator:
             'description': description,
             'original_dataset': dataset_name,
             'original_dimensions': f"{original_dimensions[0]}x{original_dimensions[1]}",
-            'index': image_id
+            'id': image_id
         }
         return annotation
 

@@ -6,6 +6,7 @@ import sys
 import torch
 import time
 from pathlib import Path
+import pandas as pd
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -109,19 +110,21 @@ def save_as_json(dataset, output_dir):
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(record, f, ensure_ascii=False, indent=4)
 
-def generate_and_save_annotations(dataset, synthetic_image_generator, annotations_dir, batch_size=8):
+def generate_and_save_annotations(dataset, dataset_name, synthetic_image_generator, annotations_dir, batch_size=8):
     annotations_batch = []
     image_count = 0
     start_time = time.time()
     progress_interval = max(1, len(dataset) // 10)  # Update progress every 10% of image chunk
 
-    for real_image in dataset:
+    for index, real_image in enumerate(dataset):
         annotation = synthetic_image_generator.image_annotation_generator.process_image(
             real_image,
+            dataset_name,
+            index,
             resize=False,
             verbose=0
         )[0]
-        annotations_batch.append((real_image['id'], annotation))
+        annotations_batch.append((index, annotation))
 
         if len(annotations_batch) == batch_size or image_count == len(dataset) - 1:
             for image_id, annotation in annotations_batch:
@@ -138,6 +141,22 @@ def generate_and_save_annotations(dataset, synthetic_image_generator, annotation
     synthetic_image_generator.image_annotation_generator.clear_gpu()
     duration = time.time() - start_time
     print(f"All {image_count} annotations generated and saved in {duration:.2f} seconds.")
+    print(f"Mean annotation generation time: {duration/image_count:.2f} seconds if any.")
+
+def save_images_to_disk(image_dataset, start_index, num_images, save_directory):
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+
+    for i in range(start_index, start_index + num_images):
+        try:
+            image_data = image_dataset[i]  # Retrieve image using the __getitem__ method
+            image = image_data['image']  # Extract the image
+            image_id = image_data['id']  # Extract the image ID
+            file_path = os.path.join(save_directory, f"{image_id}.jpg")  # Construct file path
+            image.save(file_path, 'JPEG')  # Save the image
+            print(f"Saved: {file_path}")
+        except Exception as e:
+            print(f"Failed to save image {i}: {e}")
 
 def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=8):
     start_time = time.time()
@@ -152,7 +171,7 @@ def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generato
                 with open(annotation_file, 'r') as f:
                     annotation = json.load(f)
                 prompt = annotation['description']
-                name = annotation['index']
+                name = annotation['id']
                 synthetic_image = synthetic_image_generator.generate_image(prompt, name=name)
                 filename = f"{name}.png"
                 file_path = os.path.join(synthetic_images_dir, filename)
@@ -164,7 +183,7 @@ def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generato
     synthetic_image_generator.clear_gpu()
     duration = time.time() - start_time
     print(f"All synthetic images generated in {duration:.2f} seconds.")
-    print(f"Mean annotation generation time: {max(1, total)/duration:.2f} seconds if any.")
+    print(f"Mean synthetic images generation time: {duration/max(total, 1):.2f} seconds.")
 
 def main():
     args = parse_arguments()
@@ -172,6 +191,7 @@ def main():
     hf_annotations_name = f"{hf_dataset_name}-annotations"
     hf_synthetic_images_name = f"{hf_dataset_name}-{args.diffusion_model}"
     annotations_dir = f'test_data/annotations/{args.real_image_dataset_name}'
+    real_image_samples_dir = f'test_data/real_images/{args.real_image_dataset_name}'
     synthetic_images_dir = f'test_data/synthetic_images/{args.real_image_dataset_name}'
     os.makedirs(annotations_dir, exist_ok=True)
     os.makedirs(synthetic_images_dir, exist_ok=True)
@@ -190,8 +210,13 @@ def main():
             print(f"Downloading annotations from {hf_annotations_name} and saving annotations to {annotations_dir}.")
             # Download annotations from Hugging Face
             all_annotations = load_dataset(hf_annotations_name, split='train', keep_in_memory=False)
+            df_annotations = pd.DataFrame(all_annotations)
+            # Ensure the index is of integer type and sort by it
+            df_annotations['index'] = df_annotations['index'].astype(int)
+            df_annotations.sort_values('index', inplace=True)
+            print(df_annotations)
             # Slice specified chunk
-            annotations_chunk = slice_dataset(all_annotations, args.start_index, args.end_index)
+            annotations_chunk = df_annotations.iloc[args.start_index:args.end_index]
             all_annotations = None
              # Save the chunk as JSON files on disk
             save_as_json(annotations_chunk, annotations_dir)
@@ -201,22 +226,22 @@ def main():
     else:
         print("Generating new annotations.")
         all_images = ImageDataset(hf_dataset_name, 'train')
-        images_chunk = slice_dataset(all_images, start_index=args.start_index, end_index=args.end_index)
+        #save_images_to_disk(all_images, 0, 10, real_image_samples_dir)
+        images_chunk = slice_dataset(all_images.dataset, start_index=args.start_index, end_index=args.end_index)
         all_images = None
-        generate_and_save_annotations(images_chunk, synthetic_image_generator, annotations_dir, batch_size=batch_size)
+        generate_and_save_annotations(images_chunk, hf_dataset_name, synthetic_image_generator, annotations_dir, batch_size=batch_size)
         images_chunk = None # Free up memory
 
         # Upload to Hugging Face
         if args.upload_annotations and args.hf_token:
+            start_time = time.time()
             print("Uploading annotations to HF.")
             print("Loading annotations dataset.")
-            start_time = time.time()
             annotations_dataset = load_dataset('json', data_files=os.path.join(annotations_dir, '*.json'))
             print("Uploading annotations of" + args.real_image_dataset_name + " to Hugging Face.")
             upload_to_huggingface(annotations_dataset, hf_annotations_name, args.hf_token)
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
-    start_time = time.time()
     synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
     generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=batch_size)
     
