@@ -28,16 +28,19 @@ VALIDATOR_MODEL_META = {
         {
             "path": "stabilityai/stable-diffusion-xl-base-1.0",
             "use_safetensors": True,
-            "variant": "fp16"
+            "variant": "fp16",
+            "pipeline": "StableDiffusionXLPipeline"
         },
         {
             "path": "SG161222/RealVisXL_V4.0",
             "use_safetensors": True,
-            "variant": "fp16"
+            "variant": "fp16",
+            "pipeline": "StableDiffusionXLPipeline"
         },
         {
             "path": "Corcelio/mobius",
-            "use_safetensors": True
+            "use_safetensors": True,
+            "pipeline": "StableDiffusionXLPipeline"
         }
     ]
 }
@@ -55,11 +58,14 @@ PROMPT_GENERATOR_ARGS = {
 PROMPT_GENERATOR_NAMES = list(PROMPT_GENERATOR_ARGS.keys())
 
 DIFFUSER_ARGS = {
-    m['path']: {k: v for k, v in m.items() if k != 'path'}  
+    m['path']: {k: v for k, v in m.items() if k != 'path' and k != 'pipeline'}  
     for m in VALIDATOR_MODEL_META['diffusers']
+}
+
+DIFFUSER_PIPELINE = {
+    m['path']: m['pipeline'] for m in VALIDATOR_MODEL_META['diffusers'] if 'pipeline' in m
 }
 
 DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-2.7b-coco"
-

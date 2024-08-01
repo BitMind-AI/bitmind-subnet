@@ -12,6 +12,7 @@ from bitmind.constants import (
     PROMPT_GENERATOR_ARGS,
     DIFFUSER_NAMES,
     DIFFUSER_ARGS,
+    DIFFUSER_PIPELINE,
     PROMPT_TYPES,
     IMAGE_ANNOTATION_MODEL,
     TARGET_IMAGE_SIZE
@@ -22,7 +23,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 from transformers import pipeline
-from diffusers import StableDiffusionPipeline
+from diffusers import StableDiffusionXLPipeline, StableDiffusionPipeline, DiffusionPipeline
 from transformers import set_seed
 from datasets import load_dataset
 import bittensor as bt
@@ -138,9 +139,12 @@ class SyntheticImageGenerator:
         
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
-        self.diffuser = StableDiffusionPipeline.from_pretrained(
+        pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
+        self.diffuser = pipeline_class.from_pretrained(
             diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
         self.diffuser.to("cuda")
+        print(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
+        bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
     def generate_image_caption(self, image_sample) -> str:
         """
@@ -199,15 +203,30 @@ class SyntheticImageGenerator:
             if prompt != "":
                 return prompt
             
-    def generate_image(self, prompt, name = None) -> list:
+    def generate_image(self, prompt, name = None, generate_at_target_size = False) -> list:
         # Generate a unique image name based on current time if not provided
         image_name = name if name else f"{time.time():.0f}.jpg"
-        gen_image = self.diffuser(prompt=prompt, height=TARGET_IMAGE_SIZE[0],
-                                  width=TARGET_IMAGE_SIZE[1]).images[0]
+        
+        try:
+            if generate_at_target_size:
+                # Attempt to generate an image with specified dimensions
+                gen_image = self.diffuser(prompt=prompt, height=TARGET_IMAGE_SIZE[0],
+                                          width=TARGET_IMAGE_SIZE[1]).images[0]
+            else:
+                # Generate an image using default dimensions supported by the pipeline
+                gen_image = self.diffuser(prompt=prompt).images[0]
+        except Exception as e:
+            bt.logging.warning(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
+            try:
+                # Fallback to generating an image without specifying dimensions
+                gen_image = self.diffuser(prompt=prompt).images[0]
+            except Exception as fallback_error:
+                bt.logging.error(f"Failed to generate image with default dimensions after initial failure: {fallback_error}")
+                raise RuntimeError(f"Both attempts to generate image failed: {fallback_error}")
+            
         image_data = {
             'prompt': prompt,
             'image': gen_image,
             'id': image_name
         }
         return image_data
-
