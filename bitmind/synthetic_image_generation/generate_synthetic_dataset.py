@@ -36,7 +36,7 @@ def parse_arguments():
     pm2 start generate_synthetic_dataset.py --name "first_ten_celebahq" --no-autorestart \
     -- --hf_org 'bitmind' --real_image_dataset_name 'celeb-a-hq' \
     --diffusion_model 'stabilityai/stable-diffusion-xl-base-1.0' --upload_synthetic_images \
-    --hf_token 'YOUR_HF_TOKEN' --start_index 0 --end_index 9
+    --hf_token 'YOUR_HF_TOKEN' --start_index 0 --end_index 10
 
     Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0
     and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
@@ -55,7 +55,7 @@ def parse_arguments():
     --upload_synthetic_images (bool): Optional. Flag to upload synthetic images to Hugging Face.
     --hf_token (str): Required for interfacing with Hugging Face.
     parser.add_argument('--start_index', type=int, default=0, help='Start index for processing the dataset.')
-    parser.add_argument('--end_index', type=int, default=None, help='End index for processing the dataset.')
+    parser.add_argument('--end_index', type=int, default=None, help='End index (exclusive) for processing the dataset.')
     """
     parser = argparse.ArgumentParser(description='Generate synthetic images and annotations from a real dataset.')
     parser.add_argument('--hf_org', type=str, required=True, help='Hugging Face org name.')
@@ -85,7 +85,7 @@ def upload_to_huggingface(dataset, repo_name, token):
     """Uploads the dataset dictionary to Hugging Face."""
     api = HfApi()
     api.create_repo(repo_name, repo_type="dataset", private=False, token=token)
-    dataset.push_to_hub(repo_name, use_auth_token=True)
+    dataset.push_to_hub(repo_name)
 
 def slice_dataset(dataset, start_index, end_index=None):
     """
@@ -161,32 +161,52 @@ def save_images_to_disk(image_dataset, start_index, num_images, save_directory):
         except Exception as e:
             print(f"Failed to save image {i}: {e}")
 
-def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=8):
+def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, 
+                                       synthetic_images_dir, start_index, end_index, batch_size=8):
     start_time = time.time()
     annotation_files = sorted(Path(annotations_dir).glob('*.json'))
-    total = len(annotation_files)
-    progress_interval = max(1, total // 10)  # Update progress every 10% of total annotations
+    total_images = 0
+    annotations_batch = []
 
+    # Collect all valid annotation file paths first
+    valid_files = []
+    for json_filename in sorted(os.listdir(annotations_dir)):
+        # Extract index from filename
+        try:
+            # Remove '.json' extension and converts to integer
+            file_index = int(json_filename[:-5])  
+        except ValueError:
+            continue  # Skip files that don't match expected format
+
+        if start_index <= file_index < end_index:
+            valid_files.append(json_filename)
+
+    total_valid_files = len(valid_files)
+    progress_interval = max(1, total_valid_files // 10)  # Update progress every 10% of total annotations
+    
     with torch.no_grad():  # Use no_grad to reduce memory usage during inference
-        for i in range(0, total, batch_size):
-            end = min(i + batch_size, total)
-            for annotation_file in annotation_files[i:end]:
-                with open(annotation_file, 'r') as f:
-                    annotation = json.load(f)
+        for i in range(0, len(valid_files), batch_size):
+            batch_files = valid_files[i:i+batch_size]
+            for json_filename in batch_files:
+                json_path = os.path.join(annotations_dir, json_filename)
+                with open(json_path, 'r') as file:
+                    annotation = json.load(file)
                 prompt = annotation['description']
                 name = annotation['id']
                 synthetic_image = synthetic_image_generator.generate_image(prompt, name=name)
                 filename = f"{name}.png"
                 file_path = os.path.join(synthetic_images_dir, filename)
                 synthetic_image['image'].save(file_path)
+                total_images += 1
 
             if i % progress_interval == 0 or end >= total:
-                print(f"Progress: Generated {end}/{total} synthetic images.")
+                print(f"Progress: {total_images}/{total_valid_files} images generated \
+                ({(total_images / total_valid_files) * 100:.2f}%)")
 
     synthetic_image_generator.clear_gpu()
     duration = time.time() - start_time
-    print(f"All synthetic images generated in {duration:.2f} seconds.")
-    print(f"Mean synthetic images generation time: {duration/max(total, 1):.2f} seconds.")
+    print(f"All {total_images} synthetic images generated in {duration:.2f} seconds.")
+    print(f"Mean synthetic images generation time: {duration/max(total_images, 1):.2f} seconds.")
 
 def main():
     args = parse_arguments()
@@ -203,7 +223,7 @@ def main():
     synthetic_image_generator = SyntheticImageGenerator(
         prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
                 
-    batch_size = 4
+    batch_size = 8
     image_count = 0
 
     # If annotations exist on Hugging Face, load them to disk.
@@ -247,7 +267,9 @@ def main():
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
     synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
-    generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, synthetic_images_dir, batch_size=batch_size)
+    generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator,
+                                       synthetic_images_dir, args.start_index, args.end_index,
+                                       batch_size=batch_size)
     
     synthetic_image_generator.clear_gpu()
 
