@@ -1,3 +1,4 @@
+from requests.exceptions import HTTPError
 from typing import Optional, Union
 from datasets import load_dataset
 from PIL import Image
@@ -27,7 +28,7 @@ def download_image(url: str) -> Image.Image:
         return Image.open(image_data)
 
     else:
-        #print(f"Failed to download image: {response.status_code}")
+        raise HTTPError(f"Failed to download image: {response.status_code}")
         return None
 
 
