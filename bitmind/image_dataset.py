@@ -65,8 +65,8 @@ class ImageDataset:
 
     def _get_image(self, index: int) -> dict:
         """
-        Load an image from self.dataset. Expects self.dataset[i] to be a dictionary containing either 'image' or 'url'
-        as a key.
+        Load an image from self.dataset. Expects self.dataset[i] to be a dictionary containing either 'image', 'imgage_url', or
+        'url' as a key.
             - The value associated with the 'image' key should be either a PIL image or a b64 string encoding of
             the image.
             - The value associated with the 'url' key should be a url that hosts the image (as in
@@ -106,7 +106,7 @@ class ImageDataset:
             image_id = image_id if image_id != '' else index
 
         else:
-            prefix = f"ImageDataset: {self.huggingface_dataset_path}"
+            err_prefix = f"ImageDataset: {self.huggingface_dataset_path}"
             raise NotImplementedError(f"{err_prefix}: Must contain one of the folowing keys ('image', 'image_url', 'url' ). Keys found : {sample.keys()}")
 
         # emove alpha channel if download didnt 404
