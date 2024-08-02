@@ -7,12 +7,13 @@ import torch
 import time
 from pathlib import Path
 import pandas as pd
+from math import ceil
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-from datasets import load_dataset, disable_progress_bar
+from datasets import load_dataset
 from huggingface_hub import HfApi
 
 from synthetic_image_generator import SyntheticImageGenerator
@@ -213,7 +214,6 @@ def save_images_to_disk(image_dataset, start_index, num_images, save_directory):
 
 def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, 
                                        synthetic_images_dir, start_index, end_index, batch_size=16):
-    disable_progress_bar()
     start_time = time.time()
     total_images = 0
 
