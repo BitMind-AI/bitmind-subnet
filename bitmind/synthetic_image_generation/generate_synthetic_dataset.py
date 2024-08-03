@@ -262,7 +262,7 @@ def main():
     args = parse_arguments()
     hf_dataset_name = f"{args.hf_org}/{args.real_image_dataset_name}"
     data_range = f"{args.start_index}-to-{args.end_index-1}"
-    hf_annotations_name = f"{hf_dataset_name}___{data_range}___annotations"
+    hf_annotations_name = f"{hf_dataset_name}___annotations"
     model_name = args.diffusion_model.split('/')[-1]
     hf_synthetic_images_name = f"{hf_dataset_name}___{data_range}___{model_name}"
     annotations_dir = f'test_data/annotations/{args.real_image_dataset_name}'
