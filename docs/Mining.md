@@ -87,7 +87,7 @@ pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python
 **Testnet Example**:
 
 ```bash
-pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --neuron.model_path ./mining_models/miner.pth --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
+pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --neuron.model_path ./mining_models/base.pth --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
 ```
 
 ---
@@ -133,13 +133,13 @@ Another approach, which avoids miner downtime, is to replace the model file.
 1. Optionally make a backup of the currently active model:
 
    ```bash
-   cp mining_models/miner.pth mining_models/miner_backup.pth
+   cp mining_models/base.pth mining_models/miner_backup.pth
    ```
 
 2. Replace the currently active model with your newly trained one. The next forward pass of your miner will load the new model without a restart.
 
    ```bash
-   cp path/to/your/trained/model_epoch_best.pth mining_models/miner.pth
+   cp path/to/your/trained/model_epoch_best.pth mining_models/base.pth
    ```
 
 ## Predict
