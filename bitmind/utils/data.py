@@ -17,6 +17,7 @@ class UrlImageCache:
     def __init__(self, cache_dir):
         self.cache_dir = cache_dir
         self.url_filename_map = {}
+        os.makedirs(self.cache_dir, exist_ok=True)
 
     def __getitem__(self, url: str) -> Image:
         """
@@ -93,7 +94,7 @@ def load_huggingface_dataset(
         _, directory = path.split(':')
         dataset = load_dataset(path='imagefolder', data_dir=directory, split='train')
     else:
-        dataset = download_dataset(path, name, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
+        dataset = download_dataset(path, name, "reuse_dataset_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
 
     if not create_splits:
         if split is not None:

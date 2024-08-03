@@ -49,7 +49,8 @@ def download_dataset(dataset_path, dataset_name, download_mode: str, cache_dir: 
                 dataset_name,
                 cache_dir=cache_dir,
                 download_mode=download_mode,
-                trust_remote_code=True)
+                trust_remote_code=True,
+                num_proc=os.cpu_count()//2)
             break
         except Exception as e:
             print(e)
@@ -82,7 +83,8 @@ if __name__ == '__main__':
     parser.add_argument('--cache_dir', type=str, default=HUGGINGFACE_CACHE_DIR, help='huggingface cache directory')
     args = parser.parse_args()
 
-    download_mode = "reuse_cache_if_exists"
+    #download_mode = "reuse_cache_if_exists"
+    download_mode = "reuse_dataset_if_exists"
     if args.force_redownload:
         download_mode = "force_redownload"
 
