@@ -75,8 +75,8 @@ def parse_arguments():
     parser.add_argument('--upload_synthetic_images', action='store_true', default=False, 
                         help='Upload synthetic images to Hugging Face.')
     parser.add_argument('--hf_token', type=str, default=None, help='Token for uploading to Hugging Face.')
-    parser.add_argument('--start_index', type=int, default=0, help='Start index for processing the dataset. Default to the first index.')
-    parser.add_argument('--end_index', type=int, default=None, help='End index for processing the dataset. Default to the last index.')
+    parser.add_argument('--start_index', type=int, default=0, required=True, help='Start index for processing the dataset. Default to the first index.')
+    parser.add_argument('--end_index', type=int, default=None, required=True, help='End index for processing the dataset. Default to the last index.')
 
     return parser.parse_args()
 
@@ -262,7 +262,7 @@ def main():
     args = parse_arguments()
     hf_dataset_name = f"{args.hf_org}/{args.real_image_dataset_name}"
     data_range = f"{args.start_index}-to-{args.end_index-1}"
-    hf_annotations_name = f"{hf_dataset_name}___annotations"
+    hf_annotations_name = f"{hf_dataset_name}___{data_range}___annotations"
     model_name = args.diffusion_model.split('/')[-1]
     hf_synthetic_images_name = f"{hf_dataset_name}___{data_range}___{model_name}"
     annotations_dir = f'test_data/annotations/{args.real_image_dataset_name}'
