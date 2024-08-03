@@ -3,12 +3,42 @@ from typing import Optional, Union
 from datasets import load_dataset
 from PIL import Image
 from io import BytesIO
+import numpy as np
 import requests
 import datasets
-import numpy as np
+import os
 
 from bitmind.download_data import download_dataset
 from bitmind.constants import HUGGINGFACE_CACHE_DIR
+
+
+class UrlImageCache:
+
+    def __init__(self, cache_dir):
+        self.cache_dir = cache_dir
+        self.url_filename_map = {}
+
+    def __getitem__(self, url: str) -> Image:
+        """
+        First, checks if the image is downloaded and its path is stored in the filename_map.
+        If the path isn't stored, checks if the file is downloaded in the cache_dir, and if so
+        adds the url: filename mapping to the filename_map.
+        If the image hasn't been downloaded, downloads it, saves it, adds its path to the url_filename map
+        for subsequent reads.
+        """
+        if url in self.url_filename_map:
+            return Image.open(os.path.join(self.cache_dir, self.url_filename_map[url]))
+
+        image_filename = url.split('/')[-1]
+        image_filepath = os.path.join(self.cache_dir, image_filename)
+        if os.path.exists(image_filepath):
+            self.url_filename_map[url] = image_filename
+            return Image.open(image_filepath)
+
+        image = download_image(url)
+        self.url_filename_map[url] = image_filename
+        image.save(image_filepath)
+        return image
 
 
 def download_image(url: str) -> Image.Image:
@@ -29,7 +59,6 @@ def download_image(url: str) -> Image.Image:
 
     else:
         raise HTTPError(f"Failed to download image: {response.status_code}")
-        return None
 
 
 def load_huggingface_dataset(

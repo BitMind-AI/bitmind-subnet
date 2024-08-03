@@ -43,6 +43,8 @@ VALIDATOR_MODEL_META = {
 }
 
 HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
+URL_IMAGE_CACHE_DIR = os.path.expanduser('~/.cache/url_images')
+
 
 TARGET_IMAGE_SIZE = (256, 256)
 

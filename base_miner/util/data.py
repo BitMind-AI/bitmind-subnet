@@ -3,9 +3,12 @@ import torchvision.transforms as transforms
 
 from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META
+from bitmind.constants import DATASET_META, URL_IMAGE_CACHE_DIR
 
-def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]:
+
+def load_and_split_datasets(
+        dataset_meta: list,
+        url_image_cache_dir: str = URL_IMAGE_CACHE_DIR) -> Dict[str, List[ImageDataset]]:
     """
     Helper function to load and split dataset into train, validation, and test sets.
 
@@ -33,7 +36,8 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
             huggingface_datset_split=None,
             huggingface_datset_name=meta.get('name', None),
             create_splits=True, # dataset.dataset == (train, val, test) splits from load_huggingface_dataset(...)
-            download_mode=meta.get('download_mode', None)
+            download_mode=meta.get('download_mode', None),
+            url_image_cache_dir=url_image_cache_dir
         )
         
         train_ds, val_ds, test_ds = dataset.dataset
@@ -58,6 +62,7 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
         print(f'done, {split_lengths}')
 
     return datasets
+
 
 def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
         Dict[str, List[ImageDataset]],

@@ -4,7 +4,11 @@ from io import BytesIO
 import bittensor as bt
 import numpy as np
 
-from bitmind.utils.data import load_huggingface_dataset, download_image
+from bitmind.utils.data import (
+    load_huggingface_dataset,
+    download_image,
+    UrlImageCache
+)
 
 
 class ImageDataset:
@@ -15,7 +19,8 @@ class ImageDataset:
         huggingface_datset_split: str = 'train',
         huggingface_datset_name: str = None,
         create_splits: bool = False,
-        download_mode: str = None
+        download_mode: str = None,
+        url_image_cache_dir: str = None
     ):
         """
         Args:
@@ -31,6 +36,8 @@ class ImageDataset:
                 randomly.
             download_mode (str): Download mode for the dataset (default: None).
                 can be None or "force_redownload"
+            url_image_cache_dir (str): Set to enable caching of images from datasets that store urls intead of
+                images. Downloaded images will be cached to this directory and loaded from here for subsequent access
         """
         self.huggingface_dataset_path = huggingface_dataset_path
         self.huggingface_datset_name = huggingface_datset_name
@@ -40,6 +47,11 @@ class ImageDataset:
             huggingface_datset_name,
             create_splits,
             download_mode)
+
+        self.url_image_cache = None
+        if url_image_cache_dir is not None:
+            self.url_image_cache = UrlImageCache(url_image_cache_dir)
+
         self.sampled_images_idx = []
 
     def __getitem__(self, index: int) -> dict:
@@ -81,8 +93,12 @@ class ImageDataset:
         sample = self.dataset[int(index)]
         if 'url' in sample or 'image_url' in sample:
             key = 'url' if 'url' in sample else 'image_url'
-            image = download_image(sample[key])
             image_id = sample[key]
+            if self.url_image_cache is None:
+                image = download_image(sample[key])
+            else:
+                image = self.url_image_cache[sample[key]]
+
         elif 'image' in sample:
             if isinstance(sample['image'], Image.Image):
                 image = sample['image']
@@ -109,9 +125,8 @@ class ImageDataset:
             err_prefix = f"ImageDataset: {self.huggingface_dataset_path}"
             raise NotImplementedError(f"{err_prefix}: Must contain one of the folowing keys ('image', 'image_url', 'url' ). Keys found : {sample.keys()}")
 
-        # emove alpha channel if download didnt 404
-        if image is not None:
-            image = image.convert('RGB')
+        # remove alpha channel/convert grayscale to RGB
+        image = image.convert('RGB')
 
         return {
             'image': image,

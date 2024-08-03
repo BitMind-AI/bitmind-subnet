@@ -41,18 +41,31 @@ class RealFakeDataset:
         Returns:
             tuple: Tuple containing the image and its label.
         """
-        if len(self._history['index']) > index:
-            self.reset()
+        #if len(self._history['index']) > index:
+        #    self.reset()
 
-        if np.random.rand() > self.fake_prob:
-            datasets = self.fake_image_datasets
-            label = 1
+        if index in self._history['index']:
+            source = self._history['source'][index]
+            label = self._history['label'][index]
+            # Update index to account for potential download failures in previous epochs
+            # if a download failed, the current index maps to a working index in the
+            # current dataset
+            index = self._history['index'][index]
         else:
-            datasets = self.real_image_datasets
-            label = 0
+            if np.random.rand() > self.fake_prob:
+                datasets = self.fake_image_datasets
+                label = 1
+            else:
+                datasets = self.real_image_datasets
+                label = 0
+            source = datasets[np.random.randint(0, len(datasets))]
 
-        source = datasets[np.random.randint(0, len(datasets))]
         try:
+            # this image index may have been updated at the beginning of this function to
+            # account for failed downloads for url datasets. If this is the first time
+            # accessing this index for a url dataset, a download will be attempted before
+            # falling back to a random sample. The index that gave a successful download will
+            # be tracked in self._history for access in subsequent epochs
             image = source[index]['image']
         except Exception as e:
             print(e)
@@ -70,7 +83,7 @@ class RealFakeDataset:
                 image = self.transforms(image)
         except Exception as e:
             print(e)
-            print(source.huggingface_dataset_path, index)
+            print("RealFakeDataset: Error transforming image", source.huggingface_dataset_path, index)
 
         return image, label
 
