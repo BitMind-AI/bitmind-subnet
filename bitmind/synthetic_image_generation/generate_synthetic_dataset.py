@@ -154,14 +154,14 @@ def slice_dataset(dataset, start_index, end_index=None):
     else:
         return dataset.select(range(start_index, len(dataset)))
 
-def save_as_json(dataset, output_dir):
-    os.makedirs(output_dir, exist_ok=True)  # Ensure directory exists
-    # Iterate through each record in the dataset
-    for i, record in enumerate(dataset):
-        file_path = os.path.join(output_dir, f"{i}.json")
-        # Write the record as a JSON file
+def save_as_json(df, output_dir):
+    os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+    # Iterate through rows in dataframe
+    for index, row in df.iterrows():
+        file_path = os.path.join(output_dir, f"{row['id']}.json")
+        # Convert the row to a dictionary and save it as JSON
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(record, f, ensure_ascii=False, indent=4)
+            json.dump(row.to_dict(), f, ensure_ascii=False, indent=4)
 
 def generate_and_save_annotations(dataset, dataset_name, synthetic_image_generator, annotations_dir, batch_size=16):
     annotations_batch = []
@@ -288,7 +288,6 @@ def main():
             # Ensure the index is of integer type and sort by it
             df_annotations['id'] = df_annotations['id'].astype(int)
             df_annotations.sort_values('id', inplace=True)
-            print(df_annotations)
             # Slice specified chunk
             annotations_chunk = df_annotations.iloc[args.start_index:args.end_index]
             all_annotations = None
