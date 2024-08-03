@@ -286,8 +286,8 @@ def main():
             all_annotations = load_dataset(hf_annotations_name, split='train', keep_in_memory=False)
             df_annotations = pd.DataFrame(all_annotations)
             # Ensure the index is of integer type and sort by it
-            df_annotations['index'] = df_annotations['index'].astype(int)
-            df_annotations.sort_values('index', inplace=True)
+            df_annotations['id'] = df_annotations['id'].astype(int)
+            df_annotations.sort_values('id', inplace=True)
             print(df_annotations)
             # Slice specified chunk
             annotations_chunk = df_annotations.iloc[args.start_index:args.end_index]
