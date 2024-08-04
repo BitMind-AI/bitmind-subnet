@@ -133,7 +133,7 @@ def save_json_files(json_filenames, annotations_dir, synthetic_image_generator, 
         filename = f"{name}.png"
         file_path = os.path.join(synthetic_images_dir, filename)
         if resize:
-            synthetic_image = resize_image(synthetic_image, TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
+            synthetic_image = resize_image(synthetic_image['image'], TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
         synthetic_image['image'].save(file_path)
         total_images += 1
     return total_images
@@ -243,8 +243,10 @@ def main():
         synthetic_image_generator.clear_gpu()
     
     if args.resize_existing:
+        print(f"Resizing images in {synthetic_images_dir}.")
         resize_images_in_directory(synthetic_images_dir)
-        hf_synthetic_image_name += f"___{TARGET_IMAGE_SIZE[0]}"
+        hf_synthetic_images_name += f"___{TARGET_IMAGE_SIZE[0]}"
+        print(f"Done resizing existing images.")
 
     if args.upload_synthetic_images and args.hf_token:
         start_time = time.time()
