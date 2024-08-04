@@ -244,7 +244,7 @@ def main():
     
     if args.resize_existing:
         resize_images_in_directory(synthetic_images_dir)
-        hf_synthetic_image_name += "___{TARGET_IMAGE_SIZE[0]}"
+        hf_synthetic_image_name += f"___{TARGET_IMAGE_SIZE[0]}"
 
     if args.upload_synthetic_images and args.hf_token:
         start_time = time.time()
