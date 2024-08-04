@@ -81,8 +81,8 @@ def parse_arguments():
     parser.add_argument('--hf_token', type=str, default=None, help='Token for uploading to Hugging Face.')
     parser.add_argument('--start_index', type=int, default=0, required=True, help='Start index for processing the dataset. Default to the first index.')
     parser.add_argument('--end_index', type=int, default=None, required=True, help='End index for processing the dataset. Default to the last index.')
-    parser.add_argument('--resize', type=bool, default=True, required=True, help='Resize to target image size from BitMind constants.')
-    parser.add_argument('--resize_existing', type=bool, default=False, required=False, help='Resize existinng image files.')
+    parser.add_argument('--no-resize', action='store_false', dest='resize', help='Do not resize to target image size from BitMind constants.')
+    parser.add_argument('--resize_existing', action='store_true', default=False, required=False, help='Resize existing image files.')
     return parser.parse_args()
 
 
