@@ -46,6 +46,7 @@ def load_and_split_datasets(
             # Create a new ImageDataset instance without calling __init__
             # This avoids calling load_huggingface_dataset(...) and redownloading
             split_dataset = ImageDataset.__new__(ImageDataset)
+            split_dataset.url_image_cache = dataset.url_image_cache
 
             # Assign the appropriate split data
             split_dataset.dataset = data
