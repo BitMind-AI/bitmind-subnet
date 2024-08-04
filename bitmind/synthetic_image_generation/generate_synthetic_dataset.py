@@ -2,23 +2,27 @@ import argparse
 import logging
 import json
 import os
-import sys
 import torch
 import time
 from pathlib import Path
 import pandas as pd
 from math import ceil
+from PIL import Image
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 from datasets import load_dataset
-from huggingface_hub import HfApi
 
 from synthetic_image_generator import SyntheticImageGenerator
 from bitmind.image_dataset import ImageDataset
-from bitmind.utils.data import load_huggingface_dataset
+from bitmind.constants import TARGET_IMAGE_SIZE
+from utils.hugging_face_utils import (
+    dataset_exists_on_hf, load_and_sort_dataset, upload_to_huggingface, 
+    slice_dataset, save_as_json
+)
+from utils.image_utils import resize_image, resize_images_in_directory
 
 PROGRESS_INCREMENT = 10
 
@@ -30,7 +34,7 @@ def parse_arguments():
     Before running, authenticate with command line to upload to Hugging Face:
     huggingface-cli login
     
-    Don't add token as Git credential.
+    Do not add token as Git credential.
 
     Example Usage:
 
@@ -77,91 +81,10 @@ def parse_arguments():
     parser.add_argument('--hf_token', type=str, default=None, help='Token for uploading to Hugging Face.')
     parser.add_argument('--start_index', type=int, default=0, required=True, help='Start index for processing the dataset. Default to the first index.')
     parser.add_argument('--end_index', type=int, default=None, required=True, help='End index for processing the dataset. Default to the last index.')
-
+    parser.add_argument('--resize', type=bool, default=True, required=True, help='Resize to target image size from BitMind constants.')
+    parser.add_argument('--resize_existing', type=bool, default=False, required=False, help='Resize existinng image files.')
     return parser.parse_args()
 
-def dataset_exists_on_hf(hf_dataset_name, token):
-    """Check if the dataset exists on Hugging Face."""
-    api = HfApi()
-    try:
-        dataset_info = api.dataset_info(hf_dataset_name, token=token)
-        return True
-    except Exception as e:
-        return False
-
-def numerical_sort(value):
-    return int(os.path.splitext(os.path.basename(value))[0])
-
-def load_and_sort_dataset(data_dir, file_type):
-    # Get list of filenames in the directory with the given extension
-    try:
-        if file_type == 'image':
-            # List image filenames with common image extensions
-            valid_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif')
-            filenames = [os.path.join(data_dir, f) for f in os.listdir(data_dir)
-                         if f.lower().endswith(valid_extensions)]
-        elif file_type == 'json':
-            # List json filenames
-            filenames = [os.path.join(data_dir, f) for f in os.listdir(data_dir)
-                         if f.lower().endswith('.json')]
-        else:
-            raise ValueError(f"Unsupported file type: {file_type}")
-
-        if not filenames:
-            raise FileNotFoundError(f"No files with the extension '{file_type}' \
-                                    found in directory '{data_dir}'")
-    
-        # Sort filenames numerically (0, 1, 2, 3, 4). Necessary because
-        # HF datasets are ordered by string (0, 1, 10, 11, 12). 
-        sorted_filenames = sorted(filenames, key=numerical_sort)
-        
-        # Load the dataset with sorted filenames
-        if file_type == 'image':
-            return load_dataset("imagefolder", data_files=sorted_filenames)
-        elif file_type == 'json':
-            return load_dataset("json", data_files=sorted_filenames)
-        
-    except Exception as e:
-        print(f"Error loading dataset: {e}")
-        return None
-    
-def upload_to_huggingface(dataset, repo_name, token):
-    """Uploads the dataset dictionary to Hugging Face."""
-    api = HfApi()
-    api.create_repo(repo_name, repo_type="dataset", private=False, token=token)
-    dataset.push_to_hub(repo_name)
-
-def upload_to_huggingface(dataset, repo_name, token):
-    """Uploads the dataset dictionary to Hugging Face."""
-    api = HfApi()
-    api.create_repo(repo_name, repo_type="dataset", private=False, token=token)
-    dataset.push_to_hub(repo_name)
-
-def slice_dataset(dataset, start_index, end_index=None):
-    """
-    Slice the dataset according to provided start and end indices.
-
-    Parameters:
-    dataset (Dataset): The dataset to be sliced.
-    start_index (int): The index of the first element to include in the slice.
-    end_index (int, optional): The index of the last element to include in the slice. If None, slices to the end of the dataset.
-
-    Returns:
-    Dataset: The sliced dataset.
-    """
-    if end_index is not None and end_index < len(dataset):
-        return dataset.select(range(start_index, end_index))
-    else:
-        return dataset.select(range(start_index, len(dataset)))
-
-def save_as_json(df, output_dir):
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
-    # Iterate through rows in dataframe
-    for index, row in df.iterrows():
-        file_path = os.path.join(output_dir, f"{row['id']}.json")
-        # Convert the row to a dictionary and save it as JSON
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(row.to_dict(), f, ensure_ascii=False, indent=4)
 
 def generate_and_save_annotations(dataset, dataset_name, synthetic_image_generator, annotations_dir, batch_size=16):
     annotations_batch = []
@@ -197,23 +120,28 @@ def generate_and_save_annotations(dataset, dataset_name, synthetic_image_generat
     print(f"All {image_count} annotations generated and saved in {duration:.2f} seconds.")
     print(f"Mean annotation generation time: {duration/image_count:.2f} seconds if any.")
 
-def save_images_to_disk(image_dataset, start_index, num_images, save_directory):
-    if not os.path.exists(save_directory):
-        os.makedirs(save_directory)
 
-    for i in range(start_index, start_index + num_images):
-        try:
-            image_data = image_dataset[i]  # Retrieve image using the __getitem__ method
-            image = image_data['image']  # Extract the image
-            image_id = image_data['id']  # Extract the image ID
-            file_path = os.path.join(save_directory, f"{image_id}.jpg")  # Construct file path
-            image.save(file_path, 'JPEG')  # Save the image
-            print(f"Saved: {file_path}")
-        except Exception as e:
-            print(f"Failed to save image {i}: {e}")
+def save_json_files(json_filenames, annotations_dir, synthetic_image_generator, synthetic_images_dir, resize=True):
+    total_images = 0
+    for json_filename in json_filenames:
+        json_path = os.path.join(annotations_dir, json_filename)
+        with open(json_path, 'r') as file:
+            annotation = json.load(file)
+        prompt = annotation['description']
+        name = annotation['id']
+        synthetic_image = synthetic_image_generator.generate_image(prompt, name=name)
+        filename = f"{name}.png"
+        file_path = os.path.join(synthetic_images_dir, filename)
+        if resize:
+            synthetic_image = resize_image(synthetic_image, TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
+        synthetic_image['image'].save(file_path)
+        total_images += 1
+    return total_images
+
 
 def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, 
-                                       synthetic_images_dir, start_index, end_index, batch_size=16):
+                                       synthetic_images_dir, start_index, end_index, 
+                                       batch_size=16, resize=True):
     start_time = time.time()
     total_images = 0
 
@@ -237,17 +165,9 @@ def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generato
     with torch.no_grad():  # Use no_grad to reduce memory usage during inference
         for i in range(0, total_valid_files, batch_size):
             batch_files = valid_files[i:i+batch_size]
-            for json_filename in batch_files:
-                json_path = os.path.join(annotations_dir, json_filename)
-                with open(json_path, 'r') as file:
-                    annotation = json.load(file)
-                prompt = annotation['description']
-                name = annotation['id']
-                synthetic_image = synthetic_image_generator.generate_image(prompt, name=name)
-                filename = f"{name}.png"
-                file_path = os.path.join(synthetic_images_dir, filename)
-                synthetic_image['image'].save(file_path)
-                total_images += 1
+            total_images += save_json_files(batch_files, annotations_dir, 
+                                            synthetic_image_generator, synthetic_images_dir,
+                                            resize)
 
             if i % progress_interval == 0 or total_images >= total_valid_files:
                 print(f"Progress: {total_images}/{total_valid_files} images generated \
@@ -299,7 +219,6 @@ def main():
     else:
         print("Generating new annotations.")
         all_images = ImageDataset(hf_dataset_name, 'train')
-        #save_images_to_disk(all_images, 0, 10, real_image_samples_dir)
         images_chunk = slice_dataset(all_images.dataset, start_index=args.start_index, end_index=args.end_index)
         all_images = None
         generate_and_save_annotations(images_chunk, hf_dataset_name, synthetic_image_generator, annotations_dir, batch_size=batch_size)
@@ -319,9 +238,13 @@ def main():
         synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
         generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator,
                                            synthetic_images_dir, args.start_index, args.end_index,
-                                           batch_size=batch_size)
+                                           batch_size=batch_size, resize=args.resize)
     
         synthetic_image_generator.clear_gpu()
+    
+    if args.resize_existing:
+        resize_images_in_directory(synthetic_images_dir)
+        hf_synthetic_image_name += "___256"
 
     if args.upload_synthetic_images and args.hf_token:
         start_time = time.time()
