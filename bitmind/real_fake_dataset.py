@@ -24,11 +24,7 @@ class RealFakeDataset:
         self.transforms = transforms
         self.fake_prob = fake_prob
 
-        self._history = {
-            'source': [],
-            'index': [],
-            'label': [],
-        }
+        self._history = {}
 
     def __getitem__(self, index: int) -> tuple:
         """
@@ -41,16 +37,16 @@ class RealFakeDataset:
         Returns:
             tuple: Tuple containing the image and its label.
         """
-        #if len(self._history['index']) > index:
-        #    self.reset()
-
-        if index in self._history['index']:
-            source = self._history['source'][index]
-            label = self._history['label'][index]
+        if index in self._history:
+            label = self._history[index]['label']
+            datasets = self.real_image_datasets if label == 0 else self.fake_image_datasets
+            for ds in datasets:
+                if ds.huggingface_dataset_path == self._history[index]['source']:
+                    source = ds
             # Update index to account for potential download failures in previous epochs
             # if a download failed, the current index maps to a working index in the
             # current dataset
-            index = self._history['index'][index]
+            index = self._history[index]['sampled_index']
         else:
             if np.random.rand() > self.fake_prob:
                 datasets = self.fake_image_datasets
@@ -59,6 +55,10 @@ class RealFakeDataset:
                 datasets = self.real_image_datasets
                 label = 0
             source = datasets[np.random.randint(0, len(datasets))]
+            self._history[index] = {
+                'label': label,
+                'source': source.huggingface_dataset_path
+            }
 
         try:
             # this image index may have been updated at the beginning of this function to
@@ -67,16 +67,13 @@ class RealFakeDataset:
             # falling back to a random sample. The index that gave a successful download will
             # be tracked in self._history for access in subsequent epochs
             image = source[index]['image']
+            self._history[index]['sampled_index'] = index
         except Exception as e:
             print(e)
             print(f"Error sampling image index {index} from dataset {source}, performing random sample instead")
             imgs, idx = source.sample(1)
             image = imgs[0]['image']
-            index = idx[0]
-
-        self._history['source'].append(source.huggingface_dataset_path)
-        self._history['label'].append(label)
-        self._history['index'].append(index)
+            self._history[index]['sampled_index'] = idx[0]
 
         try:
             if self.transforms is not None:
@@ -98,10 +95,3 @@ class RealFakeDataset:
         real_dataset_min = min([len(ds) for ds in self.real_image_datasets])
         fake_dataset_min = min([len(ds) for ds in self.fake_image_datasets])
         return min(fake_dataset_min, real_dataset_min)
-
-    def reset(self):
-        self._history = {
-            'source': [],
-            'index': [],
-            'label': [],
-        }
