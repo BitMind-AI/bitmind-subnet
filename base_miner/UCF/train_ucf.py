@@ -30,6 +30,14 @@ from dataset import *
 from metrics.utils import parse_metric_for_print
 from logger import create_logger, RankFilter
 
+# BitMind imports (not from original Deepfake Bench repo)
+
+from tensorboardX import SummaryWriter
+from validate import validate
+from torch.utils.data import DataLoader
+
+from bitmind.image_transforms import base_transforms, random_aug_transforms
+from util.data import load_datasets, create_real_fake_datasets
 
 parser = argparse.ArgumentParser(description='Process some paths.')
 parser.add_argument('--detector_path', type=str,
@@ -54,100 +62,24 @@ def init_seed(config):
         torch.manual_seed(config['manualSeed'])
         torch.cuda.manual_seed_all(config['manualSeed'])
 
+def prepare_datasets():
+    real_datasets, fake_datasets = load_datasets()
+    train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
+        real_datasets,
+        fake_datasets,
+        train_transforms=random_aug_transforms,
+        val_transforms=base_transforms,
+        test_transforms=base_transforms
+    )
 
-def prepare_training_data(config):
-    # Only use the blending dataset class in training
-    if 'dataset_type' in config and config['dataset_type'] == 'blend':
-        if config['model_name'] == 'facexray':
-            train_set = FFBlendDataset(config)
-        elif config['model_name'] == 'fwa':
-            train_set = FWABlendDataset(config)
-        elif config['model_name'] == 'sbi':
-            train_set = SBIDataset(config, mode='train')
-        elif config['model_name'] == 'lsda':
-            train_set = LSDADataset(config, mode='train')
-        else:
-            raise NotImplementedError(
-                'Only facexray, fwa, sbi, and lsda are currently supported for blending dataset'
-            )
-    elif 'dataset_type' in config and config['dataset_type'] == 'pair':
-        train_set = pairDataset(config, mode='train')  # Only use the pair dataset class in training
-    elif 'dataset_type' in config and config['dataset_type'] == 'iid':
-        train_set = IIDDataset(config, mode='train')
-    elif 'dataset_type' in config and config['dataset_type'] == 'I2G':
-        train_set = I2GDataset(config, mode='train')
-    elif 'dataset_type' in config and config['dataset_type'] == 'lrl':
-        train_set = LRLDataset(config, mode='train')
-    else:
-        train_set = DeepfakeAbstractBaseDataset(
-                    config=config,
-                    mode='train',
-                )
-    if config['model_name'] == 'lsda':
-        from dataset.lsda_dataset import CustomSampler
-        custom_sampler = CustomSampler(num_groups=2*360, n_frame_per_vid=config['frame_num']['train'], batch_size=config['train_batchSize'], videos_per_group=5)
-        train_data_loader = \
-            torch.utils.data.DataLoader(
-                dataset=train_set,
-                batch_size=config['train_batchSize'],
-                num_workers=int(config['workers']),
-                sampler=custom_sampler, 
-                collate_fn=train_set.collate_fn,
-            )
-    elif config['ddp']:
-        sampler = DistributedSampler(train_set)
-        train_data_loader = \
-            torch.utils.data.DataLoader(
-                dataset=train_set,
-                batch_size=config['train_batchSize'],
-                num_workers=int(config['workers']),
-                collate_fn=train_set.collate_fn,
-                sampler=sampler
-            )
-    else:
-        train_data_loader = \
-            torch.utils.data.DataLoader(
-                dataset=train_set,
-                batch_size=config['train_batchSize'],
-                shuffle=True,
-                num_workers=int(config['workers']),
-                collate_fn=train_set.collate_fn,
-                )
-    return train_data_loader
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=lambda d: tuple(d))
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=lambda d: tuple(d))
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=lambda d: tuple(d))
 
-
-def prepare_testing_data(config):
-    def get_test_data_loader(config, test_name):
-        # update the config dictionary with the specific testing dataset
-        config = config.copy()  # create a copy of config to avoid altering the original one
-        config['test_dataset'] = test_name  # specify the current test dataset
-        if not config.get('dataset_type', None) == 'lrl':
-            test_set = DeepfakeAbstractBaseDataset(
-                    config=config,
-                    mode='test',
-            )
-        else:
-            test_set = LRLDataset(
-                config=config,
-                mode='test',
-            )
-
-        test_data_loader = \
-            torch.utils.data.DataLoader(
-                dataset=test_set,
-                batch_size=config['test_batchSize'],
-                shuffle=False,
-                num_workers=int(config['workers']),
-                collate_fn=test_set.collate_fn,
-                drop_last = (test_name=='DeepFakeDetection'),
-            )
-
-        return test_data_loader
-
-    test_data_loaders = {}
-    for one_test_name in config['test_dataset']:
-        test_data_loaders[one_test_name] = get_test_data_loader(config, one_test_name)
-    return test_data_loaders
+    return train_loader, val_loader, test_loader
 
 
 def choose_optimizer(model, config):
@@ -207,7 +139,6 @@ def choose_scheduler(config, optimizer):
         )
     else:
         raise NotImplementedError('Scheduler {} is not implemented'.format(config['lr_scheduler']))
-
 
 def choose_metric(config):
     metric_scoring = config['metric_scoring']
@@ -269,11 +200,9 @@ def main():
             timeout=timedelta(minutes=30)
         )
         logger.addFilter(RankFilter(0))
-    # prepare the training data loader
-    train_data_loader = prepare_training_data(config)
 
-    # prepare the testing data loader
-    test_data_loaders = prepare_testing_data(config)
+    # prepare the data loaders
+    train_loader, val_loader, test_loader = prepare_datasets()
 
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
@@ -296,8 +225,8 @@ def main():
         trainer.model.epoch = epoch
         best_metric = trainer.train_epoch(
                     epoch=epoch,
-                    train_data_loader=train_data_loader,
-                    test_data_loaders=test_data_loaders,
+                    train_data_loader=train_loader,
+                    test_data_loaders={'val': val_loader, 'test': test_loader},
                 )
         if best_metric is not None:
             logger.info(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
@@ -311,7 +240,6 @@ def main():
     # close the tensorboard writers
     for writer in trainer.writers.values():
         writer.close()
-
 
 
 if __name__ == '__main__':
