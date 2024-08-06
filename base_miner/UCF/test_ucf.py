@@ -14,8 +14,15 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from detectors import DETECTOR
 import yaml
+import cv2
+import dlib
+from preprocessing.preprocess import extract_aligned_face_dlib
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+SHAPE_PREDICTOR_PATH = './dlib_tools/shape_predictor_81_face_landmarks.dat'
+face_detector = dlib.get_frontal_face_detector()
+shape_predictor = dlib.shape_predictor(SHAPE_PREDICTOR_PATH)
 
 WEIGHTS_DIR = "./weights/"
 HUGGING_FACE_REPO_NAME = "bitmind/ucf"
@@ -76,12 +83,19 @@ def load_model(config, weights_path):
 def preprocess(image, device):
     """ Preprocess the image for model inference. """
     image = image.convert('RGB')
+    aligned_image, _, _ = extract_aligned_face_dlib(face_detector, shape_predictor, image)
+    if aligned_image is not None:
+        aligned_image.show()
+    else:
+        print("No face detected.")
+
     transform = transforms.Compose([
+        transforms.resize((256, 256)),
         transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        # Normalizes each channel according to ImageNet statistics
     ])
     image_tensor = transform(image).unsqueeze(0)
+
     return image_tensor.to(device)
 
 def infer(image_tensor, model):
