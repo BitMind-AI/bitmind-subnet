@@ -1,5 +1,5 @@
 # log dir 
-log_dir: /data/home/zhiyuanyan/DeepfakeBench/debug_logs/ucf
+log_dir: ../debug_logs/ucf
 
 # model setting
 pretrained: ../weights/xception_best.pth   # path to a pre-trained model, if using one
