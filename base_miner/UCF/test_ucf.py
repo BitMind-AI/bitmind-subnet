@@ -76,9 +76,9 @@ def load_model(config, weights_path):
         print('Failed to load the pretrained weights.')
     return model
 
-def extract_aligned_face(image_path, res=256):
+def extract_aligned_face(image, res=256):
     # Load the image file into a numpy array
-    image = face_recognition.load_image_file(image_path)
+    image = face_recognition.load_image_file(image, mode='RGB')
 
     # Find all the faces and face landmarks in the image using the CNN model
     face_locations = face_recognition.face_locations(image, model="cnn")
@@ -123,7 +123,7 @@ def preprocess(image, device):
     """ Preprocess the image for model inference. """
     image = image.convert('RGB')
     #aligned_image, _, _ = extract_aligned_face_dlib(face_detector, shape_predictor, image)
-    aligned_image = extract_aligned_face()
+    aligned_image = extract_aligned_face(image)
     if aligned_image is not None:
         aligned_image.show()
     else:
