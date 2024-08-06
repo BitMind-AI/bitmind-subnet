@@ -28,6 +28,7 @@ class TestUCF(unittest.TestCase):
         image = Image.open(image_path)
         preprocessed_image = self.ucf.preprocess(image)
         output = self.ucf.infer(preprocessed_image)
+        print(f"output: {output}")
         self.assertIsNotNone(output, "Inference output should not be None")
 
 if __name__ == '__main__':

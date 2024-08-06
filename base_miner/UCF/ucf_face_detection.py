@@ -130,7 +130,7 @@ def preprocess(image, device):
         print("No face detected.")
 
     transform = transforms.Compose([
-        transforms.resize((256, 256)),
+        #transforms.resize((256, 256)),
         transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])

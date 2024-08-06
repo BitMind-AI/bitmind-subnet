@@ -3,6 +3,7 @@ import random
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
+from PIL import Image
 import yaml
 import logging
 from pathlib import Path
@@ -67,16 +68,24 @@ class UCF:
             logging.error('Failed to load the pretrained weights.')
         return model
     
-    def preprocess(self, image):
-        """ Preprocess the image for model inference. """
+    def preprocess(self, image, res=256):
+        """Preprocess the image for model inference."""
+        # Ensure image is in RGB format
         image = image.convert('RGB')
+        
+        # Resize the image using Lanczos resampling
+        image = image.resize((res, res), Image.LANCZOS)
+        
+        # Define the transformation pipeline
         transform = transforms.Compose([
-            transforms.resize((256, 256)),
             transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
+            # Use ImageNet mean and std since the backbone, Xception, was pretrained on it
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
-        image_tensor = transform(image).unsqueeze(0)
-
+        
+        # Apply transformations
+        image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
+    
         return image_tensor.to(self.device)
 
     def infer(self, image_tensor):
