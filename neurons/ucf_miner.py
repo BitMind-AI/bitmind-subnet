@@ -25,6 +25,12 @@ import time
 import typing
 import io
 import numpy as np
+import os
+import sys
+
+script_directory = os.path.dirname(os.path.realpath(__file__))
+detectors_path = os.path.join(script_directory, '../base_miner/UCF/detectors/')
+sys.path.append(detectors_path)
 
 from base_miner.UCF.pretrained_ucf import UCF
 from bitmind.base.miner import BaseMinerNeuron
