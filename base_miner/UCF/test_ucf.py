@@ -3,22 +3,45 @@
 """
 Evaluate a pretained DeepfakeBench model.
 """
+import os
 import random
 import argparse
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from detectors import DETECTOR
 import yaml
 
-# Parse command-line arguments
-parser = argparse.ArgumentParser(description='Evaluate a pretrained deepfake detection model.')
-parser.add_argument('--detector_path', type=str, default='./configs/ucf.yaml', help='Path to detector YAML configuration file.')
-parser.add_argument('--weights_path', type=str, default='./weights/ucf_best.pth', help='Path to the weights file.')
-args = parser.parse_args()
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+WEIGHTS_DIR = "./weights/"
+HUGGING_FACE_REPO_NAME = "bitmind/ucf"
+UCF_CHECKPOINT_NAME = "ucf_best.pth"
+BACKBONE_CHECKPOINT_NAME = "xception_best.pth"
+DETECTOR_CONFIG_PATH = "./configs/ucf.yaml"
+UCF_WEIGHTS_PATH = WEIGHTS_DIR + UCF_CHECKPOINT_NAME
+BACKBONE_WEIGHTS_PATH = WEIGHTS_DIR + BACKBONE_CHECKPOINT_NAME
+
+def ensure_weights_are_available(repo_name, model_filename, destination_path):
+    """
+    Ensures that model weights are available at the destination path.
+    If not, it downloads them from the Hugging Face repository.
+
+    Args:
+    repo_name (str): Name of the Hugging Face repository.
+    model_filename (str): Name of the model file in the repository.
+    destination_path (str): Local path to save the model weights.
+    """
+    if not os.path.exists(destination_path):
+        # Download the file and save it directly to the destination_path
+        model_path = hf_hub_download(repo_name, model_filename)
+        model = torch.load(model_path)  # Load the model weights from the downloaded path
+        torch.save(model, destination_path)  # Save it to the specified path
+        print(f"Downloaded {model_filename} to {destination_path}.")
+    else:
+        print(f"{model_filename} already present at {destination_path}.")
 
 def load_config(detector_path):
     """ Load configuration from YAML file. """
@@ -65,8 +88,12 @@ def infer(image_tensor, model):
     return probability
 
 def main():
+     # Check if the weights already exist, if not download them
+    ensure_weights_are_available(HUGGING_FACE_REPO_NAME, UCF_CHECKPOINT_NAME, UCF_WEIGHTS_PATH)
+    ensure_weights_are_available(HUGGING_FACE_REPO_NAME, BACKBONE_CHECKPOINT_NAME, BACKBONE_WEIGHTS_PATH)
+
     # parse args and load config
-    config = load_config(args.detector_path)
+    config = load_config(DETECTOR_CONFIG_PATH)
 
     # Set manual seed for reproducibility
     if config.get('manualSeed'):
@@ -76,7 +103,7 @@ def main():
     if config.get('cudnn'):
         cudnn.benchmark = True
 
-    model = load_model(config, args.weights_path)
+    model = load_model(config, UCF_WEIGHTS_PATH)
     image = Image.open("sample_images/fake.jpg")
     image_tensor = preprocess(image, device)
     probability = infer(image_tensor, model)
