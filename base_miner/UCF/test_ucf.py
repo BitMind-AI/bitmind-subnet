@@ -15,14 +15,10 @@ from PIL import Image
 from detectors import DETECTOR
 import yaml
 import cv2
-import dlib
-from preprocessing.preprocess import extract_aligned_face_dlib
+import face_recognition
+#from preprocessing.preprocess import extract_aligned_face_dlib
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-SHAPE_PREDICTOR_PATH = './dlib_tools/shape_predictor_81_face_landmarks.dat'
-face_detector = dlib.get_frontal_face_detector()
-shape_predictor = dlib.shape_predictor(SHAPE_PREDICTOR_PATH)
 
 WEIGHTS_DIR = "./weights/"
 HUGGING_FACE_REPO_NAME = "bitmind/ucf"
@@ -80,10 +76,54 @@ def load_model(config, weights_path):
         print('Failed to load the pretrained weights.')
     return model
 
+def extract_aligned_face(image_path, res=256):
+    # Load the image file into a numpy array
+    image = face_recognition.load_image_file(image_path)
+
+    # Find all the faces and face landmarks in the image using the CNN model
+    face_locations = face_recognition.face_locations(image, model="cnn")
+    face_landmarks_list = face_recognition.face_landmarks(image, model="small")
+
+    if not face_locations:
+        print("No faces detected.")
+        return None
+
+    # Taking the first face detected
+    top, right, bottom, left = face_locations[0]
+    face_image = image[top:bottom, left:right]
+    pil_image = Image.fromarray(face_image)
+
+    # Check if landmarks were detected for the first face
+    if face_landmarks_list:
+        face_landmarks = face_landmarks_list[0]
+
+        if 'left_eye' in face_landmarks and 'right_eye' in face_landmarks:
+            left_eye = face_landmarks['left_eye']
+            right_eye = face_landmarks['right_eye']
+
+            # Calculate the center of each eye
+            left_eye_center = np.mean(left_eye, axis=0).astype("int")
+            right_eye_center = np.mean(right_eye, axis=0).astype("int")
+
+            # Calculate the angle between the eye centroids
+            dy = right_eye_center[1] - left_eye_center[1]
+            dx = right_eye_center[0] - left_eye_center[0]
+            angle = np.degrees(np.arctan2(dy, dx)) - 180
+
+            # Rotate the image to align the eyes horizontally
+            pil_image = pil_image.rotate(-angle, expand=True)
+
+    # Resize the aligned image to the given resolution
+    pil_image = pil_image.resize((res, res), Image.LANCZOS)
+    pil_image.show()
+    return pil_image
+
+
 def preprocess(image, device):
     """ Preprocess the image for model inference. """
     image = image.convert('RGB')
-    aligned_image, _, _ = extract_aligned_face_dlib(face_detector, shape_predictor, image)
+    #aligned_image, _, _ = extract_aligned_face_dlib(face_detector, shape_predictor, image)
+    aligned_image = extract_aligned_face()
     if aligned_image is not None:
         aligned_image.show()
     else:
