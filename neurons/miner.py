@@ -25,7 +25,7 @@ import time
 import typing
 import io
 
-from base_miner.networks.resnet import resnet50
+from base_miner.NPR.networks.resnet import resnet50
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 from bitmind.miner.predict import predict

@@ -94,10 +94,10 @@ pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python
 
 ## Train
 
-To train a model, you can start with our base training script. If you prefer a notebook environment, you can use `base_miner/train_detector.ipynb`
+To train a model, you can start with our base training script. If you prefer a notebook environment, you can use `base_miner/NPR/train_detector.ipynb`
 
 ```python
-cd base_miner && python train_detector.py
+cd base_miner/NPR/ && python train_detector.py
 ```
 
 - The model with the lowest validation accuracy will be saved to `base_miner/checkpoints/<experiment_name>/model_epoch_best.pth`.<br>
