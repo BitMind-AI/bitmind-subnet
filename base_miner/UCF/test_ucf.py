@@ -77,7 +77,7 @@ def main():
         cudnn.benchmark = True
 
     model = load_model(config, args.weights_path)
-    image = Image.open("test_data/fake.jpg")
+    image = Image.open("sample_images/fake.jpg")
     image_tensor = preprocess(image, device)
     probability = infer(image_tensor, model)
     print(f"Probability that the image is a deepfake: {probability}")

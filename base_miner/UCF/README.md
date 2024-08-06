@@ -1,3 +1,7 @@
+## UCF
+
+This model has been adapted from [DeepfakeBench](https://github.com/SCLBD/DeepfakeBench).
+
 ## Setup Instructions
 
 1. **Download Model Weights**:
