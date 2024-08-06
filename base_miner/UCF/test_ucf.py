@@ -34,6 +34,10 @@ def ensure_weights_are_available(repo_name, model_filename, destination_path):
     model_filename (str): Name of the model file in the repository.
     destination_path (str): Local path to save the model weights.
     """
+    directory = os.path.dirname(destination_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+        print(f"Created directory {directory}.")
     if not os.path.exists(destination_path):
         # Download the file and save it directly to the destination_path
         model_path = hf_hub_download(repo_name, model_filename)
