@@ -9,6 +9,7 @@ import argparse
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
+import numpy as np
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from detectors import DETECTOR
@@ -83,13 +84,28 @@ def preprocess(image, device):
     image_tensor = transform(image).unsqueeze(0)
     return image_tensor.to(device)
 
-
 def infer(image_tensor, model):
     """ Perform inference using the model. """
     with torch.no_grad():
-        predictions = model({'image': image_tensor}, inference=True)
-        probability = predictions['prob'].squeeze().item()
-    return probability
+        model({'image': image_tensor}, inference=True)
+    return model.prob[-1]
+
+def process_images_in_folder(folder_path, model):
+    """Process all images in the specified folder and predict if they are deepfakes."""
+    images = [img for img in os.listdir(folder_path) if img.endswith('.jpg')]
+    results = {}
+    for image_name in images:
+        image_path = os.path.join(folder_path, image_name)
+        image = Image.open(image_path)
+        image_tensor = preprocess(image, device)
+        probability = infer(image_tensor, model)
+        results[image_name] = probability
+        rounded_prob = np.round(probability).astype(int)
+        classification = 'fake' if rounded_prob == 1 else 'real'
+        results[image_name] = (probability, classification)
+        print(f"Probability that {image_name} is a deepfake: {probability:.4f}\
+               - Classified as {classification}")
+    return results
 
 def main():
      # Check if the weights already exist, if not download them
@@ -108,10 +124,8 @@ def main():
         cudnn.benchmark = True
 
     model = load_model(config, UCF_WEIGHTS_PATH)
-    image = Image.open("sample_images/fake.jpg")
-    image_tensor = preprocess(image, device)
-    probability = infer(image_tensor, model)
-    print(f"Probability that the image is a deepfake: {probability}")
+    folder_path = "sample_images/"
+    process_images_in_folder(folder_path, model)
 
 if __name__ == '__main__':
     main()

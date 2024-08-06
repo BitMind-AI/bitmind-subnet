@@ -98,12 +98,14 @@ class UCFDetector(AbstractDetector):
         )
         
     def build_backbone(self, config):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        pretrained_path = os.path.join(current_dir, config['pretrained'])
         # prepare the backbone
         backbone_class = BACKBONE[config['backbone_name']]
         model_config = config['backbone_config']
         backbone = backbone_class(model_config)
         # if donot load the pretrained weights, fail to get good results
-        state_dict = torch.load(config['pretrained'])
+        state_dict = torch.load(pretrained_path)
         for name, weights in state_dict.items():
             if 'pointwise' in name:
                 state_dict[name] = weights.unsqueeze(-1).unsqueeze(-1)
@@ -247,20 +249,22 @@ class UCFDetector(AbstractDetector):
                 .cpu()
                 .numpy()
             )
-            self.label.append(
-                data_dict['label']
-                .detach()
-                .squeeze()
-                .cpu()
-                .numpy()
-            )
-            # deal with acc
-            _, prediction_class = torch.max(out_sha, 1)
-            common_label = (data_dict['label'] >= 1)
-            correct = (prediction_class == common_label).sum().item()
-            self.correct += correct
-            self.total += data_dict['label'].size(0)
 
+            if 'label'in data_dict:
+                self.label.append(
+                    data_dict['label']
+                    .detach()
+                    .squeeze()
+                    .cpu()
+                    .numpy()
+                )
+                # deal with acc
+                common_label = (data_dict['label'] >= 1)
+                correct = (prediction_class == common_label).sum().item()
+                self.correct += correct
+                self.total += data_dict['label'].size(0)
+
+            _, prediction_class = torch.max(out_sha, 1)
             pred_dict = {'cls': out_sha, 'feat': sha_feat}
             return  pred_dict
 
