@@ -1,7 +1,7 @@
 import os
 import argparse
 from os.path import join
-import cv2
+#import cv2
 import random
 import datetime
 import time
@@ -26,14 +26,11 @@ from optimizor.LinearLR import LinearDecayLR
 
 from trainer.trainer import Trainer
 from detectors import DETECTOR
-from dataset import *
+#from dataset import *
 from metrics.utils import parse_metric_for_print
 from logger import create_logger, RankFilter
 
 # BitMind imports (not from original Deepfake Bench repo)
-
-from tensorboardX import SummaryWriter
-from validate import validate
 from torch.utils.data import DataLoader
 
 from bitmind.image_transforms import base_transforms, random_aug_transforms
@@ -218,7 +215,7 @@ def main():
     metric_scoring = choose_metric(config)
 
     # prepare the trainer
-    trainer = Trainer(config, model, optimizer, scheduler, logger, metric_scoring)
+    trainer = Trainer(config, model, optimizer, scheduler, None, metric_scoring)
 
     # start training
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
@@ -226,10 +223,11 @@ def main():
         best_metric = trainer.train_epoch(
                     epoch=epoch,
                     train_data_loader=train_loader,
-                    test_data_loaders={'val': val_loader, 'test': test_loader},
+                    test_data_loaders={'test': test_loader},
                 )
         if best_metric is not None:
-            logger.info(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
+            print(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
+            #logger.info(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
     logger.info("Stop Training on best Testing metric {}".format(parse_metric_for_print(best_metric))) 
     # update
     if 'svdd' in config['model_name']:
