@@ -27,8 +27,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from sklearn import metrics
 from metrics.utils import get_test_metrics
 
-from bitmind.real_fake_dataset import RealFakeDataset
-
 FFpp_pool=['FaceForensics++','FF-DF','FF-F2F','FF-FS','FF-NT']#
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -422,8 +420,8 @@ class Trainer(object):
         keys = test_data_loaders.keys()
         for key in keys:
             # save the testing data_dict
-            data_dict = test_data_loaders[key].dataset.data_dict
-            self.save_data_dict('test', data_dict, key)
+            # data_dict = test_data_loaders[key].dataset.data_dict
+            # self.save_data_dict('test', data_dict, key)
 
             # compute loss for each dataset
             losses_one_dataset_recorder, predictions_nps, label_nps, feature_nps = self.test_one_dataset(test_data_loaders[key])
