@@ -164,3 +164,4 @@ data/
 checkpoints/
 .requirements_installed
 base_miner/UCF/weights/*
+base_miner/UCF/logs/*
