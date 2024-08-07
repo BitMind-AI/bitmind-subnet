@@ -38,7 +38,7 @@ from util.data import load_datasets, create_real_fake_datasets
 
 parser = argparse.ArgumentParser(description='Process some paths.')
 parser.add_argument('--detector_path', type=str,
-                    default='/data/home/zhiyuanyan/DeepfakeBenchv2/training/config/detector/sbi.yaml',
+                    default=os.getcwd() + '/config/ucf.yaml',
                     help='path to detector YAML file')
 parser.add_argument("--train_dataset", nargs="+")
 parser.add_argument("--test_dataset", nargs="+")
@@ -59,6 +59,22 @@ def init_seed(config):
         torch.manual_seed(config['manualSeed'])
         torch.cuda.manual_seed_all(config['manualSeed'])
 
+def custom_collate_fn(batch):
+    images, labels = zip(*batch)
+    
+    images = torch.stack(images, dim=0)  # Stack image tensors into a single tensor
+    labels = torch.LongTensor(labels) 
+    
+    data_dict = {
+        'image': images,
+        'label': labels,
+        'label_spe': labels,
+        'landmark': None,
+        'mask': None
+    }
+    
+    return data_dict
+
 def prepare_datasets():
     real_datasets, fake_datasets = load_datasets()
     train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
@@ -70,11 +86,11 @@ def prepare_datasets():
     )
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=lambda d: tuple(d))
+        train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=custom_collate_fn)
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=lambda d: tuple(d))
+        val_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=custom_collate_fn)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=lambda d: tuple(d))
+        test_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=custom_collate_fn)
 
     return train_loader, val_loader, test_loader
 
@@ -148,7 +164,7 @@ def main():
     # parse options and load config
     with open(args.detector_path, 'r') as f:
         config = yaml.safe_load(f)
-    with open('./training/config/train_config.yaml', 'r') as f:
+    with open(os.getcwd() + '/config/train_config.yaml', 'r') as f:
         config2 = yaml.safe_load(f)
     if 'label_dict' in config:
         config2['label_dict']=config['label_dict']
@@ -168,7 +184,10 @@ def main():
         config['dataset_json_folder'] = 'preprocessing/dataset_json_v3'
     # create logger
     timenow=datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    task_str = f"_{config['task_target']}" if config['task_target'] is not None else ""
+    task_str = ""
+    
+    if 'task_target' in config.keys():
+        task_str = f"_{config['task_target']}" if config['task_target'] is not None else ""
     logger_path =  os.path.join(
                 config['log_dir'],
                 config['model_name'] + task_str + '_' + timenow
@@ -198,13 +217,10 @@ def main():
         )
         logger.addFilter(RankFilter(0))
 
-    # prepare the data loaders
-    train_loader, val_loader, test_loader = prepare_datasets()
-
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
     model = model_class(config)
-
+    
     # prepare the optimizer
     optimizer = choose_optimizer(model, config)
 
@@ -215,19 +231,21 @@ def main():
     metric_scoring = choose_metric(config)
 
     # prepare the trainer
-    trainer = Trainer(config, model, optimizer, scheduler, None, metric_scoring)
+    trainer = Trainer(config, model, optimizer, scheduler, logger, metric_scoring)
+
+    # prepare the data loaders
+    train_loader, val_loader, test_loader = prepare_datasets()
 
     # start training
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
         trainer.model.epoch = epoch
         best_metric = trainer.train_epoch(
-                    epoch=epoch,
+                    epoch,
                     train_data_loader=train_loader,
                     test_data_loaders={'test': test_loader},
                 )
         if best_metric is not None:
-            print(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
-            #logger.info(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
+            logger.info(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
     logger.info("Stop Training on best Testing metric {}".format(parse_metric_for_print(best_metric))) 
     # update
     if 'svdd' in config['model_name']:

@@ -27,6 +27,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from sklearn import metrics
 from metrics.utils import get_test_metrics
 
+from bitmind.real_fake_dataset import RealFakeDataset
+
 FFpp_pool=['FaceForensics++','FF-DF','FF-F2F','FF-FS','FF-NT']#
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -192,7 +194,6 @@ class Trainer(object):
                     self.optimizer.second_step(zero_grad=True)
             return losses_first, pred_first
         else:
-
             predictions = self.model(data_dict)
             if type(self.model) is DDP:
                 losses = self.model.module.get_losses(data_dict, predictions)
@@ -202,9 +203,7 @@ class Trainer(object):
             losses['overall'].backward()
             self.optimizer.step()
 
-
             return losses,predictions
-
 
     def train_epoch(
         self,
@@ -226,8 +225,9 @@ class Trainer(object):
         step_cnt = epoch * len(train_data_loader)
 
         # save the training data_dict
-        data_dict = train_data_loader.dataset.data_dict
-        self.save_data_dict('train', data_dict, ','.join(self.config['train_dataset']))
+        # data_dict = train_data_loader.dataset.data_dict
+        # self.save_data_dict('train', data_dict, ','.join(self.config['train_dataset']))
+        
         # define training recorder
         train_recorder_loss = defaultdict(Recorder)
         train_recorder_metric = defaultdict(Recorder)
@@ -288,8 +288,6 @@ class Trainer(object):
                     writer = self.get_writer('train', ','.join(self.config['train_dataset']), k)
                     writer.add_scalar(f'train_metric/{k}', v_avg, global_step=step_cnt)
                 self.logger.info(metric_str)
-
-
 
                 # clear recorder.
                 # Note we only consider the current 300 samples for computing batch-level loss/metric
@@ -410,6 +408,7 @@ class Trainer(object):
             writer.add_scalar(f'test_metrics/acc_real', acc_real, global_step=step)
             writer.add_scalar(f'test_metrics/acc_fake', acc_fake, global_step=step)
         self.logger.info(metric_str)
+
     def test_epoch(self, epoch, iteration, test_data_loaders, step):
         # set model to eval mode
         self.setEval()
