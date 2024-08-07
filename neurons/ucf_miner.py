@@ -36,8 +36,8 @@ from base_miner.UCF.pretrained_ucf import UCF
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 
-UCF_CONFIG_PATH = "../base_miner/UCF/config/ucf.yaml"
-UCF_WEIGHTS_PATH = "../base_miner/UCF/weights/"
+UCF_CONFIG_PATH = "./base_miner/UCF/config/ucf.yaml"
+UCF_WEIGHTS_PATH = "./base_miner/UCF/weights/"
 
 class Miner(BaseMinerNeuron):
 

@@ -8,7 +8,7 @@ import yaml
 import logging
 from pathlib import Path
 from huggingface_hub import hf_hub_download
-from detectors import DETECTOR
+from base_miner.detectors import DETECTOR
 
 class UCF:
     def __init__(self, config_path="./config/ucf.yaml", weights_dir="./weights/", weights_hf_repo_name="bitmind/ucf"):

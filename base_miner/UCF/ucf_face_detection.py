@@ -123,11 +123,11 @@ def preprocess(image, device):
     """ Preprocess the image for model inference. """
     image = image.convert('RGB')
     #aligned_image, _, _ = extract_aligned_face_dlib(face_detector, shape_predictor, image)
-    aligned_image = extract_aligned_face(image)
-    if aligned_image is not None:
-        aligned_image.show()
-    else:
-        print("No face detected.")
+    # aligned_image = extract_aligned_face(image)
+    # if aligned_image is not None:
+    #     aligned_image.show()
+    # else:
+    #     print("No face detected.")
 
     transform = transforms.Compose([
         #transforms.resize((256, 256)),
