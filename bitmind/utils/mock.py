@@ -1,10 +1,92 @@
 import time
-
 import asyncio
 import random
 import bittensor as bt
-
+import numpy as np
 from typing import List
+from PIL import Image
+
+from bitmind.constants import DIFFUSER_NAMES
+
+
+def get_mock_image():
+    random_data = np.random.randint(0, 256, (512, 512, 3), dtype=np.uint8)
+    return Image.fromarray(random_data)
+
+
+class MockImageDataset:
+    def __init__(
+            self,
+            huggingface_dataset_path: str,
+            huggingface_datset_split: str = 'train',
+            huggingface_datset_name: str = None,
+            create_splits: bool = False,
+            download_mode: str = None):
+
+        self.huggingface_dataset_path = huggingface_dataset_path
+        self.huggingface_datset_name = huggingface_datset_name
+        self.dataset = ""
+        self.sampled_images_idx = []
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            'image': get_mock_image(),
+            'id': index,
+            'source': self.huggingface_dataset_path
+        }
+
+    def sample(self, k=1):
+        return [self.__getitem__(i) for i in range(k)], [i for i in range(k)]
+
+
+class MockSyntheticImageGenerator:
+    def __init__(self, prompt_type, use_random_diffuser, diffuser_name):
+        self.prompt_type = prompt_type
+        self.diffuser_name = diffuser_name
+        self.use_random_diffuser = use_random_diffuser
+
+    def generate(self, k=1, real_images=None):
+        if self.use_random_diffuser:
+            self.load_diffuser('random')
+        else:
+            self.load_diffuser(self.diffuser_name)
+
+        return [{
+            'prompt': f'mock {self.prompt_type} prompt',
+            'image': get_mock_image(),
+            'id': i
+        } for i in range(k)]
+
+    def load_diffuser(self, diffuser_name) -> None:
+        """
+        loads a huggingface diffuser model.
+        """
+        if diffuser_name == 'random':
+            diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
+        self.diffuser_name = diffuser_name
+
+
+class MockValidator:
+    def __init__(self, config):
+        self.config = config
+        self.metagraph = MockMetagraph(
+            netuid=34,
+            subtensor=MockSubtensor(netuid=34, wallet=bt.MockWallet())
+        )
+        self.dendrite = MockDendrite(bt.MockWallet())
+        self.real_image_datasets = [
+            MockImageDataset(
+                f"fake-path/dataset-{i}",
+                'train',
+                None,
+                False)
+            for i in range(3)
+        ]
+        self.synthetic_image_generator = MockSyntheticImageGenerator(
+            prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
+
+    def update_scores(self, rewards, miner_uids):
+        pass
 
 
 class MockSubtensor(bt.MockSubtensor):
@@ -87,12 +169,12 @@ class MockDendrite(bt.dendrite):
                     s.dendrite.process_time = str(time.time() - start_time)
                     # Update the status code and status message of the dendrite to match the axon
                     # TODO (developer): replace with your own expected synapse data
-                    s.dummy_output = s.dummy_input * 2
+                    s.prediction = np.random.rand(1)[0]
                     s.dendrite.status_code = 200
                     s.dendrite.status_message = "OK"
                     synapse.dendrite.process_time = str(process_time)
                 else:
-                    s.dummy_output = 0
+                    s.prediction = -1
                     s.dendrite.status_code = 408
                     s.dendrite.status_message = "Timeout"
                     synapse.dendrite.process_time = str(timeout)
