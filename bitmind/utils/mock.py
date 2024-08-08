@@ -9,7 +9,7 @@ from PIL import Image
 from bitmind.constants import DIFFUSER_NAMES
 
 
-def get_mock_image():
+def create_random_image():
     random_data = np.random.randint(0, 256, (512, 512, 3), dtype=np.uint8)
     return Image.fromarray(random_data)
 
@@ -30,7 +30,7 @@ class MockImageDataset:
 
     def __getitem__(self, index: int) -> dict:
         return {
-            'image': get_mock_image(),
+            'image': create_random_image(),
             'id': index,
             'source': self.huggingface_dataset_path
         }
@@ -53,7 +53,7 @@ class MockSyntheticImageGenerator:
 
         return [{
             'prompt': f'mock {self.prompt_type} prompt',
-            'image': get_mock_image(),
+            'image': create_random_image(),
             'id': i
         } for i in range(k)]
 
