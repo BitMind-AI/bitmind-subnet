@@ -27,7 +27,7 @@ def parse_metric_for_print(metric_dict):
     return str
 
 
-def get_test_metrics(y_pred, y_true, img_names):
+def get_test_metrics(y_pred, y_true, img_names=None, logger=None):
     def get_video_metrics(image, pred, label):
         result_dict = {}
         new_label = []
@@ -69,6 +69,7 @@ def get_test_metrics(y_pred, y_true, img_names):
 
 
     y_pred = y_pred.squeeze()
+    
     # For UCF, where labels for different manipulations are not consistent.
     y_true[y_true >= 1] = 1
     # auc
@@ -83,7 +84,7 @@ def get_test_metrics(y_pred, y_true, img_names):
     prediction_class = (y_pred > 0.5).astype(int)
     correct = (prediction_class == np.clip(y_true, a_min=0, a_max=1)).sum().item()
     acc = correct / len(prediction_class)
-    if type(img_names[0]) is not list:
+    if img_names is not None and type(img_names[0]) is not list:
         # calculate video-level auc for the frame-level methods.
         v_auc, _ = get_video_metrics(img_names, y_pred, y_true)
     else:

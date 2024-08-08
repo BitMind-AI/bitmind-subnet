@@ -345,9 +345,13 @@ class Trainer(object):
                 if data_dict[key]!=None:
                     data_dict[key]=data_dict[key].cuda()
             # model forward without considering gradient computation
-            predictions = self.inference(data_dict)
+            predictions = self.inference(data_dict) #dict with keys cls, feat
+            
             label_lists += list(data_dict['label'].cpu().detach().numpy())
-            prediction_lists += list(predictions['prob'].cpu().detach().numpy())
+            # Get the predicted class for each sample in the batch
+            _, predicted_classes = torch.max(predictions['cls'], dim=1)
+            # Convert the predicted class indices to a list and add to prediction_lists
+            prediction_lists += predicted_classes.cpu().detach().numpy().tolist()
             feature_lists += list(predictions['feat'].cpu().detach().numpy())
             if type(self.model) is not AveragedModel:
                 # compute all losses for each batch data
@@ -359,7 +363,6 @@ class Trainer(object):
                 # store data by recorder
                 for name, value in losses.items():
                     test_recorder_loss[name].update(value)
-
         return test_recorder_loss, np.array(prediction_lists), np.array(label_lists),np.array(feature_lists)
 
     def save_best(self,epoch,iteration,step,losses_one_dataset_recorder,key,metric_one_dataset):
@@ -415,7 +418,7 @@ class Trainer(object):
         losses_all_datasets = {}
         metrics_all_datasets = {}
         best_metrics_per_dataset = defaultdict(dict)  # best metric for each dataset, for each metric
-        avg_metric = {'acc': 0, 'auc': 0, 'eer': 0, 'ap': 0,'video_auc': 0,'dataset_dict':{}}
+        avg_metric = {'acc': 0, 'auc': 0, 'eer': 0, 'ap': 0,'dataset_dict':{}} #'video_auc': 0
         # testing for all test data
         keys = test_data_loaders.keys()
         for key in keys:
@@ -427,7 +430,8 @@ class Trainer(object):
             losses_one_dataset_recorder, predictions_nps, label_nps, feature_nps = self.test_one_dataset(test_data_loaders[key])
             # print(f'stack len:{predictions_nps.shape};{label_nps.shape};{len(data_dict["image"])}')
             losses_all_datasets[key] = losses_one_dataset_recorder
-            metric_one_dataset=get_test_metrics(y_pred=predictions_nps,y_true=label_nps,img_names=data_dict['image'])
+            metric_one_dataset=get_test_metrics(y_pred=predictions_nps,y_true=label_nps, logger=self.logger)
+            #{'acc': acc, 'auc': auc, 'eer': eer, 'ap': ap, 'pred': y_pred, 'video_auc': v_auc, 'label': y_true}
             for metric_name, value in metric_one_dataset.items():
                 if metric_name in avg_metric:
                     avg_metric[metric_name]+=value
