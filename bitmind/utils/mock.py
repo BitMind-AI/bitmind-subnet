@@ -100,23 +100,29 @@ class MockSubtensor(bt.MockSubtensor):
 
         # Register ourself (the validator) as a neuron at uid=0
         if wallet is not None:
-            self.force_register_neuron(
-                netuid=netuid,
-                hotkey=wallet.hotkey.ss58_address,
-                coldkey=wallet.coldkey.ss58_address,
-                balance=100000,
-                stake=100000,
-            )
+            try:
+                self.force_register_neuron(
+                    netuid=netuid,
+                    hotkey=wallet.hotkey.ss58_address,
+                    coldkey=wallet.coldkey.ss58_address,
+                    balance=100000,
+                    stake=100000,
+                )
+            except Exception as e:
+                print(f"Skipping force_register_neuron: {e}")
 
         # Register n mock neurons who will be miners
         for i in range(1, n + 1):
-            self.force_register_neuron(
-                netuid=netuid,
-                hotkey=f"miner-hotkey-{i}",
-                coldkey="mock-coldkey",
-                balance=100000,
-                stake=100000,
-            )
+            try:
+                self.force_register_neuron(
+                    netuid=netuid,
+                    hotkey=f"miner-hotkey-{i}",
+                    coldkey="mock-coldkey",
+                    balance=100000,
+                    stake=100000,
+                )
+            except Exception as e:
+                print(f"Skipping force_register_neuron: {e}")
 
 
 class MockMetagraph(bt.metagraph):
