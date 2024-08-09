@@ -63,6 +63,8 @@ class Validator(BaseValidatorNeuron):
         self.synthetic_image_generator = SyntheticImageGenerator(
             prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
 
+        self._fake_prob = config.get('fake_prob', 0.5)
+
     async def forward(self):
         """
         Validator forward pass. Consists of:
