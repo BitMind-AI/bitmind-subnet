@@ -119,22 +119,17 @@ def extract_aligned_face(image, res=256):
     pil_image.show()
     return pil_image
 
-
-def preprocess(image, device, res=256):
+def preprocess(image, device, config, res=256):
     """Preprocess the image for model inference."""
     # Ensure image is in RGB format
     image = image.convert('RGB')
     
-    # Resize the image using Lanczos resampling
-    image = image.resize((res, res), Image.LANCZOS)
-    
-    # Define the transformation pipeline
     transform = transforms.Compose([
-        transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
-        # Use ImageNet mean and std since the backbone, Xception, was pretrained on it
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        transforms.Resize((res, res), interpolation=Image.LANCZOS),
+        transforms.ToTensor(),  # Convert image to tensor
+        transforms.Normalize(mean=config['mean'], std=config['std'])  # Normalize the image
     ])
-    
+
     # Apply transformations
     image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
 
@@ -146,7 +141,7 @@ def infer(image_tensor, model):
         model({'image': image_tensor}, inference=True)
     return model.prob[-1]
 
-def process_images_in_folder(folder_path, model, device):
+def process_images_in_folder(folder_path, model, device, config):
     """Process all images in the specified folder and predict if they are deepfakes."""
     images = [img for img in os.listdir(folder_path) if img.endswith('.jpg')]
     results = {}
@@ -155,7 +150,7 @@ def process_images_in_folder(folder_path, model, device):
         with open(image_path, 'rb') as file:
             image_bytes = file.read()
             image = Image.open(io.BytesIO(image_bytes))
-        image_tensor = preprocess(image, device)
+        image_tensor = preprocess(image, device, config)
         probability = infer(image_tensor, model)
         results[image_name] = probability
         rounded_prob = np.round(probability).astype(int)
@@ -183,7 +178,7 @@ def main():
 
     model = load_model(config, UCF_WEIGHTS_PATH)
     folder_path = "sample_images/"
-    process_images_in_folder(folder_path, model, device)
+    process_images_in_folder(folder_path, model, device, config)
 
 if __name__ == '__main__':
     main()

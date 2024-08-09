@@ -73,11 +73,9 @@ class UCF:
         # Ensure image is in RGB format
         image = image.convert('RGB')
         
-        # Resize the image using Lanczos resampling
-        image = image.resize((res, res), Image.LANCZOS)
-        
         # Define the transformation pipeline
         transform = transforms.Compose([
+            transforms.Resize((res, res), interpolation=Image.LANCZOS),
             transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
             transforms.Normalize(mean=self.config["mean"], std=self.config["std"])
         ])

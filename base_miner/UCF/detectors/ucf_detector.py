@@ -250,7 +250,7 @@ class UCFDetector(AbstractDetector):
                 .numpy()
             )
             _, prediction_class = torch.max(out_sha, 1)
-            if 'label'in data_dict: 
+            if 'label' in data_dict: 
                 self.label.append(
                     data_dict['label']
                     .detach()
