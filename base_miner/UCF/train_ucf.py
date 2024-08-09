@@ -60,19 +60,19 @@ def init_seed(config):
         torch.cuda.manual_seed_all(config['manualSeed'])
 
 def custom_collate_fn(batch):
-    images, labels = zip(*batch)
+    images, labels, source_labels = zip(*batch)
     
     images = torch.stack(images, dim=0)  # Stack image tensors into a single tensor
     labels = torch.LongTensor(labels) 
+    source_labels = torch.LongTensor(source_labels) 
     
     data_dict = {
         'image': images,
         'label': labels,
-        'label_spe': labels,
+        'label_spe': source_labels,
         'landmark': None,
         'mask': None
-    }
-    
+    }    
     return data_dict
 
 def prepare_datasets():
@@ -242,11 +242,15 @@ def main():
         best_metric = trainer.train_epoch(
                     epoch,
                     train_data_loader=train_loader,
-                    test_data_loaders={'test': test_loader},
+                    validation_data_loaders={'val':val_loader}
                 )
         if best_metric is not None:
-            logger.info(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
-    logger.info("Stop Training on best Testing metric {}".format(parse_metric_for_print(best_metric))) 
+            logger.info(f"===> Epoch[{epoch}] end with validation {metric_scoring}: {parse_metric_for_print(best_metric)}!")
+    logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
+
+    # test
+    trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
+    
     # update
     if 'svdd' in config['model_name']:
         model.update_R(epoch)
