@@ -56,7 +56,7 @@ async def forward(self):
     wandb_data = {}
 
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    if np.random.rand() > 0.5:
+    if np.random.rand() > self.fake_prob:
         bt.logging.info('sampling real image')
 
         label = 0
