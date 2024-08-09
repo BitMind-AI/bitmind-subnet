@@ -89,7 +89,6 @@ def create_source_label_mapping(
     for split, dataset_list in real_datasets.items():
         for dataset in dataset_list:
             source = dataset.huggingface_dataset_path
-            print(source)
             if source not in source_label_mapping.keys():
                 source_label_mapping[source] = 0.0
 
@@ -98,8 +97,6 @@ def create_source_label_mapping(
     for split, dataset_list in fake_datasets.items():
         for dataset in dataset_list:
             source = dataset.huggingface_dataset_path
-            print(source)
-            print("set")
             if source not in source_label_mapping.keys():
                 source_label_mapping[source] = fake_source_label
                 fake_source_label += 1.0

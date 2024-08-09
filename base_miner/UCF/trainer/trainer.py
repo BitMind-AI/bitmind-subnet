@@ -232,8 +232,7 @@ class Trainer(object):
                 if data_dict[key]!=None and key!='name':
                     data_dict[key]=data_dict[key].cuda()
 
-            losses,predictions=self.train_step(data_dict)
-
+            losses, predictions=self.train_step(data_dict)
             # update learning rate
 
             if 'SWA' in self.config and self.config['SWA'] and epoch>self.config['swa_start']:
@@ -303,10 +302,11 @@ class Trainer(object):
                 else:
                     validation_best_metric = None
 
-                    # total_end_time = time.time()
-            # total_elapsed_time = total_end_time - total_start_time
-            # print("总花费的时间: {:.2f} 秒".format(total_elapsed_time))
             step_cnt += 1
+
+            for key in data_dict.keys():
+                if data_dict[key]!=None and key!='name':
+                    data_dict[key]=data_dict[key].cpu()
         return validation_best_metric
     
     def get_respect_acc(self,prob,label):
