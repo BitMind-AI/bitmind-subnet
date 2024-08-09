@@ -11,6 +11,7 @@ import numpy as np
 from datetime import timedelta
 from copy import deepcopy
 from PIL import Image as pil_image
+import gc
 
 import torch
 import torch.nn as nn
@@ -75,7 +76,7 @@ def custom_collate_fn(batch):
     }    
     return data_dict
 
-def prepare_datasets():
+def prepare_datasets(config):
     real_datasets, fake_datasets = load_datasets()
     train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
         real_datasets,
@@ -86,11 +87,11 @@ def prepare_datasets():
     )
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=custom_collate_fn)
+        train_dataset, batch_size=config['train_batchSize'], shuffle=True, num_workers=config['workers'], collate_fn=custom_collate_fn)
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=custom_collate_fn)
+        val_dataset, batch_size=config['train_batchSize'], shuffle=False, num_workers=config['workers'], collate_fn=custom_collate_fn)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=32, shuffle=False, num_workers=0, collate_fn=custom_collate_fn)
+        test_dataset, batch_size=config['train_batchSize'], shuffle=False, num_workers=config['workers'], collate_fn=custom_collate_fn)
 
     return train_loader, val_loader, test_loader
 
@@ -161,6 +162,8 @@ def choose_metric(config):
 
 
 def main():
+    torch.cuda.empty_cache()
+    gc.collect()
     # parse options and load config
     with open(args.detector_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -234,7 +237,7 @@ def main():
     trainer = Trainer(config, model, optimizer, scheduler, logger, metric_scoring)
 
     # prepare the data loaders
-    train_loader, val_loader, test_loader = prepare_datasets()
+    train_loader, val_loader, test_loader = prepare_datasets(config)
 
     # start training
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
@@ -261,6 +264,8 @@ def main():
     for writer in trainer.writers.values():
         writer.close()
 
+    torch.cuda.empty_cache()
+    gc.collect()
 
 if __name__ == '__main__':
     main()
