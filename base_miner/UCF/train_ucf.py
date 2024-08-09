@@ -160,6 +160,24 @@ def choose_metric(config):
         raise NotImplementedError('metric {} is not implemented'.format(metric_scoring))
     return metric_scoring
 
+def log_start_time(logger, process_name):
+    """Log the start time of a process."""
+    start_time = time.time()
+    logger.info(f"{process_name} Start Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+    return start_time
+
+def log_finish_time(logger, process_name, start_time):
+    """Log the finish time and elapsed time of a process."""
+    finish_time = time.time()
+    elapsed_time = finish_time - start_time
+
+    # Convert elapsed time into hours, minutes, and seconds
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    # Log the finish time and elapsed time
+    logger.info(f"{process_name} Finish Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(finish_time))}")
+    logger.info(f"{process_name} Elapsed Time: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
 
 def main():
     torch.cuda.empty_cache()
@@ -240,6 +258,7 @@ def main():
     train_loader, val_loader, test_loader = prepare_datasets(config)
 
     # start training
+    start_time = log_start_time(logger, "Training")
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
         trainer.model.epoch = epoch
         best_metric = trainer.train_epoch(
@@ -250,9 +269,12 @@ def main():
         if best_metric is not None:
             logger.info(f"===> Epoch[{epoch}] end with validation {metric_scoring}: {parse_metric_for_print(best_metric)}!")
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
-
+    log_finish_time(logger, "Training", start_time)
+   
     # test
+    start_time = log_start_time(logger, "Test")
     trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
+    log_finish_time(logger, "Test", start_time)
     
     # update
     if 'svdd' in config['model_name']:
