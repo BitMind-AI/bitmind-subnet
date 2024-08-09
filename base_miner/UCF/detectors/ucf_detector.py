@@ -249,19 +249,20 @@ class UCFDetector(AbstractDetector):
                 .cpu()
                 .numpy()
             )
-            self.label.append(
-                data_dict['label']
-                .detach()
-                .squeeze()
-                .cpu()
-                .numpy()
-            )
-            # deal with acc
             _, prediction_class = torch.max(out_sha, 1)
-            common_label = (data_dict['label'] >= 1)
-            correct = (prediction_class == common_label).sum().item()
-            self.correct += correct
-            self.total += data_dict['label'].size(0)
+            if 'label'in data_dict: 
+                self.label.append(
+                    data_dict['label']
+                    .detach()
+                    .squeeze()
+                    .cpu()
+                    .numpy()
+                )
+                # deal with acc
+                common_label = (data_dict['label'] >= 1)
+                correct = (prediction_class == common_label).sum().item()
+                self.correct += correct
+                self.total += data_dict['label'].size(0)
 
             pred_dict = {'cls': out_sha, 'feat': sha_feat}
             return  pred_dict
