@@ -424,16 +424,14 @@ class Trainer(object):
                     metric_str += f"{eval_stage}-metric, {k}: {v}    "
                 self.logger.info(metric_str)
                 continue
-            if eval_stage=='validation':
-                self.save_best(epoch,iteration,step,losses_one_dataset_recorder,key,metric_one_dataset,eval_stage)
+            self.save_best(epoch,iteration,step,losses_one_dataset_recorder,key,metric_one_dataset,eval_stage)
 
         if len(keys)>0 and self.config.get('save_avg',False):
             # calculate avg value
             for key in avg_metric:
                 if key != 'dataset_dict':
                     avg_metric[key] /= len(keys)
-            if eval_stage=='validation':
-                self.save_best(epoch, iteration, step, None, 'avg', avg_metric, eval_stage)
+            self.save_best(epoch, iteration, step, None, 'avg', avg_metric, eval_stage)
 
         self.logger.info(f'===> {eval_stage} Done!')
         return self.best_metrics_all_time  # return all types of mean metrics for determining the best ckpt
