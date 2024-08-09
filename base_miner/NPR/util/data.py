@@ -47,7 +47,7 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
 
             # Copy other attributes from the initial dataset
             split_dataset.huggingface_dataset_path = dataset.huggingface_dataset_path
-            split_dataset.huggingface_datset_name = dataset.huggingface_datset_name
+            split_dataset.huggingface_dataset_name = dataset.huggingface_dataset_name
             split_dataset.sampled_images_idx = dataset.sampled_images_idx
 
             # Append to the corresponding split list
