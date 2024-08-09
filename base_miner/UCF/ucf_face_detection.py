@@ -4,6 +4,7 @@
 Evaluate a pretained DeepfakeBench model.
 """
 import os
+import io
 import random
 import argparse
 import torch
@@ -119,38 +120,41 @@ def extract_aligned_face(image, res=256):
     return pil_image
 
 
-def preprocess(image, device):
-    """ Preprocess the image for model inference. """
+def preprocess(image, device, res=256):
+    """Preprocess the image for model inference."""
+    # Ensure image is in RGB format
     image = image.convert('RGB')
-    #aligned_image, _, _ = extract_aligned_face_dlib(face_detector, shape_predictor, image)
-    # aligned_image = extract_aligned_face(image)
-    # if aligned_image is not None:
-    #     aligned_image.show()
-    # else:
-    #     print("No face detected.")
-
+    
+    # Resize the image using Lanczos resampling
+    image = image.resize((res, res), Image.LANCZOS)
+    
+    # Define the transformation pipeline
     transform = transforms.Compose([
-        #transforms.resize((256, 256)),
         transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # Use ImageNet mean and std since the backbone, Xception, was pretrained on it
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
-    image_tensor = transform(image).unsqueeze(0)
+    
+    # Apply transformations
+    image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
 
     return image_tensor.to(device)
-
+    
 def infer(image_tensor, model):
     """ Perform inference using the model. """
     with torch.no_grad():
         model({'image': image_tensor}, inference=True)
     return model.prob[-1]
 
-def process_images_in_folder(folder_path, model):
+def process_images_in_folder(folder_path, model, device):
     """Process all images in the specified folder and predict if they are deepfakes."""
     images = [img for img in os.listdir(folder_path) if img.endswith('.jpg')]
     results = {}
     for image_name in images:
         image_path = os.path.join(folder_path, image_name)
-        image = Image.open(image_path)
+        with open(image_path, 'rb') as file:
+            image_bytes = file.read()
+            image = Image.open(io.BytesIO(image_bytes))
         image_tensor = preprocess(image, device)
         probability = infer(image_tensor, model)
         results[image_name] = probability
@@ -179,7 +183,7 @@ def main():
 
     model = load_model(config, UCF_WEIGHTS_PATH)
     folder_path = "sample_images/"
-    process_images_in_folder(folder_path, model)
+    process_images_in_folder(folder_path, model, device)
 
 if __name__ == '__main__':
     main()

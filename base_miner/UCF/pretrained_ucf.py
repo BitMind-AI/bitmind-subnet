@@ -79,8 +79,7 @@ class UCF:
         # Define the transformation pipeline
         transform = transforms.Compose([
             transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
-            # Use ImageNet mean and std since the backbone, Xception, was pretrained on it
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            transforms.Normalize(mean=self.config["mean"], std=self.config["std"])
         ])
         
         # Apply transformations
