@@ -110,6 +110,8 @@ def create_real_fake_datasets(
     train_transforms: transforms.Compose,
     val_transforms: transforms.Compose,
     test_transforms: transforms.Compose,
+    config=None,
+    normalize=False,
 ) -> Tuple[RealFakeDataset, ...]:
     """
     Args:
@@ -129,18 +131,24 @@ def create_real_fake_datasets(
         real_image_datasets=real_datasets['train'],
         fake_image_datasets=fake_datasets['train'],
         transforms=train_transforms,
-        source_label_mapping=source_label_mapping)
+        source_label_mapping=source_label_mapping,
+        config=config,
+        normalize=normalize)
 
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
         fake_image_datasets=fake_datasets['validation'],
         transforms=val_transforms,
-        source_label_mapping=source_label_mapping)
+        source_label_mapping=source_label_mapping,
+        config=config,
+        normalize=normalize)
 
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
         transforms=test_transforms,
-        source_label_mapping=source_label_mapping)
+        source_label_mapping=source_label_mapping,
+        config=config,
+        normalize=normalize)
 
     return train_dataset, val_dataset, test_dataset

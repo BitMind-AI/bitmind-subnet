@@ -1,5 +1,6 @@
 import numpy as np
-
+from torchvision import transforms as T
+import torch
 
 class RealFakeDataset:
 
@@ -9,7 +10,9 @@ class RealFakeDataset:
         fake_image_datasets: list,
         transforms=None,
         fake_prob=0.5,
-        source_label_mapping=None
+        source_label_mapping=None,
+        config=None,
+        normalize=False
     ):
         """
         Initialize the RealFakeDataset instance.
@@ -26,6 +29,8 @@ class RealFakeDataset:
         self.transforms = transforms
         self.fake_prob = fake_prob
         self.source_label_mapping = source_label_mapping if source_label_mapping else {}
+        self.config = config
+        self.normalize = normalize
 
         self._history = {
             'source': [],
@@ -33,6 +38,15 @@ class RealFakeDataset:
             'label': [],
         }
 
+    def normalize_image(self, img):
+        """
+        Normalize an image using mean and std from configs.
+        """
+        mean = self.config['mean']
+        std = self.config['std']
+        normalize = T.Normalize(mean=mean, std=std)
+        return normalize(img)
+    
     def __getitem__(self, index: int) -> tuple:
         """
         Retrieve an item (image, label) from the dataset.
@@ -64,14 +78,20 @@ class RealFakeDataset:
         self._history['source'].append(source.huggingface_dataset_path)
         self._history['label'].append(label)
         self._history['index'].append(index)
-
+        
         try:
             if self.transforms is not None:
                 image = self.transforms(image)
         except Exception as e:
             print(e)
             print(source.huggingface_dataset_path, index)
-
+            
+        if self.normalize:
+            if isinstance(image, torch.Tensor):
+                image = self.normalize_image(image)
+            else:
+                image = self.normalize_image(T.ToTensor()(image))
+            
         return image, label, source_label
         
     def __len__(self) -> int:

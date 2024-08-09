@@ -83,7 +83,9 @@ def prepare_datasets(config):
         fake_datasets,
         train_transforms=random_aug_transforms,
         val_transforms=base_transforms,
-        test_transforms=base_transforms
+        test_transforms=base_transforms,
+        config=config,
+        normalize=True
     )
 
     train_loader = torch.utils.data.DataLoader(
