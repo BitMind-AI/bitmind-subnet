@@ -3,22 +3,36 @@ import random
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
+import numpy as np
 from PIL import Image
 import yaml
 import logging
 from pathlib import Path
 from huggingface_hub import hf_hub_download
-from base_miner.detectors import DETECTOR
+from base_miner.UCF.detectors import DETECTOR
+import dlib
+from base_miner.UCF.preprocessing.preprocess import extract_aligned_face_dlib
 
 class UCF:
-    def __init__(self, config_path="./config/ucf.yaml", weights_dir="./weights/", weights_hf_repo_name="bitmind/ucf"):
+    def __init__(self, config_path="./config/ucf.yaml", weights_dir="./weights/", weights_hf_repo_name="bitmind/ucf",
+                 ucf_checkpoint_name="ucf_best.pth", backbone_checkpoint_name="xception_best.pth",
+                 predictor_path = "./preprocessing/dlib_tools/shape_predictor_81_face_landmarks.dat"):
+        
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.config_path = Path(config_path)
         self.weights_dir = Path(weights_dir)
         self.hugging_face_repo_name = weights_hf_repo_name
-        self.ucf_checkpoint_name = "ucf_best.pth"
-        self.backbone_checkpoint_name = "xception_best.pth"
+        self.ucf_checkpoint_name = ucf_checkpoint_name
+        self.backbone_checkpoint_name = backbone_checkpoint_name
         self.config = self.load_config()
+
+        self.face_detector = dlib.get_frontal_face_detector()
+        self.predictor_path = predictor_path
+        if not os.path.exists(predictor_path):
+            logger.error(f"Predictor path does not exist: {predictor_path}")
+            sys.exit()
+        self.face_predictor = dlib.shape_predictor(predictor_path)
+        
         self.init_cudnn()
         self.init_seed()
         self.ensure_weights_are_available(self.ucf_checkpoint_name)
@@ -67,21 +81,29 @@ class UCF:
         except FileNotFoundError:
             logging.error('Failed to load the pretrained weights.')
         return model
-    
+
     def preprocess(self, image, res=256):
         """Preprocess the image for model inference."""
-        # Ensure image is in RGB format
-        image = image.convert('RGB')
+        image = np.array(image)
+
+        # Crop and align face image.
+        cropped_face, landmark, mask_face = extract_aligned_face_dlib(
+                                            self.face_detector, self.face_predictor,
+                                            image, res=res, mask=None) 
         
-        # Define the transformation pipeline
+        cropped_face = Image.fromarray(cropped_face)
+        
+        # Ensure image is in RGB format
+        cropped_face = cropped_face.convert('RGB')
+        
         transform = transforms.Compose([
             transforms.Resize((res, res), interpolation=Image.LANCZOS),
-            transforms.ToTensor(),  # Converts image to Tensor, scales to [0, 1]
-            transforms.Normalize(mean=self.config["mean"], std=self.config["std"])
+            transforms.ToTensor(),  # Convert image to tensor
+            transforms.Normalize(mean=self.config['mean'], std=self.config['std'])  # Normalize the image
         ])
-        
+    
         # Apply transformations
-        image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
+        image_tensor = transform(cropped_face).unsqueeze(0)  # Add batch dimension
     
         return image_tensor.to(self.device)
 

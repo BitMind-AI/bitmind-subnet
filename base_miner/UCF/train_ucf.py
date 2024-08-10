@@ -1,4 +1,4 @@
-import os
+cimport os
 import argparse
 from os.path import join
 #import cv2

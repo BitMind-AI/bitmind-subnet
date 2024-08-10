@@ -21,3 +21,5 @@ httpx
 wandb
 dlib
 face-recognition
+imutils
+scikit-image

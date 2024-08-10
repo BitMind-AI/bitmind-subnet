@@ -16,8 +16,8 @@ from PIL import Image
 from detectors import DETECTOR
 import yaml
 import cv2
-import face_recognition
-#from preprocessing.preprocess import extract_aligned_face_dlib
+import dlib
+from preprocessing.preprocess import extract_aligned_face_dlib
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -28,6 +28,7 @@ BACKBONE_CHECKPOINT_NAME = "xception_best.pth"
 DETECTOR_CONFIG_PATH = "./config/ucf.yaml"
 UCF_WEIGHTS_PATH = WEIGHTS_DIR + UCF_CHECKPOINT_NAME
 BACKBONE_WEIGHTS_PATH = WEIGHTS_DIR + BACKBONE_CHECKPOINT_NAME
+PREDICTOR_PATH = "./preprocessing/dlib_tools/shape_predictor_81_face_landmarks.dat"
 
 def ensure_weights_are_available(repo_name, model_filename, destination_path):
     """
@@ -77,52 +78,15 @@ def load_model(config, weights_path):
         print('Failed to load the pretrained weights.')
     return model
 
-def extract_aligned_face(image, res=256):
-    # Load the image file into a numpy array
-    image = face_recognition.load_image_file(image, mode='RGB')
-
-    # Find all the faces and face landmarks in the image using the CNN model
-    face_locations = face_recognition.face_locations(image, model="cnn")
-    face_landmarks_list = face_recognition.face_landmarks(image, model="small")
-
-    if not face_locations:
-        print("No faces detected.")
-        return None
-
-    # Taking the first face detected
-    top, right, bottom, left = face_locations[0]
-    face_image = image[top:bottom, left:right]
-    pil_image = Image.fromarray(face_image)
-
-    # Check if landmarks were detected for the first face
-    if face_landmarks_list:
-        face_landmarks = face_landmarks_list[0]
-
-        if 'left_eye' in face_landmarks and 'right_eye' in face_landmarks:
-            left_eye = face_landmarks['left_eye']
-            right_eye = face_landmarks['right_eye']
-
-            # Calculate the center of each eye
-            left_eye_center = np.mean(left_eye, axis=0).astype("int")
-            right_eye_center = np.mean(right_eye, axis=0).astype("int")
-
-            # Calculate the angle between the eye centroids
-            dy = right_eye_center[1] - left_eye_center[1]
-            dx = right_eye_center[0] - left_eye_center[0]
-            angle = np.degrees(np.arctan2(dy, dx)) - 180
-
-            # Rotate the image to align the eyes horizontally
-            pil_image = pil_image.rotate(-angle, expand=True)
-
-    # Resize the aligned image to the given resolution
-    pil_image = pil_image.resize((res, res), Image.LANCZOS)
-    pil_image.show()
-    return pil_image
-
-def preprocess(image, device, config, res=256):
+def preprocess(image, face_detector, predictor, config, device, res=256):
     """Preprocess the image for model inference."""
+    cropped_face, landmark, mask_face = extract_aligned_face_dlib(face_detector, predictor,
+                                                                  image, res=res, mask=None) 
+    cropped_face = Image.fromarray(cropped_face)
+    cropped_face.save("cropped.jpg")
+    
     # Ensure image is in RGB format
-    image = image.convert('RGB')
+    cropped_face = cropped_face.convert('RGB')
     
     transform = transforms.Compose([
         transforms.Resize((res, res), interpolation=Image.LANCZOS),
@@ -131,7 +95,7 @@ def preprocess(image, device, config, res=256):
     ])
 
     # Apply transformations
-    image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
+    image_tensor = transform(cropped_face).unsqueeze(0)  # Add batch dimension
 
     return image_tensor.to(device)
     
@@ -141,7 +105,7 @@ def infer(image_tensor, model):
         model({'image': image_tensor}, inference=True)
     return model.prob[-1]
 
-def process_images_in_folder(folder_path, model, device, config):
+def process_images_in_folder(folder_path, face_detector, predictor, model, device, config):
     """Process all images in the specified folder and predict if they are deepfakes."""
     images = [img for img in os.listdir(folder_path) if img.endswith('.jpg')]
     results = {}
@@ -150,7 +114,8 @@ def process_images_in_folder(folder_path, model, device, config):
         with open(image_path, 'rb') as file:
             image_bytes = file.read()
             image = Image.open(io.BytesIO(image_bytes))
-        image_tensor = preprocess(image, device, config)
+        image = np.array(image)
+        image_tensor = preprocess(image, face_detector, predictor, config, device, res=256)
         probability = infer(image_tensor, model)
         results[image_name] = probability
         rounded_prob = np.round(probability).astype(int)
@@ -176,9 +141,16 @@ def main():
     if config.get('cudnn'):
         cudnn.benchmark = True
 
+    face_detector = dlib.get_frontal_face_detector()
+    predictor_path = PREDICTOR_PATH
+    if not os.path.exists(predictor_path):
+        logger.error(f"Predictor path does not exist: {predictor_path}")
+        sys.exit()
+    face_predictor = dlib.shape_predictor(predictor_path)
+
     model = load_model(config, UCF_WEIGHTS_PATH)
     folder_path = "sample_images/"
-    process_images_in_folder(folder_path, model, device, config)
+    process_images_in_folder(folder_path, face_detector, face_predictor, model, device, config)
 
 if __name__ == '__main__':
     main()
