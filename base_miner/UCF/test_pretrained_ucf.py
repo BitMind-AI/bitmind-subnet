@@ -26,7 +26,7 @@ class TestUCF(unittest.TestCase):
         # Assuming an image is available at the specified path
         image_path = './sample_images/celebahq_0.jpg'
         image = Image.open(image_path)
-        preprocessed_image = self.ucf.preprocess(image)
+        preprocessed_image = self.ucf.preprocess(image, face_crop_and_align=True)
         output = self.ucf.infer(preprocessed_image)
         print(f"output: {output}")
         self.assertIsNotNone(output, "Inference output should not be None")

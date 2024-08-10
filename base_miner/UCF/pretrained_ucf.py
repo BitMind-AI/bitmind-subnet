@@ -82,20 +82,19 @@ class UCF:
             logging.error('Failed to load the pretrained weights.')
         return model
 
-    def preprocess(self, image, res=256):
+    def preprocess(self, image, res=256, face_crop_and_align=False):
         """Preprocess the image for model inference."""
-        image = np.array(image)
-
-        # Crop and align face image.
-        cropped_face, landmark, mask_face = extract_aligned_face_dlib(
-                                            self.face_detector, self.face_predictor,
-                                            image, res=res, mask=None) 
-        
-        cropped_face = Image.fromarray(cropped_face)
-        
+        if face_crop_and_align:
+            # Crop and align face image.
+            image = np.array(image)
+            cropped_face, landmark, mask_face = extract_aligned_face_dlib(
+                                                self.face_detector, self.face_predictor,
+                                                image, res=res, mask=None)
+            # Convert back to PIL Image
+            image = Image.fromarray(cropped_face)
+            
         # Ensure image is in RGB format
-        cropped_face = cropped_face.convert('RGB')
-        
+        image = image.convert('RGB')
         transform = transforms.Compose([
             transforms.Resize((res, res), interpolation=Image.LANCZOS),
             transforms.ToTensor(),  # Convert image to tensor
@@ -103,7 +102,7 @@ class UCF:
         ])
     
         # Apply transformations
-        image_tensor = transform(cropped_face).unsqueeze(0)  # Add batch dimension
+        image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
     
         return image_tensor.to(self.device)
 

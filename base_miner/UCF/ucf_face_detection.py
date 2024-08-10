@@ -78,16 +78,19 @@ def load_model(config, weights_path):
         print('Failed to load the pretrained weights.')
     return model
 
-def preprocess(image, face_detector, predictor, config, device, res=256):
+def preprocess(image, face_detector, predictor, config, device, res=256, face_crop_and_align=True):
     """Preprocess the image for model inference."""
-    cropped_face, landmark, mask_face = extract_aligned_face_dlib(face_detector, predictor,
-                                                                  image, res=res, mask=None) 
-    cropped_face = Image.fromarray(cropped_face)
-    cropped_face.save("cropped.jpg")
-    
+    if face_crop_and_align:
+        # Crop and align face image.
+        image = np.array(image)
+        cropped_face, landmark, mask_face = extract_aligned_face_dlib(
+                                            face_detector, predictor,
+                                            image, res=res, mask=None)
+        # Convert back to PIL Image
+        image = Image.fromarray(cropped_face)
+        
     # Ensure image is in RGB format
-    cropped_face = cropped_face.convert('RGB')
-    
+    image = image.convert('RGB')
     transform = transforms.Compose([
         transforms.Resize((res, res), interpolation=Image.LANCZOS),
         transforms.ToTensor(),  # Convert image to tensor
@@ -95,7 +98,7 @@ def preprocess(image, face_detector, predictor, config, device, res=256):
     ])
 
     # Apply transformations
-    image_tensor = transform(cropped_face).unsqueeze(0)  # Add batch dimension
+    image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
 
     return image_tensor.to(device)
     
@@ -115,7 +118,7 @@ def process_images_in_folder(folder_path, face_detector, predictor, model, devic
             image_bytes = file.read()
             image = Image.open(io.BytesIO(image_bytes))
         image = np.array(image)
-        image_tensor = preprocess(image, face_detector, predictor, config, device, res=256)
+        image_tensor = preprocess(image, face_detector, predictor, config, device, res=256, face_crop_and_align=True)
         probability = infer(image_tensor, model)
         results[image_name] = probability
         rounded_prob = np.round(probability).astype(int)
