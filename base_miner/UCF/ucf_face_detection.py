@@ -4,7 +4,11 @@
 Evaluate a pretained DeepfakeBench model.
 """
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Example to ignore INFO and WARN messages
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)  # Ignore FutureWarnings
 import io
+import time
 import random
 import argparse
 import torch
@@ -81,13 +85,16 @@ def load_model(config, weights_path):
 def preprocess(image, face_detector, predictor, config, device, res=256, face_crop_and_align=True):
     """Preprocess the image for model inference."""
     if face_crop_and_align:
-        # Crop and align face image.
-        image = np.array(image)
+        # Crop and align largest face.
+        image_arr = np.array(image)
         cropped_face, landmark, mask_face = extract_aligned_face_dlib(
                                             face_detector, predictor,
-                                            image, res=res, mask=None)
-        # Convert back to PIL Image
-        image = Image.fromarray(cropped_face)
+                                            image_arr, res=res, mask=None)
+        if cropped_face is not None:
+            # Convert back to PIL Image
+            image = Image.fromarray(cropped_face)
+        else:
+            print("No face detected with dlib.  Using uncropped image.")
         
     # Ensure image is in RGB format
     image = image.convert('RGB')
@@ -126,6 +133,34 @@ def process_images_in_folder(folder_path, face_detector, predictor, model, devic
         results[image_name] = (probability, classification)
         print(f"Probability that {image_name} is a deepfake: {probability:.4f}\
                - Classified as {classification}")
+    return results
+
+def process_images_in_folder(folder_path, face_detector, predictor, model, device, config):
+    """Process all images in the specified folder and predict if they are deepfakes, and record processing times."""
+    images = [img for img in os.listdir(folder_path) if img.endswith('.jpg')]
+    results = {}
+    total_time = 0
+    print(f"Processing {len(images)} images...")
+    for image_name in images:
+        start_time = time.time()  # Start timing for this image
+        image_path = os.path.join(folder_path, image_name)
+        with open(image_path, 'rb') as file:
+            image_bytes = file.read()
+            image = Image.open(io.BytesIO(image_bytes))
+        image = np.array(image)
+        image_tensor = preprocess(image, face_detector, predictor, config, device, res=256, face_crop_and_align=True)
+        probability = infer(image_tensor, model)
+        rounded_prob = np.round(probability).astype(int)
+        classification = 'fake' if rounded_prob == 1 else 'real'
+        results[image_name] = (probability, classification)
+        end_time = time.time()  # End timing for this image
+        elapsed_time = end_time - start_time
+        total_time += elapsed_time
+        print(f"Processed {image_name} in {elapsed_time:.2f} seconds - Probability: {probability:.4f}, Classified as: {classification}")
+
+    average_time = total_time / len(images) if images else 0
+    print(f"Average processing time per image: {average_time:.2f} seconds")
+
     return results
 
 def main():

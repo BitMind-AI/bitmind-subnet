@@ -1,4 +1,7 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Example to ignore INFO and WARN messages
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)  # Ignore FutureWarnings
 import random
 import torch
 import torch.backends.cudnn as cudnn
@@ -85,13 +88,16 @@ class UCF:
     def preprocess(self, image, res=256, face_crop_and_align=False):
         """Preprocess the image for model inference."""
         if face_crop_and_align:
-            # Crop and align face image.
-            image = np.array(image)
+            # Crop and align largest face.
+            image_arr = np.array(image)
             cropped_face, landmark, mask_face = extract_aligned_face_dlib(
                                                 self.face_detector, self.face_predictor,
-                                                image, res=res, mask=None)
+                                                image_arr, res=res, mask=None)
             # Convert back to PIL Image
-            image = Image.fromarray(cropped_face)
+            if cropped_face is not None:
+                image = Image.fromarray(cropped_face)
+            else:
+                logging.info("No face detected with dlib. Using uncropped image.")
             
         # Ensure image is in RGB format
         image = image.convert('RGB')
