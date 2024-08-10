@@ -42,7 +42,7 @@ def test_mock_subtensor(netuid, n, wallet):
 
 @pytest.mark.parametrize("n", [16, 32, 64])
 def test_mock_metagraph(n):
-    mock_subtensor = MockSubtensor(netuid=34, n=n)
+    mock_subtensor = MockSubtensor(n=n)
     mock_metagraph = MockMetagraph(subtensor=mock_subtensor)
     # Check axons
     axons = mock_metagraph.axons
@@ -95,7 +95,6 @@ def test_mock_dendrite_timings(timeout, min_time, max_time, n):
         # check synapse.dendrite has (process_time, status_code, status_message)
         for field in ("process_time", "status_code", "status_message"):
             assert hasattr(dendrite, field) and getattr(dendrite, field) is not None
-        print('PROCESS_TIME', dendrite.process_time)
         # check that the dendrite take between min_time and max_time
         assert min_time <= dendrite.process_time
         assert dendrite.process_time <= max_time + eps

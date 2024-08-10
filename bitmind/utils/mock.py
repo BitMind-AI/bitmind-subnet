@@ -7,6 +7,7 @@ from typing import List
 from PIL import Image
 
 from bitmind.constants import DIFFUSER_NAMES
+from tests.fixtures import NETUID
 
 
 def create_random_image():
@@ -69,9 +70,11 @@ class MockSyntheticImageGenerator:
 class MockValidator:
     def __init__(self, config):
         self.config = config
+        subtensor = MockSubtensor(netuid=NETUID, wallet=bt.MockWallet())
+
         self.metagraph = MockMetagraph(
-            netuid=34,
-            subtensor=MockSubtensor(netuid=34, wallet=bt.MockWallet())
+            netuid=NETUID,
+            subtensor=subtensor
         )
         self.dendrite = MockDendrite(bt.MockWallet())
         self.real_image_datasets = [
@@ -92,9 +95,9 @@ class MockValidator:
 
 
 class MockSubtensor(bt.MockSubtensor):
-    def __init__(self, netuid, n=16, wallet=None, network="mock"):
+    def __init__(self, netuid=NETUID, n=16, wallet=None, network="mock"):
         super().__init__(network=network)
-        self.reset()  # reset chain state so test cases don't interfere with one another
+        bt.MockSubtensor.reset()  # reset chain state so test cases don't interfere with one another
 
         if not self.subnet_exists(netuid):
             self.create_subnet(netuid)
@@ -127,16 +130,18 @@ class MockSubtensor(bt.MockSubtensor):
 
 
 class MockMetagraph(bt.metagraph):
-    def __init__(self, netuid=1, network="mock", subtensor=None):
+    def __init__(self, netuid=NETUID, network="mock", subtensor=None):
         super().__init__(netuid=netuid, network=network, sync=False)
+        self.default_ip = "127.0.0.0"
+        self.default_port = 8092
 
         if subtensor is not None:
             self.subtensor = subtensor
         self.sync(subtensor=subtensor)
 
         for axon in self.axons:
-            axon.ip = "127.0.0.0"
-            axon.port = 8092
+            axon.ip = self.default_ip
+            axon.port = self.default_port
 
         bt.logging.info(f"Metagraph: {self}")
         bt.logging.info(f"Axons: {self.axons}")
