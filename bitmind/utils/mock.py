@@ -180,12 +180,12 @@ class MockDendrite(bt.dendrite):
                     s.prediction = np.random.rand(1)[0]
                     s.dendrite.status_code = 200
                     s.dendrite.status_message = "OK"
-                    synapse.dendrite.process_time = str(process_time)
+                    s.dendrite.process_time = str(process_time)
                 else:
                     s.prediction = -1
                     s.dendrite.status_code = 408
                     s.dendrite.status_message = "Timeout"
-                    synapse.dendrite.process_time = str(timeout)
+                    s.dendrite.process_time = str(timeout)
 
                 # Return the updated synapse object after deserializing if requested
                 if deserialize:
