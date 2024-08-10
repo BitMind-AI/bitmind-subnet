@@ -116,26 +116,6 @@ def infer(image_tensor, model):
     return model.prob[-1]
 
 def process_images_in_folder(folder_path, face_detector, predictor, model, device, config):
-    """Process all images in the specified folder and predict if they are deepfakes."""
-    images = [img for img in os.listdir(folder_path) if img.endswith('.jpg')]
-    results = {}
-    for image_name in images:
-        image_path = os.path.join(folder_path, image_name)
-        with open(image_path, 'rb') as file:
-            image_bytes = file.read()
-            image = Image.open(io.BytesIO(image_bytes))
-        image = np.array(image)
-        image_tensor = preprocess(image, face_detector, predictor, config, device, res=256, face_crop_and_align=True)
-        probability = infer(image_tensor, model)
-        results[image_name] = probability
-        rounded_prob = np.round(probability).astype(int)
-        classification = 'fake' if rounded_prob == 1 else 'real'
-        results[image_name] = (probability, classification)
-        print(f"Probability that {image_name} is a deepfake: {probability:.4f}\
-               - Classified as {classification}")
-    return results
-
-def process_images_in_folder(folder_path, face_detector, predictor, model, device, config):
     """Process all images in the specified folder and predict if they are deepfakes, and record processing times."""
     images = [img for img in os.listdir(folder_path) if img.endswith('.jpg')]
     results = {}
