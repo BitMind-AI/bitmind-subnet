@@ -94,6 +94,7 @@ class MockValidator:
 class MockSubtensor(bt.MockSubtensor):
     def __init__(self, netuid, n=16, wallet=None, network="mock"):
         super().__init__(network=network)
+        self.reset()  # reset chain state so test cases don't interfere with one another
 
         if not self.subnet_exists(netuid):
             self.create_subnet(netuid)

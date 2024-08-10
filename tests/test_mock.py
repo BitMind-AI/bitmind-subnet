@@ -64,7 +64,7 @@ def test_mock_neuron():
 
 @pytest.mark.parametrize("timeout", [0.1, 0.2])
 @pytest.mark.parametrize("min_time", [0, 0, 0])
-@pytest.mark.parametrize("max_time", [1, 1, 1])
+@pytest.mark.parametrize("max_time", [0.1, 0.15, 0.2])
 @pytest.mark.parametrize("n", [4, 16, 64])
 def test_mock_dendrite_timings(timeout, min_time, max_time, n):
     mock_wallet = bt.MockWallet(config=None)
