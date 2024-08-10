@@ -32,7 +32,7 @@ def test_invoke_transform(transform):
     try:
         transformed_image = transform()(image)
     except Exception as e:
-        pytest.fail(f"transform pipeline invocaiton raised an exception: {e}")
+        pytest.fail(f"transform pipeline invocation raised an exception: {e}")
 
     assert transformed_image is not None
 
@@ -44,7 +44,7 @@ def test_invoke_transform_pipeline(transform_pipeline):
     try:
         transformed_image = transform_pipeline(image)
     except Exception as e:
-        pytest.fail(f"transform pipeline invocaiton raised an exception: {e}")
+        pytest.fail(f"transform pipeline invocation raised an exception: {e}")
 
     assert transformed_image is not None
 
