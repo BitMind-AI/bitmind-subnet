@@ -78,8 +78,7 @@ def test_mock_dendrite_timings(timeout, min_time, max_time, n):
     async def run():
         return await mock_dendrite(
             axons,
-            synapse=ImageSynapse(image="thisisnotreallyb64"),
-            #synapse=prepare_image_synapse(create_random_image()),
+            synapse=prepare_image_synapse(create_random_image()),
             timeout=timeout,
             deserialize=False,
         )
