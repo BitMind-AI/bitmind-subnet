@@ -21,14 +21,25 @@ class TestUCF(unittest.TestCase):
         """Test if the model is loaded properly."""
         self.assertIsNotNone(self.ucf.model, "Model should not be None")
 
-    def test_infer(self):
+    def test_infer_faces(self):
         """Test a basic inference to ensure model outputs are correct."""
         # Assuming an image is available at the specified path
         image_path = './sample_images/celebahq_0.jpg'
         image = Image.open(image_path)
-        preprocessed_image = self.ucf.preprocess(image, face_crop_and_align=True)
+        faces, num_faces = self.ucf.detect_faces(image)
+        preprocessed_image = self.ucf.preprocess(image, faces=faces)
         output = self.ucf.infer(preprocessed_image)
-        print(f"output: {output}")
+        print(f"Face crop and align output: {output}")
+        self.assertIsNotNone(output, "Inference output should not be None")
+
+    def test_infer_general(self):
+        """Test a basic inference to ensure model outputs are correct."""
+        # Assuming an image is available at the specified path
+        image_path = './sample_images/celebahq_0.jpg'
+        image = Image.open(image_path)
+        preprocessed_image = self.ucf.preprocess(image)
+        output = self.ucf.infer(preprocessed_image)
+        print(f"General output: {output}")
         self.assertIsNotNone(output, "Inference output should not be None")
 
 if __name__ == '__main__':

@@ -205,6 +205,7 @@ def extract_aligned_face_dlib(face_detector, predictor, image, res=256, mask=Non
     
     else:
         return None, None, None
+        
 
 def video_manipulate(
     movie_path: Path,

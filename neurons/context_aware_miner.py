@@ -77,7 +77,8 @@ class Miner(BaseMinerNeuron):
             image = Image.open(io.BytesIO(image_bytes))
             image_tensor = self.model.preprocess(image)
             pred = self.model.infer(image_tensor)
-            synapse.prediction = pred
+            rounded_prob = np.round(pred).astype(int)
+            synapse.prediction = rounded_prob
         except Exception as e:
             bt.logging.error("Error performing inference")
             bt.logging.error(e)
