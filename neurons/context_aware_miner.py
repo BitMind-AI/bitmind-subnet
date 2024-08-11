@@ -33,8 +33,10 @@ detectors_path = os.path.join(script_directory, '../base_miner/UCF/detectors/')
 sys.path.append(detectors_path)
 
 from base_miner.UCF.pretrained_ucf import UCF
+from base_miner.NPR.networks.resnet import resnet50
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
+from bitmind.miner.predict import predict
 
 UCF_CONFIG_PATH = "./base_miner/UCF/config/ucf.yaml"
 UCF_WEIGHTS_PATH = "./base_miner/UCF/weights/"
@@ -64,10 +66,20 @@ class Miner(BaseMinerNeuron):
 
         """
         try:
-            self.model = UCF(config_path=UCF_CONFIG_PATH,
+            bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
+
+            # UCF for face detection
+            self.face_model = UCF(config_path=UCF_CONFIG_PATH,
                              weights_dir=UCF_WEIGHTS_PATH,
                              ucf_checkpoint_name=UCF_CHECKPOINT_NAME)
-            bt.logging.info(f"Loading detector model from {UCF_WEIGHTS_PATH}")
+
+            # NPR for general detection
+            self.general_model = resnet50(num_classes=1)
+            general_model_weight_path = self.config.neuron.model_path
+            bt.logging.info(f"Loading general model from {weight_path}")
+            self.general_model.load_state_dict(torch.load(weight_path, map_location='cpu'))
+            self.general_model.eval()
+            
         except Exception as e:
             bt.logging.error("Error loading model")
             bt.logging.error(e)
@@ -75,10 +87,19 @@ class Miner(BaseMinerNeuron):
         try:
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))
-            image_tensor = self.model.preprocess(image)
-            pred = self.model.infer(image_tensor)
-            rounded_prob = np.round(pred).astype(int)
-            synapse.prediction = rounded_prob
+
+            faces, num_faces = face_model.detect_faces(image)
+            # If there is at least one face...
+            if(faces):
+                # Use UCF model
+                image_tensor = self.face_model.preprocess(image, faces=faces)
+                pred = self.face_model.infer(image_tensor)
+            else:
+                # Use general model
+                pred = predict(self.general_model, image)
+                
+            synapse.prediction = pred
+            
         except Exception as e:
             bt.logging.error("Error performing inference")
             bt.logging.error(e)
