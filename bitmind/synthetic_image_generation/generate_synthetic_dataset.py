@@ -133,7 +133,7 @@ def save_json_files(json_filenames, annotations_dir, synthetic_image_generator, 
         filename = f"{name}.png"
         file_path = os.path.join(synthetic_images_dir, filename)
         if resize:
-            synthetic_image = resize_image(synthetic_image['image'], TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
+            synthetic_image['image'] = resize_image(synthetic_image['image'], TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
         synthetic_image['image'].save(file_path)
         total_images += 1
     return total_images
