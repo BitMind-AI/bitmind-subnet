@@ -1,5 +1,5 @@
 from transformers import pipeline
-from diffusers import DiffusionPipeline
+from diffusers import DiffusionPipeline, FluxPipeline
 from transformers import set_seed
 from datasets import load_dataset
 import bittensor as bt
@@ -135,8 +135,10 @@ class SyntheticImageGenerator:
 
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
-        self.diffuser = DiffusionPipeline.from_pretrained(
+        #self.diffuser = DiffusionPipeline.from_pretrained(
+        self.diffuser = FluxPipeline.from_pretrained(
             diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
+        self.diffuser.enable_model_cpu_offload()
         self.diffuser.to("cuda")
 
     def generate_image_caption(self, image_sample) -> str:
