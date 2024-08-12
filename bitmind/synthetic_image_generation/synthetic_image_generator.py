@@ -104,7 +104,22 @@ class SyntheticImageGenerator:
         gen_data = []
         for prompt in prompts:
             image_name = f"{time.time()}.jpg"
-            gen_image = self.diffuser(prompt=prompt).images[0]
+
+            gen_args = {}
+            if 'generate_args' in DIFFUSER_ARGS[diffuser_name]:
+                gen_args = DIFFUSER_ARGS[diffuser_name]['generate_args']
+                if isinstance(gen_args['num_inference_steps'], dict):
+                    gen_args['num_inference_steps'] = np.random.randint(
+                        gen_args['num_inference_steps']['min'],
+                        gen_args['num_inference_steps']['max'])
+
+            gen_image = self.diffuser(
+                prompt=prompt,
+                num_images_per_prompt=1,
+                height=np.random.choice([512, 768, 1024, 1360]),
+                width=np.random.choice([512, 768, 1024, 1360]),
+                **gen_args
+            ).images[0]
             gen_data.append({
                 'prompt': prompt,
                 'image': gen_image,
@@ -135,9 +150,10 @@ class SyntheticImageGenerator:
 
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
-        #self.diffuser = DiffusionPipeline.from_pretrained(
         self.diffuser = FluxPipeline.from_pretrained(
-            diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
+            diffuser_name,
+            torch_dtype=DIFFUSER_ARGS[diffuser_name].get('torch_dtype', torch.bfloat16),
+            use_safetensors=DIFFUSER_ARGS[diffuser_name].get('use_safetensors', True))
         self.diffuser.enable_model_cpu_offload()
         self.diffuser.to("cuda")
 
