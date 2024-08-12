@@ -19,3 +19,4 @@ tensorboardx
 tf-keras
 httpx
 wandb
+sentencepiece

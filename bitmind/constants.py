@@ -1,4 +1,5 @@
 import os
+import torch
 
 
 WANDB_PROJECT = 'bitmind'
@@ -27,11 +28,23 @@ VALIDATOR_MODEL_META = {
     "diffusers": [
         {
             "path": "black-forest-labs/FLUX.1-schnell",
-            "use_safetensors": True
+            "use_safetensors": True,
+            "torch_dtype": torch.bfloat16,
+            "generate_args": {
+                "guidance_scale": 0.0,
+                "num_inference_steps": 1,
+                "generator": torch.Generator("cuda")
+            }
         },
         {
             'path': 'black-forest-labs/FLUX.1-dev',
-            "use_safetensors": True
+            "use_safetensors": True,
+            "torch_dtype": torch.bfloat16,
+            "generate_args": {
+                "guidance_scale": 3.5,
+                "num_inference_steps": {"min": 50, "max": 200},
+                "generator": torch.Generator("cuda")
+            },
         }
     ]
 }
