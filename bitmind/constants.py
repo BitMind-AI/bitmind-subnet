@@ -1,7 +1,7 @@
 import os
 
 
-WANDB_PROJECT = 'bitmind-subnet'
+WANDB_PROJECT = 'bitmind'
 WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {
@@ -26,17 +26,11 @@ VALIDATOR_MODEL_META = {
     ],
     "diffusers": [
         {
-            "path": "stabilityai/stable-diffusion-xl-base-1.0",
-            "use_safetensors": True,
-            "variant": "fp16"
+            "path": "black-forest-labs/FLUX.1-schnell",
+            "use_safetensors": True
         },
         {
-            "path": "SG161222/RealVisXL_V4.0",
-            "use_safetensors": True,
-            "variant": "fp16"
-        },
-        {
-            "path": "Corcelio/mobius",
+            'path': 'black-forest-labs/FLUX.1-dev',
             "use_safetensors": True
         }
     ]
