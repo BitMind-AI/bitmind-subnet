@@ -1,51 +1,147 @@
 import time
-
 import asyncio
 import random
 import bittensor as bt
-
+import numpy as np
 from typing import List
+from PIL import Image
+
+from bitmind.constants import DIFFUSER_NAMES
+from tests.fixtures import NETUID
+
+
+def create_random_image():
+    random_data = np.random.randint(0, 256, (512, 512, 3), dtype=np.uint8)
+    return Image.fromarray(random_data)
+
+
+class MockImageDataset:
+    def __init__(
+            self,
+            huggingface_dataset_path: str,
+            huggingface_datset_split: str = 'train',
+            huggingface_datset_name: str = None,
+            create_splits: bool = False,
+            download_mode: str = None):
+
+        self.huggingface_dataset_path = huggingface_dataset_path
+        self.huggingface_datset_name = huggingface_datset_name
+        self.dataset = ""
+        self.sampled_images_idx = []
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            'image': create_random_image(),
+            'id': index,
+            'source': self.huggingface_dataset_path
+        }
+
+    def sample(self, k=1):
+        return [self.__getitem__(i) for i in range(k)], [i for i in range(k)]
+
+
+class MockSyntheticImageGenerator:
+    def __init__(self, prompt_type, use_random_diffuser, diffuser_name):
+        self.prompt_type = prompt_type
+        self.diffuser_name = diffuser_name
+        self.use_random_diffuser = use_random_diffuser
+
+    def generate(self, k=1, real_images=None):
+        if self.use_random_diffuser:
+            self.load_diffuser('random')
+        else:
+            self.load_diffuser(self.diffuser_name)
+
+        return [{
+            'prompt': f'mock {self.prompt_type} prompt',
+            'image': create_random_image(),
+            'id': i
+        } for i in range(k)]
+
+    def load_diffuser(self, diffuser_name) -> None:
+        """
+        loads a huggingface diffuser model.
+        """
+        if diffuser_name == 'random':
+            diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
+        self.diffuser_name = diffuser_name
+
+
+class MockValidator:
+    def __init__(self, config):
+        self.config = config
+        subtensor = MockSubtensor(netuid=NETUID, wallet=bt.MockWallet())
+
+        self.metagraph = MockMetagraph(
+            netuid=NETUID,
+            subtensor=subtensor
+        )
+        self.dendrite = MockDendrite(bt.MockWallet())
+        self.real_image_datasets = [
+            MockImageDataset(
+                f"fake-path/dataset-{i}",
+                'train',
+                None,
+                False)
+            for i in range(3)
+        ]
+        self.synthetic_image_generator = MockSyntheticImageGenerator(
+            prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
+
+        self._fake_prob = config.fake_prob
+
+    def update_scores(self, rewards, miner_uids):
+        pass
 
 
 class MockSubtensor(bt.MockSubtensor):
-    def __init__(self, netuid, n=16, wallet=None, network="mock"):
+    def __init__(self, netuid=NETUID, n=16, wallet=None, network="mock"):
         super().__init__(network=network)
+        bt.MockSubtensor.reset()  # reset chain state so test cases don't interfere with one another
 
         if not self.subnet_exists(netuid):
             self.create_subnet(netuid)
 
         # Register ourself (the validator) as a neuron at uid=0
         if wallet is not None:
-            self.force_register_neuron(
-                netuid=netuid,
-                hotkey=wallet.hotkey.ss58_address,
-                coldkey=wallet.coldkey.ss58_address,
-                balance=100000,
-                stake=100000,
-            )
+            try:
+                self.force_register_neuron(
+                    netuid=netuid,
+                    hotkey=wallet.hotkey.ss58_address,
+                    coldkey=wallet.coldkey.ss58_address,
+                    balance=100000,
+                    stake=100000,
+                )
+            except Exception as e:
+                print(f"Skipping force_register_neuron: {e}")
 
         # Register n mock neurons who will be miners
         for i in range(1, n + 1):
-            self.force_register_neuron(
-                netuid=netuid,
-                hotkey=f"miner-hotkey-{i}",
-                coldkey="mock-coldkey",
-                balance=100000,
-                stake=100000,
-            )
+            try:
+                self.force_register_neuron(
+                    netuid=netuid,
+                    hotkey=f"miner-hotkey-{i}",
+                    coldkey="mock-coldkey",
+                    balance=100000,
+                    stake=100000,
+                )
+            except Exception as e:
+                print(f"Skipping force_register_neuron: {e}")
 
 
 class MockMetagraph(bt.metagraph):
-    def __init__(self, netuid=1, network="mock", subtensor=None):
+    def __init__(self, netuid=NETUID, network="mock", subtensor=None):
         super().__init__(netuid=netuid, network=network, sync=False)
+        self.default_ip = "127.0.0.0"
+        self.default_port = 8092
 
         if subtensor is not None:
             self.subtensor = subtensor
         self.sync(subtensor=subtensor)
 
         for axon in self.axons:
-            axon.ip = "127.0.0.0"
-            axon.port = 8092
+            axon.ip = self.default_ip
+            axon.port = self.default_port
 
         bt.logging.info(f"Metagraph: {self}")
         bt.logging.info(f"Axons: {self.axons}")
@@ -87,15 +183,15 @@ class MockDendrite(bt.dendrite):
                     s.dendrite.process_time = str(time.time() - start_time)
                     # Update the status code and status message of the dendrite to match the axon
                     # TODO (developer): replace with your own expected synapse data
-                    s.dummy_output = s.dummy_input * 2
+                    s.prediction = np.random.rand(1)[0]
                     s.dendrite.status_code = 200
                     s.dendrite.status_message = "OK"
-                    synapse.dendrite.process_time = str(process_time)
+                    s.dendrite.process_time = str(process_time)
                 else:
-                    s.dummy_output = 0
+                    s.prediction = -1
                     s.dendrite.status_code = 408
                     s.dendrite.status_message = "Timeout"
-                    synapse.dendrite.process_time = str(timeout)
+                    s.dendrite.process_time = str(timeout)
 
                 # Return the updated synapse object after deserializing if requested
                 if deserialize:
