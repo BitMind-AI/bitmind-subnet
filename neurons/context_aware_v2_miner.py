@@ -36,7 +36,6 @@ predictor_path = os.path.join(base_ucf_path, 'preprocessing', 'dlib_tools',
                               'shape_predictor_81_face_landmarks.dat')
 
 from pretrained_ucf import UCF
-from base_miner.NPR.networks.resnet import resnet50
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 from bitmind.miner.predict import predict
