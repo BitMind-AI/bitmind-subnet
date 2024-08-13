@@ -1,4 +1,4 @@
-import logging
+import bittensor as bt
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Ignore INFO and WARN messages
 
@@ -37,8 +37,7 @@ class UCF:
         self.face_detector = dlib.get_frontal_face_detector()
         self.predictor_path = predictor_path
         if not os.path.exists(predictor_path):
-            logger.error(f"Predictor path does not exist: {predictor_path}")
-            sys.exit()
+            bt.logging.error(f"Predictor path does not exist: {predictor_path}")
         self.face_predictor = dlib.shape_predictor(predictor_path)
         
         self.init_cudnn()
@@ -51,14 +50,14 @@ class UCF:
         destination_path = self.weights_dir / model_filename
         if not destination_path.parent.exists():
             destination_path.parent.mkdir(parents=True, exist_ok=True)
-            logging.info(f"Created directory {destination_path.parent}.")
+            bt.logging.info(f"Created directory {destination_path.parent}.")
         if not destination_path.exists():
             model_path = hf_hub_download(self.hugging_face_repo_name, model_filename)
-            model = torch.load(model_path)
+            model = torch.load(model_path, map_location=self.device)
             torch.save(model, destination_path)
-            logging.info(f"Downloaded {model_filename} to {destination_path}.")
+            bt.logging.info(f"Downloaded {model_filename} to {destination_path}.")
         else:
-            logging.info(f"{model_filename} already present at {destination_path}.")
+            bt.logging.info(f"{model_filename} already present at {destination_path}.")
 
     def load_config(self):
         if not self.config_path.exists():
@@ -85,9 +84,9 @@ class UCF:
         try:
             checkpoint = torch.load(weights_path, map_location=self.device)
             model.load_state_dict(checkpoint, strict=True)
-            logging.info('Loaded checkpoint successfully.')
+            bt.logging.info('Loaded checkpoint successfully.')
         except FileNotFoundError:
-            logging.error('Failed to load the pretrained weights.')
+            bt.logging.error('Failed to load the pretrained weights.')
         return model
 
     def get_keypts(self, image, face):
@@ -233,7 +232,7 @@ class UCF:
                 image = Image.fromarray(cropped_face)
             else:
                 # Log a message if face cropping failed.
-                logging.info("Largest face was not successfully cropped.")
+                bt.logging.info("Largest face was not successfully cropped.")
         
         # Convert image to RGB format to ensure consistent color handling.
         image = image.convert('RGB')

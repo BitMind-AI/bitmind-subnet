@@ -32,13 +32,15 @@ script_directory = os.path.dirname(os.path.realpath(__file__))
 base_ucf_path = os.path.join(script_directory, '../base_miner/UCF/')
 resolved_path = os.path.abspath(base_ucf_path)
 sys.path.append(resolved_path)
+predictor_path = os.path.join(base_ucf_path, 'preprocessing', 'dlib_tools',
+                              'shape_predictor_81_face_landmarks.dat')
 
 from pretrained_ucf import UCF
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 
-UCF_CONFIG_PATH = "./base_miner/UCF/config/ucf.yaml"
-UCF_WEIGHTS_PATH = "./base_miner/UCF/weights/"
+UCF_CONFIG_PATH = os.path.join(base_ucf_path, 'config', 'ucf.yaml')
+UCF_WEIGHTS_PATH = os.path.join(base_ucf_path, 'weights')
 UCF_CHECKPOINT_NAME = "ucf_best.pth"
 
 class Miner(BaseMinerNeuron):
@@ -67,7 +69,8 @@ class Miner(BaseMinerNeuron):
         try:
             self.model = UCF(config_path=UCF_CONFIG_PATH,
                              weights_dir=UCF_WEIGHTS_PATH,
-                             ucf_checkpoint_name=UCF_CHECKPOINT_NAME)
+                             ucf_checkpoint_name=UCF_CHECKPOINT_NAME,
+                             predictor_path=predictor_path)
             bt.logging.info(f"Loading detector model from {UCF_WEIGHTS_PATH}")
         except Exception as e:
             bt.logging.error("Error loading model")
