@@ -92,7 +92,7 @@ class Miner(BaseMinerNeuron):
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))
 
-            faces, num_faces = face_model.detect_faces(image)
+            faces, num_faces = self.face_model.detect_faces(image)
             # If there is at least one face...
             if(faces):
                 # Use UCF model
