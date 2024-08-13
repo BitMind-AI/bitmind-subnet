@@ -80,8 +80,8 @@ class Miner(BaseMinerNeuron):
             # NPR for general detection
             self.general_model = resnet50(num_classes=1)
             general_model_weight_path = self.config.neuron.model_path
-            bt.logging.info(f"Loading general model from {weight_path}")
-            self.general_model.load_state_dict(torch.load(weight_path, map_location='cpu'))
+            bt.logging.info(f"Loading general model from {general_model_weight_path}")
+            self.general_model.load_state_dict(torch.load(general_model_weight_path, map_location='cpu'))
             self.general_model.eval()
             
         except Exception as e:
