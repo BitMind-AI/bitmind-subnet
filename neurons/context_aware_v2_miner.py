@@ -38,7 +38,6 @@ predictor_path = os.path.join(base_ucf_path, 'preprocessing', 'dlib_tools',
 from pretrained_ucf import UCF
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
-from bitmind.miner.predict import predict
 
 UCF_CONFIG_PATH = os.path.join(base_ucf_path, 'config', 'ucf.yaml')
 UCF_WEIGHTS_PATH = os.path.join(base_ucf_path, 'weights')
@@ -49,25 +48,6 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        self.model = None
-
-    async def forward(
-        self, synapse: ImageSynapse
-    ) -> ImageSynapse:
-        """
-        Loads the deepfake detection model (a PyTorch binary classifier) from the path specified in --neuron.model_path.
-        Processes the incoming ImageSynapse and passes the image to the loaded model for classification.
-        The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
-        their model file as a means of updating their miner's predictor.
-
-        Args:
-            synapse (ImageSynapse): The synapse object containing the list of b64 encoded images in the
-            'images' field.
-
-        Returns:
-            ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
-
-        """
         try:
             bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
 
@@ -87,6 +67,23 @@ class Miner(BaseMinerNeuron):
             bt.logging.error("Error loading model")
             bt.logging.error(e)
 
+    async def forward(
+        self, synapse: ImageSynapse
+    ) -> ImageSynapse:
+        """
+        Loads the deepfake detection model (a PyTorch binary classifier) from the path specified in --neuron.model_path.
+        Processes the incoming ImageSynapse and passes the image to the loaded model for classification.
+        The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
+        their model file as a means of updating their miner's predictor.
+
+        Args:
+            synapse (ImageSynapse): The synapse object containing the list of b64 encoded images in the
+            'images' field.
+
+        Returns:
+            ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
+
+        """
         try:
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))
