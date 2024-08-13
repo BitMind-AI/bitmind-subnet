@@ -18,6 +18,7 @@ from PIL import Image
 from huggingface_hub import hf_hub_download
 from imutils import face_utils
 from skimage import transform as trans
+import gc
 
 from base_miner.UCF.detectors import DETECTOR
 
@@ -255,3 +256,28 @@ class UCF:
         with torch.no_grad():
             self.model({'image': image_tensor}, inference=True)
         return self.model.prob[-1]
+    
+    def free_memory(self):
+        """ Frees up memory by setting model and large data structures to None. """
+        bt.logging.info("Freeing up memory...")
+
+        if self.model is not None:
+            self.model.cpu()  # Move model to CPU to free up GPU memory (if applicable)
+            del self.model
+            self.model = None
+
+        if self.face_detector is not None:
+            del self.face_detector
+            self.face_detector = None
+
+        if self.face_predictor is not None:
+            del self.face_predictor
+            self.face_predictor = None
+
+        gc.collect()
+
+        # If using GPUs and PyTorch, clear the cache as well
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        bt.logging.info("Memory freed successfully.")

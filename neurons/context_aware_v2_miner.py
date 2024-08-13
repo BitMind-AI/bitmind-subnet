@@ -24,7 +24,6 @@ import base64
 import time
 import typing
 import io
-import numpy as np
 import os
 import sys
 
@@ -48,24 +47,6 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        try:
-            bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
-
-            # UCF-DFB for face detection
-            self.face_model = UCF(config_path=UCF_CONFIG_PATH,
-                             weights_dir=UCF_WEIGHTS_PATH,
-                             ucf_checkpoint_name=UCF_DFB_CHECKPOINT_NAME,
-                             predictor_path=predictor_path)
-
-            # UCF-BitMind for general detection
-            self.general_model = UCF(config_path=UCF_CONFIG_PATH,
-                             weights_dir=UCF_WEIGHTS_PATH,
-                             ucf_checkpoint_name=UCF_BITMIND_CHECKPOINT_NAME,
-                             predictor_path=predictor_path)
-            
-        except Exception as e:
-            bt.logging.error("Error loading model")
-            bt.logging.error(e)
 
     async def forward(
         self, synapse: ImageSynapse
@@ -87,6 +68,16 @@ class Miner(BaseMinerNeuron):
         try:
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))
+            try:
+                bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
+                # UCF-DFB for face detection
+                self.face_model = UCF(config_path=UCF_CONFIG_PATH,
+                                        weights_dir=UCF_WEIGHTS_PATH,
+                                        ucf_checkpoint_name=UCF_DFB_CHECKPOINT_NAME,
+                                        predictor_path=predictor_path)
+            except Exception as e:
+                bt.logging.error("Error loading face model")
+                bt.logging.error(e)
 
             faces, num_faces = self.face_model.detect_faces(image)
             # If there is at least one face...
@@ -95,7 +86,18 @@ class Miner(BaseMinerNeuron):
                 image_tensor = self.face_model.preprocess(image, faces=faces)
                 pred = self.face_model.infer(image_tensor)
             else:
+                self.face_model.free_memory()
                 # Use general model
+                # UCF-BitMind for general detection
+                try:
+                    self.general_model = UCF(config_path=UCF_CONFIG_PATH,
+                                    weights_dir=UCF_WEIGHTS_PATH,
+                                    ucf_checkpoint_name=UCF_BITMIND_CHECKPOINT_NAME,
+                                    predictor_path=predictor_path)
+                except Exception as e:
+                    bt.logging.error("Error loading general model")
+                    bt.logging.error(e)
+
                 image_tensor = self.general_model.preprocess(image)
                 pred = self.general_model.infer(image_tensor)
                 
