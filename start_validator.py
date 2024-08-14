@@ -15,7 +15,7 @@ def update_and_restart(pm2_name, wallet_name, wallet_hotkey, port, network, addr
 
     vali_start_command = [
         "pm2", "start", "neurons/validator.py", "--interpreter", "python3", "--name", pm2_name, "--", "--wallet.name", wallet_name, "--wallet.hotkey", wallet_hotkey,
-        "--netuid", "168", "--subtensor.network", network, "--axon.port", port
+        "--netuid", "34", "--subtensor.network", network, "--axon.port", port
     ]
     if network == 'finney' or address != default_address:
         vali_start_command += ["--subtensor.chain_endpoint", address]
