@@ -49,7 +49,25 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        self.model = None
+        try:
+            bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
+
+            # UCF for face detection
+            self.face_model = UCF(config_path=UCF_CONFIG_PATH,
+                             weights_dir=UCF_WEIGHTS_PATH,
+                             ucf_checkpoint_name=UCF_CHECKPOINT_NAME,
+                             predictor_path=predictor_path)
+
+            # NPR for general detection
+            self.general_model = resnet50(num_classes=1)
+            general_model_weight_path = self.config.neuron.model_path
+            bt.logging.info(f"Loading general model from {general_model_weight_path}")
+            self.general_model.load_state_dict(torch.load(general_model_weight_path, map_location='cpu'))
+            self.general_model.eval()
+            
+        except Exception as e:
+            bt.logging.error("Error loading models")
+            bt.logging.error(e)
 
     async def forward(
         self, synapse: ImageSynapse
@@ -68,26 +86,6 @@ class Miner(BaseMinerNeuron):
             ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
 
         """
-        try:
-            bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
-
-            # UCF for face detection
-            self.face_model = UCF(config_path=UCF_CONFIG_PATH,
-                             weights_dir=UCF_WEIGHTS_PATH,
-                             ucf_checkpoint_name=UCF_CHECKPOINT_NAME,
-                             predictor_path=predictor_path)
-
-            # NPR for general detection
-            self.general_model = resnet50(num_classes=1)
-            general_model_weight_path = self.config.neuron.model_path
-            bt.logging.info(f"Loading general model from {general_model_weight_path}")
-            self.general_model.load_state_dict(torch.load(general_model_weight_path, map_location='cpu'))
-            self.general_model.eval()
-            
-        except Exception as e:
-            bt.logging.error("Error loading model")
-            bt.logging.error(e)
-
         try:
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))
