@@ -92,7 +92,7 @@ class Miner(BaseMinerNeuron):
 
             faces, num_faces = self.face_model.detect_faces(image)
             # If there is at least one face...
-            if(faces):
+            if num_faces:
                 # Use UCF model
                 image_tensor = self.face_model.preprocess(image, faces=faces)
                 pred = self.face_model.infer(image_tensor)
