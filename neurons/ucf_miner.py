@@ -47,7 +47,15 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        self.model = None
+        try:
+            self.model = UCF(config_path=UCF_CONFIG_PATH,
+                             weights_dir=UCF_WEIGHTS_PATH,
+                             ucf_checkpoint_name=UCF_CHECKPOINT_NAME,
+                             predictor_path=predictor_path)
+            bt.logging.info(f"Loading detector model from {UCF_WEIGHTS_PATH}")
+        except Exception as e:
+            bt.logging.error("Error loading model")
+            bt.logging.error(e)
 
     async def forward(
         self, synapse: ImageSynapse
@@ -66,16 +74,6 @@ class Miner(BaseMinerNeuron):
             ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
 
         """
-        try:
-            self.model = UCF(config_path=UCF_CONFIG_PATH,
-                             weights_dir=UCF_WEIGHTS_PATH,
-                             ucf_checkpoint_name=UCF_CHECKPOINT_NAME,
-                             predictor_path=predictor_path)
-            bt.logging.info(f"Loading detector model from {UCF_WEIGHTS_PATH}")
-        except Exception as e:
-            bt.logging.error("Error loading model")
-            bt.logging.error(e)
-
         try:
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))

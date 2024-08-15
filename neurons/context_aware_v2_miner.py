@@ -64,9 +64,9 @@ class Miner(BaseMinerNeuron):
                             weights_dir=UCF_WEIGHTS_PATH,
                             ucf_checkpoint_name=UCF_BITMIND_CHECKPOINT_NAME,
                             predictor_path=predictor_path)
-            except Exception as e:
-                bt.logging.error("Error loading general model")
-                bt.logging.error(e)
+        except Exception as e:
+            bt.logging.error("Error loading general model")
+            bt.logging.error(e)
 
     async def forward(
         self, synapse: ImageSynapse
