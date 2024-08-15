@@ -5,6 +5,17 @@ import os
 import subprocess
 import time
 
+# Set the interval in hours to restart the PM2 process
+RESTART_INTERVAL_HOURS = 6
+PM2_PROCESS_NAME = "bitmind_validator"
+
+
+def restart_pm2_process():
+    print(f"Restarting PM2 process: {PM2_PROCESS_NAME}")
+    os.system(f"pm2 delete {PM2_PROCESS_NAME}")
+    os.system(f"pm2 start {PM2_PROCESS_NAME}")
+    print(f"PM2 process {PM2_PROCESS_NAME} restarted successfully")
+
 
 def should_update_local(local_commit, remote_commit):
     return local_commit != remote_commit
@@ -15,6 +26,7 @@ time.sleep(10)
 
 
 def run_auto_updater():
+    last_restart_time = time.time()
     while True:
         current_branch = subprocess.getoutput("git rev-parse --abbrev-ref HEAD")
         local_commit = subprocess.getoutput("git rev-parse HEAD")
@@ -41,6 +53,13 @@ def run_auto_updater():
 
         else:
             print("Repo is up-to-date.")
+
+        time.sleep(60)
+
+        # Check if it's time to restart the PM2 process
+        if time.time() - last_restart_time >= RESTART_INTERVAL_HOURS * 3600:
+            restart_pm2_process()
+            last_restart_time = time.time()  # Reset the timer after the restart
 
         time.sleep(60)
 
