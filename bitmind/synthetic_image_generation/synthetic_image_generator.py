@@ -140,8 +140,10 @@ class SyntheticImageGenerator:
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
         pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
-        self.diffuser = pipeline_class.from_pretrained(
-            diffuser_name, torch_dtype=torch.float16, **DIFFUSER_ARGS[diffuser_name])
+        self.diffuser = pipeline_class.from_pretrained(diffuser_name,
+                                                       torch_dtype=torch.float16,
+                                                       **DIFFUSER_ARGS[diffuser_name],
+                                                       add_watermarker=False)
         self.diffuser.set_progress_bar_config(disable=True)
         self.diffuser.to("cuda")
         print(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
