@@ -79,7 +79,7 @@ class ImageAnnotationGenerator:
         dict: Dictionary containing the annotation data.
         """
         image_to_process = image.copy()
-        if resize:
+        if resize: # Downsize if dimension(s) are greater than 1280
             image_to_process = image_utils.resize_image(image_to_process, 1280, 1280)
             if verbose > 1 and image_to_process.size != image.size:
                 bt.logging.info(f"Resized {image_id}: {image.size} to {image_to_process.size}")

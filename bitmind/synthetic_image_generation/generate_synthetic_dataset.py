@@ -61,6 +61,7 @@ def parse_arguments():
     --real_image_dataset_name (str): Required. Name of the real image dataset.
     --diffusion_model (str): Required. Diffusion model to use for image generation.
     --upload_annotations (bool): Optional. Flag to upload annotations to Hugging Face.
+    --download_annotations (bool): Optional. Flag to download existing annotations from Hugging Face.
     --generate_synthetic_images (bool): Optional. Flag to generate synthetic images.
     --upload_synthetic_images (bool): Optional. Flag to upload synthetic images to Hugging Face.
     --hf_token (str): Required for interfacing with Hugging Face.
@@ -74,6 +75,8 @@ def parse_arguments():
                         help='Diffusion model to use for image generation.')
     parser.add_argument('--upload_annotations', action='store_true', default=False, 
                         help='Upload annotations to Hugging Face.')
+    parser.add_argument('--download_annotations', action='store_true', default=False, 
+                        help='Download annotations from Hugging Face.')
     parser.add_argument('--generate_synthetic_images', action='store_true', default=False, 
                         help='Generate synthetic images.')
     parser.add_argument('--upload_synthetic_images', action='store_true', default=False, 
@@ -197,7 +200,7 @@ def main():
     batch_size = 16
 
     # If annotations exist on Hugging Face, load them to disk.
-    if dataset_exists_on_hf(hf_annotations_name, args.hf_token):
+    if args.download_annotations and dataset_exists_on_hf(hf_annotations_name, args.hf_token):
         print("Annotations exist on Hugging Face.")
         # Check if the annotations are already saved locally
         if not Path(annotations_dir).is_dir() or not any(Path(annotations_dir).iterdir()):
