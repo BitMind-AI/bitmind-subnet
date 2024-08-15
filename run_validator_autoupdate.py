@@ -6,7 +6,7 @@ import subprocess
 import time
 
 # Set the interval in hours to restart the PM2 process
-RESTART_INTERVAL_HOURS = 6
+RESTART_INTERVAL_HOURS = 6.5
 PM2_PROCESS_NAME = "bitmind_validator"
 
 
