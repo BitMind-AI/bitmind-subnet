@@ -205,12 +205,31 @@ class SyntheticImageGenerator:
                 return prompt
 
     def get_tokenizer_with_min_len(self):
+        """
+        Returns the tokenizer with the smallest maximum token length from the 'diffuser` object.
+    
+        If a second tokenizer exists, it compares both and returns the one with the smaller 
+        maximum token length. Otherwise, it returns the available tokenizer.
+        
+        Returns:
+            tuple: A tuple containing the tokenizer and its maximum token length.
+        """
+        # Check if a second tokenizer is available in the diffuser
         if self.diffuser.tokenizer_2:
             if self.diffuser.tokenizer.model_max_length > self.diffuser.tokenizer_2.model_max_length:
                 return self.diffuser.tokenizer_2, self.diffuser.tokenizer_2.model_max_length
         return self.diffuser.tokenizer, self.diffuser.tokenizer.model_max_length
 
-    def truncate_prompt_if_too_long(self, prompt):
+    def truncate_prompt_if_too_long(self, prompt: str):
+        """
+        Truncates the input string if it exceeds the maximum token length when tokenized.
+    
+        Args:
+            prompt (str): The text prompt that may need to be truncated.
+    
+        Returns:
+            str: The original prompt if within the token limit; otherwise, a truncated version of the prompt.
+        """
         tokenizer, max_token_len = self.get_tokenizer_with_min_len()
         tokens = tokenizer(prompt, verbose=False) # Suppress token max exceeded warnings
         if len(tokens['input_ids']) < max_token_len:
@@ -223,6 +242,17 @@ class SyntheticImageGenerator:
         return truncated_prompt
     
     def generate_image(self, prompt, name = None, generate_at_target_size = False) -> list:
+        """
+        Generates an image based on a text prompt, optionally at a specified target size.
+    
+        Args:
+            prompt (str): The text prompt used for generating the image.
+            name (str, optional): The id associated with the generated image. Defaults to None.
+            generate_at_target_size (bool, optional): If True, generates the image at a specified target size.
+    
+        Returns:
+            list: A dictionary containing the prompt (truncated if over max token length), generated image, and image ID.
+        """
         # Generate a unique image name based on current time if not provided
         image_name = name if name else f"{time.time():.0f}.jpg"
         # Check if the prompt is too long

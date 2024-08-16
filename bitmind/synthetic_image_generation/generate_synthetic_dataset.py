@@ -63,6 +63,8 @@ def parse_arguments():
     --diffusion_model (str): Required. Diffusion model to use for image generation.
     --upload_annotations (bool): Optional. Flag to upload annotations to Hugging Face.
     --download_annotations (bool): Optional. Flag to download existing annotations from Hugging Face.
+    --skip_generate_annotations (bool): Optional. Flag to skip local annotation generation.
+                                        Useful when local annotations exist.
     --generate_synthetic_images (bool): Optional. Flag to generate synthetic images.
     --upload_synthetic_images (bool): Optional. Flag to upload synthetic images to Hugging Face.
     --hf_token (str): Required for interfacing with Hugging Face.
@@ -207,7 +209,7 @@ def main():
                 
     batch_size = 16
 
-    # If annotations exist on Hugging Face, load them to disk.
+    # Generate or download annotations to local storage.
     if args.download_annotations and dataset_exists_on_hf(hf_annotations_name, args.hf_token):
         print("Annotations exist on Hugging Face.")
         # Check if the annotations are already saved locally
@@ -229,7 +231,6 @@ def main():
             print("Annotations already saved to disk.")
     elif not args.skip_generate_annotations:
         print("Generating new annotations.")
-        
         all_images = ImageDataset(hf_dataset_name, 'train')
         images_chunk = slice_dataset(all_images.dataset, start_index=args.start_index, end_index=args.end_index)
         all_images = None
@@ -251,6 +252,7 @@ def main():
             upload_to_huggingface(annotations_dataset, hf_annotations_name, args.hf_token)
             print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
+    # Generate synthetic images to local storage.
     if args.generate_synthetic_images:
         synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
         generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator,

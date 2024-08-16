@@ -40,6 +40,18 @@ class ImageAnnotationGenerator:
                              image: PIL.Image.Image,
                              verbose: bool = False,
                              max_new_tokens: int = 20) -> str:
+        """
+        Generates a string description for a given image by interfacing with a transformer
+        model using prompt-based captioning and building conversational context.
+    
+        Args:
+            image (PIL.Image.Image): The image for which the description is to be generated.
+            verbose (bool, optional): If True, additional logging information is printed. Defaults to False.
+            max_new_tokens (int, optional): The maximum number of tokens to generate for each prompt. Defaults to 20.
+    
+        Returns:
+            str: A generated description of the image.
+        """
         if not verbose:
             transformers_logging.set_verbosity_error()
 
