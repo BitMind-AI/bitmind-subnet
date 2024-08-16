@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 from math import ceil
 from PIL import Image
+import copy
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -91,7 +92,11 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def generate_and_save_annotations(dataset, dataset_name, synthetic_image_generator, annotations_dir, batch_size=16):
+def generate_and_save_annotations(dataset,
+                                  dataset_name,
+                                  synthetic_image_generator,
+                                  annotations_dir,
+                                  batch_size=16):
     annotations_batch = []
     image_count = 0
     start_time = time.time()
@@ -223,12 +228,17 @@ def main():
             print("Annotations already saved to disk.")
     elif not args.skip_generate_annotations:
         print("Generating new annotations.")
+        
         all_images = ImageDataset(hf_dataset_name, 'train')
         images_chunk = slice_dataset(all_images.dataset, start_index=args.start_index, end_index=args.end_index)
         all_images = None
-        generate_and_save_annotations(images_chunk, hf_dataset_name, synthetic_image_generator, annotations_dir, batch_size=batch_size)
+        generate_and_save_annotations(images_chunk,
+                                      hf_dataset_name,
+                                      synthetic_image_generator,
+                                      annotations_dir,
+                                      batch_size=batch_size)
         images_chunk = None # Free up memory
-
+        
         # Upload to Hugging Face
         if args.upload_annotations and args.hf_token:
             start_time = time.time()

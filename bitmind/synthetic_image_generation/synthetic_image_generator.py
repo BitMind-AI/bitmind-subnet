@@ -220,7 +220,7 @@ class SyntheticImageGenerator:
         truncated_prompt = tokenizer.decode(token_ids=tokens['input_ids'][:max_token_len-1],
                                             skip_special_tokens=True)
         tokens = tokenizer(truncated_prompt)
-        bt.logging.info(f"Truncated prompt to abide by token limit.")
+        bt.logging.info("Truncated prompt to abide by token limit.")
         return truncated_prompt
     
     def generate_image(self, prompt, name = None, generate_at_target_size = False) -> list:

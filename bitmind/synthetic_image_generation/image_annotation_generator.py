@@ -30,30 +30,43 @@ class ImageAnnotationGenerator:
         gc.collect()
         torch.cuda.empty_cache()
 
-    def generate_description(self, image: PIL.Image.Image, verbose: bool = False) -> str:
+    def generate_description(self,
+                             image: PIL.Image.Image,
+                             verbose: bool = False,
+                             max_new_tokens: int = 20) -> str:
         if not verbose:
             transformers_logging.set_verbosity_error()
 
         description = ""
         prompts = ["A picture of", "The setting is", "The background is", "The image type/style is"]
+        
         for i, prompt in enumerate(prompts):
             description += prompt + ' '
             inputs = self.processor(image, text=description, return_tensors="pt").to(self.device, torch.float16)
-            generated_ids = self.model.generate(**inputs, max_new_tokens=20)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens) #GPT2Tokenizer
             answer = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-
             if verbose:
                 bt.logging.info(f"{i}. Prompt: {prompt}")
                 bt.logging.info(f"{i}. Answer: {answer}")
-
+            
             if answer:
-                description += answer
+                # Remove any ending spaces or punctuation that is not a period
+                answer = answer.rstrip(" ,;!?")
+                # Add a period at the end if it's not already there
+                if not answer.endswith('.'):
+                    answer += '.'
+                    
+                description += answer + ' '
             else:
                 description = description[:-len(prompt) - 1]
 
         if not verbose:
             transformers_logging.set_verbosity_info()
-
+            
+        # Remove any trailing spaces and ensure the description ends with a period
+        description = description.strip()
+        if not description.endswith('.'):
+            description += '.'
         return description
 
     def generate_annotation(
@@ -108,7 +121,12 @@ class ImageAnnotationGenerator:
 
         original_dimensions = image_info['image'].size
         start_time = time.time()
-        annotation = self.generate_annotation(image_index, dataset_name, image_info['image'], original_dimensions, resize, verbose)
+        annotation = self.generate_annotation(image_index,
+                                              dataset_name,
+                                              image_info['image'],
+                                              original_dimensions,
+                                              resize,
+                                              verbose)
         time_elapsed = time.time() - start_time
 
         if annotation == -1:
@@ -147,7 +165,11 @@ class ImageAnnotationGenerator:
             processed_images = 0
             dataset_time = 0
             for j, image_info in enumerate(dataset):
-                annotation, time_elapsed = self.process_image(image_info, dataset_name, j, resize_images, verbose)
+                annotation, time_elapsed = self.process_image(image_info,
+                                                              dataset_name,
+                                                              j,
+                                                              resize_images,
+                                                              verbose)
                 if annotation is not None:
                     annotations.setdefault(dataset_name, {})[image_info['id']] = annotation
                     total_time += time_elapsed
