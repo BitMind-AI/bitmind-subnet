@@ -90,6 +90,8 @@ VALIDATOR_AXON_PORT=8092
 
 Then, log into weights and biases by running `wandb login` and entering your API key. If you don't have an API key, please reach out to the BitMind team via Discord and we can provide one. 
 
+Now you're ready to run your validator!
+
 ```bash
 conda activate bitmind
 pm2 start run_neuron.py -- --validator 

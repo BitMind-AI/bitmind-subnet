@@ -95,6 +95,8 @@ MINER_AXON_PORT=8091
 BLACKLIST_FORCE_VALIDATOR_PERMIT=True
 ```
 
+Now you're ready to run your miner!
+
 ```bash
 conda activate bitmind
 pm2 start run_neuron.py -- --miner 
