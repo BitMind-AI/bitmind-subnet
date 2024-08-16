@@ -58,7 +58,7 @@ python bitmind/download_data.py
 
 ### Registration
 
-To mine or validate on our subnet, must have a registered hotkey on subnet 168 on testnet.
+To validate on our subnet, must have a registered hotkey.
 
 #### Mainnet
 
@@ -76,28 +76,24 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ## Validating
 
-Before launching your validator, log into wandb by running the following command and pasting your API key when prompted. If you do not have an API key, contact the BitMind team via Discord for support.
-```bash
-wandb login
-```
+You can launch your validator with `run_neuron.py`.
 
+First, make sure to update `start_mainnet_validator.sh` or `start_testnet_validator.sh` with your **wallet name**, **hotkey name**, and your **validator port**. 
+One of scripts will be called by `run_neuron.py` based on the value supplied in the `--network` argument.
 
-You can launch your validator via pm2 using the following command. To stop your validator, you can run `pm2 delete validator`.
-
-```bash
-pm2 start ./neurons/validator.py --name validator --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME>
-```
-
-**Mainnet Example**:
+- Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
+- Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
 ```bash
-pm2 start ./neurons/validator.py --name validator -- --netuid 34 --subtensor.network finney --wallet.name default --wallet.hotkey default
+conda activate bitmind
+pm2 start run_neuron.py -- --validator --network finney
 ```
 
 **Testnet Example**:
 
 ```bash
-pm2 start ./neurons/validator.py --name validator -- --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default
+conda activate bitmind
+pm2 start run_neuron.py -- --validator --network test
 ```
 
 ---
