@@ -213,7 +213,7 @@ class SyntheticImageGenerator:
 
     def truncate_prompt_if_too_long(self, prompt):
         tokenizer, max_token_len = self.get_tokenizer_with_min_len()
-        tokens = tokenizer(prompt)
+        tokens = tokenizer(prompt, verbose=False) # Suppress token max exceeded warnings
         if len(tokens['input_ids']) < max_token_len:
             return prompt
         # Truncate tokens if they exceed the maximum token length, decode the tokens back to a string
@@ -232,26 +232,22 @@ class SyntheticImageGenerator:
         try:
             if generate_at_target_size:
                 #Attempt to generate an image with specified dimensions
-                try:
-                    gen_image = self.diffuser(prompt=truncated_prompt, height=TARGET_IMAGE_SIZE[0],
-                                          width=TARGET_IMAGE_SIZE[1]).images[0]
-                except Exception as e:
-                    print("Exception:", e)
+                gen_image = self.diffuser(prompt=truncated_prompt, height=TARGET_IMAGE_SIZE[0],
+                                      width=TARGET_IMAGE_SIZE[1]).images[0]
             else:
                 #Generate an image using default dimensions supported by the pipeline
-                try:
-                    gen_image = self.diffuser(prompt=truncated_prompt).images[0]
-                except Exception as e:
-                    print("Exception:", e)
+                gen_image = self.diffuser(prompt=truncated_prompt).images[0]
         except Exception as e:
-            bt.logging.warning(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
             if generate_at_target_size:
+                bt.logging.warning(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
                 try:
                     # Fallback to generating an image without specifying dimensions
                     gen_image = self.diffuser(prompt=truncated_prompt).images[0]
                 except Exception as fallback_error:
                     bt.logging.error(f"Failed to generate image with default dimensions after initial failure: {fallback_error}")
                     raise RuntimeError(f"Both attempts to generate image failed: {fallback_error}")
+            else:
+                bt.logging.warning(f"Image generation error: {e}")
             
         image_data = {
             'prompt': truncated_prompt,
