@@ -42,8 +42,8 @@ def test_mock_subtensor(netuid, n, wallet):
 
 @pytest.mark.parametrize("n", [16, 32, 64])
 def test_mock_metagraph(n):
-    mock_subtensor = MockSubtensor(n=n)
-    mock_metagraph = MockMetagraph(subtensor=mock_subtensor)
+    mock_subtensor = MockSubtensor(netuid=n, n=n)
+    mock_metagraph = MockMetagraph(netuid=n, subtensor=mock_subtensor)
     # Check axons
     axons = mock_metagraph.axons
     assert len(axons) == n

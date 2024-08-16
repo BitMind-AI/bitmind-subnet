@@ -60,7 +60,10 @@ python bitmind/download_data.py
 
 ### Registration
 
-To mine or validate on our subnet, must have a registered hotkey on subnet 168 on testnet.
+To mine on our subnet, you must have a registered hotkey.
+
+*Note: For testnet tao, you can make requests in the [Bittensor Discord's "Requests for Testnet Tao" channel](https://discord.com/channels/799672011265015819/1190048018184011867)*
+
 
 #### Mainnet
 
@@ -78,18 +81,36 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ## Mining
 
-You can launch your miners via pm2 using the following command. To stop your miner, you can run `pm2 delete miner`.
+You can launch your validator with `run_neuron.py`.
+
+First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
 
 ```bash
-pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --netuid XX --subtensor.network <LOCAL/FINNEY/TEST> --wallet.name <WALLET NAME> --wallet.hotkey <HOTKEY NAME> --axon.port <PORT>
+MODEL_PATH=./mining_models/base.pth
+NETUID=34 # or 168 
+SUBTENSOR_NETWORK=finney # or test
+WALLET_NAME=default
+WALLET_HOTKEY=default
+MINER_AXON_PORT=8091
+BLACKLIST_FORCE_VALIDATOR_PERMIT=True
 ```
 
-**Testnet Example**:
+Now you're ready to run your miner!
 
 ```bash
-pm2 start ./neurons/miner.py --name miner --interpreter $CONDA_PREFIX/bin/python3 -- --neuron.model_path ./mining_models/base.pth --netuid 168 --subtensor.network test --wallet.name default --wallet.hotkey default --axon.port 8091
+conda activate bitmind
+pm2 start run_neuron.py -- --miner 
 ```
 
+- Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
+- Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
+
+
+### Bring Your Own Model
+If you want to outperform the base model, you'll need to train on more data or try experiment with different model architectures. 
+
+- If you want to deploy a model you trained with your base miner code, you can simply update `MODEL_PATH` in `miner.env` to point to your new `.pth` file
+- If you try a different model architecture (which we encourage!), you'll also need to make the appropriate updates to `neurons/miner.py` and `bitmind/miner/predict.py` so that your miner can properly load and predict with your model.
 ---
 
 ## Train
@@ -104,7 +125,7 @@ cd base_miner && python train_detector.py
 - Once you've trained your model, you can evaluate its performance and inspect its predictions in `base_miner/eval_detector.ipynb`.<br>
 - To see performance improvements, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
 
-### Tensorboard
+### Tensorboard 
 
 Training metrics are logged with TensorboardX. You can view interactive graphs of these metrics by starting a tensorboard server with the following command, and navigating to `localhost:6006`.
 
@@ -123,24 +144,6 @@ with port forwarding enabled, you can start your tensorboard server on your remo
 ```bash
 tensorboard --logdir=./base_miner/checkpoints/<experiment_name> --host 0.0.0.0 --port 6006
 ```
-
-#### Update Miner Detector Model
-
-The most straightforward way to deploy a new miner is by stopping its associated pm2 process (`pm2 delete miner`) and starting it again, setting the `--neuron.model_path` argument appropriately.
-
-Another approach, which avoids miner downtime, is to replace the model file.
-
-1. Optionally make a backup of the currently active model:
-
-   ```bash
-   cp mining_models/base.pth mining_models/miner_backup.pth
-   ```
-
-2. Replace the currently active model with your newly trained one. The next forward pass of your miner will load the new model without a restart.
-
-   ```bash
-   cp path/to/your/trained/model_epoch_best.pth mining_models/base.pth
-   ```
 
 ## Predict
 
