@@ -78,23 +78,23 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 You can launch your validator with `run_neuron.py`.
 
-First, make sure to update `start_mainnet_validator.sh` or `start_testnet_validator.sh` with your **wallet name**, **hotkey name**, and your **validator port**. 
+First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **validator port**. This file was created for you during setup, and is not tracked by git.
+
+```bash
+NETUID=34 # or 168 
+SUBTENSOR_NETWORK=finney # or test
+WALLET_NAME=default
+WALLET_HOTKEY=default
+VALIDATOR_AXON_PORT=8092
+```
 
 Then, log into weights and biases by running `wandb login` and entering your API key. If you don't have an API key, please reach out to the BitMind team via Discord and we can provide one. 
+
+```bash
+conda activate bitmind
+pm2 start run_neuron.py -- --validator 
+```
 
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
-```bash
-conda activate bitmind
-pm2 start run_neuron.py -- --validator --network finney
-```
-
-**Testnet Example**:
-
-```bash
-conda activate bitmind
-pm2 start run_neuron.py -- --validator --network test
-```
-
----

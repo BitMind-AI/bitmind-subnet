@@ -81,29 +81,34 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ## Mining
 
-You can launch your miner with `run_neuron.py`.
+You can launch your validator with `run_neuron.py`.
+
+First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
+
+```bash
+MODEL_PATH=./mining_models/base.pth
+NETUID=34 # or 168 
+SUBTENSOR_NETWORK=finney # or test
+WALLET_NAME=default
+WALLET_HOTKEY=default
+MINER_AXON_PORT=8091
+BLACKLIST_FORCE_VALIDATOR_PERMIT=True
+```
+
+```bash
+conda activate bitmind
+pm2 start run_neuron.py -- --miner 
+```
 
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
 
-```bash
-conda activate bitmind
-pm2 start run_neuron.py -- --miner --network finney
-```
-
-**Testnet Example**:
-
-```bash
-conda activate bitmind
-pm2 start run_neuron.py -- --miner --network test
-```
-
 ### Bring Your Own Model
 If you want to outperform the base model, you'll need to train on more data or try experiment with different model architectures. 
 
-- If you want to deploy a model you trained with your base miner code, you can simply update `--neuron.model_path` to point to your new `.pth` file
-- If you try a different model architecture (which we encourage!), you'll need to make the appropriate updates to `neurons/miner.py` and `bitmind/miner/predict.py` so that your miner can properly load and predict with your model.
+- If you want to deploy a model you trained with your base miner code, you can simply update `MODEL_PATH` in `miner.env` to point to your new `.pth` file
+- If you try a different model architecture (which we encourage!), you'll also need to make the appropriate updates to `neurons/miner.py` and `bitmind/miner/predict.py` so that your miner can properly load and predict with your model.
 ---
 
 ## Train
