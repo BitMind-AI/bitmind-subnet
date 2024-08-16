@@ -2,7 +2,7 @@
 
 # Load environment variables from .env file
 set -a
-source .env
+source miner.env
 set +a
 
 # Check if the process is already running

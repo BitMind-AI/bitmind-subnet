@@ -2,7 +2,7 @@
 
 # Load environment variables from .env file
 set -a
-source .env
+source validator.env
 set +a
 
 # Check if the process is already running
