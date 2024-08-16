@@ -29,7 +29,6 @@ from datasets import load_dataset
 import bittensor as bt
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 
-
 import tensorflow
 
 
@@ -205,30 +204,57 @@ class SyntheticImageGenerator:
             prompt += ', ' + np.random.choice(device, 1)[0]
             if prompt != "":
                 return prompt
-            
+
+    def get_tokenizer_with_min_len(self):
+        if self.diffuser.tokenizer_2:
+            if self.diffuser.tokenizer.model_max_length > self.diffuser.tokenizer_2.model_max_length:
+                return self.diffuser.tokenizer_2, self.diffuser.tokenizer_2.model_max_length
+        return self.diffuser.tokenizer, self.diffuser.tokenizer.model_max_length
+
+    def truncate_prompt_if_too_long(self, prompt):
+        tokenizer, max_token_len = self.get_tokenizer_with_min_len()
+        tokens = tokenizer(prompt)
+        if len(tokens['input_ids']) < max_token_len:
+            return prompt
+        # Truncate tokens if they exceed the maximum token length, decode the tokens back to a string
+        truncated_prompt = tokenizer.decode(token_ids=tokens['input_ids'][:max_token_len-1],
+                                            skip_special_tokens=True)
+        tokens = tokenizer(truncated_prompt)
+        bt.logging.info(f"Truncated prompt to abide by token limit.")
+        return truncated_prompt
+    
     def generate_image(self, prompt, name = None, generate_at_target_size = False) -> list:
         # Generate a unique image name based on current time if not provided
         image_name = name if name else f"{time.time():.0f}.jpg"
-        
+        # Check if the prompt is too long
+       
+        truncated_prompt = self.truncate_prompt_if_too_long(prompt)
         try:
             if generate_at_target_size:
-                # Attempt to generate an image with specified dimensions
-                gen_image = self.diffuser(prompt=prompt, height=TARGET_IMAGE_SIZE[0],
+                #Attempt to generate an image with specified dimensions
+                try:
+                    gen_image = self.diffuser(prompt=truncated_prompt, height=TARGET_IMAGE_SIZE[0],
                                           width=TARGET_IMAGE_SIZE[1]).images[0]
+                except Exception as e:
+                    print("Exception:", e)
             else:
-                # Generate an image using default dimensions supported by the pipeline
-                gen_image = self.diffuser(prompt=prompt).images[0]
+                #Generate an image using default dimensions supported by the pipeline
+                try:
+                    gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+                except Exception as e:
+                    print("Exception:", e)
         except Exception as e:
             bt.logging.warning(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
-            try:
-                # Fallback to generating an image without specifying dimensions
-                gen_image = self.diffuser(prompt=prompt).images[0]
-            except Exception as fallback_error:
-                bt.logging.error(f"Failed to generate image with default dimensions after initial failure: {fallback_error}")
-                raise RuntimeError(f"Both attempts to generate image failed: {fallback_error}")
+            if generate_at_target_size:
+                try:
+                    # Fallback to generating an image without specifying dimensions
+                    gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+                except Exception as fallback_error:
+                    bt.logging.error(f"Failed to generate image with default dimensions after initial failure: {fallback_error}")
+                    raise RuntimeError(f"Both attempts to generate image failed: {fallback_error}")
             
         image_data = {
-            'prompt': prompt,
+            'prompt': truncated_prompt,
             'image': gen_image,
             'id': image_name
         }
