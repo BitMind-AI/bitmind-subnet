@@ -3,7 +3,7 @@ import pytest
 
 from bitmind.utils.mock import MockValidator
 from bitmind.validator.forward import forward
-from fixtures import NETUID
+from tests.fixtures import NETUID
 
 
 @pytest.mark.asyncio
