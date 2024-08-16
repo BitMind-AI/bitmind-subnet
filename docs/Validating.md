@@ -80,6 +80,8 @@ You can launch your validator with `run_neuron.py`.
 
 First, make sure to update `start_mainnet_validator.sh` or `start_testnet_validator.sh` with your **wallet name**, **hotkey name**, and your **validator port**. 
 
+Then, log into weights and biases by running `wandb login` and entering your API key. If you don't have an API key, please reach out to the BitMind team via Discord and we can provide one. 
+
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
