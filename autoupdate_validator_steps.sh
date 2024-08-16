@@ -7,5 +7,4 @@
 conda activate bitmind
 pip install -e .
 python bitmind/download_data.sh
-./start_mainnet_validator.sh
 echo "Autoupdate steps complete :)"

@@ -6,5 +6,4 @@
 
 conda activate bitmind
 pip install -e .
-./start_mainnet_miner.sh
 echo "Autoupdate steps complete :)"
