@@ -65,11 +65,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     if not (args.miner ^ args.validator):
-        print(f"Usage: python {__file__}" +  "--validator | --miner [--network {finney,test} --no-self-heal --no-auto-update]")
+        print(f"Usage: python {__file__}" + "--validator | --miner [--network {finney,test} --no-self-heal --no-auto-update]")
         sys.exit(1)
 
     neuron_type = 'miner' if args.miner else 'validator'
-    network = 'mainnet' if args.network =='finney' else 'testnet'
+    network = 'mainnet' if args.network == 'finney' else 'testnet'
 
     os.system(f"./start_{network}_{neuron_type}.sh")
 
