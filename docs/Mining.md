@@ -83,11 +83,9 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 You can launch your miner with `run_neuron.py`.
 
-First, make sure to update your **wallet name**, **hotkey name**, and your **miner port** in `start_mainnet_miner.sh` or `start_testnet_miner.sh`. 
-
-
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
+
 
 ```bash
 conda activate bitmind
