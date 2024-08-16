@@ -1,5 +1,10 @@
+# Transformer models
 from transformers import AutoProcessor, Blip2ForConditionalGeneration
+
+# Logging and progress handling
 from transformers import logging as transformers_logging
+from transformers.utils.logging import disable_progress_bar
+
 from typing import Any, Dict, List, Tuple
 import bittensor as bt
 import PIL
@@ -10,6 +15,7 @@ import gc
 from bitmind.image_dataset import ImageDataset
 from bitmind.synthetic_image_generation.utils import image_utils
 
+disable_progress_bar()
 
 class ImageAnnotationGenerator:
     def __init__(self, model_name: str, device: str = 'auto'):

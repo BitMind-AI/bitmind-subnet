@@ -25,7 +25,6 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 from transformers import pipeline
 from diffusers import StableDiffusionXLPipeline, StableDiffusionPipeline, DiffusionPipeline
 from transformers import set_seed
-from datasets import load_dataset
 import bittensor as bt
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 
