@@ -18,5 +18,5 @@ pm2 start python --name bitmind_miner -- neurons/miner.py \
   --subtensor.network $SUBTENSOR_NETWORK \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
-  --axon.port $AXON_PORT \
+  --axon.port $MINER_AXON_PORT \
   --blacklist.force_validator_permit $BLACKLIST_FORCE_VALIDATOR_PERMIT
