@@ -7,7 +7,6 @@ from typing import List
 from PIL import Image
 
 from bitmind.constants import DIFFUSER_NAMES
-from tests.fixtures import NETUID
 
 
 def create_random_image():
@@ -70,10 +69,10 @@ class MockSyntheticImageGenerator:
 class MockValidator:
     def __init__(self, config):
         self.config = config
-        subtensor = MockSubtensor(netuid=NETUID, wallet=bt.MockWallet())
+        subtensor = MockSubtensor(config.netuid, wallet=bt.MockWallet())
 
         self.metagraph = MockMetagraph(
-            netuid=NETUID,
+            netuid=config.netuid,
             subtensor=subtensor
         )
         self.dendrite = MockDendrite(bt.MockWallet())
@@ -95,7 +94,7 @@ class MockValidator:
 
 
 class MockSubtensor(bt.MockSubtensor):
-    def __init__(self, netuid=NETUID, n=16, wallet=None, network="mock"):
+    def __init__(self, netuid, n=16, wallet=None, network="mock"):
         super().__init__(network=network)
         bt.MockSubtensor.reset()  # reset chain state so test cases don't interfere with one another
 
@@ -130,7 +129,7 @@ class MockSubtensor(bt.MockSubtensor):
 
 
 class MockMetagraph(bt.metagraph):
-    def __init__(self, netuid=NETUID, network="mock", subtensor=None):
+    def __init__(self, netuid, network="mock", subtensor=None):
         super().__init__(netuid=netuid, network=network, sync=False)
         self.default_ip = "127.0.0.0"
         self.default_port = 8092
