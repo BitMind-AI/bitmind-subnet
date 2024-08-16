@@ -226,7 +226,6 @@ class SyntheticImageGenerator:
         # Generate a unique image name based on current time if not provided
         image_name = name if name else f"{time.time():.0f}.jpg"
         # Check if the prompt is too long
-       
         truncated_prompt = self.truncate_prompt_if_too_long(prompt)
         try:
             if generate_at_target_size:

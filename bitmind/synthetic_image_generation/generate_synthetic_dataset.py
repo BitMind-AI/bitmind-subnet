@@ -93,6 +93,7 @@ def parse_arguments():
 
 
 def generate_and_save_annotations(dataset,
+                                  start_index,
                                   dataset_name,
                                   synthetic_image_generator,
                                   annotations_dir,
@@ -104,14 +105,15 @@ def generate_and_save_annotations(dataset,
     progress_interval = (batch_size * ceil(len(dataset) / (PROGRESS_INCREMENT * batch_size)))
 
     for index, real_image in enumerate(dataset):
+        adjusted_index = index + start_index
         annotation = synthetic_image_generator.image_annotation_generator.process_image(
             real_image,
             dataset_name,
-            index,
+            adjusted_index,
             resize=False,
             verbose=0
         )[0]
-        annotations_batch.append((index, annotation))
+        annotations_batch.append((adjusted_index, annotation))
 
         if len(annotations_batch) == batch_size or image_count == len(dataset) - 1:
             for image_id, annotation in annotations_batch:
@@ -164,7 +166,6 @@ def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generato
             file_index = int(json_filename[:-5])  
         except ValueError:
             continue  # Skip files that don't match expected format
-
         if start_index <= file_index < end_index:
             valid_files.append(json_filename)
 
@@ -233,6 +234,7 @@ def main():
         images_chunk = slice_dataset(all_images.dataset, start_index=args.start_index, end_index=args.end_index)
         all_images = None
         generate_and_save_annotations(images_chunk,
+                                      args.start_index,
                                       hf_dataset_name,
                                       synthetic_image_generator,
                                       annotations_dir,
