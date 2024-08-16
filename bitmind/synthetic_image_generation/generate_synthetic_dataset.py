@@ -77,6 +77,8 @@ def parse_arguments():
                         help='Upload annotations to Hugging Face.')
     parser.add_argument('--download_annotations', action='store_true', default=False, 
                         help='Download annotations from Hugging Face.')
+    parser.add_argument('--skip_generate_annotations', action='store_true', default=False, 
+                        help='Skip annotation generation and use existing annotations.')
     parser.add_argument('--generate_synthetic_images', action='store_true', default=False, 
                         help='Generate synthetic images.')
     parser.add_argument('--upload_synthetic_images', action='store_true', default=False, 
@@ -219,7 +221,7 @@ def main():
             annotations_chunk = None
         else:
             print("Annotations already saved to disk.")
-    else:
+    elif not args.skip_generate_annotations:
         print("Generating new annotations.")
         all_images = ImageDataset(hf_dataset_name, 'train')
         images_chunk = slice_dataset(all_images.dataset, start_index=args.start_index, end_index=args.end_index)
