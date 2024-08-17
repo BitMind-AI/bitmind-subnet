@@ -75,21 +75,29 @@ async def forward(self):
         if self.config.neuron.prompt_type == 'annotation':
             bt.logging.info('generating fake image from annotation of real image')
 
-            # sample image(s) from real dataset for captioning
-            real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
-            real_dataset = self.real_image_datasets[real_dataset_index]
-            images_to_caption, image_indexes = real_dataset.sample(k=1)  # [{'image': PIL Image ,'id': int}, ...]
+            retries = 10
+            while retries > 0:
+                retries -= 1
 
-            # generate captions for the real images, then synthetic images from these captions
-            sample = self.synthetic_image_generator.generate(
-                k=1, real_images=images_to_caption[0])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+                # sample image(s) from real dataset for captioning
+                real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
+                real_dataset = self.real_image_datasets[real_dataset_index]
+                images_to_caption, image_indexes = real_dataset.sample(k=1)  # [{'image': PIL Image ,'id': int}, ...]
 
-            wandb_data['model'] = self.synthetic_image_generator.diffuser_name
-            wandb_data['source_dataset'] = source_dataset
-            wandb_data['source_image_id'] = images_to_caption[0]['id']
-            wandb_data['source_image_index'] = image_indexes[0]
-            wandb_data['image'] = wandb.Image(sample['image'])
-            wandb_data['prompt'] = sample['prompt']
+                # generate captions for the real images, then synthetic images from these captions
+                sample = self.synthetic_image_generator.generate(
+                    k=1, real_images=images_to_caption)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+
+                wandb_data['model'] = self.synthetic_image_generator.diffuser_name
+                wandb_data['source_dataset'] = source_dataset
+                wandb_data['source_image_id'] = images_to_caption[0]['id']
+                wandb_data['source_image_index'] = image_indexes[0]
+                wandb_data['image'] = wandb.Image(sample['image'])
+                wandb_data['prompt'] = sample['prompt']
+                if not np.isnan(wandb_data['image']):
+                    break
+
+                bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
 
         elif self.config.neuron.prompt_type == 'random':
             bt.logging.info('generating fake image using prompt_generator')
