@@ -62,10 +62,12 @@ async def forward(self):
         label = 0
         real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
         real_dataset = self.real_image_datasets[real_dataset_index]
-        sample = real_dataset.sample(k=1)[0][0]  # {'image': PIL Image ,'id': int}
+        samples, idx = real_dataset.sample(k=1)  # {'image': PIL Image ,'id': int}
+        sample = samples[0]
 
         wandb_data['dataset'] = source_dataset
-        wandb_data['image_index'] = sample['id']
+        wandb_data['image_index'] = idx[0]
+        wandb_data['image_id'] = sample['id']
 
     else:
         label = 1
@@ -76,15 +78,16 @@ async def forward(self):
             # sample image(s) from real dataset for captioning
             real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
             real_dataset = self.real_image_datasets[real_dataset_index]
-            images_to_caption = real_dataset.sample(k=1)[0]  # [{'image': PIL Image ,'id': int}, ...]
+            images_to_caption, image_indexes = real_dataset.sample(k=1)  # [{'image': PIL Image ,'id': int}, ...]
 
             # generate captions for the real images, then synthetic images from these captions
             sample = self.synthetic_image_generator.generate(
-                k=1, real_images=images_to_caption)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+                k=1, real_images=images_to_caption[0])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
 
             wandb_data['model'] = self.synthetic_image_generator.diffuser_name
             wandb_data['source_dataset'] = source_dataset
-            wandb_data['source_image_index'] = images_to_caption[0]['id']
+            wandb_data['source_image_id'] = images_to_caption[0]['id']
+            wandb_data['source_image_index'] = image_indexes[0]
             wandb_data['image'] = wandb.Image(sample['image'])
             wandb_data['prompt'] = sample['prompt']
 
