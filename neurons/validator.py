@@ -89,14 +89,19 @@ class Validator(BaseValidatorNeuron):
 
         # Initialize the wandb run for the single project
         print("Initializing W&B")
-        run = wandb.init(
-            name=run_name,
-            project=WANDB_PROJECT,
-            entity=WANDB_ENTITY,
-            config=self.config,
-            dir=self.config.full_path,
-            reinit=True
-        )
+        try:
+            run = wandb.init(
+                name=run_name,
+                project=WANDB_PROJECT,
+                entity=WANDB_ENTITY,
+                config=self.config,
+                dir=self.config.full_path,
+                reinit=True
+            )
+        except wandb.UsageError as e:
+            bt.logging.warning(e)
+            bt.logging.warning("Did you run wandb login?")
+            return
 
         # Sign the run to ensure it's from the correct hotkey
         signature = self.wallet.hotkey.sign(run.id.encode()).hex()
