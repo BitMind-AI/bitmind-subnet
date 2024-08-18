@@ -94,7 +94,7 @@ async def forward(self):
                 wandb_data['source_image_index'] = image_indexes[0]
                 wandb_data['image'] = wandb.Image(sample['image'])
                 wandb_data['prompt'] = sample['prompt']
-                if not np.isnan(wandb_data['image']):
+                if not np.any(np.isnan(sample['image'])):
                     break
 
                 bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
