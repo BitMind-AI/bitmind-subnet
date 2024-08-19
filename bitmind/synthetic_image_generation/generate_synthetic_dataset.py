@@ -10,7 +10,7 @@ from math import ceil
 from PIL import Image
 import copy
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 

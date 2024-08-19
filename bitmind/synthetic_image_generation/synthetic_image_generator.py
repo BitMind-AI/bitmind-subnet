@@ -23,6 +23,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 from transformers import pipeline, set_seed
+from diffusers import StableDiffusionXLPipeline, StableDiffusionPipeline, DiffusionPipeline
 import bittensor as bt
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 
