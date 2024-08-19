@@ -67,7 +67,7 @@ async def forward(self):
 
         wandb_data['dataset'] = source_dataset
         wandb_data['image_index'] = idx[0]
-        wandb_data['image_id'] = sample['id']
+        wandb_data['image_name'] = sample['id']
 
     else:
         label = 1
@@ -90,7 +90,7 @@ async def forward(self):
 
                 wandb_data['model'] = self.synthetic_image_generator.diffuser_name
                 wandb_data['source_dataset'] = source_dataset
-                wandb_data['source_image_id'] = images_to_caption[0]['id']
+                wandb_data['source_image_name'] = images_to_caption[0]['id']
                 wandb_data['source_image_index'] = image_indexes[0]
                 wandb_data['image'] = wandb.Image(sample['image'])
                 wandb_data['prompt'] = sample['prompt']
