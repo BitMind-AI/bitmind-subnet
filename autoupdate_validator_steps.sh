@@ -6,5 +6,5 @@
 
 conda activate bitmind
 pip install -e .
-python bitmind/download_data.sh
+python bitmind/download_data.py
 echo "Autoupdate steps complete :)"
