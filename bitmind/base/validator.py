@@ -29,7 +29,11 @@ from typing import List, Union
 from traceback import print_exception
 
 from bitmind.base.neuron import BaseNeuron
-from bitmind.base.utils.weight_utils import process_weights_for_netuid, convert_weights_and_uids_for_emit  #TODO: Replace when bittensor switches to numpy
+from bitmind.base.utils.weight_utils import (
+    process_weights_for_netuid,
+    convert_weights_and_uids_for_emit,
+)  # TODO: Replace when bittensor switches to numpy
+
 from bitmind.utils.mock import MockDendrite
 from bitmind.utils.config import add_validator_args
 
@@ -61,9 +65,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
-        self.scores = np.zeros(
-            self.metagraph.n, dtype=np.float32
-        )
+        self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
 
         # Init sync with the network. Updates the metagraph.
         self.sync()
@@ -85,6 +87,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
     def serve_axon(self):
         """Serve axon to enable external connections."""
+
         bt.logging.info("serving ip to chain...")
         try:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
@@ -92,9 +95,8 @@ class BaseValidatorNeuron(BaseNeuron):
             try:
                 self.subtensor.serve_axon(
                     netuid=self.config.netuid,
-                    axon=self.axon
+                    axon=self.axon,
                 )
-
                 bt.logging.info(
                     f"Running validator {self.axon} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
                 )
@@ -103,15 +105,12 @@ class BaseValidatorNeuron(BaseNeuron):
                 pass
 
         except Exception as e:
-            bt.logging.error(
-                f"Failed to create Axon initialize with exception: {e}"
-            )
+            bt.logging.error(f"Failed to create Axon initialize with exception: {e}")
             pass
 
     async def concurrent_forward(self):
         coroutines = [
-            self.forward()
-            for _ in range(self.config.neuron.num_concurrent_forwards)
+            self.forward() for _ in range(self.config.neuron.num_concurrent_forwards)
         ]
         await asyncio.gather(*coroutines)
 
@@ -151,9 +150,9 @@ class BaseValidatorNeuron(BaseNeuron):
                         bt.logging.info(
                             "Validator proxy ping to proxy-client successfully"
                         )
-                    except Exception:
+                    except Exception as e:
+                        bt.logging.warning(e)
                         bt.logging.warning("Warning, proxy can't ping to proxy-client.")
-
 
                 # Run multiple forwards concurrently.
                 self.loop.run_until_complete(self.concurrent_forward())
@@ -166,7 +165,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 self.sync()
 
                 self.step += 1
-                time.sleep(30)
+                time.sleep(60)
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
         except KeyboardInterrupt:
@@ -177,9 +176,7 @@ class BaseValidatorNeuron(BaseNeuron):
         # In case of unforeseen errors, the validator will log the error and continue operations.
         except Exception as err:
             bt.logging.error(f"Error during validation: {str(err)}")
-            bt.logging.debug(
-                str(print_exception(type(err), err, err.__traceback__))
-            )
+            bt.logging.debug(str(print_exception(type(err), err, err.__traceback__)))
 
     def run_in_background_thread(self):
         """
@@ -242,7 +239,15 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # Calculate the average reward for each uid across non-zero values.
         # Replace any NaN values with 0.
-        raw_weights = self.scores / np.linalg.norm(self.scores, ord=1, axis=0, keepdims=True)
+        # Compute the norm of the scores
+        norm = np.linalg.norm(self.scores, ord=1, axis=0, keepdims=True)
+
+        # Check if the norm is zero or contains NaN values
+        if np.any(norm == 0) or np.isnan(norm).any():
+            norm = np.ones_like(norm)  # Avoid division by zero or NaN
+
+        # Compute raw_weights safely
+        raw_weights = self.scores / norm
 
         bt.logging.debug("raw_weights", raw_weights)
         bt.logging.debug("raw_weight_uids", str(self.metagraph.uids.tolist()))
@@ -327,11 +332,30 @@ class BaseValidatorNeuron(BaseNeuron):
             bt.logging.warning(f"NaN values detected in rewards: {rewards}")
             # Replace any NaN values in rewards with 0.
             rewards = np.nan_to_num(rewards, nan=0)
+
+        # Ensure rewards is a numpy array.
+        rewards = np.asarray(rewards)
+
         # Check if `uids` is already a numpy array and copy it to avoid the warning.
         if isinstance(uids, np.ndarray):
             uids_array = uids.copy()
         else:
             uids_array = np.array(uids)
+
+        # Handle edge case: If either rewards or uids_array is empty.
+        if rewards.size == 0 or uids_array.size == 0:
+            bt.logging.info(f"rewards: {rewards}, uids_array: {uids_array}")
+            bt.logging.warning(
+                "Either rewards or uids_array is empty. No updates will be performed."
+            )
+            return
+
+        # Check if sizes of rewards and uids_array match.
+        if rewards.size != uids_array.size:
+            raise ValueError(
+                f"Shape mismatch: rewards array of shape {rewards.shape} "
+                f"cannot be broadcast to uids array of shape {uids_array.shape}"
+            )
 
         # Compute forward pass rewards, assumes uids are mutually exclusive.
         # shape: [ metagraph.n ]
@@ -342,9 +366,7 @@ class BaseValidatorNeuron(BaseNeuron):
         # Update scores with rewards produced by this step.
         # shape: [ metagraph.n ]
         alpha: float = self.config.neuron.moving_average_alpha
-        self.scores: np.ndarray = alpha * scattered_rewards + (
-            1 - alpha
-        ) * self.scores
+        self.scores: np.ndarray = alpha * scattered_rewards + (1 - alpha) * self.scores
         bt.logging.debug(f"Updated moving avg scores: {self.scores}")
 
     def save_state(self):

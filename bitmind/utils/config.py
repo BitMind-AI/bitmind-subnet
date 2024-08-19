@@ -141,7 +141,7 @@ def add_miner_args(cls, parser):
         "--neuron.model_path",
         type=str,
         help="Path to the .pth file for your trained model",
-        default="./mining_models/miner.pth",
+        default="./mining_models/base.pth",
     )
 
     parser.add_argument(
