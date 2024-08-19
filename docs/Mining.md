@@ -32,7 +32,9 @@ chmod +x install_system_deps.sh
 ```
 
 We recommend using a Conda virtual environment to install the necessary Python packages.<br>
-You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and create a virtual environment with this command:
+You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install). Note that after you run the last commands in the miniconda setup process, you'll be prompted to start a new shell session to complete the initialization. 
+
+With miniconda installed, you can create a virtual environment with this command:
 
 ```bash
 conda create -y -n bitmind python=3.10 ipython jupyter ipykernel
