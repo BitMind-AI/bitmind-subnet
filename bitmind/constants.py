@@ -11,8 +11,8 @@ DATASET_META = {
         {"path": "bitmind/celeb-a-hq", "create_splits": False}
     ],
     "fake": [
-        {"path": "bitmind/realvis-xl___parquet", "create_splits": False},
-        {"path": "bitmind/stable-diffusion-xl___parquet", "create_splits": False},
+        {"path": "bitmind/realvis-xl", "create_splits": False},
+        {"path": "bitmind/stable-diffusion-xl", "create_splits": False},
     ]
 }
 
