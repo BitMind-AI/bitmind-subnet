@@ -19,16 +19,12 @@ from bitmind.constants import (
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
-from transformers import pipeline
-from diffusers import StableDiffusionXLPipeline, StableDiffusionPipeline, DiffusionPipeline
-from transformers import set_seed
+from transformers import pipeline, set_seed
 import bittensor as bt
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
-
-import tensorflow
 
 
 class SyntheticImageGenerator:
@@ -120,9 +116,6 @@ class SyntheticImageGenerator:
     def clear_gpu(self):
         if self.diffuser is not None:
             bt.logging.debug(f"Deleting previous diffuser, freeing memory")
-            if self.diffuser.dtype == torch.float16:
-                self.diffuser = self.diffuser.to(dtype=torch.float32) # cannot use dtype float16 on cpu
-            self.diffuser.to('cpu')
             del self.diffuser
             gc.collect()
             torch.cuda.empty_cache()
