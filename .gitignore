@@ -163,3 +163,4 @@ testing/
 data/
 checkpoints/
 .requirements_installed
+*.env
