@@ -114,15 +114,19 @@ class ImageAnnotationGenerator:
             image_to_process = image_utils.resize_image(image_to_process, 1280, 1280)
             if verbose > 1 and image_to_process.size != image.size:
                 bt.logging.info(f"Resized {image_id}: {image.size} to {image_to_process.size}")
-    
-        description = self.generate_description(image_to_process, verbose > 2)
-        annotation = {
-            'description': description,
-            'original_dataset': dataset_name,
-            'original_dimensions': f"{original_dimensions[0]}x{original_dimensions[1]}",
-            'id': image_id
-        }
-        return annotation
+        try:
+            description = self.generate_description(image_to_process, verbose > 2)
+            annotation = {
+                'description': description,
+                'original_dataset': dataset_name,
+                'original_dimensions': f"{original_dimensions[0]}x{original_dimensions[1]}",
+                'id': image_id
+            }
+            return annotation
+        except Exception as e:
+            if verbose > 1:
+                bt.logging.error(f"Error processing image {image_id} in {dataset_name}: {e}")
+            return None
 
     def process_image(
             self,
@@ -147,7 +151,7 @@ class ImageAnnotationGenerator:
                                               verbose)
         time_elapsed = time.time() - start_time
 
-        if annotation == -1:
+        if annotation is None:
             if verbose > 1:
                 bt.logging.debug(f"Failed to generate annotation for image {image_index} in dataset {dataset_name}")
             return None, time_elapsed
