@@ -43,17 +43,19 @@ VALIDATOR_MODEL_META = {
             "use_safetensors": True,
             "torch_dtype": torch.bfloat16,
             "generate_args": {
-                "guidance_scale": 3.5,
-                "num_inference_steps": {"min": 50, "max": 200},
-                "generator": torch.Generator("cuda")
+                "guidance_scale": 1,
+                "num_inference_steps": 100, #{"min": 50, "max": 200},
+                "generator": torch.Generator("cuda"),
+                "height": 1024, #[512, 768, 1024, 1360],
+                "width": 1024 #[512, 768, 1024, 1360]
             },
-            "enable_cpu_offload": True,
+            "enable_cpu_offload": False,
             "pipeline": "FluxPipeline"
         }
     ]
 }
 
-HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
+HUGGINGFACE_CACHE_DIR = '/workspace/.cache/huggingface' #os.path.expanduser('~/.cache/huggingface')
 
 TARGET_IMAGE_SIZE = (256, 256)
 
