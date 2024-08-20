@@ -31,7 +31,9 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 from transformers import pipeline, set_seed
 from diffusers import StableDiffusionXLPipeline, StableDiffusionPipeline, DiffusionPipeline
 import bittensor as bt
+
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
+from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
 
 class SyntheticImageGenerator:
@@ -116,24 +118,29 @@ class SyntheticImageGenerator:
 
             gen_args = {}
             if 'generate_args' in DIFFUSER_ARGS[self.diffuser_name]:
-                gen_args = DIFFUSER_ARGS[self.diffuser_name]['generate_args']
+                gen_args = DIFFUSER_ARGS[self.diffuser_name]['generate_args'].copy()
+
                 if isinstance(gen_args['num_inference_steps'], dict):
                     gen_args['num_inference_steps'] = np.random.randint(
                         gen_args['num_inference_steps']['min'],
                         gen_args['num_inference_steps']['max'])
 
+                for dim in ('height', 'width'):
+                    if isinstance(gen_args[dim], list):
+                    gen_args[dim] = np.random.choice(gen_args[dim])
+
+            start_time = time.time()
             gen_image = self.diffuser(
                 prompt=prompt,
                 num_images_per_prompt=1,
-                height=np.random.choice([512, 768, 1024, 1360]),
-                width=np.random.choice([512, 768, 1024, 1360]),
                 **gen_args
             ).images[0]
 
             gen_data.append({
                 'prompt': prompt,
                 'image': gen_image,
-                'id': image_name
+                'id': image_name,
+                'gen_time': time.time() - start_time
             })
 
             if self.image_cache_dir is not None:
@@ -163,13 +170,15 @@ class SyntheticImageGenerator:
         self.diffuser_name = diffuser_name
         pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
         self.diffuser = pipeline_class.from_pretrained(diffuser_name,
+                                                       cache_dir=HUGGINGFACE_CACHE_DIR,
                                                        **DIFFUSER_ARGS[diffuser_name],
                                                        add_watermarker=False)
         self.diffuser.set_progress_bar_config(disable=True)
         if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
             self.diffuser.enable_model_cpu_offload()
+        else:
+            self.diffuser.to("cuda")
 
-        self.diffuser.to("cuda")
         print(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
         bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
