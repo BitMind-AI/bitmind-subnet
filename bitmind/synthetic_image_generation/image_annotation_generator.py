@@ -1,5 +1,10 @@
+# Transformer models
 from transformers import AutoProcessor, Blip2ForConditionalGeneration
+
+# Logging and progress handling
 from transformers import logging as transformers_logging
+from transformers.utils.logging import disable_progress_bar
+
 from typing import Any, Dict, List, Tuple
 import bittensor as bt
 import PIL
@@ -10,6 +15,7 @@ import gc
 from bitmind.image_dataset import ImageDataset
 from bitmind.synthetic_image_generation.utils import image_utils
 
+disable_progress_bar()
 
 class ImageAnnotationGenerator:
     def __init__(self, model_name: str, device: str = 'auto'):
@@ -30,30 +36,55 @@ class ImageAnnotationGenerator:
         gc.collect()
         torch.cuda.empty_cache()
 
-    def generate_description(self, image: PIL.Image.Image, verbose: bool = False) -> str:
+    def generate_description(self,
+                             image: PIL.Image.Image,
+                             verbose: bool = False,
+                             max_new_tokens: int = 20) -> str:
+        """
+        Generates a string description for a given image by interfacing with a transformer
+        model using prompt-based captioning and building conversational context.
+    
+        Args:
+            image (PIL.Image.Image): The image for which the description is to be generated.
+            verbose (bool, optional): If True, additional logging information is printed. Defaults to False.
+            max_new_tokens (int, optional): The maximum number of tokens to generate for each prompt. Defaults to 20.
+    
+        Returns:
+            str: A generated description of the image.
+        """
         if not verbose:
             transformers_logging.set_verbosity_error()
 
         description = ""
         prompts = ["A picture of", "The setting is", "The background is", "The image type/style is"]
+        
         for i, prompt in enumerate(prompts):
             description += prompt + ' '
             inputs = self.processor(image, text=description, return_tensors="pt").to(self.device, torch.float16)
-            generated_ids = self.model.generate(**inputs, max_new_tokens=20)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens) #GPT2Tokenizer
             answer = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-
             if verbose:
                 bt.logging.info(f"{i}. Prompt: {prompt}")
                 bt.logging.info(f"{i}. Answer: {answer}")
-
+            
             if answer:
-                description += answer
+                # Remove any ending spaces or punctuation that is not a period
+                answer = answer.rstrip(" ,;!?")
+                # Add a period at the end if it's not already there
+                if not answer.endswith('.'):
+                    answer += '.'
+                    
+                description += answer + ' '
             else:
                 description = description[:-len(prompt) - 1]
 
         if not verbose:
             transformers_logging.set_verbosity_info()
-
+            
+        # Remove any trailing spaces and ensure the description ends with a period
+        description = description.strip()
+        if not description.endswith('.'):
+            description += '.'
         return description
 
     def generate_annotation(
@@ -79,19 +110,23 @@ class ImageAnnotationGenerator:
         dict: Dictionary containing the annotation data.
         """
         image_to_process = image.copy()
-        if resize:
+        if resize: # Downsize if dimension(s) are greater than 1280
             image_to_process = image_utils.resize_image(image_to_process, 1280, 1280)
             if verbose > 1 and image_to_process.size != image.size:
                 bt.logging.info(f"Resized {image_id}: {image.size} to {image_to_process.size}")
-    
-        description = self.generate_description(image_to_process, verbose > 2)
-        annotation = {
-            'description': description,
-            'original_dataset': dataset_name,
-            'original_dimensions': f"{original_dimensions[0]}x{original_dimensions[1]}",
-            'index': image_id
-        }
-        return annotation
+        try:
+            description = self.generate_description(image_to_process, verbose > 2)
+            annotation = {
+                'description': description,
+                'original_dataset': dataset_name,
+                'original_dimensions': f"{original_dimensions[0]}x{original_dimensions[1]}",
+                'id': image_id
+            }
+            return annotation
+        except Exception as e:
+            if verbose > 1:
+                bt.logging.error(f"Error processing image {image_id} in {dataset_name}: {e}")
+            return None
 
     def process_image(
             self,
@@ -108,10 +143,15 @@ class ImageAnnotationGenerator:
 
         original_dimensions = image_info['image'].size
         start_time = time.time()
-        annotation = self.generate_annotation(image_index, dataset_name, image_info['image'], original_dimensions, resize, verbose)
+        annotation = self.generate_annotation(image_index,
+                                              dataset_name,
+                                              image_info['image'],
+                                              original_dimensions,
+                                              resize,
+                                              verbose)
         time_elapsed = time.time() - start_time
 
-        if annotation == -1:
+        if annotation is None:
             if verbose > 1:
                 bt.logging.debug(f"Failed to generate annotation for image {image_index} in dataset {dataset_name}")
             return None, time_elapsed
@@ -147,7 +187,11 @@ class ImageAnnotationGenerator:
             processed_images = 0
             dataset_time = 0
             for j, image_info in enumerate(dataset):
-                annotation, time_elapsed = self.process_image(image_info, dataset_name, j, resize_images, verbose)
+                annotation, time_elapsed = self.process_image(image_info,
+                                                              dataset_name,
+                                                              j,
+                                                              resize_images,
+                                                              verbose)
                 if annotation is not None:
                     annotations.setdefault(dataset_name, {})[image_info['id']] = annotation
                     total_time += time_elapsed

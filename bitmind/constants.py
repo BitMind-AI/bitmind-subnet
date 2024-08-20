@@ -34,10 +34,12 @@ VALIDATOR_MODEL_META = {
                 "guidance_scale": 0.0,
                 "num_inference_steps": 1,
                 "generator": torch.Generator("cuda")
-            }
+            },
+            "enable_cpu_offload": True,
+            "pipeline": "FluxPipeline"
         },
         {
-            'path': 'black-forest-labs/FLUX.1-dev',
+            "path": 'black-forest-labs/FLUX.1-dev',
             "use_safetensors": True,
             "torch_dtype": torch.bfloat16,
             "generate_args": {
@@ -45,6 +47,8 @@ VALIDATOR_MODEL_META = {
                 "num_inference_steps": {"min": 50, "max": 200},
                 "generator": torch.Generator("cuda")
             },
+            "enable_cpu_offload": True,
+            "pipeline": "FluxPipeline"
         }
     ]
 }
@@ -61,12 +65,23 @@ PROMPT_GENERATOR_ARGS = {
 
 PROMPT_GENERATOR_NAMES = list(PROMPT_GENERATOR_ARGS.keys())
 
+# args for .from_pretrained
 DIFFUSER_ARGS = {
-    m['path']: {k: v for k, v in m.items() if k != 'path'}  
+    m['path']: {
+        k: v for k, v in m.items()
+        if k not in ('path', 'pipeline', 'generate_args', 'enable_cpu_offload')
+    } for m in VALIDATOR_MODEL_META['diffusers']
+}
+
+DIFFUSER_CPU_OFFLOAD_ENABLED = {
+    m['path']: m.get('enable_cpu_offload', False)
     for m in VALIDATOR_MODEL_META['diffusers']
+}
+
+DIFFUSER_PIPELINE = {
+    m['path']: m['pipeline'] for m in VALIDATOR_MODEL_META['diffusers'] if 'pipeline' in m
 }
 
 DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-2.7b-coco"
-

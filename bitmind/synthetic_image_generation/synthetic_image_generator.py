@@ -17,14 +17,21 @@ from bitmind.constants import (
     PROMPT_GENERATOR_ARGS,
     DIFFUSER_NAMES,
     DIFFUSER_ARGS,
+    DIFFUSER_PIPELINE,
+    DIFFUSER_CPU_OFFLOAD_ENABLED,
     PROMPT_TYPES,
-    IMAGE_ANNOTATION_MODEL
+    IMAGE_ANNOTATION_MODEL,
+    TARGET_IMAGE_SIZE
 )
-from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 
 warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-import tensorflow
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+from transformers import pipeline, set_seed
+from diffusers import StableDiffusionXLPipeline, StableDiffusionPipeline, DiffusionPipeline
+import bittensor as bt
+from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 
 
 class SyntheticImageGenerator:
@@ -48,6 +55,7 @@ class SyntheticImageGenerator:
         self.prompt_type = prompt_type
         self.prompt_generator_name = prompt_generator_name
 
+        self.diffuser = None
         if self.use_random_diffuser and diffuser_name is not None:
             bt.logging.warning("Warning: diffuser_name will be ignored (use_random_diffuser=True)")
             self.diffuser_name = None
@@ -94,20 +102,21 @@ class SyntheticImageGenerator:
             ]
         else:
             raise NotImplementedError
-
+        
         if self.use_random_diffuser:
             self.load_diffuser('random')
         else:
             self.load_diffuser(self.diffuser_name)
-
+        
         bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
+
             image_name = f"{time.time()}.jpg"
 
             gen_args = {}
-            if 'generate_args' in DIFFUSER_ARGS[diffuser_name]:
-                gen_args = DIFFUSER_ARGS[diffuser_name]['generate_args']
+            if 'generate_args' in DIFFUSER_ARGS[self.diffuser_name]:
+                gen_args = DIFFUSER_ARGS[self.diffuser_name]['generate_args']
                 if isinstance(gen_args['num_inference_steps'], dict):
                     gen_args['num_inference_steps'] = np.random.randint(
                         gen_args['num_inference_steps']['min'],
@@ -120,11 +129,13 @@ class SyntheticImageGenerator:
                 width=np.random.choice([512, 768, 1024, 1360]),
                 **gen_args
             ).images[0]
+
             gen_data.append({
                 'prompt': prompt,
                 'image': gen_image,
                 'id': image_name
             })
+
             if self.image_cache_dir is not None:
                 path = os.path.join(self.image_cache_dir, image_name)
                 gen_image.save(path)
@@ -136,10 +147,10 @@ class SyntheticImageGenerator:
     def clear_gpu(self):
         if self.diffuser is not None:
             bt.logging.debug(f"Deleting previous diffuser, freeing memory")
-            self.diffuser.to('cpu')
             del self.diffuser
             gc.collect()
             torch.cuda.empty_cache()
+            self.diffuser = None
 
     def load_diffuser(self, diffuser_name) -> None:
         """
@@ -147,15 +158,20 @@ class SyntheticImageGenerator:
         """
         if diffuser_name == 'random':
             diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
-
+        
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
-        self.diffuser = FluxPipeline.from_pretrained(
-            diffuser_name,
-            torch_dtype=DIFFUSER_ARGS[diffuser_name].get('torch_dtype', torch.bfloat16),
-            use_safetensors=DIFFUSER_ARGS[diffuser_name].get('use_safetensors', True))
-        self.diffuser.enable_model_cpu_offload()
+        pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
+        self.diffuser = pipeline_class.from_pretrained(diffuser_name,
+                                                       **DIFFUSER_ARGS[diffuser_name],
+                                                       add_watermarker=False)
+        self.diffuser.set_progress_bar_config(disable=True)
+        if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
+            self.diffuser.enable_model_cpu_offload()
+
         self.diffuser.to("cuda")
+        print(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
+        bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
     def generate_image_caption(self, image_sample) -> str:
         """
@@ -213,3 +229,83 @@ class SyntheticImageGenerator:
             prompt += ', ' + np.random.choice(device, 1)[0]
             if prompt != "":
                 return prompt
+
+    def get_tokenizer_with_min_len(self):
+        """
+        Returns the tokenizer with the smallest maximum token length from the 'diffuser` object.
+    
+        If a second tokenizer exists, it compares both and returns the one with the smaller 
+        maximum token length. Otherwise, it returns the available tokenizer.
+        
+        Returns:
+            tuple: A tuple containing the tokenizer and its maximum token length.
+        """
+        # Check if a second tokenizer is available in the diffuser
+        if self.diffuser.tokenizer_2:
+            if self.diffuser.tokenizer.model_max_length > self.diffuser.tokenizer_2.model_max_length:
+                return self.diffuser.tokenizer_2, self.diffuser.tokenizer_2.model_max_length
+        return self.diffuser.tokenizer, self.diffuser.tokenizer.model_max_length
+
+    def truncate_prompt_if_too_long(self, prompt: str):
+        """
+        Truncates the input string if it exceeds the maximum token length when tokenized.
+    
+        Args:
+            prompt (str): The text prompt that may need to be truncated.
+    
+        Returns:
+            str: The original prompt if within the token limit; otherwise, a truncated version of the prompt.
+        """
+        tokenizer, max_token_len = self.get_tokenizer_with_min_len()
+        tokens = tokenizer(prompt, verbose=False) # Suppress token max exceeded warnings
+        if len(tokens['input_ids']) < max_token_len:
+            return prompt
+        # Truncate tokens if they exceed the maximum token length, decode the tokens back to a string
+        truncated_prompt = tokenizer.decode(token_ids=tokens['input_ids'][:max_token_len-1],
+                                            skip_special_tokens=True)
+        tokens = tokenizer(truncated_prompt)
+        bt.logging.info("Truncated prompt to abide by token limit.")
+        return truncated_prompt
+    
+    def generate_image(self, prompt, name = None, generate_at_target_size = False) -> list:
+        """
+        Generates an image based on a text prompt, optionally at a specified target size.
+    
+        Args:
+            prompt (str): The text prompt used for generating the image.
+            name (str, optional): The id associated with the generated image. Defaults to None.
+            generate_at_target_size (bool, optional): If True, generates the image at a specified target size.
+    
+        Returns:
+            list: A dictionary containing the prompt (truncated if over max token length), generated image, and image ID.
+        """
+        # Generate a unique image name based on current time if not provided
+        image_name = name if name else f"{time.time():.0f}.jpg"
+        # Check if the prompt is too long
+        truncated_prompt = self.truncate_prompt_if_too_long(prompt)
+        try:
+            if generate_at_target_size:
+                #Attempt to generate an image with specified dimensions
+                gen_image = self.diffuser(prompt=truncated_prompt, height=TARGET_IMAGE_SIZE[0],
+                                      width=TARGET_IMAGE_SIZE[1]).images[0]
+            else:
+                #Generate an image using default dimensions supported by the pipeline
+                gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+        except Exception as e:
+            if generate_at_target_size:
+                bt.logging.warning(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
+                try:
+                    # Fallback to generating an image without specifying dimensions
+                    gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+                except Exception as fallback_error:
+                    bt.logging.error(f"Failed to generate image with default dimensions after initial failure: {fallback_error}")
+                    raise RuntimeError(f"Both attempts to generate image failed: {fallback_error}")
+            else:
+                bt.logging.warning(f"Image generation error: {e}")
+            
+        image_data = {
+            'prompt': truncated_prompt,
+            'image': gen_image,
+            'id': image_name
+        }
+        return image_data

@@ -1,480 +1,279 @@
-# Standard library imports
-import sys
-import gc
-import json
+import argparse
 import logging
+import json
 import os
-import random
-import time
-from multiprocessing import Pool, cpu_count, current_process, get_context, Manager
-from typing import Any, Dict, List, Tuple
-
-# Third-party library imports
-import numpy as np
-import PIL
 import torch
-import warnings
-from diffusers import DiffusionPipeline
-from diffusers.models.modeling_outputs import Transformer2DModelOutput
-from IPython.display import display
+import time
+from pathlib import Path
+import pandas as pd
+from math import ceil
 from PIL import Image
-from torchvision.transforms import ToPILImage
-from transformers import AutoProcessor, Blip2ForConditionalGeneration, BlipProcessor, logging as transformers_logging, pipeline
+import copy
 
-# Suppress TensorFlow logging before import
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 1: filter out INFO, 2: filter out WARNING, 3: filter out ERROR
-import tensorflow as tf
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Local/application-specific imports
-import bittensor as bt
-from bitmind.constants import DATASET_META, IMAGE_ANNOTATION_MODEL, PROMPT_GENERATOR_ARGS, PROMPT_GENERATOR_NAMES, DIFFUSER_ARGS, DIFFUSER_NAMES
+from datasets import load_dataset
+
+from synthetic_image_generator import SyntheticImageGenerator
 from bitmind.image_dataset import ImageDataset
-from utils import image_utils
-from multiprocessing_tasks import generate_images_for_chunk, worker_initializer
+from bitmind.constants import TARGET_IMAGE_SIZE
+from utils.hugging_face_utils import (
+    dataset_exists_on_hf, load_and_sort_dataset, upload_to_huggingface, 
+    slice_dataset, save_as_json
+)
+from utils.image_utils import resize_image, resize_images_in_directory
 
-torch.manual_seed(0)
-random.seed(0)
-np.random.seed(0)
+PROGRESS_INCREMENT = 10
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-#Default log settings
-transformers_level = logging.getLogger("transformers").getEffectiveLevel()
-huggingface_hub_level = logging.getLogger("huggingface_hub").getEffectiveLevel()
-
-#Suppress logs
-logging.getLogger("transformers").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-processor = AutoProcessor.from_pretrained(IMAGE_ANNOTATION_MODEL)
-# by default `from_pretrained` loads the weights in float32
-# we load in float16 instead to save memory
-model = Blip2ForConditionalGeneration.from_pretrained(IMAGE_ANNOTATION_MODEL, torch_dtype=torch.float16) 
-model.to(device)
-
-#Restore log settings
-logging.getLogger("transformers").setLevel(transformers_level)
-logging.getLogger("huggingface_hub").setLevel(huggingface_hub_level)
-
-### Real Image to Annotation
-
-prompts = [
-    "A picture of",
-    "The setting is",
-    "The background is",
-    "The image type/style is"
-    # "the background is",
-    # "The color(s) are",
-    # "The texture(s) are",
-    # "The emotion/mood is",
-    # "The image medium is",
-    # "The image style is"
-]
-
-def generate_description(image: PIL.Image.Image, use_prompts: bool = True, verbose: bool = False) -> str:
+def parse_arguments():
     """
-    Generates a description for a given image using a sequence of prompts.
+    Parse command-line arguments for generating synthetic images and annotations
+    from a single real dataset.
 
-    Parameters:
-    image (PIL.Image.Image): The image for which to generate a text description (string).
-    use_prompts (bool) : Determines whether to use prompt input for BLIP-2 image-to-text generation.
-    verbose (bool): If True, prints the prompts and answers during processing. Defaults to False.
-
-    Returns:
-    str: The generated description for the image.
-    """
-    if not verbose: transformers_logging.set_verbosity_error() # Only display error messages (no warnings)
-    description = ""
-    if not use_prompts:
-        inputs = processor(image, return_tensors="pt").to(device, torch.float16)
-        generated_ids = model.generate(**inputs, max_new_tokens=20)
-        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        description += generated_text
-    else:
-        for i, prompt in enumerate(prompts):
-            # Append prompt to description to build context history
-            description += prompt + ' '
-            inputs = processor(image, text=description, return_tensors="pt").to(device, torch.float16)
-            generated_ids = model.generate(**inputs, max_new_tokens=20)
-            answer = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-            if answer:
-                # Append answer to description to build context history
-                description += answer
-            else:
-                description = description[:-len(prompt) - 1]  # Remove the last prompt if no answer is generated
-            if verbose:
-                print(f"{i}. Prompt: {prompt}")
-                print(f"{i}. Answer: {answer}")
-    if not verbose: transformers_logging.set_verbosity_info() # Restore transformer warnings
-    return description
-
-# Helper functions
-
-def set_logging_level(verbose: int):
-    level = logging.WARNING if verbose == 0 else logging.INFO if verbose < 3 else logging.DEBUG
-    logging.getLogger().setLevel(level)
-
-def ensure_save_path(path: str) -> str:
-    if not os.path.exists(path):
-        os.makedirs(path)
-    return path
-
-def create_annotation_dataset_directory(base_path: str, dataset_name: str) -> str:
-    safe_name = dataset_name.replace("/", "_")
-    full_path = os.path.join(base_path, safe_name)
-    if not os.path.exists(full_path):
-        os.makedirs(full_path)
-    return full_path
-
-def generate_annotation(image_id,
-                        dataset_name: str,
-                        image: PIL.Image.Image,
-                        original_dimensions: tuple,
-                        resize: bool,
-                        resize_dim: int,
-                        use_prompts: bool,
-                        verbose: int):
-    """
-    Generate a text annotation for a given image.
-
-    Parameters:
-    image_id (int or str): The identifier for the image within the dataset.
-    dataset_name (str): The name of the dataset the image belongs to.
-    image (PIL.Image.Image): The image object that requires annotation.
-    original_dimensions (tuple): Original dimensions of the image as (width, height).
-    resize (bool): Allow image downsizing to maximum dimensions of (1280, 1280).
-    verbose (int): Verbosity level. If greater than 1, prints image resize message.
-
-    Returns:
-    dict: Dictionary containing the annotation data.
-    """
-    image_to_process = image.copy()
-    if resize:
-        image_to_process = image_utils.resize_image(image_to_process, resize_dim, resize_dim)
-        if verbose > 1 and image_to_process.size != image.size:
-            print(f"Resized {image_id}: {image.size} to {image_to_process.size}")
-
-    description = generate_description(image_to_process, use_prompts, verbose > 2)
-    annotation = {
-        'description': description,
-        'original_dataset': dataset_name,
-        'original_dimensions': f"{original_dimensions[0]}x{original_dimensions[1]}",
-        'index': image_id
-    }
-    return annotation
-
-def save_annotation(dataset_dir: str, image_id, annotation: dict, verbose: int):
-    """
-    Save a text annotation to a JSON file if it doesn't already exist.
-
-    Parameters:
-    dataset_dir (str): The directory where the annotation file will be saved.
-    image_id (int or str): The identifier for the image within the dataset.
-    annotation (dict): Annotation data to be saved.
-    verbose (int): Verbosity level. If greater than 0, it prints messages during processing.
-
-    Returns:
-    int: Returns 0 if the annotation is successfully saved, -1 if the annotation file already exists.
-    """
-    file_path = os.path.join(dataset_dir, f"{image_id}.json")
-    if os.path.exists(file_path):
-        if verbose > 0: print(f"Annotation for {image_id} already exists - Skipping")
-        return -1  # Skip this image as it already has an annotation
+    Before running, authenticate with command line to upload to Hugging Face:
+    huggingface-cli login
     
-    with open(file_path, 'w') as f:
-        json.dump(annotation, f, indent=4)
-        if verbose > 0: print(f"Created {file_path}")
+    Do not add token as Git credential.
 
-    return 0
+    Example Usage:
 
-def process_image(dataset_dir: str,
-                  image_info: dict,
-                  dataset_name: str,
-                  image_index: int,
-                  resize: bool,
-                  resize_dim : int,
-                  use_prompts: bool,
-                  verbose: int) -> tuple:
+    Generate the first 10 mirrors of celeb-a-hq with stabilityai/stable-diffusion-xl-base-1.0
+    and existing annotations from Hugging Face, and upload images to Hugging Face.
+    Replace YOUR_HF_TOKEN with your actual Hugging Face API token:
+
+    pm2 start generate_synthetic_dataset.py --name "first_ten_celebahq" --no-autorestart \
+    -- --hf_org 'bitmind' --real_image_dataset_name 'celeb-a-hq' \
+    --diffusion_model 'stabilityai/stable-diffusion-xl-base-1.0' --upload_synthetic_images \
+    --hf_token 'YOUR_HF_TOKEN' --start_index 0 --end_index 10
+
+    Generate mirrors of the entire ffhq256 using stabilityai/stable-diffusion-xl-base-1.0
+    and upload annotations and images to Hugging Face. Replace YOUR_HF_TOKEN with your
+    actual Hugging Face API token:
+
+    pm2 start generate_synthetic_dataset.py --name "ffhq256" --no-autorestart \
+    -- --hf_org "bitmind" --real_image_dataset_name "ffhq256" \
+    --diffusion_model "stabilityai/stable-diffusion-xl-base-1.0" \
+    --upload_annotations --upload_synthetic_images \ --hf_token "YOUR_HF_TOKEN""
+
+    Arguments:
+    --hf_org (str): Required. Hugging Face organization name.
+    --real_image_dataset_name (str): Required. Name of the real image dataset.
+    --diffusion_model (str): Required. Diffusion model to use for image generation.
+    --upload_annotations (bool): Optional. Flag to upload annotations to Hugging Face.
+    --download_annotations (bool): Optional. Flag to download existing annotations from Hugging Face.
+    --skip_generate_annotations (bool): Optional. Flag to skip local annotation generation.
+                                        Useful when local annotations exist.
+    --generate_synthetic_images (bool): Optional. Flag to generate synthetic images.
+    --upload_synthetic_images (bool): Optional. Flag to upload synthetic images to Hugging Face.
+    --hf_token (str): Required for interfacing with Hugging Face.
+    parser.add_argument('--start_index', type=int, default=0, help='Start index for processing the dataset.')
+    parser.add_argument('--end_index', type=int, default=None, help='End index (exclusive) for processing the dataset.')
     """
-    Process an image from a dataset and generate annotations.
+    parser = argparse.ArgumentParser(description='Generate synthetic images and annotations from a real dataset.')
+    parser.add_argument('--hf_org', type=str, required=True, help='Hugging Face org name.')
+    parser.add_argument('--real_image_dataset_name', type=str, required=True, help='Real image dataset name.')
+    parser.add_argument('--diffusion_model', type=str, required=True, 
+                        help='Diffusion model to use for image generation.')
+    parser.add_argument('--upload_annotations', action='store_true', default=False, 
+                        help='Upload annotations to Hugging Face.')
+    parser.add_argument('--download_annotations', action='store_true', default=False, 
+                        help='Download annotations from Hugging Face.')
+    parser.add_argument('--skip_generate_annotations', action='store_true', default=False, 
+                        help='Skip annotation generation and use existing annotations.')
+    parser.add_argument('--generate_synthetic_images', action='store_true', default=False, 
+                        help='Generate synthetic images.')
+    parser.add_argument('--upload_synthetic_images', action='store_true', default=False, 
+                        help='Upload synthetic images to Hugging Face.')
+    parser.add_argument('--hf_token', type=str, default=None, help='Token for uploading to Hugging Face.')
+    parser.add_argument('--start_index', type=int, default=0, required=True, help='Start index for processing the dataset. Default to the first index.')
+    parser.add_argument('--end_index', type=int, default=None, required=True, help='End index for processing the dataset. Default to the last index.')
+    parser.add_argument('--no-resize', action='store_false', dest='resize', help='Do not resize to target image size from BitMind constants.')
+    parser.add_argument('--resize_existing', action='store_true', default=False, required=False, help='Resize existing image files.')
+    return parser.parse_args()
 
-    This function handles the processing of an individual image from the given dataset.
-    It generates annotations based on the provided parameters, saves the annotation
-    in JSON format, and returns the annotation along with the time taken for processing.
 
-    Parameters:
-        dataset_dir (str): The directory where the annotation will be stored.
-        image_info (dict): Dictionary containing Pillow image.
-        dataset_name (str): The name of the dataset.
-        image_index (int): The index of the image within the dataset.
-        resize (bool): A flag indicating whether the image should be resized.
-        resize_dim (int): The dimension to resize the image to if resizing is enabled.
-        use_prompts (bool): A flag indicating whether prompts should be used in annotation generation.
-        verbose (int): The verbosity level for logging (0 = no logs/messages, 3 = most messages)
-
-    Returns:
-        tuple: A tuple containing the generated annotation and the time elapsed during processing.
-            If the image data is missing or annotation generation fails, returns (None, time_elapsed).
-    """
-    if image_info['image'] is None:
-        if verbose > 1:
-            logging.debug(f"Skipping image {image_index} in dataset {dataset_name} due to missing image data.")
-        return None, 0
-
-    original_dimensions = image_info['image'].size
+def generate_and_save_annotations(dataset,
+                                  start_index,
+                                  dataset_name,
+                                  synthetic_image_generator,
+                                  annotations_dir,
+                                  batch_size=16):
+    annotations_batch = []
+    image_count = 0
     start_time = time.time()
-    annotation = generate_annotation(image_index,
-                                     dataset_name,
-                                     image_info['image'],
-                                     original_dimensions,
-                                     resize,
-                                     resize_dim,
-                                     use_prompts,
-                                     verbose)
-    save_annotation(dataset_dir, image_index, annotation, verbose)
-    time_elapsed = time.time() - start_time
+    # Update progress every PROGRESS_INCREMENT % of image chunk
+    progress_interval = (batch_size * ceil(len(dataset) / (PROGRESS_INCREMENT * batch_size)))
 
-    if annotation == -1:
-        if verbose > 1:
-            logging.debug(f"Failed to generate annotation for image {image_index} in dataset {dataset_name}")
-        return None, time_elapsed
-    
-    return annotation, time_elapsed
+    for index, real_image in enumerate(dataset):
+        adjusted_index = index + start_index
+        annotation = synthetic_image_generator.image_annotation_generator.process_image(
+            real_image,
+            dataset_name,
+            adjusted_index,
+            resize=False,
+            verbose=0
+        )[0]
+        annotations_batch.append((adjusted_index, annotation))
 
-def compute_annotation_latency(processed_images: int, dataset_time: float, dataset_name: str) -> float:
-    """
-    Compute the average annotation latency for a dataset.
+        if len(annotations_batch) == batch_size or image_count == len(dataset) - 1:
+            for image_id, annotation in annotations_batch:
+                file_path = os.path.join(annotations_dir, f"{image_id}.json")
+                with open(file_path, 'w') as f:
+                    json.dump(annotation, f)
+            annotations_batch = []
 
-    This function calculates the average time taken to annotate each image in a dataset
-    based on the total time spent and the number of processed images. If no images were
-    processed, it returns 0.0.
+        image_count += 1
 
-    Parameters:
-        processed_images (int): The number of images that were successfully processed.
-        dataset_time (float): The total time taken to process the dataset, in seconds.
-        dataset_name (str): The name of the dataset.
+        if image_count % progress_interval == 0 or image_count == len(dataset):
+            print(f"Progress: {image_count}/{len(dataset)} annotations generated.")
 
-    Returns:
-        float: The average annotation latency per image in seconds. If no images were processed, returns 0.0.
-    """
-    if processed_images > 0:
-        average_latency = dataset_time / processed_images
-        logging.info(f'Average annotation latency for {dataset_name}: {average_latency:.4f} seconds')
-        return average_latency
-    return 0.0
+    synthetic_image_generator.image_annotation_generator.clear_gpu()
+    duration = time.time() - start_time
+    print(f"All {image_count} annotations generated and saved in {duration:.2f} seconds.")
+    print(f"Mean annotation generation time: {duration/image_count:.2f} seconds if any.")
 
-def generate_annotation_dataset(real_image_datasets: List[Any],
-                                save_path: str = 'annotations/',
-                                verbose: int = 0,
-                                max_images: int | None = None,
-                                resize_images = False,
-                                resize_dim = 512,
-                                use_prompts : bool = True) -> Tuple[Dict[str, Dict[str, Any]], float]:
-    """
-    Generates text annotations for images in the given datasets, saves them in a specified directory, 
-    and computes the average per image latency. Returns a dictionary of new annotations and the average latency.
 
-    Parameters:
-        real_image_datasets (List[Any]): Datasets containing images.
-        save_path (str): Directory path for saving annotation files.
-        verbose (int): Verbosity level between 0, 1, 2, 3 for process logs/messages (No messages = 0; Most messages = 3).
-        max_images (int): Maximum number of images to annotate.
-        resize_images (bool): Allow image downsizing before captioning.
-                            Sets max dimensions to (resize_dim, resize_dim), maintaining aspect ratio.
-        use_prompts (bool): Whether to enable prompt input for BLIP-2 for more descriptive annotations.
-3
-    Returns:
-        Tuple[Dict[str, Dict[str, Any]], float]: A tuple containing the annotations dictionary and average latency.
-    """
-    set_logging_level(verbose)
-    annotations_dir = ensure_save_path(save_path)
-    annotations = {}
-    total_time = 0
-    total_processed_images = 0
+def save_json_files(json_filenames, annotations_dir, synthetic_image_generator, synthetic_images_dir, resize=True):
+    total_images = 0
+    for json_filename in json_filenames:
+        json_path = os.path.join(annotations_dir, json_filename)
+        with open(json_path, 'r') as file:
+            annotation = json.load(file)
+        prompt = annotation['description']
+        name = annotation['id']
+        synthetic_image = synthetic_image_generator.generate_image(prompt, name=name)
+        filename = f"{name}.png"
+        file_path = os.path.join(synthetic_images_dir, filename)
+        if resize:
+            synthetic_image['image'] = resize_image(synthetic_image['image'], TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
+        synthetic_image['image'].save(file_path)
+        total_images += 1
+    return total_images
 
-    for i, dataset in enumerate(real_image_datasets):
-        dataset_name = dataset.huggingface_dataset_path
-        dataset_dir = create_annotation_dataset_directory(annotations_dir, dataset_name)
-        processed_images = 0
-        dataset_time = 0
 
-        for j, image_info in enumerate(dataset):
-            annotation, time_elapsed = \
-            process_image(dataset_dir, image_info, dataset_name, j, resize_images, resize_dim, use_prompts, verbose)
-            if annotation is not None:
-                annotations.setdefault(dataset_name, {})[image_info['id']] = annotation
-                total_time += time_elapsed
-                dataset_time += time_elapsed
-                processed_images += 1
-                if max_images is not None and processed_images >= max_images:
-                    break
-
-        average_latency = compute_annotation_latency(processed_images, dataset_time, dataset_name)
-        total_processed_images += processed_images
-
-    overall_average_latency = total_time / total_processed_images if total_processed_images else 0
-    return annotations, overall_average_latency
-
-def list_datasets(base_dir):
-    """List all subdirectories in the base directory."""
-    return [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
-
-def load_annotations(base_dir, dataset):
-    """Load annotations from JSON files within a specified directory."""
-    annotations = []
-    path = os.path.join(base_dir, dataset)
-    for filename in os.listdir(path):
-        if filename.endswith(".json"):
-            with open(os.path.join(path, filename), 'r') as file:
-                data = json.load(file)
-                annotations.append(data)
-    return annotations
-
-def load_diffuser(model_name):
-    """Load a diffusion model by name, configured to provided arguments."""
-    bt.logging.info(f"Loading image generation model ({model_name})...")
-    model = DiffusionPipeline.from_pretrained(
-        model_name, torch_dtype=torch.float32 if device == "cpu" else torch.float16, **DIFFUSER_ARGS[model_name]
-    )
-    model.to(device)
-    return model
-
-## GPU
-def generate_images(annotations, diffuser, save_dir, num_images, batch_size, diffuser_name):
-    """Generate images from annotations using a diffuser and save to the specified directory."""
-    # Ensure the directory exists
-    os.makedirs(save_dir, exist_ok=True)
-    
-    generated_images = []
+def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator, 
+                                       synthetic_images_dir, start_index, end_index, 
+                                       batch_size=16, resize=True):
     start_time = time.time()
+    total_images = 0
 
-    with torch.no_grad():
-        for i in range(min(num_images, len(annotations))):
-            start_loop = time.time()
-            annotation = annotations[i]
-            prompt = annotation['description']
-            index = annotation.get('index', f"missing_index")
+    # Collect all valid annotation file paths first
+    valid_files = []
+    for json_filename in sorted(os.listdir(annotations_dir)):
+        # Extract index from filename
+        try:
+            # Remove '.json' extension and converts to integer
+            file_index = int(json_filename[:-5])  
+        except ValueError:
+            continue  # Skip files that don't match expected format
+        if start_index <= file_index < end_index:
+            valid_files.append(json_filename)
 
-            logging.info(f"Annotation {i}: {json.dumps(annotation, indent=2)}")
-
-            generated_image = diffuser(prompt=prompt).images[0]
-            logging.info(f"Type of generated image: {type(generated_image)}")
-
-            if isinstance(generated_image, torch.Tensor):
-                img = ToPILImage()(generated_image)
-            else:
-                img = generated_image
-
-            safe_prompt = prompt[:50].replace(' ', '_').replace('/', '_').replace('\\', '_')
-            img_filename = f"{save_dir}/{safe_prompt}-{index}.png"
-            img.save(img_filename)
-            generated_images.append(img_filename)
-            loop_time = time.time() - start_loop
-            logging.info(f"Image saved to {img_filename}")
-
-    total_time = time.time() - start_time
-    logging.info(f"Total processing time: {total_time:.2f} seconds")
-    return generated_images
-
-
-def load_and_initialize_diffuser(diffuser_name, previous_diffuser=None):
-    """Load and initialize the diffuser, handling previous diffuser cleanup if needed."""
-    if previous_diffuser is not None:
-        logging.info("Deleting previous diffuser, freeing memory")
-        # Move to float32 if it's float16, then move to CPU for deletion
-        if previous_diffuser.dtype == torch.float16:
-            previous_diffuser = previous_diffuser.to(dtype=torch.float32)
-        previous_diffuser.to('cpu')
-        del previous_diffuser
-        gc.collect()
-        torch.cuda.empty_cache()
-        
-    return load_diffuser(diffuser_name)
-
-def run_diffuser_on_dataset(dataset, annotations, diffuser, output_dir, num_images, batch_size, diffuser_name):
-    """Test a single diffuser on a given dataset."""
-    dataset_name = dataset.rsplit('/', 1)[-1] if '/' in dataset else dataset
-    diffuser_name = diffuser_name.rsplit('/', 1)[-1] if '/' in diffuser_name else diffuser_name
-    save_dir = os.path.join(output_dir, dataset_name, diffuser_name)
-    logging.info(f"Testing {diffuser_name} on annotation dataset {dataset} at {save_dir}...")
-    os.makedirs(save_dir, exist_ok=True)
+    total_valid_files = len(valid_files)
+    # Update progress every PROGRESS_INCREMENT % of total annotations
+    progress_interval = (batch_size * ceil(total_valid_files / (PROGRESS_INCREMENT * batch_size)))
     
-    try:
-        generate_images(annotations, diffuser, save_dir, num_images, batch_size, diffuser_name)
-        logging.info("Images generated and saved successfully.")
-    except Exception as e:
-        logging.error(f"Failed to generate images with {diffuser_name}: {str(e)}")
+    with torch.no_grad():  # Use no_grad to reduce memory usage during inference
+        for i in range(0, total_valid_files, batch_size):
+            batch_files = valid_files[i:i+batch_size]
+            total_images += save_json_files(batch_files, annotations_dir, 
+                                            synthetic_image_generator, synthetic_images_dir,
+                                            resize)
 
-def cleanup_diffuser(diffuser):
-    """Clean up resources associated with a diffuser."""
-    logging.info("Deleting diffuser, freeing memory")
-    # Move to float32 if it's float16, then move to CPU for deletion
-    if diffuser.dtype == torch.float16:
-        diffuser = diffuser.to(dtype=torch.float32)
-    diffuser.to('cpu')
-    del diffuser
-    gc.collect()
-    torch.cuda.empty_cache()
+            if i % progress_interval == 0 or total_images >= total_valid_files:
+                print(f"Progress: {total_images}/{total_valid_files} images generated \
+                ({(total_images / total_valid_files) * 100:.2f}%)")
 
-def run_diffusers_on_datasets(annotations_dir, output_dir, num_images=sys.maxsize, batch_size=2):
-    """Test all diffusers on datasets."""
-    datasets = list_datasets(annotations_dir)
-    for diffuser_name in DIFFUSER_NAMES:
-        logging.info(f"Loading and initializing diffuser: {diffuser_name}")
-        diffuser = load_and_initialize_diffuser(diffuser_name)
-        for dataset in datasets:
-            annotations = load_annotations(annotations_dir, dataset)
-            run_diffuser_on_dataset(dataset, annotations, diffuser, output_dir, num_images, batch_size, diffuser_name)
-        cleanup_diffuser(diffuser)
-
-### Generate Annotations
-
-# Change real_image_datasets to select which datasets to generate annotations and synthetics from.
-
-# max_images=None for entire dataset
+    synthetic_image_generator.clear_gpu()
+    duration = time.time() - start_time
+    print(f"All {total_images} synthetic images generated in {duration:.2f} seconds.")
+    print(f"Mean synthetic images generation time: {duration/max(total_images, 1):.2f} seconds.")
 
 def main():
-    # Configure logging to capture process information
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+    args = parse_arguments()
+    hf_dataset_name = f"{args.hf_org}/{args.real_image_dataset_name}"
+    data_range = f"{args.start_index}-to-{args.end_index-1}"
+    hf_annotations_name = f"{hf_dataset_name}___annotations"
+    model_name = args.diffusion_model.split('/')[-1]
+    hf_synthetic_images_name = f"{hf_dataset_name}___{data_range}___{model_name}"
+    annotations_dir = f'test_data/annotations/{args.real_image_dataset_name}'
+    real_image_samples_dir = f'test_data/real_images/{args.real_image_dataset_name}'
+    synthetic_images_dir = f'test_data/synthetic_images/{args.real_image_dataset_name}'
+    os.makedirs(annotations_dir, exist_ok=True)
+    os.makedirs(synthetic_images_dir, exist_ok=True)
 
-    # Suppress FutureWarnings from diffusers module
-    warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
+    synthetic_image_generator = SyntheticImageGenerator(
+        prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
+                
+    batch_size = 16
 
-    # Set the device for model operations
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
-    if device == "cpu":
-        raise RuntimeError("This script requires a GPU because it uses torch.float16.")
+    # Generate or download annotations to local storage.
+    if args.download_annotations and dataset_exists_on_hf(hf_annotations_name, args.hf_token):
+        print("Annotations exist on Hugging Face.")
+        # Check if the annotations are already saved locally
+        if not Path(annotations_dir).is_dir() or not any(Path(annotations_dir).iterdir()):
+            print(f"Downloading annotations from {hf_annotations_name} and saving annotations to {annotations_dir}.")
+            # Download annotations from Hugging Face
+            all_annotations = load_dataset(hf_annotations_name, split='train', keep_in_memory=False)
+            df_annotations = pd.DataFrame(all_annotations)
+            # Ensure the index is of integer type and sort by it
+            df_annotations['id'] = df_annotations['id'].astype(int)
+            df_annotations.sort_values('id', inplace=True)
+            # Slice specified chunk
+            annotations_chunk = df_annotations.iloc[args.start_index:args.end_index]
+            all_annotations = None
+             # Save the chunk as JSON files on disk
+            save_as_json(annotations_chunk, annotations_dir)
+            annotations_chunk = None
+        else:
+            print("Annotations already saved to disk.")
+    elif not args.skip_generate_annotations:
+        print("Generating new annotations.")
+        all_images = ImageDataset(hf_dataset_name, 'train')
+        images_chunk = slice_dataset(all_images.dataset, start_index=args.start_index, end_index=args.end_index)
+        all_images = None
+        generate_and_save_annotations(images_chunk,
+                                      args.start_index,
+                                      hf_dataset_name,
+                                      synthetic_image_generator,
+                                      annotations_dir,
+                                      batch_size=batch_size)
+        images_chunk = None # Free up memory
+        
+        # Upload to Hugging Face
+        if args.upload_annotations and args.hf_token:
+            start_time = time.time()
+            print("Uploading annotations to HF.")
+            print("Loading annotations dataset.")
+            annotations_dataset = load_and_sort_dataset(annotations_dir, 'json')
+            print("Uploading annotations of " + args.real_image_dataset_name + " to Hugging Face.")
+            upload_to_huggingface(annotations_dataset, hf_annotations_name, args.hf_token)
+            print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
-    # Load real image datasets from predefined metadata
-    print("Loading real datasets")
-    real_image_datasets = [
-        ImageDataset(ds['path'], 'test', ds.get('name', None), ds['create_splits'])
-        for ds in DATASET_META['real']
-    ]
-
-    # Path settings for annotations and synthetic image outputs
-    ANNOTATIONS_DIR = "test_data/dataset/annotations/"
-    OUTPUT_DIR = "test_data/dataset/synthetics_from_annotations/"
-
-    # Generate text annotations for the real image datasets
-    annotations_dict, average_latency = generate_annotation_dataset(
-        real_image_datasets,
-        save_path=ANNOTATIONS_DIR,
-        verbose=2,
-        max_images=None,
-        use_prompts=True
-    )
-
-    # Move BLIP-2 to CPU and free up GPU memory after generating annotations
-    model.cpu()
-    del model
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    logging.basicConfig(level=logging.INFO)
+    # Generate synthetic images to local storage.
+    if args.generate_synthetic_images:
+        synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
+        generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator,
+                                           synthetic_images_dir, args.start_index, args.end_index,
+                                           batch_size=batch_size, resize=args.resize)
     
-    # Generate synthetic images from the annotations
-    run_diffusers_on_datasets(ANNOTATIONS_DIR, OUTPUT_DIR, num_images=sys.maxsize, batch_size=8)
+        synthetic_image_generator.clear_gpu()
+    
+    if args.resize_existing:
+        print(f"Resizing images in {synthetic_images_dir}.")
+        resize_images_in_directory(synthetic_images_dir)
+        hf_synthetic_images_name += f"___{TARGET_IMAGE_SIZE[0]}"
+        print(f"Done resizing existing images.")
+
+    if args.upload_synthetic_images and args.hf_token:
+        start_time = time.time()
+        print("Loading synthetic image dataset.")
+        synthetic_image_dataset = load_and_sort_dataset(synthetic_images_dir, 'image')
+        print("Uploading synthetic image mirrors of " + args.real_image_dataset_name + " to Hugging Face.")
+        upload_to_huggingface(synthetic_image_dataset, hf_synthetic_images_name, args.hf_token)
+        print(f"Synthetic images uploaded in {time.time() - start_time:.2f} seconds.")
 
 if __name__ == "__main__":
     main()
