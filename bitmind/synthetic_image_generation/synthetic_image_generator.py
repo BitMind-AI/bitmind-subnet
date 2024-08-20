@@ -127,7 +127,7 @@ class SyntheticImageGenerator:
 
                 for dim in ('height', 'width'):
                     if isinstance(gen_args[dim], list):
-                    gen_args[dim] = np.random.choice(gen_args[dim])
+                        gen_args[dim] = np.random.choice(gen_args[dim])
 
             start_time = time.time()
             gen_image = self.diffuser(
