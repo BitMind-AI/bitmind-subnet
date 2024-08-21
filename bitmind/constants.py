@@ -43,7 +43,7 @@ VALIDATOR_MODEL_META = {
             "use_safetensors": True,
             "torch_dtype": torch.bfloat16,
             "generate_args": {
-                "guidance_scale": 1,
+                "guidance_scale": 2,
                 "num_inference_steps": 100, #{"min": 50, "max": 200},
                 "generator": torch.Generator("cuda"),
                 "height": 1024, #[512, 768, 1024, 1360],
