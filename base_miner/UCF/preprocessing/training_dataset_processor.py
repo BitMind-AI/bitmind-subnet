@@ -237,9 +237,9 @@ class TrainingDatasetProcessor:
         return dataset_dict
     
     def load_process_split_datasets(self, dataset_meta: list, transform_info, split=True) -> Dict[str, List[ImageDataset]]:
-        print("Processing datasets for " + transform[0])
-        hf_repo_path = meta['path']+'_'+transform[0]
+        print("Processing datasets for " + transform_info[0])
         for meta in dataset_meta:
+            hf_repo_path = meta['path']+'_'+transform_info[0]
             print(f"Loading {meta['path']} for all splits... ", end='')
             dataset = ImageDataset(meta['path'],
                                    meta.get('name', None),
@@ -247,7 +247,7 @@ class TrainingDatasetProcessor:
                                    download_mode=meta.get('download_mode', None))
 
             if self.config['face_crop_and_align']:
-                dataset.dataset = self.face_filter_and_crop_align(dataset.dataset, transform[1])
+                dataset.dataset = self.face_filter_and_crop_align(dataset.dataset, transform_info[1])
             if split:
                 splits = ['train', 'validation', 'test']
                 datasets = {split: [] for split in splits}
@@ -314,7 +314,7 @@ class TrainingDatasetProcessor:
                 print(f"Dataset {dataset_name} not found on Hugging Face Hub. Error: {e}")
         else: # Generate dataset
             for t in self.transforms.keys():
-                real_datasets, fake_datasets = self.get_processed_datasets((t, self.transform[t]), split=True)
+                real_datasets, fake_datasets = self.get_processed_datasets((t, self.transforms[t]), split=True)
 
     def upload_datasets(self,
                         dataset_name: str,
