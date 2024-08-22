@@ -15,6 +15,7 @@ import warnings
 from bitmind.constants import (
     PROMPT_GENERATOR_NAMES,
     PROMPT_GENERATOR_ARGS,
+    TEXT_MODERATION_MODEL,
     DIFFUSER_NAMES,
     DIFFUSER_ARGS,
     DIFFUSER_PIPELINE,
@@ -24,7 +25,14 @@ from bitmind.constants import (
     TARGET_IMAGE_SIZE
 )
 
-warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
+future_warning_modules_to_ignore = [
+    'diffusers',
+    'transformers.tokenization_utils_base'
+]
+
+for module in future_warning_modules_to_ignore:
+    warnings.filterwarnings("ignore", category=FutureWarning, module=module)
+    
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
@@ -67,7 +75,8 @@ class SyntheticImageGenerator:
         self.image_annotation_generator = None
         if self.prompt_type == 'annotation':
             bt.logging.info(f"Loading image captioning model ({IMAGE_ANNOTATION_MODEL})...")
-            self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL)
+            self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL,
+                                                                      text_moderation_model_name=TEXT_MODERATION_MODEL)
         else:
             bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
             self.prompt_generator = pipeline(
@@ -186,7 +195,7 @@ class SyntheticImageGenerator:
         """
 
         """
-        self.image_annotation_generator.load_model()
+        self.image_annotation_generator.load_models()
         annotation = self.image_annotation_generator.process_image(
             image_info=image_sample,
             dataset_name=image_sample['source'],

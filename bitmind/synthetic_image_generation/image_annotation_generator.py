@@ -1,5 +1,5 @@
 # Transformer models
-from transformers import AutoProcessor, Blip2ForConditionalGeneration
+from transformers import Blip2Processor, Blip2ForConditionalGeneration, pipeline
 
 # Logging and progress handling
 from transformers import logging as transformers_logging
@@ -19,26 +19,83 @@ from bitmind.constants import HUGGINGFACE_CACHE_DIR
 disable_progress_bar()
 
 class ImageAnnotationGenerator:
-    def __init__(self, model_name: str, device: str = 'auto'):
-        self.device = torch.device('cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu')
+    def __init__(
+        self, model_name: str, text_moderation_model_name: str, device: str = 'auto',
+        apply_moderation: bool = True
+    ):
+        self.device = torch.device(
+            'cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu'
+        )
+        
         self.model_name = model_name
-        self.processor = AutoProcessor.from_pretrained(self.model_name, cache_dir=HUGGINGFACE_CACHE_DIR)
+        self.processor = Blip2Processor.from_pretrained(
+            self.model_name, cache_dir=HUGGINGFACE_CACHE_DIR
+        )
         self.model = None
-        self.load_model()
+        
+        self.apply_moderation = apply_moderation
+        self.text_moderation_model_name = text_moderation_model_name
+        self.text_moderation_pipeline = None
+        
+        self.load_models()
 
-    def load_model(self):
+    def load_models(self):
         self.model = Blip2ForConditionalGeneration.from_pretrained(
             self.model_name, 
             torch_dtype=torch.float16, 
-            cache_dir=HUGGINGFACE_CACHE_DIR)
+            cache_dir=HUGGINGFACE_CACHE_DIR
+        )
         self.model.to(self.device)
+        print(f"Loading {self.text_moderation_model_name}")
+        if self.apply_moderation:
+            self.text_moderation_pipeline = pipeline(
+                "text-generation",
+                model=self.text_moderation_model_name,
+                model_kwargs={"torch_dtype": torch.bfloat16}, 
+                device_map="auto"
+            )
+        print("Done loading moderation pipeline")
 
     def clear_gpu(self):
         bt.logging.debug(f"Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
+        if self.text_moderation_pipeline:
+            self.text_moderation_pipeline = None
         gc.collect()
         torch.cuda.empty_cache()
+
+    def moderate_description(self, description: str, max_new_tokens: int = 80) -> str:
+        """
+        Uses the text moderation pipeline to make the description more concise and neutral.
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": ("[INST]You always concisely rephrase given descriptions, eliminate redundancy, "
+                            "and remove all specific references to individuals by name. You do not respond with"
+                            "anything other than the revised description.[/INST]")
+            },
+            {
+                "role": "user",
+                "content": description
+            }
+        ]
+        try:
+            moderated_text = self.text_moderation_pipeline(messages, max_new_tokens=max_new_tokens,
+                                                           pad_token_id=self.text_moderation_pipeline.tokenizer.eos_token_id,
+                                                           return_full_text=False)
+            
+            if isinstance(moderated_text, list):
+                return moderated_text[0]['generated_text']
+                bt.logging.error("Failed to return moderated text.")
+            else:
+                bt.logging.error("Moderated text did not return a list.")
+            
+            return description  # Fallback to the original description if no suitable entry is found
+        except Exception as e:
+            bt.logging.error(f"An error occurred during moderation: {e}", exc_info=True)
+            return description  # Return the original description as a fallback
 
     def generate_description(self,
                              image: PIL.Image.Image,
@@ -60,8 +117,7 @@ class ImageAnnotationGenerator:
             transformers_logging.set_verbosity_error()
 
         description = ""
-        prompts = ["A picture of", "The setting is", "The background is", "The image type/style is"]
-        
+        prompts = ["An image of", "The setting is", "The background is", "The image type/style is"]
         for i, prompt in enumerate(prompts):
             description += prompt + ' '
             inputs = self.processor(image, text=description, return_tensors="pt").to(self.device, torch.float16)
@@ -84,11 +140,17 @@ class ImageAnnotationGenerator:
 
         if not verbose:
             transformers_logging.set_verbosity_info()
-            
+
+        if description.startswith(prompts[0]):
+                    description = description[len(prompts[0]):]
+        
         # Remove any trailing spaces and ensure the description ends with a period
         description = description.strip()
         if not description.endswith('.'):
             description += '.'
+        if self.apply_moderation:
+            moderated_description = self.moderate_description(description)
+            return moderated_description
         return description
 
     def generate_annotation(

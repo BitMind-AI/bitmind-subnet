@@ -87,3 +87,5 @@ DIFFUSER_PIPELINE = {
 DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-2.7b-coco"
+
+TEXT_MODERATION_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
