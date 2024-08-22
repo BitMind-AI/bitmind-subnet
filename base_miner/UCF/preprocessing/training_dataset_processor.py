@@ -44,12 +44,6 @@ class TrainingDatasetProcessor:
         print("Loaded face detector and predictor models.")
         return face_detector, face_predictor
 
-    def normalize_image(self, image):
-        mean = self.config['mean']
-        std = self.config['std']
-        normalize = T.Normalize(mean=mean, std=std)
-        return normalize(image)
-
     def get_keypts(self, image, face):
         # detect the facial landmarks for the selected face
         shape = self.face_predictor(image, face)
@@ -247,7 +241,7 @@ class TrainingDatasetProcessor:
                                    download_mode=meta.get('download_mode', None))
 
             if self.config['face_crop_and_align']:
-                dataset.dataset = self.face_filter_and_crop_align(dataset.dataset, transform_info[1])
+                dataset.dataset = self.face_filter_and_crop_align(dataset.dataset, transform_info[1]) 
             if split:
                 splits = ['train', 'validation', 'test']
                 datasets = {split: [] for split in splits}
