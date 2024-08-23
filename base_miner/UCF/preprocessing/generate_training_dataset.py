@@ -1,3 +1,22 @@
+# Run this script in the bitmind-subnet/base_miner/UCF/preprocessing/ directory
+# to interface with TrainingDatasetProcessor from training_dataset_processor.py
+
+# Example usage:
+# !) Generate and upload preprocessed training dataset of transformed images
+#    from BitMind HuggingFace repos filtered for faces only, cropped and aligned:
+# 
+#    pm2 start generate_training_dataset.py --no-autorestart -- --faces-only --hf-token [HuggingFace Write Token]
+# 2) Generate and upload preprocessed training dataset of transformed images
+#    from BitMind HuggingFace repos (unfiltered)
+# 
+#    pm2 start generate_training_dataset.py --no-autorestart -- --hf-token [HuggingFace Write Token]
+#
+# 3) Same as 1 but with splits generated for individual datasets uploaded to HF
+#    NOTE: Not a default function because splitting is typically handled after
+#          loading all datasets in bitmind-subnet/base_miner/UCF/train_ucf.py
+#
+#    pm2 start generate_training_dataset.py --no-autorestart -- --faces-only --splits --hf-token [HuggingFace Write Token]
+
 import argparse
 from training_dataset_processor import TrainingDatasetProcessor
 from bitmind.image_transforms import random_aug_transforms, base_transforms
