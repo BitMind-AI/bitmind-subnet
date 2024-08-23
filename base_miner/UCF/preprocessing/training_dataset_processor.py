@@ -24,11 +24,11 @@ from PIL import Image
 
 class TrainingDatasetProcessor:
     def __init__(self,
-                 config: dict,
+                 faces_only: bool = False,
                  transforms: dict = None,
                  hf_token: str = None,
                  dataset_meta: dict = DATASET_META):
-        self.config = config
+        self.faces_only = faces_only
         self.transforms = transforms
         self.hf_token = hf_token
         self.dataset_meta = dataset_meta
@@ -240,7 +240,7 @@ class TrainingDatasetProcessor:
                                    create_splits=False,
                                    download_mode=meta.get('download_mode', None))
 
-            if self.config['face_crop_and_align']:
+            if self.faces_only:
                 dataset.dataset = self.face_filter_and_crop_align(dataset.dataset, transform_info[1]) 
             if split:
                 splits = ['train', 'validation', 'test']
@@ -317,7 +317,7 @@ class TrainingDatasetProcessor:
         print("Pushing "+dataset_name+"_face_training to hub.")
         repo_id = dataset_name+"_face_training"
         try:
-            create_repo(repo_id, token=self.hf_token, exist_ok=False)
+            create_repo(repo_id, token=self.hf_token, repo_type="dataset", exist_ok=False)
             datasets.push_to_hub(repo_id=repo_id, token=self.hf_token)
         except Exception as e:
             print(e)
