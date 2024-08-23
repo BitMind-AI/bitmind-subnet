@@ -7,16 +7,14 @@ from tqdm import tqdm
 import dlib
 import numpy as np
 import cv2
-import time
 from datasets import DatasetDict, Image, load_dataset, Dataset
 from huggingface_hub import create_repo
-from util.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META
 from bitmind.utils.data import create_splits
 from base_miner.UCF.preprocessing.preprocess import extract_aligned_face_dlib
 from bitmind.image_transforms import random_aug_transforms
 from base_miner.UCF.preprocessing.pil_image_dataset import PILImageDataset
+from bitmind.constants import DATASET_META
 from torch.utils.data import DataLoader
 from skimage import transform as trans
 from imutils import face_utils
@@ -24,19 +22,23 @@ from PIL import Image
 
 class TrainingDatasetProcessor:
     def __init__(self,
+                 dataset_meta: dict = DATASET_META,
                  faces_only: bool = False,
                  transforms: dict = None,
+                 split: bool = False,
                  hf_token: str = None,
-                 dataset_meta: dict = DATASET_META):
+                ):
+        self.dataset_meta = dataset_meta
         self.faces_only = faces_only
         self.transforms = transforms
         self.hf_token = hf_token
-        self.dataset_meta = dataset_meta
-        self.face_detector, self.face_predictor = self.load_face_models()
+        self.split = split
+        if self.faces_only:
+            self.face_detector, self.face_predictor = self.load_face_models()
 
     def load_face_models(self):
         face_detector = dlib.get_frontal_face_detector()
-        predictor_path = './preprocessing/dlib_tools/shape_predictor_81_face_landmarks.dat'
+        predictor_path = './dlib_tools/shape_predictor_81_face_landmarks.dat'
         if not os.path.exists(predictor_path):
             print(f"Predictor path does not exist: {predictor_path}")
             sys.exit()
@@ -188,18 +190,17 @@ class TrainingDatasetProcessor:
                 cropped_faces_present_with_landmarks.append(False)
         return cropped_faces_present_with_landmarks, cropped_faces_with_landmarks, valid_landmarks, masks_with_landmarks
     
-    def face_filter_and_crop_align(self, dataset_dict, transform, batch_size=32):
+    def preprocess_faces_only(self, dataset_dict, transform, batch_size=32):
         for split in dataset_dict.keys():
             dataloader = DataLoader(dataset_dict[split].with_format("torch"), batch_size=batch_size, shuffle=False)
             indices_to_keep = []
-            new_dataset = {"image": [],
-                            "landmark": [],
-                            "mask": []}
+            preprocessed_dataset = {"image": [],
+                                    "landmark": [],
+                                    "mask": []}
             total_valid_faces = 0
             for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
                 images = batch['image']
                 # Convert tensors to PIL Images
-                start_time = time.time()
                 images = [T.ToPILImage()(transform(T.ToPILImage()(image))) for image in images]
     
                 # Detect and process faces
@@ -218,107 +219,73 @@ class TrainingDatasetProcessor:
                     assert len(batch_indices_to_keep) == len(valid_faces)
                     
                     indices_to_keep.extend(batch_indices_to_keep.tolist())
-                    new_dataset["image"].extend(valid_faces)
-                    new_dataset["landmark"].extend(valid_landmarks)
-                    new_dataset["mask"].extend(valid_masks)
-                    assert (len(new_dataset["image"]) == len(new_dataset["landmark"])) and \
-                           (len(new_dataset["landmark"]) == len(new_dataset["mask"]))
+                    preprocessed_dataset["image"].extend(valid_faces)
+                    preprocessed_dataset["landmark"].extend(valid_landmarks)
+                    preprocessed_dataset["mask"].extend(valid_masks)
+                    assert (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["landmark"])) and \
+                           (len(preprocessed_dataset["landmark"]) == len(preprocessed_dataset["mask"]))
 
             # Replace dataset with processed cropped and aligned face data
-            filtered_split_dataset = Dataset.from_dict(new_dataset)
+            filtered_split_dataset = Dataset.from_dict(preprocessed_dataset)
             assert total_valid_faces == len(filtered_split_dataset)
             dataset_dict[split] = filtered_split_dataset        
         return dataset_dict
+
+    def preprocess(self, dataset_dict, transform, batch_size=32):
+        for split in dataset_dict.keys():
+            dataloader = DataLoader(dataset_dict[split].with_format("torch"), batch_size=batch_size, shuffle=False)
+            indices_to_keep = []
+            preprocessed_dataset = {"image": []}
+            total_valid_faces = 0
+            for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+                images = batch['image']
+                # Transform images and ensure PIl format
+                images = [T.ToPILImage()(transform(T.ToPILImage()(image))) for image in images]
+                preprocessed_dataset["image"].extend(images)
+            # Replace dataset with processed cropped and aligned face data
+            transformed_dataset = Dataset.from_dict(preprocessed_dataset)
+            dataset_dict[split] = transformed_dataset
+        return dataset_dict
+
+    def upload_dataset(self, dataset_name: str, datasets):
+        repo_id = dataset_name+"_faces_only_training" if self.faces_only else dataset_name+"_training"
+        print(f"Pushing {datasets} to {repo_id} in hub")
+        
+        try:
+            create_repo(repo_id, token=self.hf_token, repo_type="dataset", exist_ok=False)
+            datasets.push_to_hub(repo_id=repo_id, token=self.hf_token)
+            print(f"Uploaded {repo_id}.")
+        except Exception as e:
+            print(f"Failed to upload {repo_id}:", e)
     
-    def load_process_split_datasets(self, dataset_meta: list, transform_info, split=True) -> Dict[str, List[ImageDataset]]:
-        print("Processing datasets for " + transform_info[0])
+    def load_preprocess_upload_datasets(self, dataset_meta: list, transform_info) -> Dict[str, List[ImageDataset]]:
+        print(f"Datasets with {transform_info[0]}:")
         for meta in dataset_meta:
             hf_repo_path = meta['path']+'_'+transform_info[0]
-            print(f"Loading {meta['path']} for all splits... ", end='')
+            print(f"Loading {meta['path']}...")
             dataset = ImageDataset(meta['path'],
                                    meta.get('name', None),
                                    create_splits=False,
                                    download_mode=meta.get('download_mode', None))
-
+            
             if self.faces_only:
-                dataset.dataset = self.face_filter_and_crop_align(dataset.dataset, transform_info[1]) 
-            if split:
+                print(f"Preprocessing {meta['path']} faces only...")
+                dataset.dataset = self.preprocess_faces_only(dataset.dataset, transform_info[1]) 
+            else:
+                print(f"Preprocessing {meta['path']}...")
+                dataset.dataset = self.preprocess(dataset.dataset, transform_info[1]) 
+            print(f"Uploading preprocessed {meta['path']}...")
+            if self.split:
                 splits = ['train', 'validation', 'test']
                 datasets = {split: [] for split in splits}
                 train_ds, val_ds, test_ds = create_splits(dataset.dataset)
-                self.upload_datasets(hf_repo_path,
-                                     DatasetDict({"train": train_ds, "validation": val_ds, "test": test_ds}))
+                self.upload_dataset(hf_repo_path+'_splits',
+                                    DatasetDict({"train": train_ds, "validation": val_ds, "test": test_ds}))
             else:
-                self.upload_datasets(hf_repo_path, dataset.dataset)
-                #return datasets
-            #return dataset
-
-    def get_processed_datasets(self,
-                               transform_info,
-                               split=True) -> Tuple[Dict[str, List[ImageDataset]], Dict[str, List[ImageDataset]]]:
-        fake_datasets = self.load_process_split_datasets(self.dataset_meta['fake'], transform_info, split)
-        real_datasets = self.load_process_split_datasets(self.dataset_meta['real'], transform_info, split)
-        return real_datasets, fake_datasets
-
-    def create_source_label_mapping(self,
-                                    real_datasets: Dict[str, List[ImageDataset]],
-                                    fake_datasets: Dict[str, List[ImageDataset]]) -> Dict:
-        source_label_mapping = {}
-        for split, dataset_list in real_datasets.items():
-            for dataset in dataset_list:
-                source = dataset.huggingface_dataset_path
-                if source not in source_label_mapping.keys():
-                    source_label_mapping[source] = 0.0
-
-        fake_source_label = 1.0
-        for split, dataset_list in fake_datasets.items():
-            for dataset in dataset_list:
-                source = dataset.huggingface_dataset_path
-                if source not in source_label_mapping.keys():
-                    source_label_mapping[source] = fake_source_label
-                    fake_source_label += 1.0
-
-        return source_label_mapping
-
-    def create_real_fake_datasets(self,
-                                  real_datasets: Dict[str, List[ImageDataset]],
-                                  fake_datasets: Dict[str, List[ImageDataset]]) -> Tuple[RealFakeDataset, ...]:
-        source_label_mapping = self.create_source_label_mapping(real_datasets, fake_datasets)
-        print(f"Source label mapping: {source_label_mapping}")
-        train_dataset = RealFakeDataset(real_image_datasets=real_datasets['train'],
-                                        fake_image_datasets=fake_datasets['train'],
-                                        source_label_mapping=source_label_mapping)
-        val_dataset = RealFakeDataset(real_image_datasets=real_datasets['validation'],
-                                      fake_image_datasets=fake_datasets['validation'],
-                                      source_label_mapping=source_label_mapping)
-        test_dataset = RealFakeDataset(real_image_datasets=real_datasets['test'],
-                                       fake_image_datasets=fake_datasets['test'],
-                                       source_label_mapping=source_label_mapping)
-        return train_dataset, val_dataset, test_dataset
-
-    def load_or_generate_datasets(self,
-                                  dataset_name=None,
-                                  upload=False) -> Tuple[RealFakeDataset, RealFakeDataset, RealFakeDataset]:
-        if dataset_name:
-            try:
-                dataset_dict = load_dataset(dataset_name)
-                return dataset_dict['train'], dataset_dict['validation'], dataset_dict['test']
-                print(f"Dataset {dataset_name} loaded from Hugging Face Hub.")
-            except Exception as e:
-                print(f"Dataset {dataset_name} not found on Hugging Face Hub. Error: {e}")
-        else: # Generate dataset
-            for t in self.transforms.keys():
-                real_datasets, fake_datasets = self.get_processed_datasets((t, self.transforms[t]), split=True)
-
-    def upload_datasets(self,
-                        dataset_name: str,
-                        datasets):
-        print("Dataset to push:", datasets)
-        print("Pushing "+dataset_name+"_face_training to hub.")
-        repo_id = dataset_name+"_face_training"
-        try:
-            create_repo(repo_id, token=self.hf_token, repo_type="dataset", exist_ok=False)
-            datasets.push_to_hub(repo_id=repo_id, token=self.hf_token)
-        except Exception as e:
-            print(e)
-        print("Uploaded "+dataset_name+"_face_training.")
+                self.upload_dataset(hf_repo_path+'_whole', dataset.dataset)
+    
+    def process_and_upload_all_datasets(self):
+        for t in self.transforms.keys():
+            self.load_preprocess_upload_datasets(self.dataset_meta['fake'], (t, self.transforms[t]))
+            self.load_preprocess_upload_datasets(self.dataset_meta['real'], (t, self.transforms[t]))
+    
