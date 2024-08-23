@@ -247,7 +247,7 @@ class TrainingDatasetProcessor:
         return dataset_dict
 
     def upload_dataset(self, dataset_name: str, datasets):
-        repo_id = dataset_name+"_faces_only_training" if self.faces_only else dataset_name+"_training"
+        repo_id = dataset_name+"_faces_training" if self.faces_only else dataset_name+"_training"
         print(f"Pushing {datasets} to {repo_id} in hub")
         
         try:
@@ -281,7 +281,7 @@ class TrainingDatasetProcessor:
                 self.upload_dataset(hf_repo_path+'_splits',
                                     DatasetDict({"train": train_ds, "validation": val_ds, "test": test_ds}))
             else:
-                self.upload_dataset(hf_repo_path+'_whole', dataset.dataset)
+                self.upload_dataset(hf_repo_path, dataset.dataset)
     
     def process_and_upload_all_datasets(self):
         for t in self.transforms.keys():
