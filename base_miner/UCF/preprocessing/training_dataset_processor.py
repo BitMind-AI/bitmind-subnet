@@ -13,7 +13,6 @@ from bitmind.image_dataset import ImageDataset
 from bitmind.utils.data import create_splits
 from base_miner.UCF.preprocessing.preprocess import extract_aligned_face_dlib
 from bitmind.image_transforms import random_aug_transforms
-from base_miner.UCF.preprocessing.pil_image_dataset import PILImageDataset
 from bitmind.constants import DATASET_META
 from torch.utils.data import DataLoader
 from skimage import transform as trans
