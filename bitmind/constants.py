@@ -88,4 +88,5 @@ DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
 
-TEXT_MODERATION_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+TEXT_MODERATION_MODEL = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit" 
+# "meta-llama/Meta-Llama-3.1-8B-Instruct"
