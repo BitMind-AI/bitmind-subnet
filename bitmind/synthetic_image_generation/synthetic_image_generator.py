@@ -77,7 +77,7 @@ class SyntheticImageGenerator:
             bt.logging.info(f"Loading image captioning model ({IMAGE_ANNOTATION_MODEL})...")
             self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL,
                                                                       text_moderation_model_name=TEXT_MODERATION_MODEL)
-        else:
+        elif self.prompt_type == 'random':
             bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
             self.prompt_generator = pipeline(
                 'text-generation', **PROMPT_GENERATOR_ARGS[prompt_generator_name])

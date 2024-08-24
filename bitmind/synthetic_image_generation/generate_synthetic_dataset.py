@@ -203,12 +203,13 @@ def main():
     synthetic_images_dir = f'test_data/synthetic_images/{args.real_image_dataset_name}'
     os.makedirs(annotations_dir, exist_ok=True)
     os.makedirs(synthetic_images_dir, exist_ok=True)
-
-    synthetic_image_generator = SyntheticImageGenerator(
-        prompt_type='annotation', use_random_diffuser=False, diffuser_name=args.diffusion_model)
                 
     batch_size = 16
 
+    synthetic_image_generator = SyntheticImageGenerator(prompt_type='annotation',
+                                                        use_random_diffuser=False,
+                                                        diffuser_name=args.diffusion_model)
+    
     # Generate or download annotations to local storage.
     if args.download_annotations and dataset_exists_on_hf(hf_annotations_name, args.hf_token):
         print("Annotations exist on Hugging Face.")
@@ -218,12 +219,13 @@ def main():
             # Download annotations from Hugging Face
             all_annotations = load_dataset(hf_annotations_name, split='train', keep_in_memory=False)
             df_annotations = pd.DataFrame(all_annotations)
+            all_annotations = None
             # Ensure the index is of integer type and sort by it
             df_annotations['id'] = df_annotations['id'].astype(int)
             df_annotations.sort_values('id', inplace=True)
             # Slice specified chunk
             annotations_chunk = df_annotations.iloc[args.start_index:args.end_index]
-            all_annotations = None
+            df_annotations = None
              # Save the chunk as JSON files on disk
             save_as_json(annotations_chunk, annotations_dir)
             annotations_chunk = None
@@ -242,18 +244,19 @@ def main():
                                       batch_size=batch_size)
         images_chunk = None # Free up memory
         
-        # Upload to Hugging Face
-        if args.upload_annotations and args.hf_token:
-            start_time = time.time()
-            print("Uploading annotations to HF.")
-            print("Loading annotations dataset.")
-            annotations_dataset = load_and_sort_dataset(annotations_dir, 'json')
-            print("Uploading annotations of " + args.real_image_dataset_name + " to Hugging Face.")
-            upload_to_huggingface(annotations_dataset, hf_annotations_name, args.hf_token)
-            print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
+    # Upload to Hugging Face
+    if args.upload_annotations and args.hf_token:
+        start_time = time.time()
+        print("Uploading annotations to HF.")
+        print("Loading annotations dataset.")
+        annotations_dataset = load_and_sort_dataset(annotations_dir, 'json')
+        print("Uploading annotations of " + args.real_image_dataset_name + " to Hugging Face.")
+        upload_to_huggingface(annotations_dataset, hf_annotations_name, args.hf_token)
+        print(f"Annotations uploaded to Hugging Face in {time.time() - start_time:.2f} seconds.")
 
     # Generate synthetic images to local storage.
     if args.generate_synthetic_images:
+        synthetic_image_generator.image_annotation_generator.clear_gpu()
         synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
         generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator,
                                            synthetic_images_dir, args.start_index, args.end_index,
