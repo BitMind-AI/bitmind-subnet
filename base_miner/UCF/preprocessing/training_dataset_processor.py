@@ -194,6 +194,7 @@ class TrainingDatasetProcessor:
             dataloader = DataLoader(dataset_dict[split].with_format("torch"), batch_size=batch_size, shuffle=False)
             indices_to_keep = []
             preprocessed_dataset = {"image": [],
+                                    "original_index": [],
                                     "landmark": [],
                                     "mask": []}
             total_valid_faces = 0
@@ -219,11 +220,12 @@ class TrainingDatasetProcessor:
                     
                     indices_to_keep.extend(batch_indices_to_keep.tolist())
                     preprocessed_dataset["image"].extend(valid_faces)
+                    preprocessed_dataset["original_index"].extend(batch_indices_to_keep.tolist())
                     preprocessed_dataset["landmark"].extend(valid_landmarks)
                     preprocessed_dataset["mask"].extend(valid_masks)
-                    assert (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["landmark"])) and \
-                           (len(preprocessed_dataset["landmark"]) == len(preprocessed_dataset["mask"]))
-
+                    assert (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["original_index"])) and \
+                           (len(preprocessed_dataset["landmark"]) == len(preprocessed_dataset["mask"])) and \
+                           (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["landmark"]))
             # Replace dataset with processed cropped and aligned face data
             filtered_split_dataset = Dataset.from_dict(preprocessed_dataset)
             assert total_valid_faces == len(filtered_split_dataset)
@@ -246,45 +248,44 @@ class TrainingDatasetProcessor:
             dataset_dict[split] = transformed_dataset
         return dataset_dict
 
-    def upload_dataset(self, dataset_name: str, datasets):
-        repo_id = dataset_name+"_faces_training" if self.faces_only else dataset_name+"_training"
-        print(f"Pushing {datasets} to {repo_id} in hub")
-        
+    def upload_dataset(self, repo_id: str, dataset, transform_name):
+        print(f"Pushing {dataset} to {repo_id} in hub.")
         try:
-            create_repo(repo_id, token=self.hf_token, repo_type="dataset", exist_ok=False)
-            datasets.push_to_hub(repo_id=repo_id, token=self.hf_token)
-            print(f"Uploaded {repo_id}.")
+            dataset.push_to_hub(repo_id=repo_id, token=self.hf_token, config_name=transform_name)
+            print(f"Uploaded {repo_id} config {transform_name}.")
         except Exception as e:
-            print(f"Failed to upload {repo_id}:", e)
+            print(f"Failed to upload {repo_id} config {transform_name}:", e)
     
     def load_preprocess_upload_datasets(self, dataset_meta: list, transform_info) -> Dict[str, List[ImageDataset]]:
-        print(f"Datasets with {transform_info[0]}:")
         for meta in dataset_meta:
-            hf_repo_path = meta['path']+'_'+transform_info[0]
             print(f"Loading {meta['path']}...")
             dataset = ImageDataset(meta['path'],
                                    meta.get('name', None),
                                    create_splits=False,
                                    download_mode=meta.get('download_mode', None))
-            
+
+            hf_repo_path = meta['path'] + '_training'
             if self.faces_only:
                 print(f"Preprocessing {meta['path']} faces only...")
+                hf_repo_path += '_faces'
                 dataset.dataset = self.preprocess_faces_only(dataset.dataset, transform_info[1]) 
             else:
                 print(f"Preprocessing {meta['path']}...")
                 dataset.dataset = self.preprocess(dataset.dataset, transform_info[1]) 
             print(f"Uploading preprocessed {meta['path']}...")
             if self.split:
-                splits = ['train', 'validation', 'test']
-                datasets = {split: [] for split in splits}
                 train_ds, val_ds, test_ds = create_splits(dataset.dataset)
-                self.upload_dataset(hf_repo_path+'_splits',
-                                    DatasetDict({"train": train_ds, "validation": val_ds, "test": test_ds}))
+                self.upload_dataset(repo_id=hf_repo_path+'_splits',
+                                    dataset=DatasetDict({"train": train_ds, "validation": val_ds, "test": test_ds}),
+                                    transform_name=transform_info[0])
             else:
-                self.upload_dataset(hf_repo_path, dataset.dataset)
+                self.upload_dataset(repo_id=hf_repo_path,
+                                    dataset=dataset.dataset,
+                                    transform_name=transform_info[0])
     
     def process_and_upload_all_datasets(self):
         for t in self.transforms.keys():
+            print("Transform:", t)
             self.load_preprocess_upload_datasets(self.dataset_meta['fake'], (t, self.transforms[t]))
             self.load_preprocess_upload_datasets(self.dataset_meta['real'], (t, self.transforms[t]))
     
