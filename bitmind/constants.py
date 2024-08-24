@@ -46,8 +46,8 @@ VALIDATOR_MODEL_META = {
                 "guidance_scale": 2,
                 "num_inference_steps": 100, #{"min": 50, "max": 200},
                 "generator": torch.Generator("cuda"),
-                "height": 1024, #[512, 768, 1024, 1360],
-                "width": 1024 #[512, 768, 1024, 1360]
+                "height": 512, #[512, 768, 1024, 1360],
+                "width": 512 #[512, 768, 1024, 1360]
             },
             "enable_cpu_offload": False,
             "pipeline": "FluxPipeline"
@@ -73,6 +73,12 @@ DIFFUSER_ARGS = {
         k: v for k, v in m.items()
         if k not in ('path', 'pipeline', 'generate_args', 'enable_cpu_offload')
     } for m in VALIDATOR_MODEL_META['diffusers']
+}
+
+GENERATE_ARGS = {
+    m['path']: m['generate_args']
+    for m in VALIDATOR_MODEL_META['diffusers']
+    if 'generate_args' in m
 }
 
 DIFFUSER_CPU_OFFLOAD_ENABLED = {

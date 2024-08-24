@@ -46,7 +46,7 @@ class ImageAnnotationGenerator:
             cache_dir=HUGGINGFACE_CACHE_DIR
         )
         self.model.to(self.device)
-        print(f"Loading {self.text_moderation_model_name}")
+        bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
         if self.apply_moderation:
             self.text_moderation_pipeline = pipeline(
                 "text-generation",
@@ -54,7 +54,7 @@ class ImageAnnotationGenerator:
                 model_kwargs={"torch_dtype": torch.bfloat16}, 
                 device_map="auto"
             )
-        print("Done loading moderation pipeline")
+        bt.logging.info(f"Loaded {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
         bt.logging.debug(f"Clearing GPU memory after generating image annotation")

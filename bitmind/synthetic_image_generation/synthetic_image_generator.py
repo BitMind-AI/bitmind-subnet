@@ -20,6 +20,7 @@ from bitmind.constants import (
     DIFFUSER_ARGS,
     DIFFUSER_PIPELINE,
     DIFFUSER_CPU_OFFLOAD_ENABLED,
+    GENERATE_ARGS,
     PROMPT_TYPES,
     IMAGE_ANNOTATION_MODEL,
     TARGET_IMAGE_SIZE
@@ -122,40 +123,12 @@ class SyntheticImageGenerator:
         bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
-
-            image_name = f"{time.time()}.jpg"
-
-            gen_args = {}
-            if 'generate_args' in DIFFUSER_ARGS[self.diffuser_name]:
-                gen_args = DIFFUSER_ARGS[self.diffuser_name]['generate_args'].copy()
-
-                if isinstance(gen_args['num_inference_steps'], dict):
-                    gen_args['num_inference_steps'] = np.random.randint(
-                        gen_args['num_inference_steps']['min'],
-                        gen_args['num_inference_steps']['max'])
-
-                for dim in ('height', 'width'):
-                    if isinstance(gen_args[dim], list):
-                        gen_args[dim] = np.random.choice(gen_args[dim])
-
-            start_time = time.time()
-            gen_image = self.diffuser(
-                prompt=prompt,
-                num_images_per_prompt=1,
-                **gen_args
-            ).images[0]
-
-            gen_data.append({
-                'prompt': prompt,
-                'image': gen_image,
-                'id': image_name,
-                'gen_time': time.time() - start_time
-            })
-
+            image_data = self.generate_image(prompt)
             if self.image_cache_dir is not None:
-                path = os.path.join(self.image_cache_dir, image_name)
-                gen_image.save(path)
-
+                path = os.path.join(self.image_cache_dir, image_data['id'])
+                image_data['image'].save(path)
+            gen_data.append(image_data)
+            
         self.clear_gpu()  # remove diffuser from gpu
 
         return gen_data
@@ -188,7 +161,6 @@ class SyntheticImageGenerator:
         else:
             self.diffuser.to("cuda")
 
-        print(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
         bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
     def generate_image_caption(self, image_sample) -> str:
@@ -301,29 +273,50 @@ class SyntheticImageGenerator:
         image_name = name if name else f"{time.time():.0f}.jpg"
         # Check if the prompt is too long
         truncated_prompt = self.truncate_prompt_if_too_long(prompt)
+        gen_args = {}
+
+        # Load generation arguments based on diffuser settings
+        if self.diffuser_name in GENERATE_ARGS:
+            gen_args = GENERATE_ARGS[self.diffuser_name].copy()
+
+            if isinstance(gen_args.get('num_inference_steps'), dict):
+                gen_args['num_inference_steps'] = np.random.randint(
+                    gen_args['num_inference_steps']['min'],
+                    gen_args['num_inference_steps']['max'])
+
+            for dim in ('height', 'width'):
+                if isinstance(gen_args.get(dim), list):
+                    gen_args[dim] = np.random.choice(gen_args[dim])
+
         try:
             if generate_at_target_size:
                 #Attempt to generate an image with specified dimensions
-                gen_image = self.diffuser(prompt=truncated_prompt, height=TARGET_IMAGE_SIZE[0],
-                                      width=TARGET_IMAGE_SIZE[1]).images[0]
-            else:
-                #Generate an image using default dimensions supported by the pipeline
-                gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+                gen_args['height'] = TARGET_IMAGE_SIZE[0]
+                gen_args['width'] = TARGET_IMAGE_SIZE[1]
+            # Record the time taken to generate the image
+            start_time = time.time()
+            # Generate image using the diffuser with appropriate arguments
+            gen_image = self.diffuser(prompt=truncated_prompt, num_images_per_prompt=1, **gen_args).images[0]
+            # Calculate generation time
+            gen_time = time.time() - start_time
         except Exception as e:
             if generate_at_target_size:
-                bt.logging.warning(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
+                bt.logging.error(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
                 try:
                     # Fallback to generating an image without specifying dimensions
                     gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+                    gen_time = time.time() - start_time
                 except Exception as fallback_error:
                     bt.logging.error(f"Failed to generate image with default dimensions after initial failure: {fallback_error}")
                     raise RuntimeError(f"Both attempts to generate image failed: {fallback_error}")
             else:
-                bt.logging.warning(f"Image generation error: {e}")
+                bt.logging.error(f"Image generation error: {e}")
+                raise RuntimeError(f"Failed to generate image: {e}")
             
         image_data = {
             'prompt': truncated_prompt,
             'image': gen_image,
-            'id': image_name
+            'id': image_name,
+            'gen_time': gen_time
         }
         return image_data
