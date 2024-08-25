@@ -37,19 +37,23 @@ def main(args):
     dataset_processor = TrainingDatasetProcessor(
         dataset_meta=FACE_DATASET_META if args.faces_only else DATASET_META,
         faces_only=args.faces_only,
-        transforms={"random_aug_transforms": random_aug_transforms, "base_transforms": base_transforms},
+        transforms={"random_aug_transforms": random_aug_transforms,
+                    "base_transforms": base_transforms},
         hf_token=args.hf_token,
         split=args.splits
     )
-    dataset_processor.process_and_upload_all_datasets()
+    
+    dataset_processor.process_and_upload_all_datasets(save_locally=args.save_locally, hf_root=args.hf_root)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate and upload training dataset using TrainingDatasetProcessor.")
     
     parser.add_argument("--faces-only", action='store_true', help="Process faces only. If flag is present, faces_only=True.")
     parser.add_argument("--splits", action='store_true', help="Create splits for the dataset. If flag is present, splits=True.")
+    parser.add_argument("--save-locally", action='store_true', help="Save preprocessed dicts locally as pickle. If flag is present, save_locally=True.")
     parser.add_argument("--hf-token", type=str, required=True, help="Hugging Face token for dataset upload.")
+    parser.add_argument("--hf-root", type=str, required=False, help="Hugging Face repo root (user or company) to upload to.")
     
     args = parser.parse_args()
-    
+        
     main(args)

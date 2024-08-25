@@ -18,6 +18,8 @@ from torch.utils.data import DataLoader
 from skimage import transform as trans
 from imutils import face_utils
 from PIL import Image
+import concurrent.futures
+import pickle
 
 class TrainingDatasetProcessor:
     def __init__(self,
@@ -188,10 +190,32 @@ class TrainingDatasetProcessor:
             else:
                 cropped_faces_present_with_landmarks.append(False)
         return cropped_faces_present_with_landmarks, cropped_faces_with_landmarks, valid_landmarks, masks_with_landmarks
+
+    def load_local_preprocessed_dataset(self, local_preprocessed_path: str, dataset_dict):
+        print("Attempting to load local preprocessed dataset:", local_preprocessed_path)
+        preprocessed_dataset = None
+        try:
+            with open(local_preprocessed_path, 'rb') as f:
+                preprocessed_dataset = pickle.load(f)
+            for split in dataset_dict.keys():
+                dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
+            print("Successfully loaded local preprocessed dataset.")
+            return True
+        except Exception as e:
+            print('Preprocessed dataset unavailable locally. Generating new preprocessed dataset:', e)
+        return False
     
-    def preprocess_faces_only(self, dataset_dict, transform, batch_size=32):
+    def preprocess_faces_only(self,
+                              dataset_dict,
+                              transform,
+                              batch_size=32,
+                              save_locally=False,
+                              local_save_path=None):
+        
         for split in dataset_dict.keys():
-            dataloader = DataLoader(dataset_dict[split].with_format("torch"), batch_size=batch_size, shuffle=False)
+            dataloader = DataLoader(dataset_dict[split].with_format("torch"),
+                                    batch_size=batch_size, 
+                                    shuffle=False)
             indices_to_keep = []
             preprocessed_dataset = {"image": [],
                                     "original_index": [],
@@ -226,13 +250,22 @@ class TrainingDatasetProcessor:
                     assert (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["original_index"])) and \
                            (len(preprocessed_dataset["landmark"]) == len(preprocessed_dataset["mask"])) and \
                            (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["landmark"]))
+            
+            if save_locally:
+                print("Saving preprocessed dict locally to " + local_save_path)
+                with open(local_save_path, 'wb') as f:
+                    pickle.dump(preprocessed_dataset, f)
             # Replace dataset with processed cropped and aligned face data
-            filtered_split_dataset = Dataset.from_dict(preprocessed_dataset)
-            assert total_valid_faces == len(filtered_split_dataset)
-            dataset_dict[split] = filtered_split_dataset        
-        return dataset_dict
+            dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
+            assert total_valid_faces == len(dataset_dict[split])
 
-    def preprocess(self, dataset_dict, transform, batch_size=32):
+    def preprocess(self,
+                   dataset_dict,
+                   transform,
+                   batch_size=32,
+                   save_locally=False,
+                   local_save_path=None):
+        
         for split in dataset_dict.keys():
             dataloader = DataLoader(dataset_dict[split].with_format("torch"), batch_size=batch_size, shuffle=False)
             indices_to_keep = []
@@ -243,20 +276,28 @@ class TrainingDatasetProcessor:
                 # Transform images and ensure PIl format
                 images = [T.ToPILImage()(transform(T.ToPILImage()(image))) for image in images]
                 preprocessed_dataset["image"].extend(images)
+            
+            if save_locally:
+                print("Saving preprocessed dict locally to " + local_save_path)
+                with open(local_save_path, 'wb') as f:
+                    pickle.dump(preprocessed_dataset, f)
+
             # Replace dataset with processed cropped and aligned face data
-            transformed_dataset = Dataset.from_dict(preprocessed_dataset)
-            dataset_dict[split] = transformed_dataset
-        return dataset_dict
+            dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
 
     def upload_dataset(self, repo_id: str, dataset, transform_name):
-        print(f"Pushing {dataset} to {repo_id} in hub.")
+        print(f"Pushing {dataset} to {repo_id} config {transform_name} in hub.")
         try:
             dataset.push_to_hub(repo_id=repo_id, token=self.hf_token, config_name=transform_name)
             print(f"Uploaded {repo_id} config {transform_name}.")
         except Exception as e:
             print(f"Failed to upload {repo_id} config {transform_name}:", e)
     
-    def load_preprocess_upload_datasets(self, dataset_meta: list, transform_info) -> Dict[str, List[ImageDataset]]:
+    def load_preprocess_upload_datasets(self,
+                                        dataset_meta: list,
+                                        transform_info: tuple,
+                                        save_locally=False,
+                                        hf_root=None) -> Dict[str, List[ImageDataset]]:
         for meta in dataset_meta:
             print(f"Loading {meta['path']}...")
             dataset = ImageDataset(meta['path'],
@@ -264,28 +305,45 @@ class TrainingDatasetProcessor:
                                    create_splits=False,
                                    download_mode=meta.get('download_mode', None))
 
-            hf_repo_path = meta['path'] + '_training'
+            if hf_root: dest_repo_path = hf_root+'/'+meta['path'].split('/')[1] + '_training'
+            else: dest_repo_path = meta['path'] + '_training'
+            local_preprocessed_path = os.getcwd()+'/'+dest_repo_path.split('/')[1]+'_'+transform_info[0]
+            # Otherwise, generate new preprocessed dataset
             if self.faces_only:
-                print(f"Preprocessing {meta['path']} faces only...")
-                hf_repo_path += '_faces'
-                dataset.dataset = self.preprocess_faces_only(dataset.dataset, transform_info[1]) 
+                # Load preprocessed dataset from local storage if it exists
+                dest_repo_path += '_faces'
+                local_preprocessed_path +='_faces.pkl'
+                loaded_local = self.load_local_preprocessed_dataset(local_preprocessed_path, dataset_dict=dataset.dataset)
+                if not loaded_local:
+                    print(f"Preprocessing {meta['path']} faces only...")
+                    self.preprocess_faces_only(dataset_dict=dataset.dataset,
+                                               transform=transform_info[1],
+                                               save_locally=save_locally,
+                                               local_save_path=local_preprocessed_path)
             else:
-                print(f"Preprocessing {meta['path']}...")
-                dataset.dataset = self.preprocess(dataset.dataset, transform_info[1]) 
+                local_preprocessed_path +='.pkl'
+                loaded_local = self.load_local_preprocessed_dataset(local_preprocessed_path, dataset_dict=dataset.dataset)
+                if not loaded_local:
+                    print(f"Preprocessing {meta['path']}...")
+                    self.preprocess(dataset_dict=dataset.dataset,
+                                    transform=transform_info[1],
+                                    save_locally=save_locally,
+                                    local_save_path=local_preprocessed_path)
             print(f"Uploading preprocessed {meta['path']}...")
             if self.split:
                 train_ds, val_ds, test_ds = create_splits(dataset.dataset)
-                self.upload_dataset(repo_id=hf_repo_path+'_splits',
+                self.upload_dataset(repo_id=dest_repo_path+'_splits',
                                     dataset=DatasetDict({"train": train_ds, "validation": val_ds, "test": test_ds}),
                                     transform_name=transform_info[0])
             else:
-                self.upload_dataset(repo_id=hf_repo_path,
+                self.upload_dataset(repo_id=dest_repo_path,
                                     dataset=dataset.dataset,
                                     transform_name=transform_info[0])
     
-    def process_and_upload_all_datasets(self):
+    def process_and_upload_all_datasets(self, save_locally=False, hf_root=None):
         for t in self.transforms.keys():
             print("Transform:", t)
-            self.load_preprocess_upload_datasets(self.dataset_meta['fake'], (t, self.transforms[t]))
-            self.load_preprocess_upload_datasets(self.dataset_meta['real'], (t, self.transforms[t]))
+            transform_info = (t, self.transforms[t])
+            self.load_preprocess_upload_datasets(self.dataset_meta['fake'], transform_info, save_locally, hf_root)
+            self.load_preprocess_upload_datasets(self.dataset_meta['real'], transform_info, save_locally, hf_root)
     
