@@ -51,7 +51,7 @@ class Miner(BaseMinerNeuron):
         # Dictionary to hold different types of detectors
         self.detectors = {}
 
-        # Attempt to load face and general detectors using the helper function
+        # Attempt to load face and general detectors
         self.detectors['face'] = self.load_detector(
             UCF_CONFIG_PATH,
             UCF_WEIGHTS_PATH,
@@ -68,7 +68,7 @@ class Miner(BaseMinerNeuron):
             'general'
         )
             
-            
+
     def load_detector(self, config_path, weights_dir, checkpoint_name, predictor_path, detector_type):
         """
         Load a detector model with given parameters.
