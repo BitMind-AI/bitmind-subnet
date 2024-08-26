@@ -1,6 +1,6 @@
 # The MIT License (MIT)
 # Copyright © 2023 Yuma Rao
-# developer: dubm
+# developer: aliang322, benliang99, dubm
 # Copyright © 2023 Bitmind
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
