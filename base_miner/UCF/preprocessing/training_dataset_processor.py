@@ -191,14 +191,16 @@ class TrainingDatasetProcessor:
                 cropped_faces_present_with_landmarks.append(False)
         return cropped_faces_present_with_landmarks, cropped_faces_with_landmarks, valid_landmarks, masks_with_landmarks
 
-    def load_local_preprocessed_dataset(self, local_preprocessed_path: str, dataset_dict):
+    def load_local_preprocessed_dataset(self, local_preprocessed_path: str, dataset):
         print("Attempting to load local preprocessed dataset:", local_preprocessed_path)
         preprocessed_dataset = None
         try:
             with open(local_preprocessed_path, 'rb') as f:
                 preprocessed_dataset = pickle.load(f)
-            for split in dataset_dict.keys():
-                dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
+            for split in dataset.dataset.keys():
+                print("Setting preprocessed data in-place.")
+                dataset.dataset[split] = None
+                dataset.dataset[split] = Dataset.from_dict(preprocessed_dataset)
             print("Successfully loaded local preprocessed dataset.")
             return True
         except Exception as e:
@@ -250,13 +252,15 @@ class TrainingDatasetProcessor:
                     assert (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["original_index"])) and \
                            (len(preprocessed_dataset["landmark"]) == len(preprocessed_dataset["mask"])) and \
                            (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["landmark"]))
-            
             if save_locally:
                 print("Saving preprocessed dict locally to " + local_save_path)
                 with open(local_save_path, 'wb') as f:
                     pickle.dump(preprocessed_dataset, f)
             # Replace dataset with processed cropped and aligned face data
+            print("Setting preprocessed data in-place.")
+            dataset_dict[split] = None
             dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
+            print("Preprocessed data successfully set in-place.")
             assert total_valid_faces == len(dataset_dict[split])
 
     def preprocess(self,
@@ -281,9 +285,11 @@ class TrainingDatasetProcessor:
                 print("Saving preprocessed dict locally to " + local_save_path)
                 with open(local_save_path, 'wb') as f:
                     pickle.dump(preprocessed_dataset, f)
-
             # Replace dataset with processed cropped and aligned face data
+            print("Setting preprocessed data in-place.")
+            dataset_dict[split] = None
             dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
+            print("Preprocessed data successfully set in-place.")
 
     def upload_dataset(self, repo_id: str, dataset, transform_name):
         print(f"Pushing {dataset} to {repo_id} config {transform_name} in hub.")
@@ -313,7 +319,7 @@ class TrainingDatasetProcessor:
                 # Load preprocessed dataset from local storage if it exists
                 dest_repo_path += '_faces'
                 local_preprocessed_path +='_faces.pkl'
-                loaded_local = self.load_local_preprocessed_dataset(local_preprocessed_path, dataset_dict=dataset.dataset)
+                loaded_local = self.load_local_preprocessed_dataset(local_preprocessed_path, dataset=dataset)
                 if not loaded_local:
                     print(f"Preprocessing {meta['path']} faces only...")
                     self.preprocess_faces_only(dataset_dict=dataset.dataset,
@@ -322,7 +328,7 @@ class TrainingDatasetProcessor:
                                                local_save_path=local_preprocessed_path)
             else:
                 local_preprocessed_path +='.pkl'
-                loaded_local = self.load_local_preprocessed_dataset(local_preprocessed_path, dataset_dict=dataset.dataset)
+                loaded_local = self.load_local_preprocessed_dataset(local_preprocessed_path, dataset=dataset)
                 if not loaded_local:
                     print(f"Preprocessing {meta['path']}...")
                     self.preprocess(dataset_dict=dataset.dataset,
