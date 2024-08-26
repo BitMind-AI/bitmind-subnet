@@ -30,6 +30,21 @@ def download_image(url: str) -> Image.Image:
         #print(f"Failed to download image: {response.status_code}")
         return None
 
+def create_splits(dataset):
+    # Split data into train, validation, test and return the three splits
+    dataset = dataset.shuffle(seed=42)
+
+    split_dataset = {}
+    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
+    split_dataset['train'] = train_test_split['train']
+    temp_dataset = train_test_split['test']
+
+    # Split the temporary dataset into validation and test
+    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
+    split_dataset['validation'] = val_test_split['train']
+    split_dataset['test'] = val_test_split['test']
+
+    return split_dataset['train'], split_dataset['validation'], split_dataset['test']
 
 def load_huggingface_dataset(
     path: str,
@@ -68,21 +83,7 @@ def load_huggingface_dataset(
         if split is not None:
             return dataset[split]
         return dataset
-
-    # Split data into train, validation, test and return the three splits
-    dataset = dataset.shuffle(seed=42)
-
-    split_dataset = {}
-    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
-    split_dataset['train'] = train_test_split['train']
-    temp_dataset = train_test_split['test']
-
-    # Split the temporary dataset into validation and test
-    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
-    split_dataset['validation'] = val_test_split['train']
-    split_dataset['test'] = val_test_split['test']
-
-    return split_dataset['train'], split_dataset['validation'], split_dataset['test']
+    return create_splits(dataset)
 
 
 def sample_dataset_index_name(image_datasets: list) -> tuple[int, str]:
