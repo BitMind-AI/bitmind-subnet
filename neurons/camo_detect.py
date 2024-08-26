@@ -51,29 +51,51 @@ class Miner(BaseMinerNeuron):
         # Dictionary to hold different types of detectors
         self.detectors = {}
 
-        # Initialize Face Detector
-        try:
-            bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
-            # UCF-DFB for face detection
-            face_detector = UCF(config_path=UCF_CONFIG_PATH,
-                                    weights_dir=UCF_WEIGHTS_PATH,
-                                    ucf_checkpoint_name=UCF_DFB_CHECKPOINT_NAME,
-                                    predictor_path=predictor_path)
-            self.detectors['face'] = face_detector
-        except Exception as e:
-            bt.logging.error("Error loading face model")
-            bt.logging.error(e)
+        # Attempt to load face and general detectors using the helper function
+        self.detectors['face'] = self.load_detector(
+            UCF_CONFIG_PATH,
+            UCF_WEIGHTS_PATH,
+            UCF_DFB_CHECKPOINT_NAME,
+            predictor_path,
+            'face'
+        )
         
-        # Initialize General Model Detector
+        self.detectors['general'] = self.load_detector(
+            UCF_CONFIG_PATH,
+            UCF_WEIGHTS_PATH,
+            UCF_BITMIND_CHECKPOINT_NAME,
+            predictor_path,
+            'general'
+        )
+            
+            
+    def load_detector(self, config_path, weights_dir, checkpoint_name, predictor_path, detector_type):
+        """
+        Load a detector model with given parameters.
+        
+        Args:
+            config_path (str): Path to the configuration file for the detector.
+            weights_dir (str): Directory where the model weights are stored.
+            checkpoint_name (str): Name of the model checkpoint file.
+            predictor_path (str): Path to any additional required files, like a shape predictor.
+            detector_type (str): A descriptive name for the type of detector being loaded.
+
+        Returns:
+            Loaded detector object if successful, None otherwise.
+        """
         try:
-            general_detector = UCF(config_path=UCF_CONFIG_PATH,
-                            weights_dir=UCF_WEIGHTS_PATH,
-                            ucf_checkpoint_name=UCF_BITMIND_CHECKPOINT_NAME,
-                            predictor_path=predictor_path)
-            self.detectors['general'] = general_detector
+            bt.logging.info(f"Loading {detector_type} detection model from {weights_dir}")
+            detector = UCF(
+                config_path=config_path,
+                weights_dir=weights_dir,
+                ucf_checkpoint_name=checkpoint_name,
+                predictor_path=predictor_path
+            )
+            return detector
         except Exception as e:
-            bt.logging.error("Error loading general model")
-            bt.logging.error(e)
+            bt.logging.error(f"Error loading {detector_type} model")
+            bt.logging.error(str(e))
+            return None
 
 
     async def classify_image(self, image):
