@@ -11,8 +11,7 @@ class RealFakeDataset:
         transforms=None,
         fake_prob=0.5,
         source_label_mapping=None,
-        config=None,
-        normalize=False
+        normalize_config=None
     ):
         """
         Initialize the RealFakeDataset instance.
@@ -29,8 +28,7 @@ class RealFakeDataset:
         self.transforms = transforms
         self.fake_prob = fake_prob
         self.source_label_mapping = source_label_mapping if source_label_mapping else {}
-        self.config = config
-        self.normalize = normalize
+        self.normalize_config = normalize_config
 
         self._history = {
             'source': [],
@@ -42,8 +40,8 @@ class RealFakeDataset:
         """
         Normalize an image using mean and std from configs.
         """
-        mean = self.config['mean']
-        std = self.config['std']
+        mean = self.normalize_config['mean']
+        std = self.normalize_config['std']
         normalize = T.Normalize(mean=mean, std=std)
         return normalize(img)
     
@@ -86,7 +84,7 @@ class RealFakeDataset:
             print(e)
             print(source.huggingface_dataset_path, index)
             
-        if self.normalize:
+        if self.normalize_config:
             if isinstance(image, torch.Tensor):
                 image = self.normalize_image(image)
             else:

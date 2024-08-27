@@ -1,9 +1,12 @@
 from typing import List, Tuple, Dict
-import torchvision.transforms as transforms
 
 from util.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META
+from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META #TRAINING_DATASET_META
+from collections import defaultdict
+from tqdm import tqdm
+from sklearn.model_selection import train_test_split
+import pandas as pd
 
 def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]:
     """
@@ -58,23 +61,147 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
 
     return datasets
 
-def load_datasets(dataset_meta: dict = DATASET_META) -> Tuple[
+def load_and_split_datasets_with_transform_subsets(dataset_meta: list,
+                                                   split_transforms: dict) -> Dict[str, List[ImageDataset]]:
+    """
+    Load datasets from Hugging Face, apply specified transformation subsets for each split 
+    (train, validation, test), and perform a stratified split by `original_index` to ensure 
+    no data leakage between the splits.
+
+    Parameters:
+    -----------
+    dataset_meta : list
+        A list of dictionaries where each dictionary contains metadata for a dataset. 
+        Metadata includes the Hugging Face dataset path, optional split name, and download mode.
+    
+    split_transforms : dict
+        A dictionary where keys are split names ('train', 'validation', 'test'), and values 
+        are dictionaries containing the subset names to be used for each split.
+
+    Returns:
+    --------
+    Dict[str, List[ImageDataset]]
+        A dictionary where keys are split names ('train', 'validation', 'test') and values 
+        are lists of ImageDataset objects for each split.
+    
+    Algorithm:
+    ----------
+    1. Initialize an empty list for each split (train, validation, test).
+    2. For each dataset in `dataset_meta`:
+       a. Load all required subsets and store them.
+       b. Group the indices by `original_index` to prepare for stratified splitting.
+    3. Perform a stratified split on the `original_index` values into train, validation, and test sets.
+    4. For each split (train, validation, test):
+       a. Filter the data according to the assigned subset and the indices from the stratified split.
+       b. Create and store the `ImageDataset` for the split.
+    5. Return a datasets dictionary containing the splits.
+    """
+    splits = split_transforms.keys()
+    subset_names = set(subset['name'] for subset in split_transforms.values())
+    datasets = {split: [] for split in splits}
+       
+    for meta in dataset_meta:
+        loaded_subsets = {}
+
+        # Store subset indices grouped by original_index for stratified train-validation-test split
+        all_data_indices = defaultdict(list)
+        subset_original_index_dfs = []
+        # Load all subsets and store in a dictionary
+        for subset_name in subset_names:
+            print(f"Loading {meta['path']} subset {subset_name} for all splits...")
+            subset = ImageDataset(
+                huggingface_dataset_path=meta['path'],
+                huggingface_dataset_split=meta.get('name', None),
+                huggingface_dataset_name=subset_name,
+                create_splits=False,
+                download_mode=meta.get('download_mode', None)
+            )
+            
+            # Save the loaded subset to the dictionary
+            loaded_subsets[subset_name] = subset
+            print(f"{subset_name} subset len: {len(subset.dataset['train'])}")
+
+            print(f"Creating {subset_name} subset dataframe for stratified splits grouped by original index.")
+            df = pd.DataFrame({'original_index': subset.dataset['train']['original_index'][:]})
+            df['index'] = df.index
+            subset_original_index_dfs.append(df)
+
+        combined_df = pd.concat(subset_original_index_dfs, ignore_index=True)
+        # Group by 'original_index' and aggregate indices into lists
+        grouped = combined_df.groupby('original_index')['index'].apply(list).to_dict()
+        # Get all unique original indices
+        all_data_indices.update(grouped)
+        all_original_indices = list(all_data_indices.keys())
+        
+        # Stratified split of indices
+        train_indices, temp_indices = train_test_split(all_original_indices,
+                                                       test_size=0.2,
+                                                       random_state=42)
+
+        val_indices, test_indices = train_test_split(temp_indices,
+                                                     test_size=0.5,
+                                                     random_state=42)
+    
+        def get_data_indices(indices_list):
+            # Returns all subset indices for the given 'original_index' values, 
+            # used to create non-overlapping train, validation, and test splits.
+            return [index for orig_idx in indices_list for index in all_data_indices[orig_idx]]
+
+        # Get all subset indices for each split based on the selected 'original_index' values.
+        train_data_indices = get_data_indices(train_indices)
+        val_data_indices = get_data_indices(val_indices)
+        test_data_indices = get_data_indices(test_indices)
+
+        # Check split proportions
+        print(f"train len: {len(train_data_indices)}, val len: {len(val_data_indices)}, test len: {len(test_data_indices)}")
+        
+        # Split data according to the specific transformation subset assigned for each split
+        for split, original_indices in tqdm(zip(['train', 'validation', 'test'],
+                                       [train_data_indices, val_data_indices, test_data_indices])):
+            
+            subset_name = split_transforms[split]['name']
+            subset = loaded_subsets[subset_name]
+
+            # Create a new ImageDataset instance for the split
+            split_dataset = ImageDataset.__new__(ImageDataset)
+            
+            # Filter subset to include only indices corresponding to the current split's original_index values
+            original_indices_set = set(original_indices)
+            split_dataset.dataset = subset.dataset['train'].filter(
+                lambda data_batch: [original_index in original_indices_set for original_index in data_batch['original_index']],
+                batched=True,
+                batch_size=5000
+            )
+            # Copy other attributes from the initial dataset
+            split_dataset.huggingface_dataset_path = meta['path']
+            split_dataset.huggingface_dataset_name = subset_name
+            split_dataset.sampled_images_idx = []
+
+            # Append to the corresponding split list
+            datasets[split].append(split_dataset)
+
+        split_lengths = ', '.join([f"{split} len={len(datasets[split][0].dataset)}" for split in splits])
+        print(f'done, {split_lengths}')
+
+    return datasets
+
+def load_datasets(faces_only: bool, split_transforms: dict=None) -> Tuple[
         Dict[str, List[ImageDataset]],
         Dict[str, List[ImageDataset]]
     ]:
     """
     Loads several ImageDatasets, each of which is an abstraction of a huggingface dataset.
 
-    Args:
-        dataset_meta: dictionary containing metadata about the real and fake image datasets
-             to load. See datasets.json.
-
     Returns:
         (real_datasets: Dict[str, List[ImageDataset]], fake_datasets: Dict[str, List[ImageDataset]])
 
     """
-    fake_datasets = load_and_split_datasets(dataset_meta['fake'])
-    real_datasets = load_and_split_datasets(dataset_meta['real'])
+    if faces_only:
+        fake_datasets = load_and_split_datasets_with_transform_subsets(FACE_TRAINING_DATASET_META['fake'], split_transforms)
+        real_datasets = load_and_split_datasets_with_transform_subsets(FACE_TRAINING_DATASET_META['real'], split_transforms)
+    else:
+        fake_datasets = load_and_split_datasets(DATASET_META['fake'])
+        real_datasets = load_and_split_datasets(DATASET_META['real'])
 
     return real_datasets, fake_datasets
 
@@ -107,20 +234,28 @@ def create_source_label_mapping(
 def create_real_fake_datasets(
     real_datasets: Dict[str, List[ImageDataset]],
     fake_datasets: Dict[str, List[ImageDataset]],
-    train_transforms: transforms.Compose,
-    val_transforms: transforms.Compose,
-    test_transforms: transforms.Compose,
-    config=None,
-    normalize=False,
+    split_transforms: Dict,
+    faces_only=False,
+    normalize_config=None,
 ) -> Tuple[RealFakeDataset, ...]:
     """
     Args:
         real_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
         fake_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
-        base_transforms: transforms to apply to all images
-        train_transforms: transforms to apply to training dataset
-        val_transforms: transforms to apply to val dataset
-        test_transforms: transforms to apply to val dataset
+        split_transforms: A dictionary that specifies the subset and transformation to be applied for each data split.
+                            Each key is the name of a split ('train', 'validation', 'test'), and the corresponding value 
+                            is a dictionary with two keys:
+                            
+                            - 'name': The name of the subset to use for the split (e.g., 'random_aug_transforms')
+                            - 'transform': The transformation function or pipeline to apply to the subset.
+                            
+                            Example:
+                            --------
+                            split_transforms = {
+                                'train': {'name': 'random_aug_transforms', 'transform': random_aug_transforms},
+                                'validation': {'name': 'base_transforms', 'transform': base_transforms},
+                                'test': {'name': 'base_transforms', 'transform': base_transforms}
+                            }
     Returns:
         Train, val, and test RealFakeDatasets
 
@@ -130,25 +265,22 @@ def create_real_fake_datasets(
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
         fake_image_datasets=fake_datasets['train'],
-        transforms=train_transforms,
+        transforms= None if faces_only else split_transforms['train']['transform'],
         source_label_mapping=source_label_mapping,
-        config=config,
-        normalize=normalize)
+        normalize_config=normalize_config)
 
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
         fake_image_datasets=fake_datasets['validation'],
-        transforms=val_transforms,
+        transforms= None if faces_only else split_transforms['validation']['transform'],
         source_label_mapping=source_label_mapping,
-        config=config,
-        normalize=normalize)
+        normalize_config=normalize_config)
 
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
-        transforms=test_transforms,
+        transforms= None if faces_only else split_transforms['test']['transform'],
         source_label_mapping=source_label_mapping,
-        config=config,
-        normalize=normalize)
+        normalize_config=normalize_config)
 
     return train_dataset, val_dataset, test_dataset

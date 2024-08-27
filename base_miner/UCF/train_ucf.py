@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 from os.path import join
 #import cv2
@@ -34,8 +35,8 @@ from logger import create_logger, RankFilter
 # BitMind imports (not from original Deepfake Bench repo)
 from torch.utils.data import DataLoader
 
-from bitmind.image_transforms import base_transforms, random_aug_transforms
 from util.data import load_datasets, create_real_fake_datasets
+from bitmind.image_transforms import base_transforms, random_aug_transforms
 
 parser = argparse.ArgumentParser(description='Process some paths.')
 parser.add_argument('--detector_path', type=str,
@@ -43,6 +44,7 @@ parser.add_argument('--detector_path', type=str,
                     help='path to detector YAML file')
 parser.add_argument("--train_dataset", nargs="+")
 parser.add_argument("--test_dataset", nargs="+")
+parser.add_argument('--faces_only', dest='faces_only', action='store_true', default=False)
 parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', default=True)
 parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', default=True)
 parser.add_argument("--ddp", action='store_true', default=False)
@@ -50,7 +52,8 @@ parser.add_argument('--local_rank', type=int, default=0)
 parser.add_argument('--task_target', type=str, default="", help='specify the target of current training task')
 args = parser.parse_args()
 torch.cuda.set_device(args.local_rank)
-
+print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
+print(f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
 
 def init_seed(config):
     if config['manualSeed'] is None:
@@ -76,18 +79,22 @@ def custom_collate_fn(batch):
     }    
     return data_dict
 
-def prepare_datasets(config):
-    real_datasets, fake_datasets = load_datasets()
-    train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
-        real_datasets,
-        fake_datasets,
-        train_transforms=random_aug_transforms,
-        val_transforms=base_transforms,
-        test_transforms=base_transforms,
-        config=config,
-        normalize=True
-    )
-
+def prepare_datasets(config, logger):
+    print(f"faces_only: {config['faces_only']}")
+    start_time = log_start_time(logger, "Loading and splitting individual datasets")
+    real_datasets, fake_datasets = load_datasets(config['faces_only'], config['split_transforms'])
+    log_finish_time(logger, "Loading and splitting individual datasets", start_time)
+    
+    start_time = log_start_time(logger, "Creating real fake dataset splits")
+    train_dataset, val_dataset, test_dataset = create_real_fake_datasets(real_datasets,
+                                                                         fake_datasets,
+                                                                         config['split_transforms'],
+                                                                         config['faces_only'],
+                                                                         normalize_config={'mean': config['mean'],
+                                                                                           'std': config['std']})
+    
+    log_finish_time(logger, "Creating real fake dataset splits", start_time)
+    
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=config['train_batchSize'], shuffle=True, num_workers=config['workers'], collate_fn=custom_collate_fn)
     val_loader = torch.utils.data.DataLoader(
@@ -201,6 +208,13 @@ def main():
         config['train_dataset'] = args.train_dataset
     if args.test_dataset:
         config['test_dataset'] = args.test_dataset
+    config['split_transforms'] = {'train': {'name': 'random_aug_transforms',
+                                            'transform': random_aug_transforms},
+                                  'validation': {'name': 'base_transforms',
+                                                 'transform': base_transforms},
+                                  'test': {'name': 'base_transforms',
+                                           'transform': base_transforms}}
+    config['faces_only'] = args.faces_only
     config['save_ckpt'] = args.save_ckpt
     config['save_feat'] = args.save_feat
     if config['lmdb']:
@@ -257,7 +271,7 @@ def main():
     trainer = Trainer(config, model, optimizer, scheduler, logger, metric_scoring)
 
     # prepare the data loaders
-    train_loader, val_loader, test_loader = prepare_datasets(config)
+    train_loader, val_loader, test_loader = prepare_datasets(config, logger)
 
     # start training
     start_time = log_start_time(logger, "Training")
