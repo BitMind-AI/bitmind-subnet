@@ -22,3 +22,4 @@ wandb
 dlib
 imutils
 scikit-image
+ultralytics
