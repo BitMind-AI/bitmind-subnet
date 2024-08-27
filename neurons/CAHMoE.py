@@ -26,6 +26,8 @@ import typing
 import io
 import os
 import sys
+import numpy as np
+from ultralytics import YOLO
 
 script_directory = os.path.dirname(os.path.realpath(__file__))
 base_ucf_path = os.path.join(script_directory, '../base_miner/UCF/')
@@ -67,7 +69,9 @@ class Miner(BaseMinerNeuron):
             predictor_path,
             'general'
         )
-            
+
+        self.object_detector = YOLO("yolov8x.pt")
+        
 
     def load_detector(self, config_path, weights_dir, checkpoint_name, predictor_path, detector_type):
         """
@@ -98,7 +102,7 @@ class Miner(BaseMinerNeuron):
             return None
 
 
-    async def classify_image(self, image):
+    async def classify_image(self, image, use_object_detection=True):
         """
         Classify the image to determine its content type.
 
@@ -108,9 +112,30 @@ class Miner(BaseMinerNeuron):
         Returns:
             str: 'face' if the image contains at least one face, otherwise 'general'.
         """
-        _, num_faces = self.detectors['face'].detect_faces(image)
-        return "face" if num_faces > 0 else "general"
 
+        _, num_faces = self.detectors['face'].detect_faces(image)
+        
+        if use_object_detection:
+            results = self.object_detector(image)
+
+            detected_classes = [
+                result.names[box.cls.item()]
+                for result in results
+                for box in result.boxes if box.conf.item() > 0.5
+            ]
+
+            if 'person' in detected_classes:
+                if num_faces > 0:
+                    return 'face'
+            else:
+                return 'general'
+
+        else:
+            if 'person' in detected_classes and num_faces > 0:
+                return 'face'
+            else:
+                return 'general'
+        
 
     async def forward(
         self, synapse: ImageSynapse
