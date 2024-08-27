@@ -42,8 +42,8 @@ from bitmind.protocol import ImageSynapse
 
 UCF_CONFIG_PATH = os.path.join(base_ucf_path, 'config', 'ucf.yaml')
 UCF_WEIGHTS_PATH = os.path.join(base_ucf_path, 'weights')
-UCF_DFB_CHECKPOINT_NAME = "ucf_best.pth"
-UCF_BITMIND_CHECKPOINT_NAME = "ucf_bitmind_best.pth"
+UCF_DFB_CHECKPOINT_NAME = "ucf_bitmind_face.pth"
+UCF_BITMIND_CHECKPOINT_NAME = "ucf-bitmind-18k.pth"
 
 class Miner(BaseMinerNeuron):
 
