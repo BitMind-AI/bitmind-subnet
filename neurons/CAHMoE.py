@@ -26,6 +26,8 @@ import typing
 import io
 import os
 import sys
+import numpy as np
+from ultralytics import YOLO
 
 script_directory = os.path.dirname(os.path.realpath(__file__))
 base_ucf_path = os.path.join(script_directory, '../base_miner/UCF/')
@@ -48,25 +50,92 @@ class Miner(BaseMinerNeuron):
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
         
+        # Dictionary to hold different types of detectors
+        self.detectors = {}
+
+        # Attempt to load face and general detectors
+        self.detectors['face'] = self.load_detector(
+            UCF_CONFIG_PATH,
+            UCF_WEIGHTS_PATH,
+            UCF_DFB_CHECKPOINT_NAME,
+            predictor_path,
+            'face'
+        )
+        
+        self.detectors['general'] = self.load_detector(
+            UCF_CONFIG_PATH,
+            UCF_WEIGHTS_PATH,
+            UCF_BITMIND_CHECKPOINT_NAME,
+            predictor_path,
+            'general'
+        )
+
+        self.object_detector = YOLO("yolov8x.pt")
+        
+
+    def load_detector(self, config_path, weights_dir, checkpoint_name, predictor_path, detector_type):
+        """
+        Load a detector model with given parameters.
+        
+        Args:
+            config_path (str): Path to the configuration file for the detector.
+            weights_dir (str): Directory where the model weights are stored.
+            checkpoint_name (str): Name of the model checkpoint file.
+            predictor_path (str): Path to any additional required files, like a shape predictor.
+            detector_type (str): A descriptive name for the type of detector being loaded.
+
+        Returns:
+            Loaded detector object if successful, None otherwise.
+        """
         try:
-            bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
-            # UCF-DFB for face detection
-            self.face_model = UCF(config_path=UCF_CONFIG_PATH,
-                                    weights_dir=UCF_WEIGHTS_PATH,
-                                    ucf_checkpoint_name=UCF_DFB_CHECKPOINT_NAME,
-                                    predictor_path=predictor_path)
+            bt.logging.info(f"Loading {detector_type} detection model from {weights_dir}")
+            detector = UCF(
+                config_path=config_path,
+                weights_dir=weights_dir,
+                ucf_checkpoint_name=checkpoint_name,
+                predictor_path=predictor_path
+            )
+            return detector
         except Exception as e:
-            bt.logging.error("Error loading face model")
-            bt.logging.error(e)
-            
-        try:
-            self.general_model = UCF(config_path=UCF_CONFIG_PATH,
-                            weights_dir=UCF_WEIGHTS_PATH,
-                            ucf_checkpoint_name=UCF_BITMIND_CHECKPOINT_NAME,
-                            predictor_path=predictor_path)
-        except Exception as e:
-            bt.logging.error("Error loading general model")
-            bt.logging.error(e)
+            bt.logging.error(f"Error loading {detector_type} model")
+            bt.logging.error(str(e))
+            return None
+
+
+    async def classify_image(self, image, use_object_detection=True):
+        """
+        Classify the image to determine its content type.
+
+        Args:
+            image (PIL.Image): The image to analyze.
+
+        Returns:
+            str: 'face' if the image contains at least one face, otherwise 'general'.
+        """
+
+        _, num_faces = self.detectors['face'].detect_faces(image)
+        
+        if use_object_detection:
+            results = self.object_detector(image)
+
+            detected_classes = [
+                result.names[box.cls.item()]
+                for result in results
+                for box in result.boxes if box.conf.item() > 0.5
+            ]
+
+            if 'person' in detected_classes:
+                if num_faces > 0:
+                    return 'face'
+            else:
+                return 'general'
+
+        else:
+            if 'person' in detected_classes and num_faces > 0:
+                return 'face'
+            else:
+                return 'general'
+        
 
     async def forward(
         self, synapse: ImageSynapse
@@ -89,18 +158,16 @@ class Miner(BaseMinerNeuron):
             image_bytes = base64.b64decode(synapse.image)
             image = Image.open(io.BytesIO(image_bytes))
 
-            faces, num_faces = self.face_model.detect_faces(image)
-            # If there is at least one face...
-            if num_faces:
-                # Use UCF model
-                image_tensor = self.face_model.preprocess(image, faces=faces)
-                pred = self.face_model.infer(image_tensor)
+            # Determine image content type.
+            image_type = await self.classify_image(image)
+
+            if image_type == "face":
+                image_tensor = self.detectors['face'].preprocess(image)
+                pred = self.detectors['face'].infer(image_tensor)
             else:
-                # Use general model
-                # UCF-BitMind for general detection
-                image_tensor = self.general_model.preprocess(image)
-                pred = self.general_model.infer(image_tensor)
-                
+                image_tensor = self.detectors['general'].preprocess(image)
+                pred = self.detectors['general'].infer(image_tensor)
+
             synapse.prediction = pred
             
         except Exception as e:
