@@ -10,7 +10,7 @@ import cv2
 from datasets import DatasetDict, Image, load_dataset, Dataset
 from huggingface_hub import create_repo
 from bitmind.image_dataset import ImageDataset
-from bitmind.utils.data import create_splits
+from bitmind.utils.data import split_dataset
 from base_miner.UCF.preprocessing.preprocess import extract_aligned_face_dlib
 from bitmind.image_transforms import random_aug_transforms
 from bitmind.constants import DATASET_META
@@ -337,7 +337,7 @@ class TrainingDatasetProcessor:
                                     local_save_path=local_preprocessed_path)
             print(f"Uploading preprocessed {meta['path']}...")
             if self.split:
-                train_ds, val_ds, test_ds = create_splits(dataset.dataset)
+                train_ds, val_ds, test_ds = split_dataset(dataset.dataset)
                 self.upload_dataset(repo_id=dest_repo_path+'_splits',
                                     dataset=DatasetDict({"train": train_ds, "validation": val_ds, "test": test_ds}),
                                     transform_name=transform_info[0])
