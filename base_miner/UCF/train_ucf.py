@@ -96,12 +96,13 @@ def prepare_datasets(config, logger):
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=config['train_batchSize'], shuffle=True, num_workers=config['workers'], collate_fn=custom_collate_fn)
+        train_dataset, batch_size=config['train_batchSize'], shuffle=True, num_workers=config['workers'], drop_last=True, collate_fn=custom_collate_fn)
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=config['train_batchSize'], shuffle=False, num_workers=config['workers'], collate_fn=custom_collate_fn)
+        val_dataset, batch_size=config['train_batchSize'], shuffle=True, num_workers=config['workers'], drop_last=True, collate_fn=custom_collate_fn)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=config['train_batchSize'], shuffle=False, num_workers=config['workers'], collate_fn=custom_collate_fn)
+        test_dataset, batch_size=config['train_batchSize'], shuffle=True, num_workers=config['workers'], drop_last=True, collate_fn=custom_collate_fn)
 
+    print(f"Train size: {len(train_loader)}, Validation size: {len(val_loader)}, Test size: {len(test_loader)}")
     return train_loader, val_loader, test_loader
 
 
