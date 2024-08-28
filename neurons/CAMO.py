@@ -119,7 +119,7 @@ class Miner(BaseMinerNeuron):
             try:
                 results = self.object_detector(image)
             except Exception as e:
-                print(f"Error in object detection: {e}")
+                bt.logging.error(f"Error in object detection: {e}")
                 return 'general'
         
             detected_classes = []
@@ -130,19 +130,18 @@ class Miner(BaseMinerNeuron):
                             if box.conf.item() is not None and box.conf.item() > 0.5:
                                 detected_classes.append(result.names[box.cls.item()])
                         except Exception as e:
-                            print(f"Error processing object detection box: {e}")
+                            bt.logging.error(f"Error processing object detection box: {e}")
                             continue
             except Exception as e:
-                print(f"Error processing object detection results: {e}")
+                bt.logging.error(f"Error processing object detection results: {e}")
                 return 'general'
         
             try:
-                if 'person' in detected_classes:
-                    if num_faces:
-                        return 'face'
+                if 'person' in detected_classes and num_faces:
+                    return 'face'
                 return 'general'
             except Exception as e:
-                print(f"Error checking detected classes: {e}")
+                bt.logging.error(f"Error checking detected classes: {e}")
                 return 'general'
                 
         else:
@@ -179,9 +178,11 @@ class Miner(BaseMinerNeuron):
             image_type = await self.classify_image(image)
 
             if image_type == "face":
+                bt.logging.error("IMAGE TYPE: face")
                 image_tensor = self.detectors['face'].preprocess(image)
                 pred = self.detectors['face'].infer(image_tensor)
             else:
+                bt.logging.error("IMAGE TYPE: other")
                 image_tensor = self.detectors['general'].preprocess(image)
                 pred = self.detectors['general'].infer(image_tensor)
 
