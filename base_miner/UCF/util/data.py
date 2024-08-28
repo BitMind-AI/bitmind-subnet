@@ -39,6 +39,9 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
         )
         
         train_ds, val_ds, test_ds = dataset.dataset
+        train_ds = train_ds.shuffle(seed=42)
+        val_ds = val_ds.shuffle(seed=42)
+        test_ds = test_ds.shuffle(seed=42)
 
         for split, data in zip(splits, [train_ds, val_ds, test_ds]):
             # Create a new ImageDataset instance without calling __init__
@@ -116,7 +119,7 @@ def load_and_split_datasets_with_transform_subsets(dataset_meta: list,
                 create_splits=False,
                 download_mode=meta.get('download_mode', None)
             )
-            
+            subset.dataset['train'] = subset.dataset['train'].shuffle(seed=42)
             # Save the loaded subset to the dictionary
             loaded_subsets[subset_name] = subset
             print(f"{subset_name} subset len: {len(subset.dataset['train'])}")
@@ -151,6 +154,11 @@ def load_and_split_datasets_with_transform_subsets(dataset_meta: list,
         train_data_indices = get_data_indices(train_indices)
         val_data_indices = get_data_indices(val_indices)
         test_data_indices = get_data_indices(test_indices)
+        
+        if len(subset_names) == 1:
+            assert set(train_data_indices).isdisjoint(set(val_data_indices))==True
+            assert set(train_data_indices).isdisjoint(set(test_data_indices))==True
+            assert set(val_data_indices).isdisjoint(set(test_data_indices))==True
 
         # Check split proportions
         print(f"train len: {len(train_data_indices)}, val len: {len(val_data_indices)}, test len: {len(test_data_indices)}")
