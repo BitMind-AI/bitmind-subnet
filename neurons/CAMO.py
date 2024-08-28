@@ -111,16 +111,17 @@ class Miner(BaseMinerNeuron):
 
         Returns:
             str: 'face' if the image contains at least one face, otherwise 'general'.
+            list: List of detected face data, or None if no faces are detected
         """
 
-        _, num_faces = self.detectors['face'].detect_faces(image)
+        faces, num_faces = self.detectors['face'].detect_faces(image)
         
         if use_object_detection:
             try:
                 results = self.object_detector(image)
             except Exception as e:
                 bt.logging.error(f"Error in object detection: {e}")
-                return 'general'
+                return 'general', None
         
             detected_classes = []
             try:
@@ -134,24 +135,24 @@ class Miner(BaseMinerNeuron):
                             continue
             except Exception as e:
                 bt.logging.error(f"Error processing object detection results: {e}")
-                return 'general'
+                return 'general', None
         
             try:
                 if 'person' in detected_classes and num_faces:
-                    return 'face'
-                return 'general'
+                    return 'face', faces
+                return 'general', None
             except Exception as e:
                 bt.logging.error(f"Error checking detected classes: {e}")
-                return 'general'
+                return 'general', None
                 
         else:
             try:
                 if num_faces:
-                    return 'face'
-                return 'general'
+                    return 'face', faces
+                return 'general', None
             except Exception as e:
                 print(f"Error in non-object detection branch: {e}")
-                return 'general'
+                return 'general', None
 
     async def forward(
         self, synapse: ImageSynapse
@@ -175,11 +176,11 @@ class Miner(BaseMinerNeuron):
             image = Image.open(io.BytesIO(image_bytes))
 
             # Determine image content type.
-            image_type = await self.classify_image(image, use_object_detection=False)
+            image_type, faces = await self.classify_image(image, use_object_detection=False)
 
             if image_type == "face":
                 bt.logging.error("IMAGE TYPE: FACE")
-                image_tensor = self.detectors['face'].preprocess(image)
+                image_tensor = self.detectors['face'].preprocess(image, faces=faces)
                 pred = self.detectors['face'].infer(image_tensor)
             else:
                 bt.logging.error("IMAGE TYPE: GENERAL")
