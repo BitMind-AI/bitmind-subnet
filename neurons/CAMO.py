@@ -116,26 +116,43 @@ class Miner(BaseMinerNeuron):
         _, num_faces = self.detectors['face'].detect_faces(image)
         
         if use_object_detection:
-            results = self.object_detector(image)
-
-            detected_classes = [
-                result.names[box.cls.item()]
-                for result in results
-                for box in result.boxes if box.conf.item() > 0.5
-            ]
-
-            if 'person' in detected_classes:
-                if num_faces > 0:
-                    return 'face'
-            else:
-                return 'general'
-
-        else:
-            if 'person' in detected_classes and num_faces > 0:
-                return 'face'
-            else:
+            try:
+                results = self.object_detector(image)
+            except Exception as e:
+                print(f"Error in object detection: {e}")
                 return 'general'
         
+            detected_classes = []
+            try:
+                for result in results:
+                    for box in result.boxes:
+                        try:
+                            if box.conf.item() is not None and box.conf.item() > 0.5:
+                                detected_classes.append(result.names[box.cls.item()])
+                        except Exception as e:
+                            print(f"Error processing object detection box: {e}")
+                            continue
+            except Exception as e:
+                print(f"Error processing object detection results: {e}")
+                return 'general'
+        
+            try:
+                if 'person' in detected_classes:
+                    if num_faces:
+                        return 'face'
+                return 'general'
+            except Exception as e:
+                print(f"Error checking detected classes: {e}")
+                return 'general'
+                
+        else:
+            try:
+                if num_faces:
+                    return 'face'
+                return 'general'
+            except Exception as e:
+                print(f"Error in non-object detection branch: {e}")
+                return 'general'
 
     async def forward(
         self, synapse: ImageSynapse
