@@ -206,63 +206,97 @@ class TrainingDatasetProcessor:
         except Exception as e:
             print('Preprocessed dataset unavailable locally. Generating new preprocessed dataset:', e)
         return False
-    
-    def preprocess_faces_only(self,
-                              dataset_dict,
-                              transform,
-                              batch_size=32,
-                              save_locally=False,
-                              local_save_path=None):
-        
-        for split in dataset_dict.keys():
-            dataloader = DataLoader(dataset_dict[split].with_format("torch"),
-                                    batch_size=batch_size, 
-                                    shuffle=False)
-            indices_to_keep = []
-            preprocessed_dataset = {"image": [],
-                                    "original_index": [],
-                                    "landmark": [],
-                                    "mask": []}
-            total_valid_faces = 0
-            for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
-                images = batch['image']
-                # Convert tensors to PIL Images
-                images = [T.ToPILImage()(transform(T.ToPILImage()(image))) for image in images]
-    
-                # Detect and process faces
-                faces, faces_present = self.detect_faces_in_batch(images)
-                cropped_faces, landmarks, masks = self.align_and_crop_faces_in_batch(images, faces)
-                valid_faces_present, valid_faces, valid_landmarks, valid_masks = \
-                self.filter_cropped_faces_with_no_landmark(faces_present, cropped_faces, landmarks, masks)
-                assert valid_faces_present.count(True) == len(valid_faces)
-                
-                total_valid_faces += len(valid_faces)
-                # Collect results where faces are present
-                if any(valid_faces_present):
-                    batch_indices_to_keep = torch.arange(batch_idx * batch_size,
-                                                        batch_idx * batch_size + len(images))[valid_faces_present]
-                    assert len(batch_indices_to_keep) == valid_faces_present.count(True)
-                    assert len(batch_indices_to_keep) == len(valid_faces)
-                    
-                    indices_to_keep.extend(batch_indices_to_keep.tolist())
-                    preprocessed_dataset["image"].extend(valid_faces)
-                    preprocessed_dataset["original_index"].extend(batch_indices_to_keep.tolist())
-                    preprocessed_dataset["landmark"].extend(valid_landmarks)
-                    preprocessed_dataset["mask"].extend(valid_masks)
-                    assert (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["original_index"])) and \
-                           (len(preprocessed_dataset["landmark"]) == len(preprocessed_dataset["mask"])) and \
-                           (len(preprocessed_dataset["image"]) == len(preprocessed_dataset["landmark"]))
-            if save_locally:
-                print("Saving preprocessed dict locally to " + local_save_path)
-                with open(local_save_path, 'wb') as f:
-                    pickle.dump(preprocessed_dataset, f)
-            # Replace dataset with processed cropped and aligned face data
-            print("Setting preprocessed data in-place.")
-            dataset_dict[split] = None
-            dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
-            print("Preprocessed data successfully set in-place.")
-            assert total_valid_faces == len(dataset_dict[split])
 
+    def _initialize_preprocessed_dataset(self):
+        """Initializes an empty dictionary to store preprocessed data."""
+        return {"image": [], "original_index": [], "landmark": [], "mask": []}
+
+    def _apply_transform_to_images(self, images, transform):
+        """Converts tensors to PIL Images and applies the given transform."""
+        return [T.ToPILImage()(transform(T.ToPILImage()(image))) for image in images]
+
+    def _process_faces(self, images):
+        """
+        Detects faces in the images, aligns and crops them, and filters out those without landmarks.
+        
+        Returns:
+            valid_faces_present (list[bool]): A list indicating which images contain valid faces.
+            valid_faces (list[PIL.Image]): A list of cropped and aligned face images.
+            valid_landmarks (list): A list of landmarks corresponding to the valid faces.
+            valid_masks (list): A list of masks corresponding to the valid faces.
+        """
+        faces, faces_present = self.detect_faces_in_batch(images)
+        cropped_faces, landmarks, masks = self.align_and_crop_faces_in_batch(images, faces)
+        valid_faces_present, valid_faces, valid_landmarks, valid_masks = \
+            self.filter_cropped_faces_with_no_landmark(faces_present, cropped_faces, landmarks, masks)
+        assert valid_faces_present.count(True) == len(valid_faces)
+        return valid_faces_present, valid_faces, valid_landmarks, valid_masks
+
+    def _update_preprocessed_data_in_place(self, preprocessed_dataset, valid_data, batch_idx, batch_size):
+        """Updates the preprocessed dataset with valid faces, indices, landmarks, and masks."""
+        batch_indices_to_keep = \
+        torch.arange(batch_idx * batch_size,
+                     batch_idx * batch_size + len(valid_data["faces_present"]))[valid_data["faces_present"]]
+        assert len(batch_indices_to_keep) == valid_data["faces_present"].count(True)
+        assert len(batch_indices_to_keep) == len(valid_data["faces"])
+
+        preprocessed_dataset["image"].extend(valid_data["faces"])
+        preprocessed_dataset["original_index"].extend(batch_indices_to_keep.tolist())
+        preprocessed_dataset["landmark"].extend(valid_data["landmarks"])
+        preprocessed_dataset["mask"].extend(valid_data["masks"])
+
+        assert len(preprocessed_dataset["image"]) == len(preprocessed_dataset["original_index"])
+        assert len(preprocessed_dataset["landmark"]) == len(preprocessed_dataset["mask"])
+        assert len(preprocessed_dataset["image"]) == len(preprocessed_dataset["landmark"])
+
+    def _save_preprocessed_data(self, preprocessed_dataset, local_save_path):
+        """Saves the preprocessed data locally if required."""
+        print(f"Saving preprocessed dict locally to {local_save_path}")
+        with open(local_save_path, 'wb') as f:
+            pickle.dump(preprocessed_dataset, f)
+
+    def _set_dataset_in_place(self, dataset_dict, split, preprocessed_dataset):
+        """Replaces the dataset with processed cropped and aligned face data."""
+        print("Setting preprocessed data in-place.")
+        dataset_dict[split] = None
+        dataset_dict[split] = Dataset.from_dict(preprocessed_dataset)
+        print("Preprocessed data successfully set in-place.")
+
+    def _initialize_valid_dict(self, valid_faces_present, valid_faces, valid_landmarks, valid_masks):
+        """Returns a dictionary populated with valid preproccessed data."""
+        return {"faces_present": valid_faces_present,
+                "faces": valid_faces,
+                "landmarks": valid_landmarks,
+                "masks": valid_masks}
+
+    def preprocess_faces_only(self, dataset_dict, transform, batch_size=32, save_locally=False, local_save_path=None):
+        """
+        Main method to preprocess datasets for faces only. This method will loop through each split in the dataset,
+        apply transformations, detect, align, and crop faces, and then store the processed data.
+
+        Args:
+            dataset_dict (dict): Dictionary containing datasets for different splits.
+            transform (callable): Transformation to be applied on images.
+            batch_size (int): Batch size for data loading.
+            save_locally (bool): Flag to save the processed data locally.
+            local_save_path (str): Path to save the processed data if save_locally is True.
+        """
+        for split in dataset_dict.keys():
+            dataloader = DataLoader(dataset_dict[split].with_format("torch"), batch_size=batch_size, shuffle=False)
+            preprocessed_dataset = self._initialize_preprocessed_dataset()
+
+            for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+                images = self._apply_transform_to_images(batch['image'], transform)
+                valid_faces_present, valid_faces, valid_landmarks, valid_masks = self._process_faces(images)
+                if any(valid_faces_present):
+                    valid_data = \
+                    self._initialize_valid_dict(valid_faces_present, valid_faces, valid_landmarks, valid_masks)
+                    self._update_preprocessed_data_in_place(preprocessed_dataset, valid_data, batch_idx, batch_size)
+
+            if save_locally:
+                self._save_preprocessed_data(preprocessed_dataset, local_save_path)
+            self._set_dataset_in_place(dataset_dict, split, preprocessed_dataset)
+            
     def preprocess(self,
                    dataset_dict,
                    transform,
@@ -274,7 +308,6 @@ class TrainingDatasetProcessor:
             dataloader = DataLoader(dataset_dict[split].with_format("torch"), batch_size=batch_size, shuffle=False)
             indices_to_keep = []
             preprocessed_dataset = {"image": []}
-            total_valid_faces = 0
             for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
                 images = batch['image']
                 # Transform images and ensure PIl format
