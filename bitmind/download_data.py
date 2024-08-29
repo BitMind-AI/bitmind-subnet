@@ -1,3 +1,4 @@
+import datasets
 from datasets import load_dataset
 import argparse
 import time
@@ -7,6 +8,9 @@ import subprocess
 import glob
 
 from bitmind.constants import DATASET_META, HUGGINGFACE_CACHE_DIR
+
+datasets.logging.set_verbosity_warning()
+datasets.disable_progress_bar()
 
 
 def clear_cache(cache_dir):

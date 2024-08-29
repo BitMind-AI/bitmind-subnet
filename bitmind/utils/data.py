@@ -1,4 +1,5 @@
 from typing import Optional, Union
+import datasets
 from datasets import load_dataset
 from PIL import Image
 from io import BytesIO
@@ -8,6 +9,9 @@ import numpy as np
 
 from bitmind.download_data import download_dataset
 from bitmind.constants import HUGGINGFACE_CACHE_DIR
+
+datasets.logging.set_verbosity_error()
+datasets.disable_progress_bar()
 
 
 def download_image(url: str) -> Image.Image:

@@ -7,6 +7,8 @@ This folder contains files for the implementation of a joint vision-to-language 
 
 Default output directory for real-image-to-annotation and annotation-to-synthetic-image pipelines in the associated notebooks.
 
+Notebooks:
+
 **real_image_to_text_annotation.ipynb :**
 
 Pipeline for real image dataset to text caption dataset generation. Contains function that generates subdirectories of annotations for each real image dataset. Annotations are formatted as JSONs with captions (Strings) of images. The filename of the JSONs correspond to the image index in the associated dataset dictionary.
