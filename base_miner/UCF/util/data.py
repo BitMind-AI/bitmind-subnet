@@ -1,6 +1,6 @@
 from typing import List, Tuple, Dict
 
-from util.real_fake_dataset import RealFakeDataset
+from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META #TRAINING_DATASET_META
 from collections import defaultdict
