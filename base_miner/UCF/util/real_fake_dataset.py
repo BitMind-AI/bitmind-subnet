@@ -27,7 +27,7 @@ class RealFakeDataset:
         self.fake_image_datasets = fake_image_datasets
         self.transforms = transforms
         self.fake_prob = fake_prob
-        self.source_label_mapping = source_label_mapping if source_label_mapping else {}
+        self.source_label_mapping = source_label_mapping
         self.normalize_config = normalize_config
 
         self._history = {
@@ -71,8 +71,6 @@ class RealFakeDataset:
             index = idx[0]
             label = 0.0
 
-        source_label = self.source_label_mapping[source.huggingface_dataset_path]
-
         self._history['source'].append(source.huggingface_dataset_path)
         self._history['label'].append(label)
         self._history['index'].append(index)
@@ -89,8 +87,12 @@ class RealFakeDataset:
                 image = self.normalize_image(image)
             else:
                 image = self.normalize_image(T.ToTensor()(image))
+                
+        if self.source_label_mapping:
+            source_label = self.source_label_mapping[source.huggingface_dataset_path]
+            return image, label, source_label
             
-        return image, label, source_label
+        return image, label
         
     def __len__(self) -> int:
         """
