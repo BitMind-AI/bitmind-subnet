@@ -35,7 +35,7 @@ from logger import create_logger, RankFilter
 # BitMind imports (not from original Deepfake Bench repo)
 from torch.utils.data import DataLoader
 
-from util.data import load_datasets, create_real_fake_datasets
+from bitmind.utils.train_data import load_datasets, create_real_fake_datasets
 from bitmind.image_transforms import base_transforms, random_aug_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
 
