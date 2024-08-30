@@ -244,11 +244,11 @@ def create_source_label_mapping(
 def create_real_fake_datasets(
     real_datasets: Dict[str, List[ImageDataset]],
     fake_datasets: Dict[str, List[ImageDataset]],
-    train_transforms: transforms.Compose,
-    val_transforms: transforms.Compose,
-    test_transforms: transforms.Compose,
-    expert=False,
-    normalize_config=None) -> Tuple[RealFakeDataset, ...]:
+    train_transforms: transforms.Compose = None,
+    val_transforms: transforms.Compose = None,
+    test_transforms: transforms.Compose = None,
+    source_labels: bool = False,
+    normalize_config: dict = None) -> Tuple[RealFakeDataset, ...]:
     """
     Args:
         real_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
@@ -261,27 +261,27 @@ def create_real_fake_datasets(
 
     """
     source_label_mapping = \
-    create_source_label_mapping(real_datasets, fake_datasets) if expert else None
+    create_source_label_mapping(real_datasets, fake_datasets) if source_labels else None
     print(f"Source label mapping: {source_label_mapping}")
     
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
         fake_image_datasets=fake_datasets['train'],
-        transforms= None if expert else train_transforms,
+        transforms=train_transforms,
         source_label_mapping=source_label_mapping,
         normalize_config=normalize_config)
 
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
         fake_image_datasets=fake_datasets['validation'],
-        transforms= None if expert else val_transforms,
+        transforms=val_transforms,
         source_label_mapping=source_label_mapping,
         normalize_config=normalize_config)
 
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
-        transforms= None if expert else test_transforms,
+        transforms=test_transforms,
         source_label_mapping=source_label_mapping,
         normalize_config=normalize_config)
 

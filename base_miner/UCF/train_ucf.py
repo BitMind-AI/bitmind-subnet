@@ -98,7 +98,7 @@ def prepare_datasets(config, logger):
                               config['split_transforms']['train']['transform'],
                               config['split_transforms']['validation']['transform'],
                               config['split_transforms']['test']['transform'],
-                              config['faces_only'],
+                              source_labels=True,
                               normalize_config={'mean': config['mean'],
                                                 'std': config['std']})
 
