@@ -22,7 +22,7 @@ class RealFakeDataset:
             transforms (transforms.Compose): Image transformations (default: None).
             fake_prob (float): Probability of selecting a fake image (default: 0.5).
             source_label_mapping (dict): A dictionary mapping dataset names to float labels.
-            normals_config (dict): A dictionary containing mean and std for image normalization.
+            normalize_config (dict): A dictionary containing mean and std for image normalization.
         """
         self.real_image_datasets = real_image_datasets
         self.fake_image_datasets = fake_image_datasets
