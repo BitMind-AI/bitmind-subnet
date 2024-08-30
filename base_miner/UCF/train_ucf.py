@@ -37,6 +37,7 @@ from torch.utils.data import DataLoader
 
 from util.data import load_datasets, create_real_fake_datasets
 from bitmind.image_transforms import base_transforms, random_aug_transforms
+from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
 
 parser = argparse.ArgumentParser(description='Process some paths.')
 parser.add_argument('--detector_path', type=str,
@@ -82,17 +83,25 @@ def custom_collate_fn(batch):
 def prepare_datasets(config, logger):
     print(f"faces_only: {config['faces_only']}")
     start_time = log_start_time(logger, "Loading and splitting individual datasets")
-    real_datasets, fake_datasets = load_datasets(config['faces_only'], config['split_transforms'])
+    dataset_meta = FACE_TRAINING_DATASET_META if config['faces_only'] else DATASET_META
+    
+    real_datasets, fake_datasets = load_datasets(dataset_meta=dataset_meta, 
+                                                 expert=config['faces_only'],
+                                                 split_transforms=config['split_transforms'])
+
     log_finish_time(logger, "Loading and splitting individual datasets", start_time)
     
     start_time = log_start_time(logger, "Creating real fake dataset splits")
-    train_dataset, val_dataset, test_dataset = create_real_fake_datasets(real_datasets,
-                                                                         fake_datasets,
-                                                                         config['split_transforms'],
-                                                                         config['faces_only'],
-                                                                         normalize_config={'mean': config['mean'],
-                                                                                           'std': config['std']})
-    
+    train_dataset, val_dataset, test_dataset = \
+    create_real_fake_datasets(real_datasets,
+                              fake_datasets,
+                              config['split_transforms']['train']['transform'],
+                              config['split_transforms']['validation']['transform'],
+                              config['split_transforms']['test']['transform'],
+                              config['faces_only'],
+                              normalize_config={'mean': config['mean'],
+                                                'std': config['std']})
+
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
     train_loader = torch.utils.data.DataLoader(
