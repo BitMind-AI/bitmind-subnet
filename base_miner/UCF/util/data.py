@@ -195,7 +195,7 @@ def load_and_split_datasets_with_transform_subsets(dataset_meta: list,
 
 def load_datasets(dataset_meta: dict = DATASET_META,
                   expert: bool = False,
-                  split_transforms: dict= None) -> Tuple[Dict[str, List[ImageDataset]],
+                  split_transforms: dict = None) -> Tuple[Dict[str, List[ImageDataset]],
                                                         Dict[str, List[ImageDataset]]]:
     """
     Loads several ImageDatasets, each of which is an abstraction of a huggingface dataset.
