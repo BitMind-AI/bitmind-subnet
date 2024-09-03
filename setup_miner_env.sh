@@ -8,6 +8,9 @@ sudo apt install build-essential cmake -y
 sudo apt install libopenblas-dev liblapack-dev -y
 sudo apt install libx11-dev libgtk-3-dev -y
 
+pip install -e .
+pip install -r requirements-miner.txt
+
 echo "MODEL_PATH=./mining_models/base.pth
 NETUID=34
 SUBTENSOR_NETWORK=finney
@@ -16,8 +19,3 @@ WALLET_HOTKEY=default
 MINER_AXON_PORT=8091
 BLACKLIST_FORCE_VALIDATOR_PERMIT=True" > miner.env
 
-echo "NETUID=34
-SUBTENSOR_NETWORK=finney
-WALLET_NAME=default
-WALLET_HOTKEY=default
-VALIDATOR_AXON_PORT=8092" > validator.env
