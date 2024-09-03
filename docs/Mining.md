@@ -83,9 +83,9 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ## Mining
 
-You can launch your validator with `run_neuron.py`.
+You can launch your miner with `run_neuron.py`.
 
-First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
+First, make sure to update `miner.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
 
 ```bash
 MODEL_PATH=./mining_models/base.pth
