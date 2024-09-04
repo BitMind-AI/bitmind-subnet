@@ -1,3 +1,13 @@
+# This script was adapted from the DeepfakeBench training code,
+# originally authored by Zhiyuan Yan (zhiyuanyan@link.cuhk.edu.cn)
+
+# Original: https://github.com/SCLBD/DeepfakeBench/blob/main/training/train.py
+
+# BitMind's modifications include adding a testing phase, changing the 
+# data load/split pipeline to work with subnet 34's image augmentations
+# and datasets from BitMind HuggingFace repositories, quality of life CLI args,
+# logging changes, etc.
+
 import os
 import sys
 import argparse

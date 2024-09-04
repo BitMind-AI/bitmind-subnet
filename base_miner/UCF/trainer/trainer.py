@@ -1,3 +1,8 @@
+# This script was adapted from the DeepfakeBench training code,
+# originally authored by Zhiyuan Yan (zhiyuanyan@link.cuhk.edu.cn)
+
+# Original: https://github.com/SCLBD/DeepfakeBench/blob/main/training/train.py
+
 import os
 import sys
 current_file_path = os.path.abspath(__file__)
