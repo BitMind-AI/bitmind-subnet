@@ -1,3 +1,0 @@
-[submodule "base_miner/DeepfakeBench"]
-	path = base_miner/DeepfakeBench
-	url = https://github.com/SCLBD/DeepfakeBench.git
