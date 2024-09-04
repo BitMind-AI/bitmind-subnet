@@ -12,7 +12,6 @@ import os
 import sys
 import argparse
 from os.path import join
-#import cv2
 import random
 import datetime
 import time
@@ -22,6 +21,7 @@ import numpy as np
 from datetime import timedelta
 from copy import deepcopy
 from PIL import Image as pil_image
+from pathlib import Path
 import gc
 
 import torch
@@ -32,19 +32,19 @@ import torch.utils.data
 import torch.optim as optim
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
+from torch.utils.data import DataLoader
 
 from optimizor.SAM import SAM
 from optimizor.LinearLR import LinearDecayLR
 
 from trainer.trainer import Trainer
 from detectors import DETECTOR
-#from dataset import *
 from metrics.utils import parse_metric_for_print
 from logger import create_logger, RankFilter
 
-# BitMind imports (not from original Deepfake Bench repo)
-from torch.utils.data import DataLoader
+from huggingface_hub import hf_hub_download
 
+# BitMind imports (not from original Deepfake Bench repo)
 from bitmind.dataset_processing.load_split_data import load_datasets, create_real_fake_datasets
 from bitmind.image_transforms import base_transforms, random_aug_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
@@ -65,6 +65,26 @@ args = parser.parse_args()
 torch.cuda.set_device(args.local_rank)
 print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
 print(f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
+
+def ensure_backbone_is_available(logger,
+                                 weights_dir='./weights/',
+                                 model_filename='xception_best.pth',
+                                 hugging_face_repo_name='bitmind/ucf/'):
+    destination_path = Path(weights_dir) / Path(model_filename)
+    if not destination_path.parent.exists():
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Created directory {destination_path.parent}.")
+    if not destination_path.exists():
+        model_path = hf_hub_download(hugging_face_repo_name, model_filename)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = torch.load(model_path, map_location=device)
+        torch.save(model, destination_path)
+        del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.info(f"Downloaded backbone {model_filename} to {destination_path}.")
+    else:
+        logger.info(f"{model_filename} backbone already present at {destination_path}.")
 
 def init_seed(config):
     if config['manualSeed'] is None:
@@ -234,6 +254,7 @@ def main():
     if 'label_dict' in config:
         config2['label_dict']=config['label_dict']
     config.update(config2)
+    
     config['local_rank']=args.local_rank
     if config['dry_run']:
         config['nEpochs'] = 0
@@ -267,6 +288,7 @@ def main():
     os.makedirs(logger_path, exist_ok=True)
     logger = create_logger(os.path.join(logger_path, 'training.log'))
     logger.info('Save log to {}'.format(logger_path))
+    
     config['ddp']= args.ddp
     # print configuration
     logger.info("--------------- Configuration ---------------")
@@ -289,6 +311,10 @@ def main():
         )
         logger.addFilter(RankFilter(0))
 
+    ensure_backbone_is_available(logger=logger,
+                             model_filename=config['pretrained'].split('/')[-1],
+                             hugging_face_repo_name='bitmind/' + config['model_name'])
+    
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
     model = model_class(config)
