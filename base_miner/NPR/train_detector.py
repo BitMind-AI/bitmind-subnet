@@ -9,7 +9,7 @@ import random
 import torch
 
 from bitmind.image_transforms import base_transforms, random_aug_transforms
-from bitmind.utils.train_data import load_datasets, create_real_fake_datasets
+from bitmind.dataset_processing.load_split_data import load_datasets, create_real_fake_datasets
 from options import TrainOptions
 
 

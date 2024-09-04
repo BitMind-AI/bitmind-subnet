@@ -13,7 +13,7 @@ script_directory = os.path.dirname(os.path.realpath(__file__))
 base_ucf_path = os.path.join(script_directory, '../base_miner/UCF/')
 resolved_path = os.path.abspath(base_ucf_path)
 sys.path.append(resolved_path)
-predictor_path = os.path.join(base_ucf_path, 'preprocessing', 'dlib_tools',
+predictor_path = os.path.join(script_directory, '../bitmind/dataset_processing/dlib_tools',
                               'shape_predictor_81_face_landmarks.dat')
 
 from pretrained_ucf import UCF

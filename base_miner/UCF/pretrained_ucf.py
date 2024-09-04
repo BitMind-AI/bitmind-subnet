@@ -25,7 +25,7 @@ from base_miner.UCF.detectors import DETECTOR
 class UCF:
     def __init__(self, config_path="./config/ucf.yaml", weights_dir="./weights/", weights_hf_repo_name="bitmind/ucf",
                  ucf_checkpoint_name="ucf_best.pth", backbone_checkpoint_name="xception_best.pth",
-                 predictor_path = "./preprocessing/dlib_tools/shape_predictor_81_face_landmarks.dat"):
+                 predictor_path = "../../bitmind/dataset_processing/dlib_tools/shape_predictor_81_face_landmarks.dat"):
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.config_path = Path(config_path)
