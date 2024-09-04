@@ -10,6 +10,7 @@ pip install -r requirements-validator.sh
 
 echo "NETUID=34
 SUBTENSOR_NETWORK=finney
+SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
 WALLET_NAME=default
 WALLET_HOTKEY=default
 VALIDATOR_AXON_PORT=8092" > validator.env
