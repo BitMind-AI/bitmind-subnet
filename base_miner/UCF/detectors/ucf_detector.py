@@ -75,7 +75,7 @@ class UCFDetector(AbstractDetector):
         self.con_gan = Conditional_UNet()
 
         # head
-        specific_task_number = len(config['train_dataset']) + 1  # default: 5 in FF++
+        specific_task_number = config['specific_task_number']
         self.head_spe = Head(
             in_f=self.half_fingerprint_dim, 
             hidden_dim=self.encoder_feat_dim,

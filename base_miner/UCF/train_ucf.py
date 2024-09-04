@@ -53,14 +53,14 @@ parser = argparse.ArgumentParser(description='Process some paths.')
 parser.add_argument('--detector_path', type=str,
                     default=os.getcwd() + '/config/ucf.yaml',
                     help='path to detector YAML file')
-parser.add_argument("--train_dataset", nargs="+")
-parser.add_argument("--test_dataset", nargs="+")
 parser.add_argument('--faces_only', dest='faces_only', action='store_true', default=False)
 parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', default=True)
 parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', default=True)
 parser.add_argument("--ddp", action='store_true', default=False)
 parser.add_argument('--local_rank', type=int, default=0)
 parser.add_argument('--task_target', type=str, default="", help='specify the target of current training task')
+parser.add_argument('--specific_tasks', type=int, default=0, help='specify the number of forgery methods')
+
 args = parser.parse_args()
 torch.cuda.set_device(args.local_rank)
 print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
@@ -111,11 +111,9 @@ def custom_collate_fn(batch):
     return data_dict
 
 def prepare_datasets(config, logger):
-    print(f"faces_only: {config['faces_only']}")
     start_time = log_start_time(logger, "Loading and splitting individual datasets")
-    dataset_meta = FACE_TRAINING_DATASET_META if config['faces_only'] else DATASET_META
     
-    real_datasets, fake_datasets = load_datasets(dataset_meta=dataset_meta, 
+    real_datasets, fake_datasets = load_datasets(dataset_meta=config['dataset_meta'], 
                                                  expert=config['faces_only'],
                                                  split_transforms=config['split_transforms'])
 
@@ -158,7 +156,6 @@ def prepare_datasets(config, logger):
     print(f"Test size: {len(test_loader.dataset)}")
 
     return train_loader, val_loader, test_loader
-
 
 def choose_optimizer(model, config):
     opt_name = config['optimizer']['type']
@@ -259,11 +256,7 @@ def main():
     if config['dry_run']:
         config['nEpochs'] = 0
         config['save_feat']=False
-    # If arguments are provided, they will overwrite the yaml settings
-    if args.train_dataset:
-        config['train_dataset'] = args.train_dataset
-    if args.test_dataset:
-        config['test_dataset'] = args.test_dataset
+
     config['split_transforms'] = {'train': {'name': 'random_aug_transforms',
                                             'transform': random_aug_transforms},
                                   'validation': {'name': 'base_transforms',
@@ -271,10 +264,19 @@ def main():
                                   'test': {'name': 'base_transforms',
                                            'transform': base_transforms}}
     config['faces_only'] = args.faces_only
+    config['dataset_meta'] = FACE_TRAINING_DATASET_META if config['faces_only'] else DATASET_META
+    dataset_names = [item["path"] for datasets in config['dataset_meta'].values() for item in datasets]
+    config['train_dataset'] = dataset_names
     config['save_ckpt'] = args.save_ckpt
     config['save_feat'] = args.save_feat
+
+    if args.specific_tasks:
+        config['specific_task_number'] = args.specific_tasks
+    else: config['specific_task_number'] = len(config['train_dataset']) + 1
+    
     if config['lmdb']:
         config['dataset_json_folder'] = 'preprocessing/dataset_json_v3'
+        
     # create logger
     timenow=datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     task_str = ""
