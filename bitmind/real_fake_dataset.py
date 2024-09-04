@@ -94,7 +94,7 @@ class RealFakeDataset:
             return image, label, source_label
             
         return image, label
-        
+    
     def __len__(self) -> int:
         """
         Return the length of the dataset.
