@@ -12,7 +12,7 @@ if pm2 list | grep -q "bitmind_miner"; then
 fi
 
 # Start the process with arguments from environment variables
-pm2 start python --name bitmind_miner -- neurons/camo_miner.py \
+pm2 start python --name bitmind_miner -- $NEURON_PATH \
   --neuron.model_path $MODEL_PATH \
   --netuid $NETUID \
   --subtensor.network $SUBTENSOR_NETWORK \

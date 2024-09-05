@@ -12,6 +12,7 @@ pip install -e .
 pip install -r requirements-miner.txt
 
 echo "MODEL_PATH=./mining_models/base.pth
+NEURON_PATH=./neurons/npr_miner.py
 NETUID=34
 SUBTENSOR_NETWORK=finney
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
