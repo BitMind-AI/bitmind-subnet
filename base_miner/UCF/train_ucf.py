@@ -63,7 +63,7 @@ parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', de
 parser.add_argument("--ddp", action='store_true', default=False)
 parser.add_argument('--local_rank', type=int, default=0)
 parser.add_argument('--task_target', type=str, default="", help='specify the target of current training task')
-parser.add_argument('--specific_tasks', type=int, default=0, help='specify the number of forgery methods')
+parser.add_argument('--specific_tasks', type=int, default=None, help='specify the number of forgery methods')
 
 args = parser.parse_args()
 torch.cuda.set_device(args.local_rank)
@@ -277,7 +277,7 @@ def main():
 
     if args.specific_tasks:
         config['specific_task_number'] = args.specific_tasks
-    else: config['specific_task_number'] = len(config['train_dataset']) + 1
+    else: config['specific_task_number'] = len(config['dataset_meta']["fake"]) + 1
     
     if config['lmdb']:
         config['dataset_json_folder'] = 'preprocessing/dataset_json_v3'

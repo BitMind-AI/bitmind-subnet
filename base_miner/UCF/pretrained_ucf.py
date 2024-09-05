@@ -31,9 +31,25 @@ from base_miner.UCF.config.constants import (
 )
 
 class UCF:
+    """
+    This class initializes a pretrained UCF model by loading the necessary configurations, checkpoints,
+    and  face detection tools required for training and inference. It sets up the device (CPU or GPU), 
+    loads the specified weights, and initializes the face detector and predictor from dlib.
+
+    Attributes:
+        config_path (str): Path to the configuration YAML file for the UCF model.
+        weights_dir (str): Directory path where UCF and Xception backbone weights are stored.
+        weights_hf_repo_name (str): Name of the Hugging Face repository containing the model weights.
+        ucf_checkpoint_name (str): Filename of the UCF model checkpoint.
+        backbone_checkpoint_name (str): Filename of the backbone model checkpoint.
+        predictor_path (str): Path to the dlib face predictor file.
+        specific_task_number (int): Number of different fake training dataset/forgery methods
+                                    for UCF to disentangle (DeepfakeBench default is 5, the
+                                    num of datasets of FF++)."""
+    
     def __init__(self, config_path=CONFIG_PATH, weights_dir=WEIGHTS_PATH, weights_hf_repo_name=WEIGHTS_HF_PATH,
                  ucf_checkpoint_name=DFB_CKPT_NAME, backbone_checkpoint_name=BACKBONE_CKPT_NAME,
-                 predictor_path=DLIB_FACE_PREDICTOR_PATH):
+                 predictor_path=DLIB_FACE_PREDICTOR_PATH, specific_task_number=5):
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.config_path = Path(config_path)
@@ -42,6 +58,7 @@ class UCF:
         self.ucf_checkpoint_name = ucf_checkpoint_name
         self.backbone_checkpoint_name = backbone_checkpoint_name
         self.config = self.load_config()
+        self.config['specific_task_number'] = specific_task_number
 
         self.face_detector = dlib.get_frontal_face_detector()
         self.predictor_path = predictor_path

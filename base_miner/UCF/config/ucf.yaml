@@ -24,7 +24,7 @@ with_mask: false   # whether to include mask information in the input
 with_landmark: false   # whether to include facial landmark information in the input
 save_ckpt: true   # whether to save checkpoint
 save_feat: true   # whether to save features
-specific_task_number: 5 # default number of training datasets, overwritten in training
+specific_task_number: 5 # default num datasets in FF++ used by DFB, overwritten in training
 
 # mean and std for normalization
 mean: [0.5, 0.5, 0.5]
