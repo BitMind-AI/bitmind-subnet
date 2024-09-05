@@ -35,6 +35,7 @@ from bitmind.protocol import ImageSynapse
 
 from base_miner.UCF.config.constants import (
     CONFIG_PATH,
+    WEIGHTS_PATH,
     BM_FACE_CKPT,
     BM_18K_CKPT,
     DLIB_FACE_PREDICTOR_PATH
