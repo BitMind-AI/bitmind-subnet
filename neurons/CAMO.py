@@ -29,21 +29,16 @@ import sys
 import numpy as np
 from ultralytics import YOLO
 
-script_directory = os.path.dirname(os.path.realpath(__file__))
-base_ucf_path = os.path.join(script_directory, '../base_miner/UCF/')
-resolved_path = os.path.abspath(base_ucf_path)
-sys.path.append(resolved_path)
-predictor_path = os.path.join(script_directory, '../bitmind/dataset_processing/dlib_tools',
-                              'shape_predictor_81_face_landmarks.dat')
-
 from pretrained_ucf import UCF
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 
-UCF_CONFIG_PATH = os.path.join(base_ucf_path, 'config', 'ucf.yaml')
-UCF_WEIGHTS_PATH = os.path.join(base_ucf_path, 'weights')
-UCF_DFB_CHECKPOINT_NAME = "ucf_bitmind_face.pth"
-UCF_BITMIND_CHECKPOINT_NAME = "ucf-bitmind-18k.pth"
+from bitmind_subnet.base_miner.UCF.config.constants import (
+    CONFIG_PATH,
+    BM_FACE_CKPT,
+    BM_18K_CKPT,
+    DLIB_FACE_PREDICTOR_PATH
+)
 
 class Miner(BaseMinerNeuron):
 
@@ -55,18 +50,18 @@ class Miner(BaseMinerNeuron):
 
         # Attempt to load face and general detectors
         self.detectors['face'] = self.load_detector(
-            UCF_CONFIG_PATH,
-            UCF_WEIGHTS_PATH,
-            UCF_DFB_CHECKPOINT_NAME,
-            predictor_path,
+            CONFIG_PATH,
+            WEIGHTS_PATH,
+            BM_FACE_CKPT,
+            DLIB_FACE_PREDICTOR_PATH,
             'face'
         )
         
         self.detectors['general'] = self.load_detector(
-            UCF_CONFIG_PATH,
-            UCF_WEIGHTS_PATH,
-            UCF_BITMIND_CHECKPOINT_NAME,
-            predictor_path,
+            CONFIG_PATH,
+            WEIGHTS_PATH,
+            BM_18K_CKPT,
+            DLIB_FACE_PREDICTOR_PATH,
             'general'
         )
 

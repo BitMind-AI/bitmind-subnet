@@ -28,35 +28,31 @@ import numpy as np
 import os
 import sys
 
-script_directory = os.path.dirname(os.path.realpath(__file__))
-base_ucf_path = os.path.join(script_directory, '../base_miner/UCF/')
-resolved_path = os.path.abspath(base_ucf_path)
-sys.path.append(resolved_path)
-predictor_path = os.path.join(script_directory, '../bitmind/dataset_processing/dlib_tools',
-                              'shape_predictor_81_face_landmarks.dat')
-
 from pretrained_ucf import UCF
 from base_miner.NPR.networks.resnet import resnet50
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 from bitmind.miner.predict import predict
 
-UCF_CONFIG_PATH = os.path.join(base_ucf_path, 'config', 'ucf.yaml')
-UCF_WEIGHTS_PATH = os.path.join(base_ucf_path, 'weights')
-UCF_CHECKPOINT_NAME = "ucf_best.pth"
+from bitmind_subnet.base_miner.UCF.config.constants import (
+    CONFIG_PATH,
+    WEIGHTS_PATH,
+    DFB_CKPT,
+    DLIB_FACE_PREDICTOR_PATH
+)
 
 class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
         try:
-            bt.logging.info(f"Loading face detection model from {UCF_WEIGHTS_PATH}")
+            bt.logging.info(f"Loading face detection model from {WEIGHTS_PATH}")
 
             # UCF for face detection
-            self.face_model = UCF(config_path=UCF_CONFIG_PATH,
-                             weights_dir=UCF_WEIGHTS_PATH,
-                             ucf_checkpoint_name=UCF_CHECKPOINT_NAME,
-                             predictor_path=predictor_path)
+            self.face_model = UCF(config_path=CONFIG_PATH,
+                             weights_dir=WEIGHTS_PATH,
+                             ucf_checkpoint_name=DFB_CKPT,
+                             predictor_path=DLIB_FACE_PREDICTOR_PATH)
 
             # NPR for general detection
             self.general_model = resnet50(num_classes=1)

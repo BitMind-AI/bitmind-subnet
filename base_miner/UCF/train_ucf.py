@@ -48,11 +48,15 @@ from huggingface_hub import hf_hub_download
 from bitmind.dataset_processing.load_split_data import load_datasets, create_real_fake_datasets
 from bitmind.image_transforms import base_transforms, random_aug_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
+from config.constants import (
+    CONFIG_PATH,
+    WEIGHTS_PATH,
+    WEIGHTS_HF_PATH,
+    BACKBONE_CKPT
+)
 
 parser = argparse.ArgumentParser(description='Process some paths.')
-parser.add_argument('--detector_path', type=str,
-                    default=os.getcwd() + '/config/ucf.yaml',
-                    help='path to detector YAML file')
+parser.add_argument('--detector_path', type=str, default=CONFIG_PATH, help='path to detector YAML file')
 parser.add_argument('--faces_only', dest='faces_only', action='store_true', default=False)
 parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', default=True)
 parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', default=True)
@@ -67,9 +71,10 @@ print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
 print(f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
 
 def ensure_backbone_is_available(logger,
-                                 weights_dir='./weights/',
-                                 model_filename='xception_best.pth',
-                                 hugging_face_repo_name='bitmind/ucf/'):
+                                 weights_dir=WEIGHTS_PATH,
+                                 model_filename=BACKBONE_CKPT,
+                                 hugging_face_repo_name=WEIGHTS_HF_PATH):
+    
     destination_path = Path(weights_dir) / Path(model_filename)
     if not destination_path.parent.exists():
         destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,8 +319,8 @@ def main():
         logger.addFilter(RankFilter(0))
 
     ensure_backbone_is_available(logger=logger,
-                             model_filename=config['pretrained'].split('/')[-1],
-                             hugging_face_repo_name='bitmind/' + config['model_name'])
+                                 model_filename=config['pretrained'].split('/')[-1],
+                                 hugging_face_repo_name='bitmind/' + config['model_name'])
     
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]

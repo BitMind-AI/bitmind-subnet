@@ -21,11 +21,19 @@ from skimage import transform as trans
 import gc
 
 from base_miner.UCF.detectors import DETECTOR
+from base_miner.UCF.config.constants import (
+    CONFIG_PATH,
+    WEIGHTS_PATH,
+    WEIGHTS_HF_PATH,
+    DFB_CKPT_NAME,
+    BACKBONE_CKPT_NAME,
+    DLIB_FACE_PREDICTOR_PATH
+)
 
 class UCF:
-    def __init__(self, config_path="./config/ucf.yaml", weights_dir="./weights/", weights_hf_repo_name="bitmind/ucf",
-                 ucf_checkpoint_name="ucf_best.pth", backbone_checkpoint_name="xception_best.pth",
-                 predictor_path = "../../bitmind/dataset_processing/dlib_tools/shape_predictor_81_face_landmarks.dat"):
+    def __init__(self, config_path=CONFIG_PATH, weights_dir=WEIGHTS_PATH, weights_hf_repo_name=WEIGHTS_HF_PATH,
+                 ucf_checkpoint_name=DFB_CKPT_NAME, backbone_checkpoint_name=BACKBONE_CKPT_NAME,
+                 predictor_path=DLIB_FACE_PREDICTOR_PATH):
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.config_path = Path(config_path)
