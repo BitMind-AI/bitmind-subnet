@@ -76,6 +76,7 @@ class UCFDetector(AbstractDetector):
 
         # head
         specific_task_number = config['specific_task_number']
+
         self.head_spe = Head(
             in_f=self.half_fingerprint_dim, 
             hidden_dim=self.encoder_feat_dim,
