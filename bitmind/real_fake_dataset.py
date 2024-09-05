@@ -1,5 +1,6 @@
 import numpy as np
-
+from torchvision import transforms as T
+import torch
 
 class RealFakeDataset:
 
@@ -9,6 +10,8 @@ class RealFakeDataset:
         fake_image_datasets: list,
         transforms=None,
         fake_prob=0.5,
+        source_label_mapping=None,
+        normalize_config=None
     ):
         """
         Initialize the RealFakeDataset instance.
@@ -18,11 +21,15 @@ class RealFakeDataset:
             fake_image_datasets (list): List of ImageDataset objects containing real images
             transforms (transforms.Compose): Image transformations (default: None).
             fake_prob (float): Probability of selecting a fake image (default: 0.5).
+            source_label_mapping (dict): A dictionary mapping dataset names to float labels.
+            normalize_config (dict): A dictionary containing mean and std for image normalization.
         """
         self.real_image_datasets = real_image_datasets
         self.fake_image_datasets = fake_image_datasets
         self.transforms = transforms
         self.fake_prob = fake_prob
+        self.source_label_mapping = source_label_mapping
+        self.normalize_config = normalize_config
 
         self._history = {
             'source': [],
@@ -30,6 +37,15 @@ class RealFakeDataset:
             'label': [],
         }
 
+    def normalize_image(self, img):
+        """
+        Normalize an image using mean and std from configs.
+        """
+        mean = self.normalize_config['mean']
+        std = self.normalize_config['std']
+        normalize = T.Normalize(mean=mean, std=std)
+        return normalize(img)
+    
     def __getitem__(self, index: int) -> tuple:
         """
         Retrieve an item (image, label) from the dataset.
@@ -39,7 +55,8 @@ class RealFakeDataset:
             index (int): Index of the item to retrieve.
 
         Returns:
-            tuple: Tuple containing the image and its label.
+            tuple: Tuple containing the image, its label (1 : fake, 0 : real),
+            and its source label (0 for real datasets and >= 1 for fake datasets).
         """
         if len(self._history['index']) > index:
             self.reset()
@@ -47,28 +64,37 @@ class RealFakeDataset:
         if np.random.rand() > self.fake_prob:
             source = self.fake_image_datasets[np.random.randint(0, len(self.fake_image_datasets))]
             image = source[index]['image']
-            label = 1.
+            label = 1.0
         else:
             source = self.real_image_datasets[np.random.randint(0, len(self.real_image_datasets))]
-            #image = source.sample(1)[0]['image']
             imgs, idx = source.sample(1)
             image = imgs[0]['image']
             index = idx[0]
-            label = 0.
+            label = 0.0
 
         self._history['source'].append(source.huggingface_dataset_path)
         self._history['label'].append(label)
         self._history['index'].append(index)
-
+        
         try:
             if self.transforms is not None:
                 image = self.transforms(image)
         except Exception as e:
             print(e)
             print(source.huggingface_dataset_path, index)
-
+            
+        if self.normalize_config:
+            if isinstance(image, torch.Tensor):
+                image = self.normalize_image(image)
+            else:
+                image = self.normalize_image(T.ToTensor()(image))
+                
+        if self.source_label_mapping:
+            source_label = self.source_label_mapping[source.huggingface_dataset_path]
+            return image, label, source_label
+            
         return image, label
-
+    
     def __len__(self) -> int:
         """
         Return the length of the dataset.
