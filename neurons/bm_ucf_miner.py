@@ -28,11 +28,11 @@ import numpy as np
 import os
 import sys
 
-from pretrained_ucf import UCF
+from base_miner.UCF.pretrained_ucf import UCF
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 
-from bitmind_subnet.base_miner.UCF.config.constants import (
+from base_miner.UCF.config.constants import (
     CONFIG_PATH,
     WEIGHTS_PATH,
     BM_CKPT,

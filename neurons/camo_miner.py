@@ -29,11 +29,11 @@ import sys
 import numpy as np
 from ultralytics import YOLO
 
-from pretrained_ucf import UCF
+from base_miner.UCF.pretrained_ucf import UCF
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 
-from bitmind_subnet.base_miner.UCF.config.constants import (
+from base_miner.UCF.config.constants import (
     CONFIG_PATH,
     BM_FACE_CKPT,
     BM_18K_CKPT,
