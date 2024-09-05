@@ -20,13 +20,6 @@ Download the repository and navigate to the folder.
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
 ```
 
-To install system dependencies like `pm2`, run our install script:
-
-```bash
-chmod +x install_system_deps.sh
-./install_system_deps.sh
-```
-
 We recommend using a Conda virtual environment to install the necessary Python packages.<br>
 You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and create a virtual environment with this command:
 
@@ -41,7 +34,8 @@ Install the remaining necessary requirements with the following chained command.
 ```bash
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
-pip install -e .
+chmod +x setup_validator_env.sh 
+./setup_validator_env.sh
 ```
 
 ### Data
