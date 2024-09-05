@@ -85,7 +85,7 @@ First, make sure to update `miner.env` with your **wallet**, **hotkey**, and **m
 MODEL_PATH=./mining_models/base.pth
 NETUID=34 # or 168 
 SUBTENSOR_NETWORK=finney # or test
-SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
+SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443 # or wss://test.finney.opentensor.ai:443/
 WALLET_NAME=default
 WALLET_HOTKEY=default
 MINER_AXON_PORT=8091
