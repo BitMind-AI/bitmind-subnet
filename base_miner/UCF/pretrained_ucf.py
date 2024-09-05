@@ -25,8 +25,8 @@ from base_miner.UCF.config.constants import (
     CONFIG_PATH,
     WEIGHTS_PATH,
     WEIGHTS_HF_PATH,
-    DFB_CKPT_NAME,
-    BACKBONE_CKPT_NAME,
+    DFB_CKPT,
+    BACKBONE_CKPT,
     DLIB_FACE_PREDICTOR_PATH
 )
 
@@ -48,7 +48,7 @@ class UCF:
                                     num of datasets of FF++)."""
     
     def __init__(self, config_path=CONFIG_PATH, weights_dir=WEIGHTS_PATH, weights_hf_repo_name=WEIGHTS_HF_PATH,
-                 ucf_checkpoint_name=DFB_CKPT_NAME, backbone_checkpoint_name=BACKBONE_CKPT_NAME,
+                 ucf_checkpoint_name=DFB_CKPT, backbone_checkpoint_name=BACKBONE_CKPT,
                  predictor_path=DLIB_FACE_PREDICTOR_PATH, specific_task_number=5):
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
