@@ -13,7 +13,7 @@ WEIGHTS_HF_PATH = "bitmind/ucf"
 DFB_CKPT = "ucf_best.pth"
 BM_CKPT = "ucf_bitmind_best.pth"
 BACKBONE_CKPT = "xception_best.pth"
-BM_FACE_CKPTE = "ucf_bitmind_face.pth"
+BM_FACE_CKPT = "ucf_bitmind_face.pth"
 BM_18K_CKPT = "ucf-bitmind-18k.pth"
 
 DLIB_FACE_PREDICTOR_PATH = os.path.abspath(os.path.join(UCF_BASE_PATH, "../../bitmind/dataset_processing/dlib_tools/shape_predictor_81_face_landmarks.dat"))
