@@ -77,6 +77,7 @@ First, make sure to update `validator.env` with your **wallet**, **hotkey**, and
 ```bash
 NETUID=34 # or 168 
 SUBTENSOR_NETWORK=finney # or test
+SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
 WALLET_NAME=default
 WALLET_HOTKEY=default
 VALIDATOR_AXON_PORT=8092
