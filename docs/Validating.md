@@ -46,7 +46,7 @@ You can download the necessary datasets by running:
 python bitmind/download_data.py
 ```
 
-- For **validators**, we recommend you do this prior to registering and running your validator. The download can take up to a few hours. Please note the minimum storage requirements specified in `min_compute.yml`.
+- For **validators**, we recommend you do this prior to registering and running your validator. Please note the minimum storage requirements specified in `min_compute.yml`.
 
 - For **miners**, this is only necessary when training a new model. Deployed miner instances do not need access to these datasets.
 
