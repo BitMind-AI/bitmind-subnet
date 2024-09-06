@@ -46,12 +46,6 @@ class ValidatorProxy:
             methods=["GET"],
             dependencies=[Depends(self.get_self)],
         )
-        self.app.add_api_route(
-            "/metagraph",
-            self.get_metagraph,
-            methods=["GET"],
-            dependencies=[Depends(self.get_self)],
-        )
 
         self.loop = asyncio.get_event_loop()
         self.proxy_counter = ProxyCounter(
