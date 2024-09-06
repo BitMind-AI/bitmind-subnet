@@ -175,11 +175,11 @@ class Miner(BaseMinerNeuron):
             image_type, faces = await self.classify_image(image, use_object_detection=False)
 
             if image_type == "face":
-                bt.logging.error("IMAGE TYPE: FACE")
+                bt.logging.info("IMAGE TYPE: FACE")
                 image_tensor = self.detectors['face'].preprocess(image, faces=faces)
                 pred = self.detectors['face'].infer(image_tensor)
             else:
-                bt.logging.error("IMAGE TYPE: GENERAL")
+                bt.logging.info("IMAGE TYPE: GENERAL")
                 image_tensor = self.detectors['general'].preprocess(image)
                 pred = self.detectors['general'].infer(image_tensor)
 
