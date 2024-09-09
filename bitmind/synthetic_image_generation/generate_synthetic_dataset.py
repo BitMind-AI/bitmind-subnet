@@ -68,6 +68,7 @@ def parse_arguments():
     --generate_synthetic_images (bool): Optional. Flag to generate synthetic images.
     --upload_synthetic_images (bool): Optional. Flag to upload synthetic images to Hugging Face.
     --hf_token (str): Required for interfacing with Hugging Face.
+    
     parser.add_argument('--start_index', type=int, default=0, help='Start index for processing the dataset.')
     parser.add_argument('--end_index', type=int, default=None, help='End index (exclusive) for processing the dataset.')
     """
@@ -89,6 +90,7 @@ def parse_arguments():
     parser.add_argument('--hf_token', type=str, default=None, help='Token for uploading to Hugging Face.')
     parser.add_argument('--start_index', type=int, default=0, required=True, help='Start index for processing the dataset. Default to the first index.')
     parser.add_argument('--end_index', type=int, default=None, required=True, help='End index for processing the dataset. Default to the last index.')
+    parser.add_argument('--gpu_id', type=int, default=0, required=True, help='Which GPU to use (check nvidia-smi -L).')
     parser.add_argument('--no-resize', action='store_false', dest='resize', help='Do not resize to target image size from BitMind constants.')
     parser.add_argument('--resize_existing', action='store_true', default=False, required=False, help='Resize existing image files.')
     return parser.parse_args()
@@ -257,7 +259,7 @@ def main():
     # Generate synthetic images to local storage.
     if args.generate_synthetic_images:
         synthetic_image_generator.image_annotation_generator.clear_gpu()
-        synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model)
+        synthetic_image_generator.load_diffuser(diffuser_name=args.diffusion_model, gpu_id=args.gpu_id)
         generate_and_save_synthetic_images(annotations_dir, synthetic_image_generator,
                                            synthetic_images_dir, args.start_index, args.end_index,
                                            batch_size=batch_size, resize=args.resize)
