@@ -142,7 +142,7 @@ class SyntheticImageGenerator:
             self.diffuser = None
 
     def load_diffuser(self, diffuser_name, gpu_id=0) -> None:
-         """
+        """
         Loads a Hugging Face diffuser model to a specific GPU.
         
         Parameters:
