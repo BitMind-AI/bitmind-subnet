@@ -53,7 +53,8 @@ class SyntheticImageGenerator:
         prompt_generator_name=PROMPT_GENERATOR_NAMES[0],
         diffuser_name=DIFFUSER_NAMES[0],
         use_random_diffuser=False,
-        image_cache_dir=None
+        image_cache_dir=None,
+        gpu_id=0
     ):
         if prompt_type not in PROMPT_TYPES:
             raise ValueError(f"Invalid prompt type '{prompt_type}'. Options are {PROMPT_TYPES}")

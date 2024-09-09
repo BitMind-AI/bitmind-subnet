@@ -59,7 +59,7 @@ HUGGINGFACE_CACHE_DIR = '/workspace/.cache/huggingface' #os.path.expanduser('~/.
 
 TARGET_IMAGE_SIZE = (256, 256)
 
-PROMPT_TYPES = ('random', 'annotation')
+PROMPT_TYPES = ('random', 'annotation', 'none')
 
 PROMPT_GENERATOR_ARGS = {
     m['model']: m for m in VALIDATOR_MODEL_META['prompt_generators']
