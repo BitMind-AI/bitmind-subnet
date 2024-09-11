@@ -30,6 +30,9 @@ from base_miner.UCF.config.constants import (
     DLIB_FACE_PREDICTOR_PATH
 )
 
+from detector_registry import DETECTOR_REGISTRY
+
+@DETECTOR_REGISTRY.register_module(module_name='UCF')
 class UCFDetector(DeepfakeDetector):
     """
     This class initializes a pretrained UCF model by loading the necessary configurations, checkpoints,

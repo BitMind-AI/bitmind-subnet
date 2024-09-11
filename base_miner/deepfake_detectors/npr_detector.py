@@ -3,7 +3,9 @@ from PIL import Image
 from base_miner.NPR.networks.resnet import resnet50
 from bitmind.image_transforms import base_transforms
 from deepfake_detector import DeepfakeDetector
+from detector_registry import DETECTOR_REGISTRY
 
+@DETECTOR_REGISTRY.register_module(module_name='NPR')
 class NPRDetector(DeepfakeDetector):
     def __init__(self, weight_path: str, model_name: str = 'NPR'):
         self.weight_path = weight_path
