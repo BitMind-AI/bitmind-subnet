@@ -28,7 +28,7 @@ import wandb
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
-from bitmind.protocol import prepare_image_synapse, b64_encode
+from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_aug_transforms
 
@@ -92,7 +92,7 @@ async def forward(self):
                 wandb_data['source_dataset'] = source_dataset
                 wandb_data['source_image_name'] = images_to_caption[0]['id']
                 wandb_data['source_image_index'] = image_indexes[0]
-                #wandb_data['image'] = wandb.Image(sample['image'])
+                wandb_data['image'] = wandb.Image(sample['image'])
                 wandb_data['prompt'] = sample['prompt']
                 if not np.any(np.isnan(sample['image'])):
                     break
@@ -104,7 +104,7 @@ async def forward(self):
             sample = self.synthetic_image_generator.generate(k=1)[0]
 
             wandb_data['model'] = self.synthetic_image_generator.diffuser_name
-            #wandb_data['image'] = wandb.Image(sample['image'])
+            wandb_data['image'] = wandb.Image(sample['image'])
             wandb_data['prompt'] = sample['prompt']
 
         else:
@@ -123,7 +123,6 @@ async def forward(self):
     )
 
     # update logging data
-    wandb_data['image'] = b64_encode(image)
     wandb_data['data_aug_params'] = data_aug_params
     wandb_data['label'] = label
     wandb_data['miner_uids'] = list(miner_uids)
