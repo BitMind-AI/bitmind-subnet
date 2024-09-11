@@ -1,6 +1,6 @@
 import torch
 from PIL import Image
-from torchvision.models import resnet50
+from base_miner.NPR.networks.resnet import resnet50
 from bitmind.image_transforms import base_transforms
 from deepfake_detector import DeepfakeDetector
 
