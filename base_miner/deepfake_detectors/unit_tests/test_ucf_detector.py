@@ -3,6 +3,8 @@ import os
 import sys
 from PIL import Image
 import numpy as np
+
+#UCFDetector class located in the parent directory
 directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)

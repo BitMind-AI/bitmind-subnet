@@ -5,7 +5,7 @@ import os
 import sys
 import numpy as np
 
-# Assuming the directory structure is set up with the NPRDetector in the parent directory
+# NPRDetector class located in the parent directory
 directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)

@@ -5,7 +5,7 @@ from PIL import Image
 import os
 import sys
 
-# Assuming the directory structure is set up with the CAMODetector in the parent directory
+#CAMODetector class located in the parent directory
 directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)
