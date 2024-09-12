@@ -30,12 +30,14 @@ class CAMODetector(DeepfakeDetector):
             'face': {'UCF': BM_FACE_CKPT},   # Default model for 'face'
             'general': {'UCF': BM_18K_CKPT}  # Default model for 'general'
         }
+        self.object_detector = YOLO("yolov8x.pt")
         super().__init__(model_name)
 
     def load_model(self):
         """
         Load detectors dynamically based on the provided configuration and registry.
         """
+        DETECTOR_REGISTRY.register_all_subclasses(DeepfakeDetector, 'deepfake_detectors')
         print(f"DETECTOR_REGISTRY: ", DETECTOR_REGISTRY.data.keys())
         for content_type, detector_info in self.detector_configs.items():
             for detector_name, weight_path in detector_info.items():
@@ -107,9 +109,11 @@ class CAMODetector(DeepfakeDetector):
         try:
             # Determine image content type.
             image_type, faces = self.classify_image(image, use_object_detection=False)
+
             image_tensor = \
             self.detectors[image_type].preprocess(image, faces=faces if image_type=="face" else None)
             pred = self.detectors[image_type].infer(image_tensor)
+
         except Exception as e:
             print("Error performing inference")
             print(e)
