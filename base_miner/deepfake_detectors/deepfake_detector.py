@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 class DeepfakeDetector(ABC):
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self.model = None
         self.load_model()
 
     @abstractmethod
