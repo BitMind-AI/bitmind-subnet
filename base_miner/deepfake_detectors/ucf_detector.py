@@ -19,8 +19,6 @@ from imutils import face_utils
 from skimage import transform as trans
 import gc
 
-from deepfake_detector import DeepfakeDetector
-from base_miner.UCF.detectors import DETECTOR
 from base_miner.UCF.config.constants import (
     CONFIG_PATH,
     WEIGHTS_PATH,
@@ -30,6 +28,8 @@ from base_miner.UCF.config.constants import (
     DLIB_FACE_PREDICTOR_PATH
 )
 
+from base_miner.UCF.detectors import DETECTOR
+from deepfake_detector import DeepfakeDetector
 from detector_registry import DETECTOR_REGISTRY
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
@@ -65,16 +65,12 @@ class UCFDetector(DeepfakeDetector):
         self.config['specific_task_number'] = specific_task_number
 
         self.face_detector = dlib.get_frontal_face_detector()
-        # self.predictor_path = predictor_path
-        # if not os.path.exists(predictor_path):
-        #     print(f"Predictor path does not exist: {predictor_path}")
         self.face_predictor = dlib.shape_predictor(predictor_path)
         
         self.init_cudnn()
         self.init_seed()
         self.ensure_weights_are_available(self.ucf_checkpoint_name)
         self.ensure_weights_are_available(self.backbone_checkpoint_name)
-        self.load_model()
         super().__init__(model_name)
 
     def ensure_weights_are_available(self, model_filename):
