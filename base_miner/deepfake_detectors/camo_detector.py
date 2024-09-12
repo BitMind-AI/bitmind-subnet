@@ -37,7 +37,7 @@ class CAMODetector(DeepfakeDetector):
         """
         Load detectors dynamically based on the provided configuration and registry.
         """
-        DETECTOR_REGISTRY.register_all_subclasses(DeepfakeDetector, 'deepfake_detectors')
+        #DETECTOR_REGISTRY.register_all_detectors(DeepfakeDetector, 'deepfake_detectors')
         print(f"DETECTOR_REGISTRY: ", DETECTOR_REGISTRY.data.keys())
         for content_type, detector_info in self.detector_configs.items():
             for detector_name, weight_path in detector_info.items():
