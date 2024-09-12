@@ -1,7 +1,8 @@
 import unittest
 import os
-from PIL import Image
 import sys
+from PIL import Image
+import numpy as np
 directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)
@@ -38,6 +39,7 @@ class TestUCFDetector(unittest.TestCase):
         preprocessed_image = self.ucf_detector.preprocess(image, faces=faces)
         output = self.ucf_detector.infer(preprocessed_image)
         print(f"Face crop and align output: {output}")
+        self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
         self.assertIsNotNone(output, "Inference output should not be None")
 
     def test_infer_general(self):
@@ -47,6 +49,7 @@ class TestUCFDetector(unittest.TestCase):
         output = self.ucf_detector.infer(preprocessed_image)
         print(f"General output: {output}")
         self.assertIsNotNone(output, "Inference output should not be None")
+        self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
 
     def test_infer_via_call(self):
         """Test the __call__ method to ensure inference is correct."""
@@ -54,6 +57,7 @@ class TestUCFDetector(unittest.TestCase):
         output = self.ucf_detector(image)
         print(f"__call__ method output: {output}")
         self.assertIsNotNone(output, "Inference output should not be None")
+        self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
 
 if __name__ == '__main__':
     unittest.main()

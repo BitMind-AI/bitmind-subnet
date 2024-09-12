@@ -3,6 +3,7 @@ import torch
 from PIL import Image
 import os
 import sys
+import numpy as np
 
 # Assuming the directory structure is set up with the NPRDetector in the parent directory
 directory = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +28,7 @@ class TestNPRDetector(unittest.TestCase):
         """Test image preprocessing."""
         image = Image.open(self.image_path)
         tensor = self.npr_detector.preprocess(image)
+        print(f"Preprocessed tensor: {tensor}")
         self.assertIsInstance(tensor, torch.Tensor, "Output should be a torch.Tensor")
         self.assertEqual(tensor.dim(), 4, "Tensor should have a dimension of 4")
         self.assertEqual(tensor.shape[1], 3, "Tensor should have 3 channels")
@@ -35,7 +37,8 @@ class TestNPRDetector(unittest.TestCase):
         """Test model inference on a preprocessed image."""
         image = Image.open(self.image_path)
         prediction = self.npr_detector(image)
-        self.assertIsInstance(prediction, float, "Output should be a float")
+        print(f"Prediction: {prediction}, Type: {type(prediction)}")
+        self.assertIsInstance(prediction, np.ndarray, "Output should be a np.ndarray containing a float value")
         self.assertTrue(0 <= prediction <= 1, "Output should be between 0 and 1")
 
 if __name__ == '__main__':

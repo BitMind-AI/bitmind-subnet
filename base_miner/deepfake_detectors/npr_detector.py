@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from PIL import Image
 from base_miner.NPR.networks.resnet import resnet50
 from bitmind.image_transforms import base_transforms
@@ -45,5 +46,5 @@ class NPRDetector(DeepfakeDetector):
         """
         image_tensor = self.preprocess(image)
         with torch.no_grad():
-            out = self.model(image_tensor).sigmoid().flatten().tolist()
-        return out[0]
+            out = np.asarray(self.model(image_tensor).sigmoid().flatten())
+        return out
