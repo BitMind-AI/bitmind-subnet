@@ -1,6 +1,5 @@
 import torch
 from PIL import Image
-from detector_registry import DETECTOR_REGISTRY
 from ultralytics import YOLO
 
 # Paths for pre-trained UCF checkpoints
@@ -8,9 +7,8 @@ from base_miner.UCF.config.constants import (
     BM_FACE_CKPT,
     BM_18K_CKPT
 )
-from deepfake_detector import DeepfakeDetector
-from ucf_detector import UCFDetector
-from npr_detector import NPRDetector
+
+from base_miner.deepfake_detectors import DETECTOR_REGISTRY, DeepfakeDetector
 
 @DETECTOR_REGISTRY.register_module(module_name='CAMO')
 class CAMODetector(DeepfakeDetector):

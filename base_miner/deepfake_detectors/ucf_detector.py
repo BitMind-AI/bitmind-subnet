@@ -29,8 +29,7 @@ from base_miner.UCF.config.constants import (
 )
 
 from base_miner.UCF.detectors import DETECTOR
-from deepfake_detector import DeepfakeDetector
-from detector_registry import DETECTOR_REGISTRY
+from base_miner.deepfake_detectors import DETECTOR_REGISTRY, DeepfakeDetector
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
 class UCFDetector(DeepfakeDetector):
