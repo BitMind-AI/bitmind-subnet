@@ -3,7 +3,8 @@ import numpy as np
 from PIL import Image
 from base_miner.NPR.networks.resnet import resnet50
 from bitmind.image_transforms import base_transforms
-from base_miner.deepfake_detectors import DETECTOR_REGISTRY, DeepfakeDetector
+from base_miner.deepfake_detectors import DeepfakeDetector
+from base_miner import DETECTOR_REGISTRY
 
 @DETECTOR_REGISTRY.register_module(module_name='NPR')
 class NPRDetector(DeepfakeDetector):

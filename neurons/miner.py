@@ -28,7 +28,7 @@ import os
 import sys
 import numpy as np
 
-from base_miner.deepfake_detectors import DETECTOR_REGISTRY
+from base_miner import DETECTOR_REGISTRY
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 

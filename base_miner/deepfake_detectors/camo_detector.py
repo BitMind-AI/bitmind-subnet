@@ -8,7 +8,8 @@ from base_miner.UCF.config.constants import (
     BM_18K_CKPT
 )
 
-from base_miner.deepfake_detectors import DETECTOR_REGISTRY, DeepfakeDetector
+from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
+from base_miner.deepfake_detectors import DeepfakeDetector
 
 @DETECTOR_REGISTRY.register_module(module_name='CAMO')
 class CAMODetector(DeepfakeDetector):
@@ -83,7 +84,6 @@ class CAMODetector(DeepfakeDetector):
             except Exception as e:
                 print(f"Error processing object detection results: {e}")
                 return 'general', None
-
             try:
                 if 'person' in detected_classes and num_faces:
                     return 'face', faces
@@ -91,7 +91,6 @@ class CAMODetector(DeepfakeDetector):
             except Exception as e:
                 print(f"Error checking detected classes: {e}")
                 return 'general', None
-
         else:
             try:
                 if num_faces:

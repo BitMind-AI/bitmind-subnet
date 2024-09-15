@@ -1,0 +1,1 @@
+from .registry import DETECTOR_REGISTRY, GATE_REGISTRY

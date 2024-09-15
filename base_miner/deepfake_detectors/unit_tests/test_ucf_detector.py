@@ -34,30 +34,47 @@ class TestUCFDetector(unittest.TestCase):
         """Test if the model is loaded properly."""
         self.assertIsNotNone(self.ucf_detector.model, "Model should not be None")
 
-    def test_infer_faces(self):
-        """Test a basic inference to ensure model outputs are correct."""
-        image = Image.open(self.image_path)
-        faces, num_faces = self.ucf_detector.detect_faces(image)
-        preprocessed_image = self.ucf_detector.preprocess(image, faces=faces)
-        output = self.ucf_detector.infer(preprocessed_image)
-        print(f"Face crop and align output: {output}")
-        self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
-        self.assertIsNotNone(output, "Inference output should not be None")
-
     def test_infer_general(self):
         """Test a basic inference to ensure model outputs are correct."""
+        self.ucf_detector = UCFDetector()
         image = Image.open(self.image_path)
         preprocessed_image = self.ucf_detector.preprocess(image)
         output = self.ucf_detector.infer(preprocessed_image)
-        print(f"General output: {output}")
+        print(f"General Output: {output}")
         self.assertIsNotNone(output, "Inference output should not be None")
         self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
 
-    def test_infer_via_call(self):
+    def test_infer_general_call(self):
         """Test the __call__ method to ensure inference is correct."""
+        self.ucf_detector = UCFDetector()
         image = Image.open(self.image_path)
         output = self.ucf_detector(image)
-        print(f"__call__ method output: {output}")
+        print(f"General __call__ method output: {output}")
+        self.assertIsNotNone(output, "Inference output should not be None")
+        self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
+    
+    def test_face_load(self):
+        """Test a basic inference to ensure model outputs are correct."""
+        self.ucf_detector = UCFDetector(gate="FACE")
+        self.assertIsNotNone(self.ucf_detector.gate, "Gate should not be None")
+    
+    def test_infer_face(self):
+        """Test a basic inference to ensure model outputs are correct."""
+        print("Face gate test")
+        self.ucf_detector = UCFDetector(gate="FACE")
+        image = Image.open(self.image_path)
+        preprocessed_image = self.ucf_detector.preprocess(image)
+        output = self.ucf_detector.infer(preprocessed_image)
+        print(f"Face Output: {output}")
+        self.assertIsNotNone(output, "Inference output should not be None")
+        self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
+
+    def test_infer_face_call(self):
+        """Test the __call__ method to ensure inference is correct."""
+        self.ucf_detector = UCFDetector(gate="FACE")
+        image = Image.open(self.image_path)
+        output = self.ucf_detector(image)
+        print(f"Face __call__ method output: {output}")
         self.assertIsNotNone(output, "Inference output should not be None")
         self.assertIsInstance(output, np.ndarray, "Output should be a np.ndarray containing a float value")
 
