@@ -2,11 +2,12 @@ from PIL import Image
 from abc import ABC, abstractmethod
 
 class Gate(ABC):
-    def __init__(self, gate_name: str):
+    def __init__(self, gate_name: str, content_type: str):
         self.gate_name = gate_name
+        self.content_type = content_type
     
     @abstractmethod
-    def detect_content_type(self, image: Image) -> str:
+    def detect_content_type(self, image: Image) -> any:
         """Detect the content type of the image."""
         pass
 

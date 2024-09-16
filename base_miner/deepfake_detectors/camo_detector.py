@@ -1,6 +1,5 @@
 import torch
 from PIL import Image
-from ultralytics import YOLO
 
 # Paths for pre-trained UCF checkpoints
 from base_miner.UCF.config.constants import (
@@ -24,20 +23,19 @@ class CAMODetector(DeepfakeDetector):
                                      the detector names to use from the registry.
         """
         self.model_name = model_name
+        self.gate = GATE_REGISTRY["GATING_MECHANISM"]()
         self.detectors = {}
         self.detector_configs = detector_configs or {
             'face': {'UCF': BM_FACE_CKPT},   # Default model for 'face'
             'general': {'UCF': BM_18K_CKPT}  # Default model for 'general'
         }
-        self.object_detector = YOLO("yolov8x.pt")
+        #self.object_detector = YOLO("yolov8x.pt")
         super().__init__(model_name)
 
     def load_model(self):
         """
         Load detectors dynamically based on the provided configuration and registry.
         """
-        #DETECTOR_REGISTRY.register_all_detectors(DeepfakeDetector, 'deepfake_detectors')
-        print(f"DETECTOR_REGISTRY: ", DETECTOR_REGISTRY.data.keys())
         for content_type, detector_info in self.detector_configs.items():
             for detector_name, weight_path in detector_info.items():
                 if detector_name in DETECTOR_REGISTRY:
@@ -50,66 +48,16 @@ class CAMODetector(DeepfakeDetector):
                 else:
                     raise ValueError(f"Detector {detector_name} not found in the registry for {content_type}.")
 
-    def classify_image(self, image, use_object_detection=True):
-        """
-        Classify the image to determine its content type.
-
-        Args:
-            image (PIL.Image): The image to analyze.
-
-        Returns:
-            str: 'face' if the image contains at least one face, otherwise 'general'.
-            list: List of detected face data, or None if no faces are detected
-        """
-
-        faces, num_faces = self.detectors['face'].detect_faces(image)
-
-        if use_object_detection:
-            try:
-                results = self.object_detector(image)
-            except Exception as e:
-                print(f"Error in object detection: {e}")
-                return 'general', None
-
-            detected_classes = []
-            try:
-                for result in results:
-                    for box in result.boxes:
-                        try:
-                            if box.conf.item() is not None and box.conf.item() > 0.5:
-                                detected_classes.append(result.names[box.cls.item()])
-                        except Exception as e:
-                            print(f"Error processing object detection box: {e}")
-                            continue
-            except Exception as e:
-                print(f"Error processing object detection results: {e}")
-                return 'general', None
-            try:
-                if 'person' in detected_classes and num_faces:
-                    return 'face', faces
-                return 'general', None
-            except Exception as e:
-                print(f"Error checking detected classes: {e}")
-                return 'general', None
-        else:
-            try:
-                if num_faces:
-                    return 'face', faces
-                return 'general', None
-            except Exception as e:
-                print(f"Error in non-object detection branch: {e}")
-                return 'general', None
-
     def __call__(
             self, image
     ) -> float:
         try:
             # Determine image content type.
-            image_type, faces = self.classify_image(image, use_object_detection=False)
+            content_type, content_data = self.gate(image, use_object_detection=False)
+            print(f"content_type: {content_type}")
+            print(f"content_data: {content_data}")
 
-            image_tensor = \
-            self.detectors[image_type].preprocess(image, faces=faces if image_type=="face" else None)
-            pred = self.detectors[image_type].infer(image_tensor)
+            pred = self.detectors[content_type](content_data)
 
         except Exception as e:
             print("Error performing inference")

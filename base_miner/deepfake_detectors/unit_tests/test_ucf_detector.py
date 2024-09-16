@@ -10,6 +10,10 @@ parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)
 
 from ucf_detector import UCFDetector
+from base_miner.UCF.config.constants import (
+    BM_FACE_CKPT,
+    BM_18K_CKPT
+)
 
 class TestUCFDetector(unittest.TestCase):
     def setUp(self):
@@ -55,13 +59,13 @@ class TestUCFDetector(unittest.TestCase):
     
     def test_face_load(self):
         """Test a basic inference to ensure model outputs are correct."""
-        self.ucf_detector = UCFDetector(gate="FACE")
+        self.ucf_detector = UCFDetector(gate="FACE", ucf_checkpoint_name=BM_FACE_CKPT)
         self.assertIsNotNone(self.ucf_detector.gate, "Gate should not be None")
     
     def test_infer_face(self):
         """Test a basic inference to ensure model outputs are correct."""
         print("Face gate test")
-        self.ucf_detector = UCFDetector(gate="FACE")
+        self.ucf_detector = UCFDetector(gate="FACE", ucf_checkpoint_name=BM_FACE_CKPT)
         image = Image.open(self.image_path)
         preprocessed_image = self.ucf_detector.preprocess(image)
         output = self.ucf_detector.infer(preprocessed_image)
@@ -71,7 +75,7 @@ class TestUCFDetector(unittest.TestCase):
 
     def test_infer_face_call(self):
         """Test the __call__ method to ensure inference is correct."""
-        self.ucf_detector = UCFDetector(gate="FACE")
+        self.ucf_detector = UCFDetector(gate="FACE", ucf_checkpoint_name=BM_FACE_CKPT)
         image = Image.open(self.image_path)
         output = self.ucf_detector(image)
         print(f"Face __call__ method output: {output}")

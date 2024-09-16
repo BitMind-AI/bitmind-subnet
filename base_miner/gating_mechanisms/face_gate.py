@@ -13,7 +13,7 @@ class FaceGate(Gate):
     def __init__(self, gate_name: str = 'FaceGate', predictor_path=DLIB_FACE_PREDICTOR_PATH):
         self.face_detector = dlib.get_frontal_face_detector()
         self.face_predictor = dlib.shape_predictor(predictor_path)
-        super().__init__(gate_name)
+        super().__init__(gate_name, "face")
 
     def get_keypts(self, image, face):
         # detect the facial landmarks for the selected face
@@ -108,8 +108,8 @@ class FaceGate(Gate):
         # Convert back to RGB
         cropped_face = cv2.cvtColor(cropped_face, cv2.COLOR_BGR2RGB)
         return cropped_face, landmark, mask_face
-
-    def detect_faces(self, image):
+    
+    def detect_content_type(self, image) -> any:
         """Detect faces in a PIL Image and return the count and the face coordinates.
 
         Args:
@@ -127,33 +127,8 @@ class FaceGate(Gate):
         faces = self.face_detector(image_np, 1)
         
         # Check if any faces were detected
-        if len(faces):
-            return faces, len(faces)
-        else:
-            return None, None
-    
-    def detect_content_type(self, image) -> str:
-        """Detect faces in a PIL Image and return the count and the face coordinates.
-
-        Args:
-            image (PIL.Image): An RGB image object.
-    
-        Returns:
-            tuple: A tuple containing the number of faces detected and their coordinates,
-                   or (None, None, None) if no faces are detected.
-        """
-        
-        # Convert RGB PIL Image to numpy array
-        image_np = np.array(image)
-    
-        # Detect faces using dlib's frontal face detector (takes RGB).
-        faces = self.face_detector(image_np, 1)
-        
-        # Check if any faces were detected
-        if len(faces):
-            return faces, len(faces)
-        else:
-            return None, None
+        if len(faces): return faces
+        return None
 
     def preprocess(self, image, faces, res=256) -> any:
         """Preprocess the image based on its content type."""
@@ -175,11 +150,11 @@ class FaceGate(Gate):
         Perform inference with the model.
 
         Args:
-            image (PIL.Image): The preprocessed image.
+            image (PIL.Image): The image to classify and preprocess if content is detected.
 
         Returns:
-            float: The model's prediction (or other relevant result).
+            image (PIL.Image): The preprocessedd 
         """
-        faces, _ = self.detect_content_type(image)
-        image_tensor = self.preprocess(image, faces, res)
-        return image_tensor
+        faces = self.detect_content_type(image)
+        processed_image = self.preprocess(image, faces, res)
+        return processed_image
