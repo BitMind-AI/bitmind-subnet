@@ -63,6 +63,9 @@ parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', de
 parser.add_argument("--ddp", action='store_true', default=False)
 parser.add_argument('--local_rank', type=int, default=0)
 parser.add_argument('--specific_tasks', type=int, default=None, help='specify the number of forgery methods')
+parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
+                    help='number of workers for data loading')
+parser.add_argument('--epochs', type=int, default=os.cpu_count() - 1, help='number of training epochs')
 
 args = parser.parse_args()
 torch.cuda.set_device(args.local_rank)
@@ -334,11 +337,15 @@ def main():
     if 'label_dict' in config:
         config2['label_dict']=config['label_dict']
     config.update(config2)
+
+    config['workers'] = args.workers
     
     config['local_rank']=args.local_rank
     if config['dry_run']:
         config['nEpochs'] = 0
         config['save_feat']=False
+
+    config['nEpochs'] = args.epochs
 
     config['split_transforms'] = {'train': {'name': 'random_aug_transforms',
                                             'transform': random_aug_transforms},
