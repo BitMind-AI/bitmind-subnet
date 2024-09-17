@@ -16,8 +16,9 @@ from huggingface_hub import hf_hub_download
 import gc
 
 from base_miner.UCF.config.constants import (
-    CONFIG_PATH,
-    WEIGHTS_PATH,
+    CONFIGS_DIR,
+    PRETRAINED_CONFIG,
+    WEIGHTS_DIR,
     WEIGHTS_HF_PATH,
     DFB_CKPT,
     BACKBONE_CKPT)
@@ -46,19 +47,19 @@ class UCFDetector(DeepfakeDetector):
                                     for UCF to disentangle (DeepfakeBench default is 5, the
                                     num of datasets of FF++)."""
     
-    def __init__(self, model_name: str = 'UCF', config_path=CONFIG_PATH, weights_dir=WEIGHTS_PATH, 
-             weights_hf_repo_name=WEIGHTS_HF_PATH, ucf_checkpoint_name=DFB_CKPT, 
-             backbone_checkpoint_name=BACKBONE_CKPT, specific_task_number=5, gate=None):
+    def __init__(self, model_name: str = 'UCF', configs_dir=CONFIGS_DIR,
+                 config_name=PRETRAINED_CONFIG, weights_dir=WEIGHTS_DIR, 
+                 weights_hf_repo_name=WEIGHTS_HF_PATH, ucf_checkpoint_name=DFB_CKPT, 
+                 backbone_checkpoint_name=BACKBONE_CKPT, gate=None):
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.config_path = Path(config_path)
+        self.configs_dir = Path(configs_dir)
+        self.config_name = config_name
         self.weights_dir = Path(weights_dir)
         self.hugging_face_repo_name = weights_hf_repo_name
         self.ucf_checkpoint_name = ucf_checkpoint_name
         self.backbone_checkpoint_name = backbone_checkpoint_name
         self.config = self.load_config()
-        self.config['specific_task_number'] = specific_task_number
-        
         self.init_cudnn()
         self.init_seed()
         self.ensure_weights_are_available(self.ucf_checkpoint_name)
@@ -80,11 +81,21 @@ class UCFDetector(DeepfakeDetector):
             print(f"{model_filename} already present at {destination_path}.")
 
     def load_config(self):
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"The config file at {self.config_path} does not exist.")
-        with self.config_path.open('r') as file:
-            return yaml.safe_load(file)
-        
+        destination_path = self.configs_dir / Path(self.config_name)
+    
+        if not destination_path.exists():
+            local_config_path = hf_hub_download(self.hugging_face_repo_name, self.config_name)
+            config_dict = {}
+            with open(local_config_path, 'r') as f:
+                config_dict = yaml.safe_load(f)
+            with open(destination_path, 'w') as f:
+                yaml.dump(config_dict, f, default_flow_style=False)
+            with destination_path.open('r') as f:
+                return yaml.safe_load(f)
+        else:
+            with destination_path.open('r') as f:
+                return yaml.safe_load(f)
+
     def init_cudnn(self):
         if self.config.get('cudnn'):
             cudnn.benchmark = True
@@ -101,12 +112,24 @@ class UCFDetector(DeepfakeDetector):
         self.model = model_class(self.config).to(self.device)
         self.model.eval()
         weights_path = self.weights_dir / self.ucf_checkpoint_name
+        checkpoint = torch.load(weights_path, map_location=self.device)
         try:
-            checkpoint = torch.load(weights_path, map_location=self.device)
             self.model.load_state_dict(checkpoint, strict=True)
-            print('Loaded checkpoint successfully.')
-        except FileNotFoundError:
-            print('Failed to load the pretrained weights.')
+        except RuntimeError as e:
+            if 'size mismatch' in str(e):
+                # Create a custom error message
+                custom_message = (
+                            "\n\n Error: Incorrect specific_task_num in model config. The 'specific_task_num' "
+                            "in 'config_path' yaml should match the value used during training. "
+                            "A mismatch results in an incorrect output layer shape for UCF's learned disentanglement"
+                            " of different forgery methods/sources.\n\n"
+                            "Solution: Use the same config.yaml to intialize UCFDetector ('config_path' arg) "
+                            "as output during training (config.yaml saved alongside weights in the training run's "
+                            "logs directory). Or simply modify your config.yaml to ensure 'specific_task_num' equals "
+                            "the value set during training (defaults to num fake training datasets + 1).\n"
+                        )
+                raise RuntimeError(custom_message) from e
+            else: raise e
     
     def preprocess(self, image, res=256):
         """Preprocess the image for model inference.

@@ -6,10 +6,12 @@ UCF_CONFIGS_DIR = os.path.dirname(os.path.abspath(__file__))
 # The base directory for UCF-related files, i.e., UCF directory
 UCF_BASE_PATH = os.path.abspath(os.path.join(UCF_CONFIGS_DIR, ".."))  # Points to bitmind-subnet/base_miner/UCF/
 # Absolute paths for the required files and directories
-CONFIG_PATH = os.path.join(UCF_BASE_PATH, "config/ucf.yaml")  # Path to the ucf.yaml file
-WEIGHTS_PATH = os.path.join(UCF_BASE_PATH, "weights/")        # Path to pretrained weights directory
+CONFIGS_DIR = os.path.join(UCF_BASE_PATH, "config/")
+CONFIG_PATH = os.path.join(CONFIGS_DIR, "ucf.yaml")  # Path to the ucf.yaml file
+WEIGHTS_DIR = os.path.join(UCF_BASE_PATH, "weights/") # Path to pretrained weights directory
 
 WEIGHTS_HF_PATH = "bitmind/ucf"
+PRETRAINED_CONFIG = "pretrained_config.yaml"
 DFB_CKPT = "ucf_best.pth"
 BM_CKPT = "ucf_bitmind_best.pth"
 BACKBONE_CKPT = "xception_best.pth"
