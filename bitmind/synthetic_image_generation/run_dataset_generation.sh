@@ -37,7 +37,7 @@ for (( i=0; i<$NUM_GPUS; i++ )); do
         --download_annotations \
         --generate_synthetic_images \
         --upload_synthetic_images \
-        --hf_token "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" \
+        --hf_token "$HF_TOKEN" \
         --start_index $gpu_start_index \
         --end_index $gpu_end_index \
         --gpu_id $i
