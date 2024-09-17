@@ -65,7 +65,7 @@ parser.add_argument('--local_rank', type=int, default=0)
 parser.add_argument('--specific_tasks', type=int, default=None, help='specify the number of forgery methods')
 parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
                     help='number of workers for data loading')
-parser.add_argument('--epochs', type=int, default=os.cpu_count() - 1, help='number of training epochs')
+parser.add_argument('--epochs', type=int, default=5, help='number of training epochs')
 
 args = parser.parse_args()
 torch.cuda.set_device(args.local_rank)
