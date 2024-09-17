@@ -27,6 +27,12 @@ VALIDATOR_MODEL_META = {
     ],
     "diffusers": [
         {
+            "path": "stabilityai/stable-diffusion-xl-base-1.0",
+            "use_safetensors": True,
+            "variant": "fp16",
+            "pipeline": "StableDiffusionXLPipeline"
+        },
+        {
             "path": "black-forest-labs/FLUX.1-schnell",
             "use_safetensors": True,
             "torch_dtype": torch.bfloat16,
