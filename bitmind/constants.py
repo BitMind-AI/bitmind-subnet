@@ -29,6 +29,7 @@ VALIDATOR_MODEL_META = {
         {
             "path": "stabilityai/stable-diffusion-xl-base-1.0",
             "use_safetensors": True,
+            "torch_dtype": torch.float16,
             "variant": "fp16",
             "pipeline": "StableDiffusionXLPipeline"
         },
