@@ -62,7 +62,6 @@ parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', de
 parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', default=True)
 parser.add_argument("--ddp", action='store_true', default=False)
 parser.add_argument('--local_rank', type=int, default=0)
-parser.add_argument('--task_target', type=str, default="", help='specify the target of current training task')
 parser.add_argument('--specific_tasks', type=int, default=None, help='specify the number of forgery methods')
 
 args = parser.parse_args()
@@ -284,17 +283,16 @@ def main():
         
     # create logger
     timenow=datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    task_str = ""
     
-    if 'task_target' in config.keys():
-        task_str = f"_{config['task_target']}" if config['task_target'] is not None else ""
-    logger_path =  os.path.join(
+    outputs_dir =  os.path.join(
                 config['log_dir'],
-                config['model_name'] + task_str + '_' + timenow
+                config['model_name'] + '_' + timenow
             )
-    os.makedirs(logger_path, exist_ok=True)
-    logger = create_logger(os.path.join(logger_path, 'training.log'))
-    logger.info('Save log to {}'.format(logger_path))
+    
+    os.makedirs(outputs_dir, exist_ok=True)
+    logger = create_logger(os.path.join(outputs_dir, 'training.log'))
+    config['log_dir'] = outputs_dir
+    logger.info('Save log to {}'.format(outputs_dir))
     
     config['ddp']= args.ddp
     # print configuration
@@ -340,7 +338,7 @@ def main():
 
     # prepare the data loaders
     train_loader, val_loader, test_loader = prepare_datasets(config, logger)
-
+    
     # start training
     start_time = log_start_time(logger, "Training")
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):

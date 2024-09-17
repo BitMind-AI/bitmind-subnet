@@ -45,7 +45,6 @@ class Trainer(object):
         scheduler,
         logger,
         metric_scoring='auc',
-        time_now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S'),
         swa_model=None
         ):
         # check if all the necessary components are implemented
@@ -67,23 +66,15 @@ class Trainer(object):
         )
         self.speed_up()  # move model to GPU
 
-        # get current time
-        self.timenow = time_now
         # create directory path
-        if 'task_target' not in config:
-            self.log_dir = os.path.join(
-                self.config['log_dir'],
-                self.config['model_name'] + '_' + self.timenow
-            )
-        else:
-            task_str = f"_{config['task_target']}" if config['task_target'] is not None else ""
-            self.log_dir = os.path.join(
-                self.config['log_dir'],
-                self.config['model_name'] + task_str + '_' + self.timenow
-            )
+        self.log_dir = self.config['log_dir']
+        print("Making dir ", self.log_dir)
         os.makedirs(self.log_dir, exist_ok=True)
 
     def get_writer(self, phase, dataset_key, metric_key):
+        phase = phase.split('/')[-1]
+        dataset_key = dataset_key.split('/')[-1]
+        metric_key = metric_key.split('/')[-1]
         writer_key = f"{phase}-{dataset_key}-{metric_key}"
         if writer_key not in self.writers:
             # update directory path
@@ -98,7 +89,6 @@ class Trainer(object):
             # update writers dictionary
             self.writers[writer_key] = SummaryWriter(writer_path)
         return self.writers[writer_key]
-
 
     def speed_up(self):
         self.model.to(device)
@@ -132,7 +122,8 @@ class Trainer(object):
                 "=> no model found at '{}'".format(model_path))
 
     def save_ckpt(self, phase, dataset_key,ckpt_info=None):
-        save_dir = os.path.join(self.log_dir, phase, dataset_key)
+        #save_dir = os.path.join(self.log_dir, phase, dataset_key)
+        save_dir = self.log_dir
         os.makedirs(save_dir, exist_ok=True)
         ckpt_name = f"ckpt_best.pth"
         save_path = os.path.join(save_dir, ckpt_name)
@@ -154,7 +145,6 @@ class Trainer(object):
         save_path = os.path.join(save_dir, ckpt_name)
         torch.save(self.swa_model.state_dict(), save_path)
         self.logger.info(f"SWA Checkpoint saved to {save_path}")
-
 
     def save_feat(self, phase, fea, dataset_key):
         save_dir = os.path.join(self.log_dir, phase, dataset_key)
@@ -270,7 +260,9 @@ class Trainer(object):
                         continue
                     loss_str += f"training-loss, {k}: {v_avg}    "
                     # tensorboard-1. loss
-                    writer = self.get_writer('train', ','.join(self.config['train_dataset']), k)
+                    processed_train_dataset = [dataset.split('/')[-1] for dataset in self.config['train_dataset']]
+                    processed_train_dataset = ','.join(processed_train_dataset)
+                    writer = self.get_writer('train', processed_train_dataset, k)
                     writer.add_scalar(f'train_loss/{k}', v_avg, global_step=step_cnt)
                 self.logger.info(loss_str)
                 # info for metric
@@ -282,7 +274,9 @@ class Trainer(object):
                         continue
                     metric_str += f"training-metric, {k}: {v_avg}    "
                     # tensorboard-2. metric
-                    writer = self.get_writer('train', ','.join(self.config['train_dataset']), k)
+                    processed_train_dataset = [dataset.split('/')[-1] for dataset in self.config['train_dataset']]
+                    processed_train_dataset = ','.join(processed_train_dataset)
+                    writer = self.get_writer('train', processed_train_dataset, k)
                     writer.add_scalar(f'train_metric/{k}', v_avg, global_step=step_cnt)
                 self.logger.info(metric_str)
 
@@ -373,6 +367,7 @@ class Trainer(object):
             # Save checkpoint, feature, and metrics if specified in config
             if eval_stage=='validation' and self.config['save_ckpt'] and key not in FFpp_pool:
                 self.save_ckpt(eval_stage, key, f"{epoch}+{iteration}")
+                
             self.save_metrics(eval_stage, metric_one_dataset, key)
         if losses_one_dataset_recorder is not None:
             # info for each dataset
