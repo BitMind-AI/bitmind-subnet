@@ -4,13 +4,13 @@ import numpy as np
 from PIL import Image
 import os
 import sys
+from camo_detector import CAMODetector
+
 
 #CAMODetector class located in the parent directory
 directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)
-
-from camo_detector import CAMODetector
 
 class TestCAMODetector(unittest.TestCase):
     def setUp(self):

@@ -4,7 +4,7 @@ import os
 CONFIGS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # The base directory for UCF-related files, i.e., UCF directory
-UCF_BASE_PATH = os.path.abspath(os.path.join(UCF_CONFIGS_DIR, ".."))  # Points to bitmind-subnet/base_miner/UCF/
+UCF_BASE_PATH = os.path.abspath(os.path.join(CONFIGS_DIR, ".."))  # Points to bitmind-subnet/base_miner/UCF/
 # Absolute paths for the required files and directories
 CONFIG_PATH = os.path.join(CONFIGS_DIR, "ucf.yaml")  # Path to the ucf.yaml file
 WEIGHTS_DIR = os.path.join(UCF_BASE_PATH, "weights/") # Path to pretrained weights directory

@@ -15,19 +15,13 @@ from PIL import Image
 from huggingface_hub import hf_hub_download
 import gc
 
-from base_miner.UCF.config.constants import (
-    CONFIGS_DIR,
-    PRETRAINED_CONFIG,
-    WEIGHTS_DIR,
-    WEIGHTS_HF_PATH,
-    DFB_CKPT,
-    BACKBONE_CKPT)
-
+from base_miner.UCF.config.constants import CONFIGS_DIR, WEIGHTS_DIR
 from base_miner.gating_mechanisms import FaceGate
 
 from base_miner.UCF.detectors import DETECTOR
 from base_miner.deepfake_detectors import DeepfakeDetector
 from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
+
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
 class UCFDetector(DeepfakeDetector):
@@ -37,54 +31,37 @@ class UCFDetector(DeepfakeDetector):
     loads the specified weights, and initializes the face detector and predictor from dlib.
 
     Attributes:
-        config_path (str): Path to the configuration YAML file for the UCF model.
-        weights_dir (str): Directory path where UCF and Xception backbone weights are stored.
-        weights_hf_repo_name (str): Name of the Hugging Face repository containing the model weights.
-        ucf_checkpoint_name (str): Filename of the UCF model checkpoint.
-        backbone_checkpoint_name (str): Filename of the backbone model checkpoint.
-        predictor_path (str): Path to the dlib face predictor file.
-        specific_task_number (int): Number of different fake training dataset/forgery methods
-                                    for UCF to disentangle (DeepfakeBench default is 5, the
-                                    num of datasets of FF++)."""
+        config_path (str): Path to the configuration YAML file for the UCF detector"""
     
-    def __init__(self, model_name: str = 'UCF', configs_dir=CONFIGS_DIR,
-                 config_name=PRETRAINED_CONFIG, weights_dir=WEIGHTS_DIR, 
-                 weights_hf_repo_name=WEIGHTS_HF_PATH, ucf_checkpoint_name=DFB_CKPT, 
-                 backbone_checkpoint_name=BACKBONE_CKPT, gate=None):
-        
+    def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml'):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.configs_dir = Path(configs_dir)
-        self.config_name = config_name
-        self.weights_dir = Path(weights_dir)
-        self.hugging_face_repo_name = weights_hf_repo_name
-        self.ucf_checkpoint_name = ucf_checkpoint_name
-        self.backbone_checkpoint_name = backbone_checkpoint_name
-        self.config = self.load_config()
+        self.load_and_apply_config(config)
+        self.train_config = self.load_train_config()
         self.init_cudnn()
         self.init_seed()
-        self.ensure_weights_are_available(self.ucf_checkpoint_name)
-        self.ensure_weights_are_available(self.backbone_checkpoint_name)
-        self.gate = GATE_REGISTRY[gate]() if gate else None
+        self.ensure_weights_are_available(self.weights)
+        self.ensure_weights_are_available(self.backbone_weights)
+        self.gate = GATE_REGISTRY[self.gate_name]() if self.gate_name else None
         super().__init__(model_name)
-
+    
     def ensure_weights_are_available(self, model_filename):
-        destination_path = self.weights_dir / model_filename
+        destination_path = Path(WEIGHTS_DIR) / model_filename
         if not destination_path.parent.exists():
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             print(f"Created directory {destination_path.parent}.")
         if not destination_path.exists():
-            model_path = hf_hub_download(self.hugging_face_repo_name, model_filename)
+            model_path = hf_hub_download(self.hf_repo, model_filename)
             model = torch.load(model_path, map_location=self.device)
             torch.save(model, destination_path)
             print(f"Downloaded {model_filename} to {destination_path}.")
         else:
             print(f"{model_filename} already present at {destination_path}.")
 
-    def load_config(self):
-        destination_path = self.configs_dir / Path(self.config_name)
+    def load_train_config(self):
+        destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
     
         if not destination_path.exists():
-            local_config_path = hf_hub_download(self.hugging_face_repo_name, self.config_name)
+            local_config_path = hf_hub_download(self.hf_repo, self.train_config)
             config_dict = {}
             with open(local_config_path, 'r') as f:
                 config_dict = yaml.safe_load(f)
@@ -97,21 +74,21 @@ class UCFDetector(DeepfakeDetector):
                 return yaml.safe_load(f)
 
     def init_cudnn(self):
-        if self.config.get('cudnn'):
+        if self.train_config.get('cudnn'):
             cudnn.benchmark = True
 
     def init_seed(self):
-        seed_value = self.config.get('manualSeed')
+        seed_value = self.train_config.get('manualSeed')
         if seed_value:
             random.seed(seed_value)
             torch.manual_seed(seed_value)
             torch.cuda.manual_seed_all(seed_value)
 
     def load_model(self):
-        model_class = DETECTOR[self.config['model_name']]
-        self.model = model_class(self.config).to(self.device)
+        model_class = DETECTOR[self.train_config['model_name']]
+        self.model = model_class(self.train_config).to(self.device)
         self.model.eval()
-        weights_path = self.weights_dir / self.ucf_checkpoint_name
+        weights_path = Path(WEIGHTS_DIR) / self.weights
         checkpoint = torch.load(weights_path, map_location=self.device)
         try:
             self.model.load_state_dict(checkpoint, strict=True)
@@ -145,7 +122,7 @@ class UCFDetector(DeepfakeDetector):
         transform = transforms.Compose([
             transforms.Resize((res, res), interpolation=Image.LANCZOS),  # Resize image to specified resolution.
             transforms.ToTensor(),  # Convert the image to a PyTorch tensor.
-            transforms.Normalize(mean=self.config['mean'], std=self.config['std'])  # Normalize the image tensor.
+            transforms.Normalize(mean=self.train_config['mean'], std=self.train_config['std'])  # Normalize the image tensor.
         ])
         
         # Apply transformations and add a batch dimension for model inference.

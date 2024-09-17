@@ -1,0 +1,10 @@
+# UCFDetector Generalist Configuration
+
+model_name: 'UCF'  # Name of the model
+hf_repo: 'bitmind/ucf'  # Hugging Face repository for downloading model weights
+train_config: 'pretrained_config.yaml'  # Name of the pre-trained configuration file
+weights: 'ucf-bitmind-30k.pth'  # Filename of the UCF model checkpoint
+backbone_weights: 'xception_best.pth'  # Filename of the backbone model checkpoint
+
+# Gating mechanism (if any)
+gate_name: null  # Gate mechanism to apply on images before processing, can be None if not used

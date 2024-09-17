@@ -1,7 +1,10 @@
-import torch
-from PIL import Image
 import typing
 from abc import ABC, abstractmethod
+from pathlib import Path
+import yaml
+import torch
+from PIL import Image
+
 
 class DeepfakeDetector(ABC):
     def __init__(self, model_name: str):
@@ -40,4 +43,23 @@ class DeepfakeDetector(ABC):
         Returns:
             float: The model's prediction (or other relevant result).
         """
-        pass
+
+    def load_and_apply_config(self, detector_config):
+        """
+        Load detector configuration from YAML file and set corresponding attributes dynamically.
+        
+        Args:
+            config_path (str): Path to the YAML configuration file.
+        """
+        detector_config_file = Path(__file__).resolve().parent / Path('configs/' + detector_config)
+        try:
+            with open(detector_config_file, 'r') as file:
+                config_dict = yaml.safe_load(file)
+
+            # Set class attributes dynamically from the config dictionary
+            for key, value in config_dict.items():
+                setattr(self, key, value)  # Dynamically create self.key = value
+            
+        except Exception as e:
+            print(f"Error loading detector configurations from {detector_config_file}: {e}")
+            raise

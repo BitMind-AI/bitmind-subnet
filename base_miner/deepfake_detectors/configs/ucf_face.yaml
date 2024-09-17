@@ -1,0 +1,4 @@
+# UCFDetector Face Expert Configuration
+
+model_name: 'UCF'  # Name of the model
+weight_path: '
