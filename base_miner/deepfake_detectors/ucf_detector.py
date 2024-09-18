@@ -44,18 +44,18 @@ class UCFDetector(DeepfakeDetector):
         self.gate = GATE_REGISTRY[self.gate_name]() if self.gate_name else None
         super().__init__(model_name)
     
-    def ensure_weights_are_available(self, model_filename):
-        destination_path = Path(WEIGHTS_DIR) / model_filename
+    def ensure_weights_are_available(self, weight_filename):
+        destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
         if not destination_path.parent.exists():
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             print(f"Created directory {destination_path.parent}.")
         if not destination_path.exists():
-            model_path = hf_hub_download(self.hf_repo, model_filename)
+            model_path = hf_hub_download(self.hf_repo, weight_filename)
             model = torch.load(model_path, map_location=self.device)
             torch.save(model, destination_path)
-            print(f"Downloaded {model_filename} to {destination_path}.")
+            print(f"Downloaded {weight_filename} to {destination_path}.")
         else:
-            print(f"{model_filename} already present at {destination_path}.")
+            print(f"{weight_filename} already present at {destination_path}.")
 
     def load_train_config(self):
         destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
@@ -135,7 +135,7 @@ class UCFDetector(DeepfakeDetector):
         """ Perform inference using the model. """
         with torch.no_grad():
             self.model({'image': image_tensor}, inference=True)
-        return self.model.prob[-1]
+        return np.asarray(self.model.prob)
 
     def __call__(self, image: Image) -> float:
         image_tensor = self.preprocess(image)
