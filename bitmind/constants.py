@@ -9,7 +9,8 @@ DATASET_META = {
     "real": [
         {"path": "bitmind/open-images-v7", "create_splits": False},
         {"path": "bitmind/ffhq-256", "create_splits": False},
-        {"path": "bitmind/celeb-a-hq", "create_splits": False}
+        {"path": "bitmind/celeb-a-hq", "create_splits": False},
+        {"path": "bitmind/MS-COCO-unique-256", "create_splits": False}
     ],
     "fake": [
         {"path": "bitmind/realvis-xl", "create_splits": False},

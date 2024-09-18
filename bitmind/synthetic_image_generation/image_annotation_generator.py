@@ -37,9 +37,8 @@ class ImageAnnotationGenerator:
         self.text_moderation_model_name = text_moderation_model_name
         self.text_moderation_pipeline = None
         
-        self.load_models()
-
     def load_models(self):
+        start = time.time()
         self.model = Blip2ForConditionalGeneration.from_pretrained(
             self.model_name, 
             torch_dtype=torch.float16, 
@@ -55,6 +54,7 @@ class ImageAnnotationGenerator:
                 device_map="auto"
             )
         bt.logging.info(f"Loaded {self.text_moderation_model_name}.")
+        print(f"Annotation loading: {time.time()-start}")
 
     def clear_gpu(self):
         bt.logging.debug(f"Clearing GPU memory after generating image annotation")
