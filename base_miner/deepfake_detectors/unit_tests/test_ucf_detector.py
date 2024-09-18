@@ -4,14 +4,13 @@ import sys
 from PIL import Image
 import numpy as np
 from pathlib import Path
-from ucf_detector import UCFDetector
-from base_miner.UCF.config.constants import CONFIGS_DIR, WEIGHTS_DIR
-
-
+from base_miner.UCF.config.constants import WEIGHTS_DIR
 #UCFDetector class located in the parent directory
 directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)
+from ucf_detector import UCFDetector
+
 
 class TestUCFDetector(unittest.TestCase):
     def setUp(self):
