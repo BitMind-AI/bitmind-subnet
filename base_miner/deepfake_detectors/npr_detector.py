@@ -12,18 +12,17 @@ from base_miner.NPR.config.constants import WEIGHTS_DIR
 
 @DETECTOR_REGISTRY.register_module(module_name='NPR')
 class NPRDetector(DeepfakeDetector):
-    def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml'):
-        self.load_and_apply_config(config)
-        self.ensure_weights_are_available(self.weights)
-        super().__init__(model_name)
+    def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml', cuda: bool = False):
+        super().__init__(model_name, config, cuda)
 
     def load_model(self):
         """
         Load the ResNet50 model with the specified weights for deepfake detection.
         """
+        self.ensure_weights_are_available(self.weights)
         self.model = resnet50(num_classes=1)
         print(f"Loading detector model from {Path(WEIGHTS_DIR) / self.weights}")
-        self.model.load_state_dict(torch.load(Path(WEIGHTS_DIR) / self.weights, map_location='cpu'))
+        self.model.load_state_dict(torch.load(Path(WEIGHTS_DIR) / self.weights, map_location=self.device))
         self.model.eval()
 
     def ensure_weights_are_available(self, weight_filename):

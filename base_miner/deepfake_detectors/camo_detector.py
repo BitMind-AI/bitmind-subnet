@@ -8,15 +8,14 @@ from base_miner.deepfake_detectors import DeepfakeDetector
 
 @DETECTOR_REGISTRY.register_module(module_name='CAMO')
 class CAMODetector(DeepfakeDetector):
-    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml'):
+    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', cuda: bool = True):
         """
         Initialize the CAMODetector with dynamic model selection based on config.
         """
         self.model_name = model_name
-        self.load_and_apply_config(config)
         self.gate = GATE_REGISTRY["GATING_MECHANISM"]()
         self.detectors = {}
-        super().__init__(model_name)
+        super().__init__(model_name, config, cuda)
     
     def load_model(self):
         """
@@ -30,7 +29,8 @@ class CAMODetector(DeepfakeDetector):
                 print(f"Loading {model_name} model for {content_type} detection with config {detector_config}.")
                 self.detectors[content_type] = DETECTOR_REGISTRY[model_name](
                     model_name=f'{model_name}_{content_type.capitalize()}',
-                    config=detector_config
+                    config=detector_config,
+                    cuda=self.device
                 )
             else:
                 raise ValueError(f"Detector {model_name} not found in the registry for {content_type}.")

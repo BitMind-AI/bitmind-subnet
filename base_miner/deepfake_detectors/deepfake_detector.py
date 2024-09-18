@@ -7,8 +7,11 @@ from PIL import Image
 
 
 class DeepfakeDetector(ABC):
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, config = None, cuda: bool = False):
         self.model_name = model_name
+        use_cuda = cuda and torch.cuda.is_available()
+        self.device = torch.device("cuda" if use_cuda else "cpu")
+        if config: self.load_and_apply_config(config)
         self.load_model()
 
     @abstractmethod

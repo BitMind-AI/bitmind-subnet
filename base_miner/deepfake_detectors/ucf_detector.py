@@ -33,16 +33,10 @@ class UCFDetector(DeepfakeDetector):
     Attributes:
         config_path (str): Path to the configuration YAML file for the UCF detector"""
     
-    def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml'):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.load_and_apply_config(config)
-        self.train_config = self.load_train_config()
-        self.init_cudnn()
-        self.init_seed()
-        self.ensure_weights_are_available(self.weights)
-        self.ensure_weights_are_available(self.backbone_weights)
-        self.gate = GATE_REGISTRY[self.gate_name]() if self.gate_name else None
-        super().__init__(model_name)
+    def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', cuda: bool = True):
+        super().__init__(model_name, config, cuda)
+        if self.gate_name: self.gate = GATE_REGISTRY[self.gate_name]()
+        else: self.gate = None
     
     def ensure_weights_are_available(self, weight_filename):
         destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
@@ -85,6 +79,11 @@ class UCFDetector(DeepfakeDetector):
             torch.cuda.manual_seed_all(seed_value)
 
     def load_model(self):
+        self.train_config = self.load_train_config()
+        self.init_cudnn()
+        self.init_seed()
+        self.ensure_weights_are_available(self.weights)
+        self.ensure_weights_are_available(self.backbone_weights)
         model_class = DETECTOR[self.train_config['model_name']]
         self.model = model_class(self.train_config).to(self.device)
         self.model.eval()
