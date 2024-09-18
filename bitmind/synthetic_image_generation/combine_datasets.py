@@ -2,11 +2,13 @@ import argparse
 from datasets import load_dataset, concatenate_datasets
 from utils.hugging_face_utils import dataset_exists_on_hf, upload_to_huggingface
 
+
 def calculate_splits(total_items, num_splits):
     """Calculate and return list of tuples with start and end indices for each split."""
     chunk_size = total_items // num_splits
     return [(i * chunk_size, (i + 1) * chunk_size - 1) if i < num_splits - 1 
             else (i * chunk_size, total_items - 1) for i in range(num_splits)]
+    
 
 def load_and_combine_datasets(hf_org, dataset_name, model, px, splits):
     dataset_parts = []
@@ -27,6 +29,7 @@ def load_and_combine_datasets(hf_org, dataset_name, model, px, splits):
     combined_dataset = concatenate_datasets(dataset_parts, split='train')
     print("All datasets combined successfully.")
     return combined_dataset
+    
 
 def parse_arguments():
     """
@@ -52,6 +55,7 @@ def parse_arguments():
     args = parser.parse_args()
     return args
 
+
 def main():
     args = parse_arguments()
     combined_dataset_name = f"{args.hf_org}/{args.dataset_name}___{args.model_name}"
@@ -71,6 +75,7 @@ def main():
         print(f"Uploading {combined_dataset_name} to Hugging Face.")
         upload_to_huggingface(combined_dataset, combined_dataset_name, args.hf_token)
         print(f"Finished uploading {combined_dataset_name} to Hugging Face.")
+        
 
 if __name__ == "__main__":
     main()

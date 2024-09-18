@@ -44,7 +44,6 @@ import bittensor as bt
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
-
 class SyntheticImageGenerator:
 
     def __init__(
@@ -170,7 +169,19 @@ class SyntheticImageGenerator:
 
     def generate_image_caption(self, image_sample) -> str:
         """
-
+        Generates a descriptive caption for a given image sample.
+    
+        This function takes an image sample as input, processes the image using a pre-trained
+        model, and returns a generated caption describing the content of the image.
+    
+        Args:
+            image_sample (dict): A dictionary containing information about the image to be processed.
+                It includes:
+                    - 'source' (str): The dataset or source name of the image.
+                    - 'id' (int/str): The unique identifier of the image.
+    
+        Returns:
+            str: A descriptive caption generated for the input image.
         """
         self.image_annotation_generator.load_models()
         annotation = self.image_annotation_generator.process_image(

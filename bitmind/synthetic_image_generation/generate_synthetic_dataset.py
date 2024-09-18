@@ -192,6 +192,7 @@ def generate_and_save_synthetic_images(annotations_dir, synthetic_image_generato
     duration = time.time() - start_time
     print(f"All {total_images} synthetic images generated in {duration:.2f} seconds.")
     print(f"Mean synthetic images generation time: {duration/max(total_images, 1):.2f} seconds.")
+    
 
 def main():
     args = parse_arguments()
