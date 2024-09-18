@@ -2,7 +2,6 @@
 
 The `base_miner/` directory facilitates the training, orchestration, and deployment of modular and highly customizable deepfake detectors.
 
-
 ## Directory Structure
 
 ### 1. Architectures and Training

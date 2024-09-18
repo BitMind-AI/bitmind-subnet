@@ -122,7 +122,6 @@ class Trainer(object):
                 "=> no model found at '{}'".format(model_path))
 
     def save_ckpt(self, phase, dataset_key,ckpt_info=None):
-        #save_dir = os.path.join(self.log_dir, phase, dataset_key)
         save_dir = self.log_dir
         os.makedirs(save_dir, exist_ok=True)
         ckpt_name = f"ckpt_best.pth"
@@ -367,7 +366,6 @@ class Trainer(object):
             # Save checkpoint, feature, and metrics if specified in config
             if eval_stage=='validation' and self.config['save_ckpt'] and key not in FFpp_pool:
                 self.save_ckpt(eval_stage, key, f"{epoch}+{iteration}")
-                
             self.save_metrics(eval_stage, metric_one_dataset, key)
         if losses_one_dataset_recorder is not None:
             # info for each dataset
