@@ -4,13 +4,12 @@ from PIL import Image
 import os
 import sys
 import numpy as np
-
 # NPRDetector class located in the parent directory
 directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)
-
 from npr_detector import NPRDetector
+
 
 class TestNPRDetector(unittest.TestCase):
     def setUp(self):
@@ -18,7 +17,7 @@ class TestNPRDetector(unittest.TestCase):
         self.script_dir = os.path.dirname(__file__)
         # Set the path of the sample image
         self.image_path = os.path.join(self.script_dir, 'sample_image.jpg')
-        self.npr_detector = NPRDetector(weight_path=os.path.join(directory, 'base_npr_weights.pth'))
+        self.npr_detector = NPRDetector()
 
     def test_load_model(self):
         """Test if the model loads properly with the given weight path."""
