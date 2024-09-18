@@ -14,13 +14,17 @@ parent_directory = os.path.dirname(directory)
 sys.path.append(parent_directory)
 
 from miner import Miner
+from bitmind.base.miner import BaseMinerNeuron
+#from bitmind.base.neuron import BaseNeuron
 from bitmind.protocol import ImageSynapse
 
 class TestMiner(unittest.TestCase):
 
     def setUp(self):
         """Set up the necessary components for testing the Miner."""
+
         self.miner = Miner.__new__(Miner) # Create an instance of the Miner class without initialization
+        self.miner.config = self.miner.config()
         self.script_dir = os.path.dirname(__file__)
         self.image_path = os.path.join(self.script_dir, 'sample_image.jpg')
         
