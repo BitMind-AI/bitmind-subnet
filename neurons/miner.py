@@ -39,7 +39,10 @@ class Miner(BaseMinerNeuron):
         self.load_detector()
 
     def load_detector(self):
-        self.deepfake_detector = DETECTOR_REGISTRY["CAMO"]()
+        self.deepfake_detector = DETECTOR_REGISTRY[self.config.neuron.detector](
+            config=self.config.neuron.detector_config,
+            cuda=self.config.neuron.device
+        )
     
     async def forward(
         self, synapse: ImageSynapse
