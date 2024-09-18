@@ -50,8 +50,8 @@ from bitmind.image_transforms import base_transforms, random_aug_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
 from config.constants import (
     CONFIG_PATH,
-    WEIGHTS_PATH,
-    WEIGHTS_HF_PATH,
+    WEIGHTS_DIR,
+    HF_REPO,
     BACKBONE_CKPT
 )
 
@@ -73,9 +73,9 @@ print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
 print(f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
 
 def ensure_backbone_is_available(logger,
-                                 weights_dir=WEIGHTS_PATH,
+                                 weights_dir=WEIGHTS_DIR,
                                  model_filename=BACKBONE_CKPT,
-                                 hugging_face_repo_name=WEIGHTS_HF_PATH):
+                                 hugging_face_repo_name=HF_REPO):
     
     destination_path = Path(weights_dir) / Path(model_filename)
     if not destination_path.parent.exists():
