@@ -7,6 +7,7 @@ The `base_miner/` directory facilitates the training, orchestration, and deploym
 
 ### 1. Architectures and Training
 - **UCF/** and **NPR/**
+
 These folders contain model architectures and training loops for `UCF (ICCV 2023)` and `NPR (CVPR 2024)`, adapted to use curated and preprocessed training datasets on our [BitMind Huggingface](https://huggingface.co/bitmind).
 
 ### 2. deepfake_detectors/
@@ -17,7 +18,7 @@ The modular structure for detectors used in the miner neuron is defined here, th
   - **Abstract Base Class**: A foundational class that outlines the standard structure for implementing detectors.
   - **Detector Subclasses**: Specialized detector implementations that can be dynamically loaded and managed based on configuration.
 
-The DeepfakeDetector design allows for high configurability and extension.
+The `DeepfakeDetector design` allows for high configurability and extension.
 
 ### 3. gating_mechanisms/
 Similar to `deepfake_detectors/`, this folder contains abstract base classes and implementations of `Gate`s that are used to handle content-aware preprocessing and routing. This is especially useful for multi-agent detection systems, such as the `DeepfakeDetector` subclass `CAMODetector` in `deepfake_detectors/camo_detector.py`*.
