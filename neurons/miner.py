@@ -32,6 +32,7 @@ from base_miner import DETECTOR_REGISTRY
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
 
+
 class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):

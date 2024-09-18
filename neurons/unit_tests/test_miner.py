@@ -15,7 +15,6 @@ sys.path.append(parent_directory)
 
 from miner import Miner
 from bitmind.base.miner import BaseMinerNeuron
-#from bitmind.base.neuron import BaseNeuron
 from bitmind.protocol import ImageSynapse
 
 class TestMiner(unittest.TestCase):
