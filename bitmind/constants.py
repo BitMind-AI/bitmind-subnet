@@ -35,16 +35,17 @@ VALIDATOR_MODEL_META = {
             "pipeline": "StableDiffusionXLPipeline"
         },
         {
-            "path": "black-forest-labs/FLUX.1-schnell",
+            "path": "SG161222/RealVisXL_V4.0",
             "use_safetensors": True,
-            "torch_dtype": torch.bfloat16,
-            "generate_args": {
-                "guidance_scale": 0.0,
-                "num_inference_steps": 1,
-                "generator": torch.Generator("cuda")
-            },
-            "enable_cpu_offload": True,
-            "pipeline": "FluxPipeline"
+            "torch_dtype": torch.float16,
+            "variant": "fp16",
+            "pipeline": "StableDiffusionXLPipeline"
+        },
+        {
+            "path": "Corcelio/mobius",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "pipeline": "StableDiffusionXLPipeline"
         },
         {
             "path": 'black-forest-labs/FLUX.1-dev',
@@ -52,10 +53,10 @@ VALIDATOR_MODEL_META = {
             "torch_dtype": torch.bfloat16,
             "generate_args": {
                 "guidance_scale": 2,
-                "num_inference_steps": 100, #{"min": 50, "max": 200},
+                "num_inference_steps": {"min": 50, "max": 125},
                 "generator": torch.Generator("cuda"),
-                "height": 512, #[512, 768, 1024, 1360],
-                "width": 512 #[512, 768, 1024, 1360]
+                "height": [512, 768],
+                "width": [512, 768]
             },
             "enable_cpu_offload": False,
             "pipeline": "FluxPipeline"
