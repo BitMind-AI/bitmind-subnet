@@ -26,12 +26,15 @@ from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
 class UCFDetector(DeepfakeDetector):
     """
-    This class initializes a pretrained UCF model by loading the necessary configurations, checkpoints,
-    and  face detection tools required for training and inference. It sets up the device (CPU or GPU), 
-    loads the specified weights, and initializes the face detector and predictor from dlib.
-
+    DeepfakeDetector subclass that initializes a pretrained UCF model
+    for binary classification of fake and real images.
+    
     Attributes:
-        config_path (str): Path to the configuration YAML file for the UCF detector"""
+        model_name (str): Name of the detector instance.
+        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+                      attributes from.
+        cuda (bool): Whether to enable cuda (GPU).
+    """
     
     def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', cuda: bool = True):
         super().__init__(model_name, config, cuda)

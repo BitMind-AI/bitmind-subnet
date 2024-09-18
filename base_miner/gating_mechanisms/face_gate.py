@@ -8,8 +8,17 @@ from base_miner.gating_mechanisms import Gate
 from base_miner.UCF.config.constants import DLIB_FACE_PREDICTOR_PATH
 from base_miner import GATE_REGISTRY
 
+
 @GATE_REGISTRY.register_module(module_name='FACE')
 class FaceGate(Gate):
+    """
+    Gate subclass for face content detection and preprocessing.
+
+    Attributes:
+        gate_name (str): The name of the gate.
+        predictor_path (str): Path to dlib face landmark model.
+    """
+    
     def __init__(self, gate_name: str = 'FaceGate', predictor_path=DLIB_FACE_PREDICTOR_PATH):
         self.face_detector = dlib.get_frontal_face_detector()
         self.face_predictor = dlib.shape_predictor(predictor_path)

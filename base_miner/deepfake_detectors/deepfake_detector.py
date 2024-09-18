@@ -7,6 +7,20 @@ from PIL import Image
 
 
 class DeepfakeDetector(ABC):
+    """
+    Abstract base class for detecting deepfake images via binary classification.
+
+    This class is intended to be subclassed by detector implementations
+    using different underying model architectures, routing via gates, or 
+    configurations.
+    
+    Attributes:
+        model_name (str): Name of the detector instance.
+        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+                      instance attributes from.
+        cuda (bool): Whether to enable cuda (GPU).
+    """
+    
     def __init__(self, model_name: str, config = None, cuda: bool = False):
         self.model_name = model_name
         use_cuda = cuda and torch.cuda.is_available()

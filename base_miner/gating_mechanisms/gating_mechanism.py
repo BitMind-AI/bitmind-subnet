@@ -5,8 +5,22 @@ from base_miner.gating_mechanisms import Gate, FaceGate
 from base_miner import GATE_REGISTRY
 from ultralytics import YOLO
 
+
 @GATE_REGISTRY.register_module(module_name='GATING_MECHANISM')
 class GatingMechanism(Gate):
+    """
+    This Gate subclass orchestrates multi-gate content detection
+    and content-specific preprocessing.
+
+    This is useful for routing images to appropriate detectors
+    trained to handle different content types in a mixture-of-experts
+    framework such as Content-Aware Model Orchestration (CAMO).
+
+    Attributes:
+        gate_name (str): The name of the gate.
+        gate_config (dict): Dictionary of gate subclasses.
+    """
+    
     def __init__(self, gate_name: str = 'GatingMechanism', gate_config = GATE_REGISTRY):
         self.gate_config = gate_config.data.copy()
         del self.gate_config['GATING_MECHANISM']

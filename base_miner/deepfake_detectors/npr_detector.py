@@ -12,6 +12,17 @@ from base_miner.NPR.config.constants import WEIGHTS_DIR
 
 @DETECTOR_REGISTRY.register_module(module_name='NPR')
 class NPRDetector(DeepfakeDetector):
+    """
+    DeepfakeDetector subclass that initializes a pretrained NPR model
+    for binary classification of fake and real images.
+    
+    Attributes:
+        model_name (str): Name of the detector instance.
+        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+                      attributes from.
+        cuda (bool): Whether to enable cuda (GPU).
+    """
+    
     def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml', cuda: bool = False):
         super().__init__(model_name, config, cuda)
 

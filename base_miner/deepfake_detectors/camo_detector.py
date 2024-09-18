@@ -8,6 +8,23 @@ from base_miner.deepfake_detectors import DeepfakeDetector
 
 @DETECTOR_REGISTRY.register_module(module_name='CAMO')
 class CAMODetector(DeepfakeDetector):
+    """
+    This DeepfakeDetector subclass implements Content-Aware Model Orchestration
+    (CAMO), a mixture-of-experts approach to the binary classification of
+    real and fake images, breaking the classification problem into content-specific
+    subproblems.
+    
+    The subproblems are solved by using a GatingMechanism to route image
+    content to appropriate DeepfakeDetector subclass instance(s) that
+    initialize models pretrained to handle the content type.
+    
+    Attributes:
+        model_name (str): Name of the detector instance.
+        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+                      attributes from.
+        cuda (bool): Whether to enable cuda (GPU).
+    """
+    
     def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', cuda: bool = True):
         """
         Initialize the CAMODetector with dynamic model selection based on config.
