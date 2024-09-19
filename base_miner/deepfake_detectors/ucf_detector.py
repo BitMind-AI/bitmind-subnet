@@ -45,14 +45,10 @@ class UCFDetector(DeepfakeDetector):
         destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
         if not destination_path.parent.exists():
             destination_path.parent.mkdir(parents=True, exist_ok=True)
-            print(f"Created directory {destination_path.parent}.")
         if not destination_path.exists():
             model_path = hf_hub_download(self.hf_repo, weight_filename)
             model = torch.load(model_path, map_location=self.device)
             torch.save(model, destination_path)
-            print(f"Downloaded {weight_filename} to {destination_path}.")
-        else:
-            print(f"{weight_filename} already present at {destination_path}.")
 
     def load_train_config(self):
         destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
@@ -145,8 +141,6 @@ class UCFDetector(DeepfakeDetector):
     
     def free_memory(self):
         """ Frees up memory by setting model and large data structures to None. """
-        print("Freeing up memory...")
-
         if self.model is not None:
             self.model.cpu()  # Move model to CPU to free up GPU memory (if applicable)
             del self.model
@@ -165,5 +159,3 @@ class UCFDetector(DeepfakeDetector):
         # If using GPUs and PyTorch, clear the cache as well
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        
-        print("Memory freed successfully.")

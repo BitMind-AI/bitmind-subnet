@@ -43,7 +43,6 @@ class CAMODetector(DeepfakeDetector):
             detector_config = detector_info['detector_config']
             
             if model_name in DETECTOR_REGISTRY:
-                print(f"Loading {model_name} model for {content_type} detection with config {detector_config}.")
                 self.detectors[content_type] = DETECTOR_REGISTRY[model_name](
                     model_name=f'{model_name}_{content_type.capitalize()}',
                     config=detector_config,
@@ -58,12 +57,7 @@ class CAMODetector(DeepfakeDetector):
         try:
             # Determine image content type.
             content_type, content_data = self.gate(image, use_object_detection=False)
-            print(f"content_type: {content_type}")
-            print(f"content_data: {content_data}")
-
             pred = self.detectors[content_type](content_data)
-
         except Exception as e:
-            print("Error performing inference")
-            print(e)
+            print(f"Error performing inference: {e}")
         return pred

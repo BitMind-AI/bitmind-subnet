@@ -32,7 +32,6 @@ class NPRDetector(DeepfakeDetector):
         """
         self.ensure_weights_are_available(self.weights)
         self.model = resnet50(num_classes=1)
-        print(f"Loading detector model from {Path(WEIGHTS_DIR) / self.weights}")
         self.model.load_state_dict(torch.load(Path(WEIGHTS_DIR) / self.weights, map_location=self.device))
         self.model.eval()
 
@@ -40,14 +39,10 @@ class NPRDetector(DeepfakeDetector):
         destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
         if not destination_path.parent.exists():
             destination_path.parent.mkdir(parents=True, exist_ok=True)
-            print(f"Created directory {destination_path.parent}.")
         if not destination_path.exists():
             model_path = hf_hub_download(self.hf_repo, weight_filename)
             model = torch.load(model_path)
             torch.save(model, destination_path)
-            print(f"Downloaded {weight_filename} to {destination_path}.")
-        else:
-            print(f"{weight_filename} already present at {destination_path}.")
     
     def preprocess(self, image: Image) -> torch.Tensor:
         """
@@ -75,5 +70,4 @@ class NPRDetector(DeepfakeDetector):
         image_tensor = self.preprocess(image)
         with torch.no_grad():
             out = np.asarray(self.model(image_tensor).sigmoid().flatten())
-        print(out.shape)
         return out

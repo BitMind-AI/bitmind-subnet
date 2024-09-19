@@ -35,11 +35,9 @@ class GatingMechanism(Gate):
         """
         for gate_name in self.gate_config.keys():
             try:
-                print(f"Loading {gate_name} gate.")
                 self.gates[gate_name] = self.gate_config[gate_name]()
             except Exception as e:
-                print(f"Gate {gate_name} not found in the registry.")
-                print(e)
+                print(f"Gate {gate_name} not found in the registry: {e}")
     
     def classify_image(self, image, use_object_detection=True):
         """
@@ -57,7 +55,6 @@ class GatingMechanism(Gate):
             gate_results[gate_name] = {"content": self.gates[gate_name].detect_content_type(image),
                                         "processed_image": self.gates[gate_name](image)}
 
-        print(f"gate_results: {gate_results}")
         if use_object_detection:
             try:
                 results = self.object_detector(image)
