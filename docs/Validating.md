@@ -11,7 +11,7 @@
 
 **Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
 
-**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). A GPU is recommended for training, although not required for basic inference.
+**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). 
 
 ### Installation
 
@@ -46,7 +46,7 @@ You can download the necessary datasets by running:
 python bitmind/download_data.py
 ```
 
-- For **validators**, we recommend you do this prior to registering and running your validator. The download can take up to a few hours. Please note the minimum storage requirements specified in `min_compute.yml`.
+- For **validators**, we recommend you do this prior to registering and running your validator. Please note the minimum storage requirements specified in `min_compute.yml`.
 
 - For **miners**, this is only necessary when training a new model. Deployed miner instances do not need access to these datasets.
 
