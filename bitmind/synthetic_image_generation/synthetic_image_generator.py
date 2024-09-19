@@ -144,7 +144,7 @@ class SyntheticImageGenerator:
             torch.cuda.empty_cache()
             self.diffuser = None
 
-    def load_diffuser(self, diffuser_name, gpu_id=0) -> None:
+    def load_diffuser(self, diffuser_name, gpu_id=None) -> None:
         """
         Loads a Hugging Face diffuser model to a specific GPU.
         
@@ -165,7 +165,9 @@ class SyntheticImageGenerator:
         self.diffuser.set_progress_bar_config(disable=True)
         if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
             self.diffuser.enable_model_cpu_offload()
-        else:
+        elif not gpu_id:
+            self.diffuser.to("cuda")
+        elif gpu_id:
             self.diffuser.to(f"cuda:{gpu_id}")
 
         bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
