@@ -16,7 +16,3 @@ datasets==2.20.0
 accelerate==0.33.0
 tensorboardx==2.6.2.2
 tf-keras==2.17.0
-httpx==0.27.0
-wandb==0.17.6
-sentencepiece
-bitsandbytes==0.43.3
