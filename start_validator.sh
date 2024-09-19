@@ -15,7 +15,6 @@ fi
 pm2 start python --name bitmind_validator -- neurons/validator.py \
   --netuid $NETUID \
   --subtensor.network $SUBTENSOR_NETWORK \
-  --subtensor.chain_endpoint $SUBTENSOR_CHAIN_ENDPOINT \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
   --axon.port $VALIDATOR_AXON_PORT

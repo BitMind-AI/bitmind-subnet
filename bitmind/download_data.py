@@ -38,11 +38,7 @@ def fix_permissions(path):
         print(f"Failed to fix permissions for {path}: {e}")
 
 
-def download_dataset(dataset_path,
-                     download_mode: str,
-                     cache_dir: str,
-                     max_wait: int = 300,
-                     name: str = None):
+def download_dataset(dataset_path, download_mode: str, cache_dir: str, max_wait: int = 300):
     """ Downloads the datasets present in datasets.json with exponential backoff
         download_mode: either 'force_redownload' or 'use_cache_if_exists'
         cache_dir: huggingface cache directory. ~/.cache/huggingface by default 
@@ -52,17 +48,11 @@ def download_dataset(dataset_path,
     print(f"Downloading {dataset_path} dataset...")
     while True:
         try:
-            if name:
-                dataset = load_dataset(dataset_path,
-                                       name=name, #config/subset name
-                                       cache_dir=cache_dir,
-                                       download_mode=download_mode,
-                                       trust_remote_code=True)
-            else:
-                dataset = load_dataset(dataset_path,
-                                       cache_dir=cache_dir,
-                                       download_mode=download_mode,
-                                       trust_remote_code=True)
+            dataset = load_dataset(
+                dataset_path,
+                cache_dir=cache_dir,
+                download_mode=download_mode,
+                trust_remote_code=True)
             break
         except Exception as e:
             print(e)

@@ -24,6 +24,13 @@ Download the repository and navigate to the folder.
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
 ```
 
+To install system dependencies like `pm2`, run our install script:
+
+```bash
+chmod +x install_system_deps.sh
+./install_system_deps.sh
+```
+
 We recommend using a Conda virtual environment to install the necessary Python packages.<br>
 You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install). Note that after you run the last commands in the miniconda setup process, you'll be prompted to start a new shell session to complete the initialization. 
 
@@ -35,13 +42,12 @@ conda create -y -n bitmind python=3.10 ipython jupyter ipykernel
 
 To activate your virtual environment, run `conda activate bitmind`. To deactivate, `conda deactivate`.
 
-Install the remaining necessary requirements with the following chained command. This may take a few minutes to complete.
+Install the remaining necessary requirements with the following chained command.
 
 ```bash
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
-chmod +x setup_miner_env.sh 
-./setup_miner_env.sh
+pip install -e .
 ```
 
 ### Data
@@ -77,16 +83,14 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ## Mining
 
-You can launch your miner with `run_neuron.py`.
+You can launch your validator with `run_neuron.py`.
 
-First, make sure to update `miner.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
+First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
 
 ```bash
 MODEL_PATH=./mining_models/base.pth
-NEURON_PATH=./neurons/npr_miner.py
 NETUID=34 # or 168 
 SUBTENSOR_NETWORK=finney # or test
-SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443 # or wss://test.finney.opentensor.ai:443/
 WALLET_NAME=default
 WALLET_HOTKEY=default
 MINER_AXON_PORT=8091
@@ -113,10 +117,10 @@ If you want to outperform the base model, you'll need to train on more data or t
 
 ## Train
 
-To train a model, you can start with our base training script. If you prefer a notebook environment, you can use `base_miner/NPR/train_detector.ipynb`
+To train a model, you can start with our base training script. If you prefer a notebook environment, you can use `base_miner/train_detector.ipynb`
 
 ```python
-cd base_miner/NPR/ && python train_detector.py
+cd base_miner && python train_detector.py
 ```
 
 - The model with the lowest validation accuracy will be saved to `base_miner/checkpoints/<experiment_name>/model_epoch_best.pth`.<br>

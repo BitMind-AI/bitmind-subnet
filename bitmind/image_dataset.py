@@ -12,15 +12,15 @@ class ImageDataset:
     def __init__(
         self,
         huggingface_dataset_path: str,
-        huggingface_dataset_split: str = 'train',
-        huggingface_dataset_name: str = None,
+        huggingface_datset_split: str = 'train',
+        huggingface_datset_name: str = None,
         create_splits: bool = False,
         download_mode: str = None
     ):
         """
         Args:
             huggingface_dataset_path (str): Path to the Hugging Face dataset. Can either be to a publicly hosted
-                huggingface dataset (<organizatoin>/<dataset-name>) or a local directory (imagefolder:<path/to/directory>)
+                huggingface datset (<organizatoin>/<datset-name>) or a local directory (imagefolder:<path/to/directory>)
             huggingface_dataset_split (str): Split of the dataset to load (default: 'train').
                 Make sure to check what splits are available for the datasets you're working with.
             huggingface_dataset_name (str): Name of the Hugging Face dataset (default: None).
@@ -33,9 +33,9 @@ class ImageDataset:
                 can be None or "force_redownload"
         """
         self.huggingface_dataset_path = huggingface_dataset_path
-        self.huggingface_dataset_name = huggingface_dataset_name
+        self.huggingface_datset_name = huggingface_datset_name
         self.dataset = load_huggingface_dataset(
-            huggingface_dataset_path, huggingface_dataset_split, huggingface_dataset_name, create_splits, download_mode)
+            huggingface_dataset_path, huggingface_datset_split, huggingface_datset_name, create_splits, download_mode)
         self.sampled_images_idx = []
 
     def __getitem__(self, index: int) -> dict:
