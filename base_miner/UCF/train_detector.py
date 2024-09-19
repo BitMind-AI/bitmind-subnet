@@ -62,10 +62,9 @@ parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', de
 parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', default=True)
 parser.add_argument("--ddp", action='store_true', default=False)
 parser.add_argument('--local_rank', type=int, default=0)
-parser.add_argument('--specific_tasks', type=int, default=None, help='specify the number of forgery methods')
 parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
                     help='number of workers for data loading')
-parser.add_argument('--epochs', type=int, default=5, help='number of training epochs')
+parser.add_argument('--epochs', type=int, default=None, help='number of training epochs')
 
 args = parser.parse_args()
 torch.cuda.set_device(args.local_rank)
@@ -345,7 +344,7 @@ def main():
         config['nEpochs'] = 0
         config['save_feat']=False
 
-    config['nEpochs'] = args.epochs
+    if args.epochs: config['nEpochs'] = args.epochs
 
     config['split_transforms'] = {'train': {'name': 'random_aug_transforms',
                                             'transform': random_aug_transforms},
@@ -360,9 +359,7 @@ def main():
     config['save_ckpt'] = args.save_ckpt
     config['save_feat'] = args.save_feat
 
-    if args.specific_tasks:
-        config['specific_task_number'] = args.specific_tasks
-    else: config['specific_task_number'] = len(config['dataset_meta']["fake"]) + 1
+    config['specific_task_number'] = len(config['dataset_meta']["fake"]) + 1
     
     if config['lmdb']:
         config['dataset_json_folder'] = 'preprocessing/dataset_json_v3'
@@ -381,12 +378,6 @@ def main():
     logger.info('Save log to {}'.format(outputs_dir))
     
     config['ddp']= args.ddp
-    # print configuration
-    logger.info("--------------- Configuration ---------------")
-    params_string = "Parameters: \n"
-    for key, value in config.items():
-        params_string += "{}: {}".format(key, value) + "\n"
-    logger.info(params_string)
 
     # init seed
     init_seed(config)
@@ -425,6 +416,13 @@ def main():
     # prepare the data loaders
     train_loader, val_loader, test_loader = prepare_datasets(config, logger)
 
+    # print configuration
+    logger.info("--------------- Configuration ---------------")
+    params_string = "Parameters: \n"
+    for key, value in config.items():
+        params_string += "{}: {}".format(key, value) + "\n"
+    logger.info(params_string)
+    
     # save training configs
     save_config(config, outputs_dir)
     
