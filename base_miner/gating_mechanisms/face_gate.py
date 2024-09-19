@@ -156,13 +156,13 @@ class FaceGate(Gate):
     
     def __call__(self, image: Image, res=256) -> any:
         """
-        Perform inference with the model.
+        Perform face detection and image aligning and cropping to the face.
 
         Args:
             image (PIL.Image): The image to classify and preprocess if content is detected.
 
         Returns:
-            image (PIL.Image): The preprocessedd 
+            image (PIL.Image): The processed face image or original image if no faces.
         """
         faces = self.detect_content_type(image)
         processed_image = self.preprocess(image, faces, res)
