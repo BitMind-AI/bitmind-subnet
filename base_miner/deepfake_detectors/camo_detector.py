@@ -29,10 +29,9 @@ class CAMODetector(DeepfakeDetector):
         """
         Initialize the CAMODetector with dynamic model selection based on config.
         """
-        self.model_name = model_name
-        self.gate = GATE_REGISTRY["GATING_MECHANISM"]()
         self.detectors = {}
         super().__init__(model_name, config, cuda)
+        self.gate = GATE_REGISTRY["GATING_MECHANISM"](object_detection=self.object_detection)
     
     def load_model(self):
         """
@@ -56,7 +55,7 @@ class CAMODetector(DeepfakeDetector):
     ) -> float:
         try:
             # Determine image content type.
-            content_type, content_data = self.gate(image, use_object_detection=False)
+            content_type, content_data = self.gate(image)
             pred = self.detectors[content_type](content_data)
         except Exception as e:
             print(f"Error performing inference: {e}")

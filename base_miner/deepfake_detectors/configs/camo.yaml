@@ -1,4 +1,5 @@
 # CAMO Configuration
+object_detection: False
 content_type:
   general:
     model: 'UCF'
