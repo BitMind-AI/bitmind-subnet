@@ -7,3 +7,4 @@ CONFIGS_DIR = os.path.dirname(os.path.abspath(__file__))
 NPR_BASE_PATH = os.path.abspath(os.path.join(CONFIGS_DIR, ".."))  # Points to dfd-arena/detectors/NPR/
 # Absolute paths for the required files and directories
 WEIGHTS_DIR = os.path.join(NPR_BASE_PATH, "weights/") # Path to pretrained weights directory
+
