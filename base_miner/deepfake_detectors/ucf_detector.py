@@ -38,8 +38,6 @@ class UCFDetector(DeepfakeDetector):
     
     def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', cuda: bool = True):
         super().__init__(model_name, config, cuda)
-        if self.gate_name: self.gate = GATE_REGISTRY[self.gate_name]()
-        else: self.gate = None
     
     def ensure_weights_are_available(self, weight_filename):
         destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
@@ -112,7 +110,6 @@ class UCFDetector(DeepfakeDetector):
         Returns:
             torch.Tensor: The preprocessed image tensor, ready for model inference.
         """
-        if self.gate: image = self.gate(image, res)
         # Convert image to RGB format to ensure consistent color handling.
         image = image.convert('RGB')
     
@@ -133,7 +130,7 @@ class UCFDetector(DeepfakeDetector):
         """ Perform inference using the model. """
         with torch.no_grad():
             self.model({'image': image_tensor}, inference=True)
-        return np.asarray(self.model.prob)
+        return self.model.prob[-1]
 
     def __call__(self, image: Image) -> float:
         image_tensor = self.preprocess(image)
