@@ -78,6 +78,9 @@ class ImageDataset:
         if 'url' in sample:
             image = download_image(sample['url'])
             image_id = sample['url']
+        elif 'image_url' in sample:
+            image = download_image(sample['image_url'])
+            image_id = sample['image_url']
         elif 'image' in sample:
             if isinstance(sample['image'], Image.Image):
                 image = sample['image']
