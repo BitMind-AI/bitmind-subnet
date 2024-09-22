@@ -1,67 +1,11 @@
 from PIL import Image
 import numpy as np
-import cv2
 import dlib
-from imutils import face_utils
-from skimage import transform as trans
+
 from detectors.gating_mechanisms import Gate
 from detectors.UCF.config.constants import DLIB_FACE_PREDICTOR_PATH
 from detectors import GATE_REGISTRY
-
-
-def img_align_crop(img, landmark=None, outsize=None, scale=1.3, mask=None):
-    """
-    align and crop the face according to the given bbox and landmarks
-    landmark: 5 key points
-    """
-
-    M = None
-    target_size = [112, 112]
-    dst = np.array([
-        [30.2946, 51.6963],
-        [65.5318, 51.5014],
-        [48.0252, 71.7366],
-        [33.5493, 92.3655],
-        [62.7299, 92.2041]], dtype=np.float32)
-
-    if target_size[1] == 112:
-        dst[:, 0] += 8.0
-
-    dst[:, 0] = dst[:, 0] * outsize[0] / target_size[0]
-    dst[:, 1] = dst[:, 1] * outsize[1] / target_size[1]
-
-    target_size = outsize
-
-    margin_rate = scale - 1
-    x_margin = target_size[0] * margin_rate / 2.
-    y_margin = target_size[1] * margin_rate / 2.
-
-    # move
-    dst[:, 0] += x_margin
-    dst[:, 1] += y_margin
-
-    # resize
-    dst[:, 0] *= target_size[0] / (target_size[0] + 2 * x_margin)
-    dst[:, 1] *= target_size[1] / (target_size[1] + 2 * y_margin)
-
-    src = landmark.astype(np.float32)
-
-    # use skimage transformation
-    tform = trans.SimilarityTransform()
-    tform.estimate(src, dst)
-    M = tform.params[0:2, :]
-
-    img = cv2.warpAffine(img, M, (target_size[1], target_size[0]))
-
-    if outsize is not None:
-        img = cv2.resize(img, (outsize[1], outsize[0]))
-
-    if mask is not None:
-        mask = cv2.warpAffine(mask, M, (target_size[1], target_size[0]))
-        mask = cv2.resize(mask, (outsize[1], outsize[0]))
-        return img, mask
-    else:
-        return img, None
+from face_utils import get_face_landmarks, align_and_crop_face
 
 
 @GATE_REGISTRY.register_module(module_name='FACE')
@@ -79,21 +23,6 @@ class FaceGate(Gate):
         self.face_predictor = dlib.shape_predictor(predictor_path)
         super().__init__(gate_name, "face")
 
-    def get_keypts(self, image, face):
-        # detect the facial landmarks for the selected face
-        shape = self.face_predictor(image, face)
-        
-        # select the key points for the eyes, nose, and mouth
-        leye = np.array([shape.part(37).x, shape.part(37).y]).reshape(-1, 2)
-        reye = np.array([shape.part(44).x, shape.part(44).y]).reshape(-1, 2)
-        nose = np.array([shape.part(30).x, shape.part(30).y]).reshape(-1, 2)
-        lmouth = np.array([shape.part(49).x, shape.part(49).y]).reshape(-1, 2)
-        rmouth = np.array([shape.part(55).x, shape.part(55).y]).reshape(-1, 2)
-        
-        pts = np.concatenate([leye, reye, nose, lmouth, rmouth], axis=0)
-
-        return pts
-
     def align_and_crop_largest_face(
             self,
             image: np.ndarray,
@@ -105,8 +34,9 @@ class FaceGate(Gate):
         face = max(faces, key=lambda rect: rect.width() * rect.height())
         
         # Get the landmarks/parts for the face in box d only with the five key points
-        landmarks = self.get_keypts(image, face)
-        cropped_face, mask_face = img_align_crop(image, landmarks, outsize=(res, res), mask=mask)
+        face_shape = self.face_predictor(image, face)
+        landmarks = get_face_landmarks(face_shape)
+        cropped_face, mask_face = align_and_crop_face(image, landmarks, outsize=(res, res), mask=mask)
         #return cv2.cvtColor(cropped_face, cv2.COLOR_RGB2BGR)
         return cropped_face
 
