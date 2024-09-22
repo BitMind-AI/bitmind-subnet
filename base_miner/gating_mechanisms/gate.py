@@ -1,5 +1,6 @@
 from PIL import Image
 from abc import ABC, abstractmethod
+import numpy as np
 
 
 class Gate(ABC):
@@ -21,7 +22,7 @@ class Gate(ABC):
         self.content_type = content_type
 
     @abstractmethod
-    def preprocess(self, image: Image) -> any:
+    def preprocess(self, image: np.array) -> any:
         """Preprocess the image based on its content type."""
         return image
 

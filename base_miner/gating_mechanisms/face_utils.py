@@ -5,12 +5,11 @@ import cv2
 
 def get_face_landmarks(face):
     """
-
     Args:
-        face:
+        face: dlib face rectangle object for face
 
     Returns:
-
+        numpy array containing key points for eyes, nose and mouth
     """
     leye = np.array([face.part(37).x, face.part(37).y]).reshape(-1, 2)
     reye = np.array([face.part(44).x, face.part(44).y]).reshape(-1, 2)
@@ -20,10 +19,21 @@ def get_face_landmarks(face):
     return np.concatenate([leye, reye, nose, lmouth, rmouth], axis=0)
 
 
-def align_and_crop_face(img, landmarks, outsize, scale=1.3, mask=None):
+def align_and_crop_face(
+        img: np.ndarray,
+        landmarks: np.ndarray, outsize: tuple, scale=1.3, mask=None):
     """
-    align and crop the face according to the given bbox and landmarks
-    landmark: 5 key points
+    Align and crop the face according to the given landmarks
+    Args:
+        img: input image containing the face
+        landmarks: 5 key points of face, determined by get_face_landmarks
+        outsize: size to use in scaling
+        scale: margin
+        mask: optional face mask to transform alongside the face
+
+    Returns:
+        cropped and aligned face, optionally with a correspondingly
+         cropped and aligned mask
     """
     target_size = [112, 112]
     dst = np.array([

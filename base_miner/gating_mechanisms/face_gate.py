@@ -1,4 +1,5 @@
 from PIL import Image
+from _dlib_pybind11 import rectangles
 import numpy as np
 import dlib
 
@@ -23,30 +24,27 @@ class FaceGate(Gate):
         self.face_predictor = dlib.shape_predictor(predictor_path)
         super().__init__(gate_name, "face")
 
-    def align_and_crop_largest_face(
-            self,
-            image: np.ndarray,
-            faces: np.ndarray,
-            res=256,
-            mask=None):
-    
+    def preprocess(self, image: np.ndarray, faces: rectangles, res=256) -> any:
+        """
+        Align and crop the largest face in the image
+
+        Args:
+            image: Input image array
+            faces: Output out of a dlib face detection model
+            res: NxN image size
+
+        Returns:
+            preprocessed image with largest face aligned and cropped
+        """
+
         # For now only take the biggest face
         face = max(faces, key=lambda rect: rect.width() * rect.height())
-        
+
         # Get the landmarks/parts for the face in box d only with the five key points
         face_shape = self.face_predictor(image, face)
         landmarks = get_face_landmarks(face_shape)
-        cropped_face, mask_face = align_and_crop_face(image, landmarks, outsize=(res, res), mask=mask)
-        #return cv2.cvtColor(cropped_face, cv2.COLOR_RGB2BGR)
-        return cropped_face
-
-    def preprocess(self, image: np.ndarray, faces: np.ndarray, res=256) -> any:
-        """Preprocess the image based on its content type."""
-
-        # If faces are detected, crop and align the largest face.
-        cropped_face = self.align_and_crop_largest_face(
-            image, faces, res=res, mask=None
-        )
+        cropped_face, _ = align_and_crop_face(image, landmarks, outsize=(res, res))
+        # return cv2.cvtColor(cropped_face, cv2.COLOR_RGB2BGR)
         
         # Convert the cropped face back to a PIL Image if cropping was successful.
         if cropped_face is not None:
