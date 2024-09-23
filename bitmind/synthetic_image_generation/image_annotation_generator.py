@@ -20,10 +20,57 @@ disable_progress_bar()
 
 
 class ImageAnnotationGenerator:
+    """
+    A class responsible for generating text annotations for images using a transformer-based image captioning model.
+    It integrates text moderation to ensure the descriptions are concise and neutral.
+
+    Attributes:
+        device (torch.device): The device (CPU or GPU) on which the models are loaded.
+        model_name (str): The name of the BLIP model for generating image captions.
+        processor (Blip2Processor): The processor associated with the BLIP model.
+        model (Blip2ForConditionalGeneration): The BLIP model used for generating image captions.
+        apply_moderation (bool): Flag to determine whether text moderation should be applied to captions.
+        text_moderation_model_name (str): The name of the model used for moderating text descriptions.
+        text_moderation_pipeline (pipeline): A Hugging Face pipeline for text moderation.
+
+    Methods:
+        __init__(self, model_name: str, text_moderation_model_name: str, device: str = 'auto', apply_moderation: bool = True):
+            Initializes the ImageAnnotationGenerator with the specified model, device, and moderation settings.
+
+        load_models(self):
+            Loads the image annotation and text moderation models into memory.
+
+        clear_gpu(self):
+            Clears GPU memory to ensure that no residual data remains that could affect further operations.
+
+        moderate_description(self, description: str, max_new_tokens: int = 80) -> str:
+            Moderates the given description to make it more concise and neutral, using the text moderation model.
+
+        generate_description(self, image: PIL.Image.Image, verbose: bool = False, max_new_tokens: int = 20) -> str:
+            Generates a description for the provided image using the image captioning model.
+
+        generate_annotation(self, image_id, dataset_name: str, image: PIL.Image.Image, original_dimensions: tuple, resize: bool, verbose: int) -> dict:
+            Generates a text annotation for a given image, including handling image resizing and verbose logging.
+
+        process_image(self, image_info: dict, dataset_name: str, image_index: int, resize: bool, verbose: int) -> Tuple[Any, float]:
+            Processes a single image from a dataset to generate its annotation and measures the time taken.
+
+        generate_annotations(self, real_image_datasets: List[ImageDataset], verbose: int = 0, max_images: int = None, resize_images: bool = False) -> Dict[str, Dict[str, Any]]:
+            Generates text annotations for a batch of images from the specified datasets and calculates the average processing latency.
+    """
     def __init__(
         self, model_name: str, text_moderation_model_name: str, device: str = 'auto',
         apply_moderation: bool = True
     ):
+        """
+        Initializes the ImageAnnotationGenerator with specific models and device settings.
+        
+        Args:
+            model_name (str): The name of the BLIP model for generating image captions.
+            text_moderation_model_name (str): The name of the model used for moderating text descriptions.
+            device (str): The device to use ('auto' to choose automatically between 'cuda' and 'cpu').
+            apply_moderation (bool): Flag to determine whether text moderation should be applied to captions.
+        """
         self.device = torch.device(
             'cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu'
         )
@@ -39,6 +86,9 @@ class ImageAnnotationGenerator:
         self.text_moderation_pipeline = None
         
     def load_models(self):
+        """
+        Loads the necessary models for image annotation and text moderation onto the specified device.
+        """
         bt.logging.info(f"Loading image annotation model {self.model_name}")
         self.model = Blip2ForConditionalGeneration.from_pretrained(
             self.model_name, 
@@ -58,6 +108,9 @@ class ImageAnnotationGenerator:
         bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
+        """
+        Clears GPU memory by moving models back to CPU and deleting them, followed by collecting garbage.
+        """
         bt.logging.debug(f"Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
@@ -202,6 +255,20 @@ class ImageAnnotationGenerator:
             image_index: int,
             resize: bool,
             verbose: int) -> Tuple[Any, float]:
+        """
+        Processes an individual image for annotation, including resizing and verbosity controls, 
+        and calculates the time taken to process the image.
+
+        Args:
+            image_info (dict): Dictionary containing image data and metadata.
+            dataset_name (str): The name of the dataset containing the image.
+            image_index (int): The index of the image within the dataset.
+            resize (bool): Whether to resize the image before processing.
+            verbose (int): Verbosity level for logging outputs.
+
+        Returns:
+            Tuple[Any, float]: A tuple containing the generated annotation (or None if failed) and the time taken to process.
+        """
 
         if image_info['image'] is None:
             if verbose > 1:
