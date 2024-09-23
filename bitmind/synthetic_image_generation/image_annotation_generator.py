@@ -51,7 +51,7 @@ class ImageAnnotationGenerator:
             self.text_moderation_pipeline = pipeline(
                 "text-generation",
                 model=self.text_moderation_model_name,
-                model_kwargs={"torch_dtype": torch.bfloat16}, 
+                model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}, 
                 device_map="auto"
             )
         bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")

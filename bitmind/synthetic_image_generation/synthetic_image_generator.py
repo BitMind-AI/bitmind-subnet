@@ -1,5 +1,6 @@
 from transformers import pipeline
 from transformers import set_seed
+from diffusers import StableDiffusionXLPipeline, FluxPipeline
 import bittensor as bt
 import numpy as np
 import torch
