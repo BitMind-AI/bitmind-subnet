@@ -38,13 +38,14 @@ class ImageAnnotationGenerator:
         self.text_moderation_pipeline = None
         
     def load_models(self):
-        start = time.time()
+        bt.logging.info(f"Loading image annotation model {self.model_name}")
         self.model = Blip2ForConditionalGeneration.from_pretrained(
             self.model_name, 
             torch_dtype=torch.float16, 
             cache_dir=HUGGINGFACE_CACHE_DIR
         )
         self.model.to(self.device)
+        bt.logging.info(f"Loaded image annotation model {self.model_name}")
         bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
         if self.apply_moderation:
             self.text_moderation_pipeline = pipeline(
@@ -53,8 +54,7 @@ class ImageAnnotationGenerator:
                 model_kwargs={"torch_dtype": torch.bfloat16}, 
                 device_map="auto"
             )
-        bt.logging.info(f"Loaded {self.text_moderation_model_name}.")
-        print(f"Annotation loading: {time.time()-start}")
+        bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
         bt.logging.debug(f"Clearing GPU memory after generating image annotation")

@@ -7,4 +7,5 @@
 echo $CONDA_PREFIX
 $CONDA_PREFIX/bin/pip install -e .
 $CONDA_PREFIX/bin/python bitmind/download_data.py
+$CONDA_PREFIX/bin/python verify_diffusion_models.py
 echo "Autoupdate steps complete :)"

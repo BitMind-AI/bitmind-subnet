@@ -72,7 +72,6 @@ class SyntheticImageGenerator:
 
         self.image_annotation_generator = None
         if self.prompt_type == 'annotation':
-            bt.logging.info(f"Loading image captioning model ({IMAGE_ANNOTATION_MODEL})...")
             self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL,
                                                                       text_moderation_model_name=TEXT_MODERATION_MODEL)
         elif self.prompt_type == 'random':
@@ -112,14 +111,11 @@ class SyntheticImageGenerator:
         else:
             raise NotImplementedError
 
-        start = time.time()
         if self.use_random_diffuser:
             self.load_diffuser('random')
         else:
             self.load_diffuser(self.diffuser_name)
-        print(f"Diffuser loading: {time.time()-start}")
 
-        start = time.time()
         bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
@@ -128,7 +124,6 @@ class SyntheticImageGenerator:
                 path = os.path.join(self.image_cache_dir, image_data['id'])
                 image_data['image'].save(path)
             gen_data.append(image_data)
-        print(f"Image gen: {time.time()-start}")
         self.clear_gpu()  # remove diffuser from gpu
 
         return gen_data
@@ -166,7 +161,7 @@ class SyntheticImageGenerator:
             self.diffuser.to("cuda")
         elif gpu_id:
             self.diffuser.to(f"cuda:{gpu_id}")
-
+            
         bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
     def generate_image_caption(self, image_sample) -> str:
@@ -186,7 +181,6 @@ class SyntheticImageGenerator:
             str: A descriptive caption generated for the input image.
         """
         self.image_annotation_generator.load_models()
-        start = time.time()
         annotation = self.image_annotation_generator.process_image(
             image_info=image_sample,
             dataset_name=image_sample['source'],
@@ -194,7 +188,6 @@ class SyntheticImageGenerator:
             resize=False,
             verbose=0
         )[0]
-        print(f"Annotation gen: {time.time()-start}")
         self.image_annotation_generator.clear_gpu()
         return annotation['description']
 
@@ -297,7 +290,6 @@ class SyntheticImageGenerator:
 
         # Load generation arguments based on diffuser settings
         if self.diffuser_name in GENERATE_ARGS:
-            print("in generate_args")
             gen_args = GENERATE_ARGS[self.diffuser_name].copy()
 
             if isinstance(gen_args.get('num_inference_steps'), dict):
@@ -308,7 +300,6 @@ class SyntheticImageGenerator:
             for dim in ('height', 'width'):
                 if isinstance(gen_args.get(dim), list):
                     gen_args[dim] = np.random.choice(gen_args[dim])
-            print(gen_args)
 
         try:
             if generate_at_target_size:
