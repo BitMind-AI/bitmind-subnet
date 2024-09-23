@@ -34,6 +34,21 @@ def download_image(url: str) -> Image.Image:
         #print(f"Failed to download image: {response.status_code}")
         return None
 
+def split_dataset(dataset):
+    # Split data into train, validation, test and return the three splits
+    dataset = dataset.shuffle(seed=42)
+
+    split_dataset = {}
+    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
+    split_dataset['train'] = train_test_split['train']
+    temp_dataset = train_test_split['test']
+
+    # Split the temporary dataset into validation and test
+    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
+    split_dataset['validation'] = val_test_split['train']
+    split_dataset['test'] = val_test_split['test']
+
+    return split_dataset['train'], split_dataset['validation'], split_dataset['test']
 
 def load_huggingface_dataset(
     path: str,
@@ -63,30 +78,20 @@ def load_huggingface_dataset(
         Union[dict, load_dataset.Dataset]: The loaded dataset or a specific split of the dataset as requested.
     """
     if 'imagefolder' in path:
+        print("Image folder is in path")
         _, directory = path.split(':')
-        dataset = load_dataset(path='imagefolder', data_dir=directory, split='train')
+        if name:
+            dataset = load_dataset(path='imagefolder', name=name, data_dir=directory, split='train')
+        else:
+            dataset = load_dataset(path='imagefolder', data_dir=directory, split='train')
     else:
-        dataset = download_dataset(path, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR)
+        dataset = download_dataset(path, "reuse_cache_if_exists", cache_dir=HUGGINGFACE_CACHE_DIR, name=name)
 
     if not create_splits:
         if split is not None:
             return dataset[split]
         return dataset
-
-    # Split data into train, validation, test and return the three splits
-    dataset = dataset.shuffle(seed=42)
-
-    split_dataset = {}
-    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
-    split_dataset['train'] = train_test_split['train']
-    temp_dataset = train_test_split['test']
-
-    # Split the temporary dataset into validation and test
-    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
-    split_dataset['validation'] = val_test_split['train']
-    split_dataset['test'] = val_test_split['test']
-
-    return split_dataset['train'], split_dataset['validation'], split_dataset['test']
+    return split_dataset(dataset)
 
 
 def sample_dataset_index_name(image_datasets: list) -> tuple[int, str]:

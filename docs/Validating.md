@@ -11,20 +11,13 @@
 
 **Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
 
-**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). A GPU is recommended for training, although not required for basic inference.
+**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). 
 
 ### Installation
 
 Download the repository and navigate to the folder.
 ```bash
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
-```
-
-To install system dependencies like `pm2`, run our install script:
-
-```bash
-chmod +x install_system_deps.sh
-./install_system_deps.sh
 ```
 
 We recommend using a Conda virtual environment to install the necessary Python packages.<br>
@@ -41,7 +34,8 @@ Install the remaining necessary requirements with the following chained command.
 ```bash
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
-pip install -e .
+chmod +x setup_validator_env.sh 
+./setup_validator_env.sh
 ```
 
 ### Data
@@ -52,7 +46,7 @@ You can download the necessary datasets by running:
 python bitmind/download_data.py
 ```
 
-- For **validators**, we recommend you do this prior to registering and running your validator. The download can take up to a few hours. Please note the minimum storage requirements specified in `min_compute.yml`.
+- For **validators**, we recommend you do this prior to registering and running your validator. Please note the minimum storage requirements specified in `min_compute.yml`.
 
 - For **miners**, this is only necessary when training a new model. Deployed miner instances do not need access to these datasets.
 
@@ -83,6 +77,7 @@ First, make sure to update `validator.env` with your **wallet**, **hotkey**, and
 ```bash
 NETUID=34 # or 168 
 SUBTENSOR_NETWORK=finney # or test
+SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443 # or wss://test.finney.opentensor.ai:443/
 WALLET_NAME=default
 WALLET_HOTKEY=default
 VALIDATOR_AXON_PORT=8092
