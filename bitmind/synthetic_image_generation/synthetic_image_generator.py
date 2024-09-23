@@ -42,6 +42,7 @@ import bittensor as bt
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
 from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
+
 class SyntheticImageGenerator:
 
     def __init__(

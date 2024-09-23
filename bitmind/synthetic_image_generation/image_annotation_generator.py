@@ -18,6 +18,7 @@ from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
 disable_progress_bar()
 
+
 class ImageAnnotationGenerator:
     def __init__(
         self, model_name: str, text_moderation_model_name: str, device: str = 'auto',
