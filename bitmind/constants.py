@@ -6,23 +6,20 @@ WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {
     "real": [
-        {"path": "bitmind/open-images-v7", "create_splits": False},
         {"path": "bitmind/ffhq-256", "create_splits": False},
-        {"path": "bitmind/celeb-a-hq", "create_splits": False}
+        {"path": "bitmind/MS-COCO-unique", "create_splits": False}
     ],
     "fake": [
-        {"path": "bitmind/realvis-xl", "create_splits": False},
-        {"path": "bitmind/stable-diffusion-xl", "create_splits": False},
+        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0", "create_splits": False},
+        {"path": "bitmind/MS-COCO-unique___stable-diffusion-xl-base-1.0", "create_splits": False}
     ]
 }
 
 FACE_TRAINING_DATASET_META = {
     "real": [
-        {"path": "bitmind/celeb-a-hq_training_faces", "create_splits": False},
         {"path": "bitmind/ffhq-256_training_faces", "create_splits": False},
     ],
     "fake": [
-        {"path": "bitmind/celeb-a-hq___stable-diffusion-xl-base-1.0___256_training_faces", "create_splits": False},
         {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "create_splits": False}
     ]
 }
