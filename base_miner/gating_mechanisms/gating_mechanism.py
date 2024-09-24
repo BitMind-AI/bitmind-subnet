@@ -4,8 +4,8 @@ from detectors import GATE_REGISTRY
 
 class GatingMechanism:
     """
-    This Gate subclass orchestrates multi-gate content detection
-    and content-specific preprocessing.
+    This class orchestrates multi-gate content detection and content-specific
+    preprocessing to facilitate use by downstream models
 
     This is useful for routing images to appropriate detectors
     trained to handle different content types in a mixture-of-experts
