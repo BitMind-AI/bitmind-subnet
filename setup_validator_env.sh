@@ -6,7 +6,7 @@ sudo apt install npm -y
 sudo npm install pm2@latest -g
 
 pip install -e .
-pip install -r requirements-validator.sh
+pip install -r requirements-validator.txt
 
 echo "NETUID=34
 SUBTENSOR_NETWORK=finney
