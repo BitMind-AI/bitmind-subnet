@@ -126,15 +126,23 @@ def prepare_datasets(config, logger):
     log_finish_time(logger, "Loading and splitting individual datasets", start_time)
     
     start_time = log_start_time(logger, "Creating real fake dataset splits")
-    train_dataset, val_dataset, test_dataset = \
-    create_real_fake_datasets(real_datasets,
-                              fake_datasets,
-                              config['split_transforms']['train']['transform'],
-                              config['split_transforms']['validation']['transform'],
-                              config['split_transforms']['test']['transform'],
-                              source_labels=True,
-                              normalize_config={'mean': config['mean'],
-                                                'std': config['std']})
+    transform = None if config['faces_only'] else config['split_transforms']
+    train_transform = transform['train']['transform'] if transform else None
+    val_transform = transform['validation']['transform'] if transform else None
+    test_transform = transform['test']['transform'] if transform else None
+
+    train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
+        real_datasets,
+        fake_datasets,
+        train_transform,
+        val_transform,
+        test_transform,
+        source_labels=True,
+        normalize_config={
+            'mean': config['mean'],
+            'std': config['std']
+        }
+    )
 
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
