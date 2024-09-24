@@ -247,8 +247,7 @@ def create_real_fake_datasets(
     train_transforms: transforms.Compose = None,
     val_transforms: transforms.Compose = None,
     test_transforms: transforms.Compose = None,
-    source_labels: bool = False,
-    normalize_config: dict = None) -> Tuple[RealFakeDataset, ...]:
+    source_labels: bool = False) -> Tuple[RealFakeDataset, ...]:
     """
     Args:
         real_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
@@ -268,21 +267,18 @@ def create_real_fake_datasets(
         real_image_datasets=real_datasets['train'],
         fake_image_datasets=fake_datasets['train'],
         transforms=train_transforms,
-        source_label_mapping=source_label_mapping,
-        normalize_config=normalize_config)
+        source_label_mapping=source_label_mapping)
 
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
         fake_image_datasets=fake_datasets['validation'],
         transforms=val_transforms,
-        source_label_mapping=source_label_mapping,
-        normalize_config=normalize_config)
+        source_label_mapping=source_label_mapping)
 
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
         transforms=test_transforms,
-        source_label_mapping=source_label_mapping,
-        normalize_config=normalize_config)
+        source_label_mapping=source_label_mapping)
 
     return train_dataset, val_dataset, test_dataset
