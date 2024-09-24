@@ -3,10 +3,10 @@ from _dlib_pybind11 import rectangles
 import numpy as np
 import dlib
 
-from detectors.gating_mechanisms import Gate
-from detectors.UCF.config.constants import DLIB_FACE_PREDICTOR_PATH
-from detectors import GATE_REGISTRY
-from face_utils import get_face_landmarks, align_and_crop_face
+from base_miner.gating_mechanisms import Gate
+from base_miner.UCF.config.constants import DLIB_FACE_PREDICTOR_PATH
+from base_miner import GATE_REGISTRY
+from base_miner.gating_mechanisms.utils import get_face_landmarks, align_and_crop_face
 
 
 @GATE_REGISTRY.register_module(module_name='FACE')
