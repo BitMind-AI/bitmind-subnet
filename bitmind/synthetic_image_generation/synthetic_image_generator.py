@@ -44,7 +44,18 @@ from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
 
 class SyntheticImageGenerator:
+    """
+    A class for generating synthetic images based on text prompts. Supports different prompt generation strategies
+    and can utilize various image diffuser models to create images.
 
+    Attributes:
+        use_random_diffuser (bool): Whether to randomly select a diffuser for each generation task.
+        prompt_type (str): The type of prompt generation strategy ('random', 'annotation').
+        prompt_generator_name (str): Name of the prompt generation model.
+        diffuser_name (str): Name of the image diffuser model.
+        image_annotation_generator (ImageAnnotationGenerator): The generator object for annotating images if required.
+        image_cache_dir (str): Directory to cache generated images.
+    """
     def __init__(
         self,
         prompt_type='random',
@@ -131,6 +142,9 @@ class SyntheticImageGenerator:
         return gen_data
 
     def clear_gpu(self):
+         """
+        Clears GPU memory by deleting the loaded diffuser and performing garbage collection.
+        """
         if self.diffuser is not None:
             bt.logging.debug(f"Deleting previous diffuser, freeing memory")
             del self.diffuser
@@ -274,15 +288,22 @@ class SyntheticImageGenerator:
     
     def generate_image(self, prompt, name = None, generate_at_target_size = False) -> list:
         """
-        Generates an image based on a text prompt, optionally at a specified target size.
-    
+        Generates a synthetic image based on a text prompt. This function can optionally adjust the generation args of the 
+        diffusion model, such as dimensions and the number of inference steps.
+        
         Args:
-            prompt (str): The text prompt used for generating the image.
-            name (str, optional): The id associated with the generated image. Defaults to None.
-            generate_at_target_size (bool, optional): If True, generates the image at a specified target size.
-    
+            prompt (str): The text prompt used to inspire the image generation.
+            name (str, optional): An optional identifier for the generated image. If not provided, a timestamp-based
+                identifier is used.
+            generate_at_target_size (bool, optional): If True, the image is generated at the dimensions specified by the
+                TARGET_IMAGE_SIZE constant. Otherwise, dimensions are selected based on the diffuser's default or random settings.
+        
         Returns:
-            list: A dictionary containing the prompt (truncated if over max token length), generated image, and image ID.
+            dict: A dictionary containing:
+                - 'prompt': The possibly truncated version of the input prompt.
+                - 'image': The generated image object.
+                - 'id': The identifier of the generated image.
+                - 'gen_time': The time taken to generate the image, measured from the start of the process.
         """
         # Generate a unique image name based on current time if not provided
         image_name = name if name else f"{time.time():.0f}.jpg"
