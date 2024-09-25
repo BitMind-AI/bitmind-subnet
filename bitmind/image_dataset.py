@@ -4,7 +4,7 @@ from io import BytesIO
 import bittensor as bt
 import numpy as np
 
-from bitmind.utils.data import load_huggingface_dataset, download_image
+from bitmind.download_data import load_huggingface_dataset, download_image
 
 
 class ImageDataset:

@@ -1,8 +1,5 @@
 from typing import Optional, Union, List, Tuple, Dict
 import torchvision.transforms as transforms
-from datasets import load_dataset
-from PIL import Image
-from io import BytesIO
 import numpy as np
 import datasets
 import requests
@@ -10,32 +7,9 @@ import datasets
 
 from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
-from bitmind.download_data import download_dataset
-from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
 datasets.logging.set_verbosity_error()
 datasets.disable_progress_bar()
-
-
-def download_image(url: str) -> Image.Image:
-    """
-    Download an image from a URL.
-
-    Args:
-        url (str): The URL of the image to download.
-
-    Returns:
-        Image.Image or None: The downloaded image as a PIL Image object if
-            successful, otherwise None.
-    """
-    response = requests.get(url)
-    if response.status_code == 200:
-        image_data = BytesIO(response.content)
-        return Image.open(image_data)
-
-    else:
-        #print(f"Failed to download image: {response.status_code}")
-        return None
 
 
 def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]:
@@ -176,44 +150,6 @@ def create_real_fake_datasets(
     if source_labels:
         return train_dataset, val_dataset, test_dataset, source_label_mapping
     return train_dataset, val_dataset, test_dataset
-
-
-def load_huggingface_dataset(
-    path: str,
-    split: str = 'train',
-    name: Optional[str] = None,
-    download_mode: str = 'reuse_cache_if_exists',
-) -> Union[dict, datasets.Dataset]:
-    """
-    Load a dataset from Hugging Face or a local directory.
-
-    Args:
-        path (str): Path to the dataset or 'imagefolder:<directory>' for image folder. Can either be to a publicly
-            hosted huggingface datset with the format <organizatoin>/<datset-name> or a local directory with the format
-            imagefolder:<path/to/directory>
-        split (str, optional): Name of the dataset split to load (default: None).
-            Make sure to check what splits are available for the datasets you're working with.
-        name (str, optional): Name of the dataset (if loading from Hugging Face, default: None).
-            Some huggingface datasets provide various subets of different sizes, which can be accessed via thi
-            parameter.
-        download_mode (str, optional): Download mode for the dataset (if loading from Hugging Face, default: None).
-            can be None or "force_redownload"
-    Returns:
-        Union[dict, load_dataset.Dataset]: The loaded dataset or a specific split of the dataset as requested.
-    """
-    if 'imagefolder' in path:
-        _, directory = path.split(':')
-        if name:
-            dataset = load_dataset(path='imagefolder', name=name, data_dir=directory)
-        else:
-            dataset = load_dataset(path='imagefolder', data_dir=directory)
-    else:
-        dataset = download_dataset(path, name=name, download_mode=download_mode, cache_dir=HUGGINGFACE_CACHE_DIR)
-
-    if split is None:
-        return dataset
-
-    return dataset[split]
 
 
 def sample_dataset_index_name(image_datasets: list) -> tuple[int, str]:
