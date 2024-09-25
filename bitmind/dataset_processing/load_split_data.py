@@ -217,11 +217,12 @@ def load_datasets(dataset_meta: dict = DATASET_META,
 
 def create_source_label_mapping(
     real_datasets: Dict[str, List[ImageDataset]],
-    fake_datasets: Dict[str, List[ImageDataset]]
+    fake_datasets: Dict[str, List[ImageDataset]],
+    group_by_name: bool = False
     ) -> Dict:
 
     source_label_mapping = {}
-
+    grouped_source_labels = {}
     # Iterate through real datasets and set their source label to 0.0
     for split, dataset_list in real_datasets.items():
         for dataset in dataset_list:
@@ -230,13 +231,22 @@ def create_source_label_mapping(
                 source_label_mapping[source] = 0.0
 
     # Assign incremental labels to fake datasets
-    fake_source_label = 1.0
     for split, dataset_list in fake_datasets.items():
         for dataset in dataset_list:
             source = dataset.huggingface_dataset_path
-            if source not in source_label_mapping.keys():
-                source_label_mapping[source] = fake_source_label
-                fake_source_label += 1.0
+            if group_by_name and '__' in source:
+                model_name = source.split('__')[1]
+                if model_name in grouped_source_labels:
+                    fake_source_label = grouped_source_labels[model_name]
+                else:
+                    fake_source_label = max(grouped_source_labels.values()) + 1
+                    grouped_source_labels[model_name] = fake_source_label
+
+                if source not in source_label_mapping:
+                    source_label_mapping[source] = fake_source_label
+            else:
+                if source not in source_label_mapping:
+                    source_label_mapping[source] = max(grouped_source_labels.values()) + 1
 
     return source_label_mapping
 
@@ -247,7 +257,8 @@ def create_real_fake_datasets(
     train_transforms: transforms.Compose = None,
     val_transforms: transforms.Compose = None,
     test_transforms: transforms.Compose = None,
-    source_labels: bool = False) -> Tuple[RealFakeDataset, ...]:
+    source_labels: bool = False,
+    group_sources_by_name: bool = False) -> Tuple[RealFakeDataset, ...]:
     """
     Args:
         real_datasets: Dict containing train, val, and test keys. Each key maps to a list of ImageDatasets
@@ -259,10 +270,13 @@ def create_real_fake_datasets(
         Train, val, and test RealFakeDatasets
 
     """
-    source_label_mapping = \
-    create_source_label_mapping(real_datasets, fake_datasets) if source_labels else None
+    source_label_mapping = None
+    if source_labels:
+        source_label_mapping = create_source_label_mapping(
+            real_datasets, fake_datasets, group_sources_by_name)
+
     print(f"Source label mapping: {source_label_mapping}")
-    
+
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
         fake_image_datasets=fake_datasets['train'],
@@ -281,4 +295,6 @@ def create_real_fake_datasets(
         transforms=test_transforms,
         source_label_mapping=source_label_mapping)
 
+    if source_labels:
+        return train_dataset, val_dataset, test_dataset, source_label_mapping
     return train_dataset, val_dataset, test_dataset

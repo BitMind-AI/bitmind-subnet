@@ -46,7 +46,7 @@ from huggingface_hub import hf_hub_download
 
 # BitMind imports (not from original Deepfake Bench repo)
 from bitmind.dataset_processing.load_split_data import load_datasets, create_real_fake_datasets
-from bitmind.image_transforms import base_transforms, random_aug_transforms
+from bitmind.image_transforms import base_transforms, random_aug_transforms, ucf_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
 from config.constants import (
     CONFIG_PATH,
@@ -126,15 +126,14 @@ def prepare_datasets(config, logger):
     log_finish_time(logger, "Loading and splitting individual datasets", start_time)
     
     start_time = log_start_time(logger, "Creating real fake dataset splits")
-    train_dataset, val_dataset, test_dataset = \
+    train_dataset, val_dataset, test_dataset, source_label_mapping = \
     create_real_fake_datasets(real_datasets,
                               fake_datasets,
                               config['split_transforms']['train']['transform'],
                               config['split_transforms']['validation']['transform'],
                               config['split_transforms']['test']['transform'],
                               source_labels=True,
-                              normalize_config={'mean': config['mean'],
-                                                'std': config['std']})
+                              group_sources_by_name=True)
 
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
@@ -161,7 +160,7 @@ def prepare_datasets(config, logger):
     print(f"Validation size: {len(val_loader.dataset)}")
     print(f"Test size: {len(test_loader.dataset)}")
 
-    return train_loader, val_loader, test_loader
+    return train_loader, val_loader, test_loader, source_label_mapping
 
 def choose_optimizer(model, config):
     opt_name = config['optimizer']['type']
@@ -347,7 +346,7 @@ def main():
     if args.epochs: config['nEpochs'] = args.epochs
 
     config['split_transforms'] = {'train': {'name': 'random_aug_transforms',
-                                            'transform': random_aug_transforms},
+                                            'transform': ucf_transforms},
                                   'validation': {'name': 'base_transforms',
                                                  'transform': base_transforms},
                                   'test': {'name': 'base_transforms',
@@ -358,8 +357,6 @@ def main():
     config['train_dataset'] = dataset_names
     config['save_ckpt'] = args.save_ckpt
     config['save_feat'] = args.save_feat
-
-    config['specific_task_number'] = len(config['dataset_meta']["fake"]) + 1
     
     if config['lmdb']:
         config['dataset_json_folder'] = 'preprocessing/dataset_json_v3'
@@ -378,6 +375,10 @@ def main():
     logger.info('Save log to {}'.format(outputs_dir))
     
     config['ddp']= args.ddp
+
+    # prepare the data loaders
+    train_loader, val_loader, test_loader, source_label_mapping = prepare_datasets(config, logger)
+    config['specific_task_number'] = len(set(source_label_mapping.values()))
 
     # init seed
     init_seed(config)
@@ -413,19 +414,16 @@ def main():
     # prepare the trainer
     trainer = Trainer(config, model, optimizer, scheduler, logger, metric_scoring)
 
-    # prepare the data loaders
-    train_loader, val_loader, test_loader = prepare_datasets(config, logger)
-
     # print configuration
     logger.info("--------------- Configuration ---------------")
     params_string = "Parameters: \n"
     for key, value in config.items():
         params_string += "{}: {}".format(key, value) + "\n"
     logger.info(params_string)
-    
+
     # save training configs
     save_config(config, outputs_dir)
-    
+
     # start training
     start_time = log_start_time(logger, "Training")
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
@@ -439,7 +437,7 @@ def main():
             logger.info(f"===> Epoch[{epoch}] end with validation {metric_scoring}: {parse_metric_for_print(best_metric)}!")
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
     log_finish_time(logger, "Training", start_time)
-   
+
     # test
     start_time = log_start_time(logger, "Test")
     trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
