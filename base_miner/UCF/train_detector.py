@@ -129,35 +129,40 @@ def prepare_datasets(config, logger):
     log_finish_time(logger, "Loading and splitting individual datasets", start_time)
     
     start_time = log_start_time(logger, "Creating real fake dataset splits")
-    train_dataset, val_dataset, test_dataset, source_label_mapping = \
-    create_real_fake_datasets(real_datasets,
-                              fake_datasets,
-                              config['split_transforms']['train'],
-                              config['split_transforms']['validation'],
-                              config['split_transforms']['test'],
-                              source_labels=True,
-                              group_sources_by_name=True)
+    train_dataset, val_dataset, test_dataset, source_label_mapping = create_real_fake_datasets(
+        real_datasets,
+        fake_datasets,
+        config['split_transforms']['train'],
+        config['split_transforms']['validation'],
+        config['split_transforms']['test'],
+        source_labels=True,
+        group_sources_by_name=True)
 
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
-    train_loader = torch.utils.data.DataLoader(train_dataset,
-                                               batch_size=config['train_batchSize'],
-                                               shuffle=True,
-                                               num_workers=config['workers'],
-                                               drop_last=True,
-                                               collate_fn=custom_collate_fn)
-    val_loader = torch.utils.data.DataLoader(val_dataset,
-                                             batch_size=config['train_batchSize'],
-                                             shuffle=True,
-                                             num_workers=config['workers'],
-                                             drop_last=True,
-                                             collate_fn=custom_collate_fn)
-    test_loader = torch.utils.data.DataLoader(test_dataset,
-                                              batch_size=config['train_batchSize'],
-                                              shuffle=True, 
-                                              num_workers=config['workers'],
-                                              drop_last=True,
-                                              collate_fn=custom_collate_fn)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config['train_batchSize'],
+        shuffle=True,
+        num_workers=config['workers'],
+        drop_last=True,
+        collate_fn=custom_collate_fn)
+
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=config['train_batchSize'],
+        shuffle=True,
+        num_workers=config['workers'],
+        drop_last=True,
+        collate_fn=custom_collate_fn)
+
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=config['train_batchSize'],
+        shuffle=True, 
+        num_workers=config['workers'],
+        drop_last=True,
+        collate_fn=custom_collate_fn)
 
     print(f"Train size: {len(train_loader.dataset)}")
     print(f"Validation size: {len(val_loader.dataset)}")
@@ -175,7 +180,6 @@ def choose_optimizer(model, config):
             momentum=config['optimizer'][opt_name]['momentum'],
             weight_decay=config['optimizer'][opt_name]['weight_decay']
         )
-        return optimizer
     elif opt_name == 'adam':
         optimizer = optim.Adam(
             params=model.parameters(),
@@ -185,7 +189,6 @@ def choose_optimizer(model, config):
             eps=config['optimizer'][opt_name]['eps'],
             amsgrad=config['optimizer'][opt_name]['amsgrad'],
         )
-        return optimizer
     elif opt_name == 'sam':
         optimizer = SAM(
             model.parameters(), 
@@ -200,21 +203,19 @@ def choose_optimizer(model, config):
 
 def choose_scheduler(config, optimizer):
     if config['lr_scheduler'] is None:
-        return None
+        scheduler = None
     elif config['lr_scheduler'] == 'step':
         scheduler = optim.lr_scheduler.StepLR(
             optimizer,
             step_size=config['lr_step'],
             gamma=config['lr_gamma'],
         )
-        return scheduler
     elif config['lr_scheduler'] == 'cosine':
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=config['lr_T_max'],
             eta_min=config['lr_eta_min'],
         )
-        return scheduler
     elif config['lr_scheduler'] == 'linear':
         scheduler = LinearDecayLR(
             optimizer,
@@ -223,6 +224,7 @@ def choose_scheduler(config, optimizer):
         )
     else:
         raise NotImplementedError('Scheduler {} is not implemented'.format(config['lr_scheduler']))
+    return scheduler
 
 
 def choose_metric(config):
