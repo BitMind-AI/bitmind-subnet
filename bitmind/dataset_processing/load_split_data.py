@@ -239,14 +239,14 @@ def create_source_label_mapping(
                 if model_name in grouped_source_labels:
                     fake_source_label = grouped_source_labels[model_name]
                 else:
-                    fake_source_label = max(grouped_source_labels.values()) + 1
+                    fake_source_label = max(source_label_mapping.values()) + 1
                     grouped_source_labels[model_name] = fake_source_label
 
                 if source not in source_label_mapping:
                     source_label_mapping[source] = fake_source_label
             else:
                 if source not in source_label_mapping:
-                    source_label_mapping[source] = max(grouped_source_labels.values()) + 1
+                    source_label_mapping[source] = max(source_label_mapping.values()) + 1
 
     return source_label_mapping
 
