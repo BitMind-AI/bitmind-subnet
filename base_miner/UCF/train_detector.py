@@ -45,7 +45,7 @@ from logger import create_logger, RankFilter
 from huggingface_hub import hf_hub_download
 
 # BitMind imports (not from original Deepfake Bench repo)
-from bitmind.dataset_processing.load_split_data import load_and_split_datasets, create_real_fake_datasets
+from bitmind.utils.data import load_and_split_datasets, create_real_fake_datasets
 from bitmind.image_transforms import base_transforms, random_aug_transforms, ucf_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
 from config.constants import (

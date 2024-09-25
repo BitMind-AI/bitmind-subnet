@@ -14,7 +14,6 @@ class ImageDataset:
         huggingface_dataset_path: str,
         huggingface_dataset_split: str = 'train',
         huggingface_dataset_name: str = None,
-        create_splits: bool = False,
         download_mode: str = None
     ):
         """
@@ -35,7 +34,10 @@ class ImageDataset:
         self.huggingface_dataset_path = huggingface_dataset_path
         self.huggingface_dataset_name = huggingface_dataset_name
         self.dataset = load_huggingface_dataset(
-            huggingface_dataset_path, huggingface_dataset_split, huggingface_dataset_name, create_splits, download_mode)
+            huggingface_dataset_path,
+            huggingface_dataset_split,
+            huggingface_dataset_name,
+            download_mode)
         self.sampled_images_idx = []
 
     def __getitem__(self, index: int) -> dict:
@@ -100,7 +102,7 @@ class ImageDataset:
         else:
             raise NotImplementedError
 
-        # emove alpha channel if download didnt 404
+        # remove alpha channel if download didnt 404
         if image is not None:
             image = image.convert('RGB')
 
