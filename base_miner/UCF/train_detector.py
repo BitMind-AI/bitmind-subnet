@@ -45,7 +45,7 @@ from logger import create_logger, RankFilter
 from huggingface_hub import hf_hub_download
 
 # BitMind imports (not from original Deepfake Bench repo)
-from bitmind.dataset_processing.load_split_data import load_datasets, create_real_fake_datasets
+from bitmind.dataset_processing.load_split_data import load_and_split_datasets, create_real_fake_datasets
 from bitmind.image_transforms import base_transforms, random_aug_transforms, ucf_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
 from config.constants import (
@@ -71,6 +71,7 @@ torch.cuda.set_device(args.local_rank)
 print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
 print(f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
 
+
 def ensure_backbone_is_available(logger,
                                  weights_dir=WEIGHTS_DIR,
                                  model_filename=BACKBONE_CKPT,
@@ -92,6 +93,7 @@ def ensure_backbone_is_available(logger,
     else:
         logger.info(f"{model_filename} backbone already present at {destination_path}.")
 
+
 def init_seed(config):
     if config['manualSeed'] is None:
         config['manualSeed'] = random.randint(1, 10000)
@@ -99,6 +101,7 @@ def init_seed(config):
     if config['cuda']:
         torch.manual_seed(config['manualSeed'])
         torch.cuda.manual_seed_all(config['manualSeed'])
+
 
 def custom_collate_fn(batch):
     images, labels, source_labels = zip(*batch)
@@ -116,11 +119,12 @@ def custom_collate_fn(batch):
     }    
     return data_dict
 
+
 def prepare_datasets(config, logger):
     start_time = log_start_time(logger, "Loading and splitting individual datasets")
-    
-    real_datasets, fake_datasets = load_datasets(dataset_meta=config['dataset_meta'], 
-                                                 split_transforms=config['split_transforms'])
+
+    fake_datasets = load_and_split_datasets(config['dataset_meta']['fake'])
+    real_datasets = load_and_split_datasets(config['dataset_meta']['real'])
 
     log_finish_time(logger, "Loading and splitting individual datasets", start_time)
     
@@ -128,9 +132,9 @@ def prepare_datasets(config, logger):
     train_dataset, val_dataset, test_dataset, source_label_mapping = \
     create_real_fake_datasets(real_datasets,
                               fake_datasets,
-                              config['split_transforms']['train']['transform'],
-                              config['split_transforms']['validation']['transform'],
-                              config['split_transforms']['test']['transform'],
+                              config['split_transforms']['train'],
+                              config['split_transforms']['validation'],
+                              config['split_transforms']['test'],
                               source_labels=True,
                               group_sources_by_name=True)
 
@@ -160,6 +164,7 @@ def prepare_datasets(config, logger):
     print(f"Test size: {len(test_loader.dataset)}")
 
     return train_loader, val_loader, test_loader, source_label_mapping
+
 
 def choose_optimizer(model, config):
     opt_name = config['optimizer']['type']
@@ -219,17 +224,20 @@ def choose_scheduler(config, optimizer):
     else:
         raise NotImplementedError('Scheduler {} is not implemented'.format(config['lr_scheduler']))
 
+
 def choose_metric(config):
     metric_scoring = config['metric_scoring']
     if metric_scoring not in ['eer', 'auc', 'acc', 'ap']:
         raise NotImplementedError('metric {} is not implemented'.format(metric_scoring))
     return metric_scoring
 
+
 def log_start_time(logger, process_name):
     """Log the start time of a process."""
     start_time = time.time()
     logger.info(f"{process_name} Start Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
     return start_time
+
 
 def log_finish_time(logger, process_name, start_time):
     """Log the finish time and elapsed time of a process."""
@@ -243,6 +251,7 @@ def log_finish_time(logger, process_name, start_time):
     # Log the finish time and elapsed time
     logger.info(f"{process_name} Finish Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(finish_time))}")
     logger.info(f"{process_name} Elapsed Time: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
+
 
 def save_config(config, outputs_dir):
     """
@@ -323,9 +332,12 @@ def save_config(config, outputs_dir):
     # Save as YAML
     save_dict_to_yaml(config, outputs_dir + '/config.yaml')
 
+
 def main():
+
     torch.cuda.empty_cache()
     gc.collect()
+
     # parse options and load config
     with open(args.detector_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -337,21 +349,21 @@ def main():
 
     config['workers'] = args.workers
     
-    config['local_rank']=args.local_rank
+    config['local_rank'] = args.local_rank
     if config['dry_run']:
         config['nEpochs'] = 0
-        config['save_feat']=False
+        config['save_feat'] = False
 
-    if args.epochs: config['nEpochs'] = args.epochs
+    if args.epochs:
+        config['nEpochs'] = args.epochs
 
-    config['split_transforms'] = {'train': {'name': 'random_aug_transforms',
-                                            'transform': ucf_transforms},
-                                  'validation': {'name': 'base_transforms',
-                                                 'transform': base_transforms},
-                                  'test': {'name': 'base_transforms',
-                                           'transform': base_transforms}}
-    config['faces_only'] = args.faces_only
-    config['dataset_meta'] = FACE_TRAINING_DATASET_META if config['faces_only'] else DATASET_META
+    config['split_transforms'] = {
+        'train': ucf_transforms,
+        'validation': ucf_transforms,
+        'test': ucf_transforms
+    }
+
+    config['dataset_meta'] = FACE_TRAINING_DATASET_META if args.faces_only else DATASET_META
     dataset_names = [item["path"] for datasets in config['dataset_meta'].values() for item in datasets]
     config['train_dataset'] = dataset_names
     config['save_ckpt'] = args.save_ckpt
@@ -364,9 +376,9 @@ def main():
     timenow=datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     
     outputs_dir =  os.path.join(
-                config['log_dir'],
-                config['model_name'] + '_' + timenow
-            )
+        config['log_dir'],
+        config['model_name'] + '_' + timenow
+    )
     
     os.makedirs(outputs_dir, exist_ok=True)
     logger = create_logger(os.path.join(outputs_dir, 'training.log'))
@@ -393,9 +405,11 @@ def main():
         )
         logger.addFilter(RankFilter(0))
 
-    ensure_backbone_is_available(logger=logger,
-                                 model_filename=config['pretrained'].split('/')[-1],
-                                 hugging_face_repo_name='bitmind/' + config['model_name'])
+    ensure_backbone_is_available(
+        logger=logger,
+        model_filename=config['pretrained'].split('/')[-1],
+        hugging_face_repo_name='bitmind/' + config['model_name']
+    )
     
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
@@ -434,6 +448,7 @@ def main():
                 )
         if best_metric is not None:
             logger.info(f"===> Epoch[{epoch}] end with validation {metric_scoring}: {parse_metric_for_print(best_metric)}!")
+
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
     log_finish_time(logger, "Training", start_time)
 
@@ -454,6 +469,7 @@ def main():
 
     torch.cuda.empty_cache()
     gc.collect()
+
 
 if __name__ == '__main__':
     main()
