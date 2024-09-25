@@ -17,10 +17,10 @@ DATASET_META = {
 
 FACE_TRAINING_DATASET_META = {
     "real": [
-        {"path": "bitmind/ffhq-256_training_faces", "create_splits": False},
+        {"path": "bitmind/ffhq-256_training_faces", "name": "base_transforms", "create_splits": False}
     ],
     "fake": [
-        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "create_splits": False}
+        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms", "create_splits": False}
     ]
 }
 

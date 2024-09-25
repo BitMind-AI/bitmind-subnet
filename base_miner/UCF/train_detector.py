@@ -120,7 +120,6 @@ def prepare_datasets(config, logger):
     start_time = log_start_time(logger, "Loading and splitting individual datasets")
     
     real_datasets, fake_datasets = load_datasets(dataset_meta=config['dataset_meta'], 
-                                                 expert=config['faces_only'],
                                                  split_transforms=config['split_transforms'])
 
     log_finish_time(logger, "Loading and splitting individual datasets", start_time)

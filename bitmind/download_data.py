@@ -49,7 +49,7 @@ def download_dataset(dataset_path,
     """
     retry_wait = 10   # initial wait time in seconds
     attempts = 0     # initialize attempts counter
-    print(f"Downloading {dataset_path} dataset...")
+    print(f"Downloading {dataset_path} (subset={name}) dataset...")
     while True:
         try:
             if name:
