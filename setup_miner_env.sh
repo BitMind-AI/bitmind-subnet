@@ -13,8 +13,7 @@ sudo apt install libx11-dev libgtk-3-dev -y
 pip install -e .
 pip install -r requirements-miner.txt
 
-echo "MODEL_PATH=./mining_models/base.pth
-DETECTOR=CAMO
+echo "DETECTOR=CAMO
 DETECTOR_CONFIG=camo.yaml
 NETUID=34
 SUBTENSOR_NETWORK=finney
