@@ -13,7 +13,8 @@ fi
 
 # Start the process with arguments from environment variables
 pm2 start python --name bitmind_miner -- $NEURON_PATH \
-  --neuron.model_path $MODEL_PATH \
+  --neuron.detector $DETECTOR \
+  --neuron.detector_config $DETECTOR_CONFIG \
   --netuid $NETUID \
   --subtensor.network $SUBTENSOR_NETWORK \
   --subtensor.chain_endpoint $SUBTENSOR_CHAIN_ENDPOINT \
