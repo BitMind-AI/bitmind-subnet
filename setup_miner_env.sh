@@ -15,6 +15,7 @@ pip install -r requirements-miner.txt
 
 echo "DETECTOR=CAMO
 DETECTOR_CONFIG=camo.yaml
+DEVICE=cpu
 NETUID=34
 SUBTENSOR_NETWORK=finney
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443

@@ -15,6 +15,7 @@ fi
 pm2 start neurons/miner.py --name bitmind_miner -- \
   --neuron.detector $DETECTOR \
   --neuron.detector_config $DETECTOR_CONFIG \
+  --neuron.device $DEVICE \
   --netuid $NETUID \
   --subtensor.network $SUBTENSOR_NETWORK \
   --subtensor.chain_endpoint $SUBTENSOR_CHAIN_ENDPOINT \
