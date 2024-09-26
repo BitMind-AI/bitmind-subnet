@@ -6,21 +6,24 @@ WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {
     "real": [
-        {"path": "bitmind/ffhq-256", "create_splits": False},
-        {"path": "bitmind/MS-COCO-unique", "create_splits": False}
+        {"path": "bitmind/bm-real"}
     ],
     "fake": [
-        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0", "create_splits": False},
-        {"path": "bitmind/MS-COCO-unique___stable-diffusion-xl-base-1.0", "create_splits": False}
+        {"path": "bitmind/bm-realvisxl"},
+        {"path": "bitmind/bm-mobius"},
+        {"path": "bitmind/bm-sdxl"}
     ]
 }
 
 FACE_TRAINING_DATASET_META = {
     "real": [
-        {"path": "bitmind/ffhq-256_training_faces", "name": "base_transforms", "create_splits": False}
+        {"path": "bitmind/ffhq-256_training_faces", "name": "base_transforms"},
+        {"path": "bitmind/celeb-a-hq_training_faces", "name": "base_transforms"}
+
     ],
     "fake": [
-        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms", "create_splits": False}
+        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms"},
+        {"path": "bitmind/celeb-a-hq___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms"}
     ]
 }
 
