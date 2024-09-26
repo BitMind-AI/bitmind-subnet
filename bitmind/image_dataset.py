@@ -1,4 +1,5 @@
 from typing import List, Tuple
+from datasets import Dataset
 from PIL import Image
 from io import BytesIO
 import bittensor as bt
@@ -11,9 +12,10 @@ class ImageDataset:
 
     def __init__(
         self,
-        huggingface_dataset_path: str,
+        huggingface_dataset_path: str = None,
         huggingface_dataset_split: str = 'train',
         huggingface_dataset_name: str = None,
+        huggingface_dataset: Dataset = None,
         download_mode: str = None
     ):
         """
@@ -31,13 +33,23 @@ class ImageDataset:
             download_mode (str): Download mode for the dataset (default: None).
                 can be None or "force_redownload"
         """
-        self.huggingface_dataset_path = huggingface_dataset_path
-        self.huggingface_dataset_name = huggingface_dataset_name
-        self.dataset = load_huggingface_dataset(
-            huggingface_dataset_path,
-            huggingface_dataset_split,
-            huggingface_dataset_name,
-            download_mode)
+        assert huggingface_dataset_path is not None or huggingface_dataset is not None, \
+            "Either huggingface_dataset_path or huggingface_dataset must be provided."
+        
+        if huggingface_dataset:
+            self.dataset = huggingface_dataset
+            self.huggingface_dataset_path = self.dataset.info.dataset_name
+            self.huggingface_dataset_split = list(self.dataset.info.splits.keys())[0]
+            self.huggingface_dataset_name = self.dataset.info.config_name
+
+        else:
+            self.huggingface_dataset_path = huggingface_dataset_path
+            self.huggingface_dataset_name = huggingface_dataset_name
+            self.dataset = load_huggingface_dataset(
+                huggingface_dataset_path,
+                huggingface_dataset_split,
+                huggingface_dataset_name,
+                download_mode)
         self.sampled_images_idx = []
 
     def __getitem__(self, index: int) -> dict:

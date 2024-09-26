@@ -47,7 +47,11 @@ def load_huggingface_dataset(
         else:
             dataset = load_dataset(path='imagefolder', data_dir=directory)
     else:
-        dataset = download_dataset(path, name=name, download_mode=download_mode, cache_dir=HUGGINGFACE_CACHE_DIR)
+        dataset = download_dataset(
+            dataset_path=path,
+            dataset_name=name,
+            download_mode=download_mode,
+            cache_dir=HUGGINGFACE_CACHE_DIR)
 
     if split is None:
         return dataset

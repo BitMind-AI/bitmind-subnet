@@ -5,11 +5,29 @@ import datasets
 import requests
 import datasets
 
+from bitmind.download_data import load_huggingface_dataset
 from bitmind.real_fake_dataset import RealFakeDataset
 from bitmind.image_dataset import ImageDataset
 
 datasets.logging.set_verbosity_error()
 datasets.disable_progress_bar()
+
+
+def split_dataset(dataset):
+    # Split data into train, validation, test and return the three splits
+    dataset = dataset.shuffle(seed=42)
+
+    split_dataset = {}
+    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
+    split_dataset['train'] = train_test_split['train']
+    temp_dataset = train_test_split['test']
+
+    # Split the temporary dataset into validation and test
+    val_test_split = temp_dataset.train_test_split(test_size=0.5, seed=42)
+    split_dataset['validation'] = val_test_split['train']
+    split_dataset['test'] = val_test_split['test']
+
+    return split_dataset['train'], split_dataset['validation'], split_dataset['test']
 
 
 def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]:
@@ -34,32 +52,12 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
     datasets = {split: [] for split in splits}
 
     for meta in dataset_meta:
-        print(f"Loading {meta['path']} (subset={meta.get('name', None)}) for all splits... ")
-        dataset = ImageDataset(
-            huggingface_dataset_path=meta['path'],
-            huggingface_dataset_split='train',
-            huggingface_dataset_name=meta.get('name', None),
-            create_splits=True, # dataset.dataset == (train, val, test) splits from load_huggingface_dataset(...)
-            download_mode=meta.get('download_mode', None)
-        )
-
-        train_ds, val_ds, test_ds = dataset.dataset
+        dataset = load_huggingface_dataset(meta['path'], None, meta.get('name'))
+        train_ds, val_ds, test_ds = split_dataset(dataset)
 
         for split, data in zip(splits, [train_ds, val_ds, test_ds]):
-            # Create a new ImageDataset instance without calling __init__
-            # This avoids calling load_huggingface_dataset(...) and redownloading
-            split_dataset = ImageDataset.__new__(ImageDataset)
-
-            # Assign the appropriate split data
-            split_dataset.dataset = data
-
-            # Copy other attributes from the initial dataset
-            split_dataset.huggingface_dataset_path = dataset.huggingface_dataset_path
-            split_dataset.huggingface_dataset_name = dataset.huggingface_dataset_name
-            split_dataset.sampled_images_idx = dataset.sampled_images_idx
-
-            # Append to the corresponding split list
-            datasets[split].append(split_dataset)
+            image_dataset = ImageDataset(huggingface_dataset=data)
+            datasets[split].append(image_dataset)
 
         split_lengths = ', '.join([f"{split} len={len(datasets[split][0])}" for split in splits])
         print(f'done, {split_lengths}')
@@ -77,6 +75,7 @@ def create_source_label_mapping(
     grouped_source_labels = {}
     # Iterate through real datasets and set their source label to 0.0
     for split, dataset_list in real_datasets.items():
+
         for dataset in dataset_list:
             source = dataset.huggingface_dataset_path
             if source not in source_label_mapping.keys():
