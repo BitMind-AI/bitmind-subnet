@@ -53,6 +53,7 @@ class UCFDetector(DeepfakeDetector):
     
         if not destination_path.exists():
             local_config_path = hf_hub_download(self.hf_repo, self.train_config)
+            print(f"Downloaded {self.hf_repo}/{self.train_config} to {local_config_path}")
             config_dict = {}
             with open(local_config_path, 'r') as f:
                 config_dict = yaml.safe_load(f)
@@ -61,6 +62,7 @@ class UCFDetector(DeepfakeDetector):
             with destination_path.open('r') as f:
                 return yaml.safe_load(f)
         else:
+            print(f"Loaded local config from {destination_path}")
             with destination_path.open('r') as f:
                 return yaml.safe_load(f)
 

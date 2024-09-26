@@ -41,7 +41,7 @@ class NPRDetector(DeepfakeDetector):
             destination_path.parent.mkdir(parents=True, exist_ok=True)
         if not destination_path.exists():
             model_path = hf_hub_download(self.hf_repo, weight_filename)
-            model = torch.load(model_path)
+            model = torch.load(model_path, map_location=torch.device(self.device))
             torch.save(model, destination_path)
     
     def preprocess(self, image: Image) -> torch.Tensor:
