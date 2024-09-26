@@ -12,7 +12,7 @@ if pm2 list | grep -q "bitmind_miner"; then
 fi
 
 # Start the process with arguments from environment variables
-pm2 start python --name bitmind_miner -- $NEURON_PATH \
+pm2 start neurons/miner.py --name bitmind_miner -- \
   --neuron.detector $DETECTOR \
   --neuron.detector_config $DETECTOR_CONFIG \
   --netuid $NETUID \
