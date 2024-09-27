@@ -7,7 +7,6 @@
    - [Registration ✍️](#registration)
 2. [Mining ⛏️](#mining)
 3. [Train 🚂](#train)
-4. [Predict 🔮](#predict)
 
 ## Before you proceed ⚠️
 
@@ -64,6 +63,11 @@ To mine on our subnet, you must have a registered hotkey.
 
 *Note: For testnet tao, you can make requests in the [Bittensor Discord's "Requests for Testnet Tao" channel](https://discord.com/channels/799672011265015819/1190048018184011867)*
 
+To reduce the risk of deregistration due to technical issues or a poor performing model, we recommend the following:
+1. Test your miner on testnet before you start mining on mainnet.
+2. Before registering your hotkey on mainnet, make sure your port is open by running `curl your_ip:your_port`
+3. If you've trained a custom model, test it's performance by deploying to testnet. You can use this [notebook](https://github.com/BitMind-AI/bitmind-utils/blob/main/wandb_data/wandb_miner_performance.ipynb) to query our tesnet Weights and Biases logs and compute your model's accuracy. Our testnet validator is running 24/7.
+
 
 #### Mainnet
 
@@ -117,22 +121,14 @@ pm2 start run_neuron.py -- --miner
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
-
-### BYOM (Bring Your Own Model)
 If you want to outperform the base model, you'll need to train on more data or try experiment with different hyperparameters and model architectures. See our [training](#train) section below for more details.
-
-Once you've trained your own detector model, you can simply update the configuration file for your miner to point to your new `.pth` file. 
-- Your detector type and associated config file are set in `miner.env`. 
-- The detector config file (e.g., `ucf.yaml`) live in `base_miner/deepfake_detectors/configs/`.
-- The model weights file (e.g., `ckpt_best.pth`) should be placed in `base_miner/<detector_type>/weights`.
-  - If the weights specified in the config file do not exist, the miner will attempt to automatically download them from Hugging Face as specified by the `hf_repo` field in the config file. Feel free to use your own Hugging Face repository for hosting your model weights, and update the config file accordingly.
 
 
 ## Train
 
-To see performance improvements over the base model weights provided for each model, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
+To see performance improvements over the base modelS, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
 
-We are working on a unified interface for training models, but for now, each model has its own training script and logging systems that are functionality independent. 
+*We are working on a unified interface for training models, but for now, each model has its own training script and logging systems that are functionality independent.*
 
 ### NPR
 ```python
@@ -148,8 +144,17 @@ The model with the lowest validation accuracy will be saved to `base_miner/UCF/l
 
 In this directory, you will find your model weights (`ckpt_best.pth`) and training configuration (`config.yaml`).
 
+## Deploy Your Model
 
-### Tensorboard 
+Once you've trained your own detector model, you can simply update the configuration file for your miner to point to your new `.pth` file. 
+- Your detector type and associated config file are set in `miner.env`. 
+- The detector config file (e.g., `ucf.yaml`) live in `base_miner/deepfake_detectors/configs/`.
+- The model weights file (e.g., `ckpt_best.pth`) should be placed in `base_miner/<detector_type>/weights`.
+  - If the weights specified in the config file do not exist, the miner will attempt to automatically download them from Hugging Face as specified by the `hf_repo` field in the config file. Feel free to use your own Hugging Face repository for hosting your model weights, and update the config file accordingly.
+
+
+
+## Tensorboard 
 
 Training metrics are logged with TensorboardX. You can view interactive graphs of these metrics by starting a tensorboard server with the following command, and navigating to `localhost:6006`.
 
@@ -168,10 +173,3 @@ with port forwarding enabled, you can start your tensorboard server on your remo
 ```bash
 tensorboard --logdir=./base_miner/checkpoints/<experiment_name> --host 0.0.0.0 --port 6006
 ```
-
-## Predict
-
-- Prediction logic specific to the trained model your miner is hosting resides in `bitmind/miner/predict.py`
-- If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
-- Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
-- Rewards are based on accuracy. The reward from each challenge is binary.
