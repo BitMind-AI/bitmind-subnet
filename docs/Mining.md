@@ -126,7 +126,7 @@ If you want to outperform the base model, you'll need to train on more data or t
 
 ## Train
 
-To see performance improvements over the base modelS, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
+To see performance improvements over the base models, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
 
 *We are working on a unified interface for training models, but for now, each model has its own training script and logging systems that are functionality independent.*
 

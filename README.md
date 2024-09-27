@@ -11,7 +11,7 @@ e necessary information to get started, contribute, and understand our architect
 
 ## The BitMind Platform
 
-The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class experience for Bittensor miners. 
+The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class developer experience for Bittensor miners. 
 
 ⚡ **Access Compute**: We offer a wide variety of CPU and GPU options<br>
 ⚡ **Develop in VSCode**: Develop in a feature-rich IDE (we support Jupyter too if you hate rich features)<br>
