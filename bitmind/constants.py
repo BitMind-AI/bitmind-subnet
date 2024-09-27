@@ -23,7 +23,7 @@ FACE_TRAINING_DATASET_META = {
     ],
     "fake": [
         {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms"},
-        {"path": "bitmind/celeb-a-hq___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms"}
+        {"path": "bitmind/celeb-a-hq___stable-diffusion-xl-base-1.0___256_training_faces", "name": "base_transforms"}
     ]
 }
 
