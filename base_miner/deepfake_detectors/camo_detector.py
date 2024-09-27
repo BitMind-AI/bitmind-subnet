@@ -23,15 +23,15 @@ class CAMODetector(DeepfakeDetector):
         model_name (str): Name of the detector instance.
         config (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
-        cuda (bool): Whether to enable cuda (GPU).
+        device (str): The type of device ('cpu' or 'cuda').
     """
 
-    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', cuda: bool = True):
+    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', device: str = 'cpu'):
         """
         Initialize the CAMODetector with dynamic model selection based on config.
         """
         self.detectors = {}
-        super().__init__(model_name, config, cuda)
+        super().__init__(model_name, config, device)
 
         gate_names = [
             content_type for content_type in self.content_type
@@ -51,21 +51,22 @@ class CAMODetector(DeepfakeDetector):
                 self.detectors[content_type] = DETECTOR_REGISTRY[model_name](
                     model_name=f'{model_name}_{content_type.capitalize()}',
                     config=detector_config,
-                    cuda=self.device
+                    device=self.device
                 )
             else:
                 raise ValueError(f"Detector {model_name} not found in the registry for {content_type}.")
 
     def __call__(
-        self, image
+        self, image: Image
     ) -> float:
         """
+        Perform inference using the CAMO detector.
 
         Args:
-            image:
+            image (PIL.Image): The input image to classify.
 
         Returns:
-
+            float: The prediction score indicating the likelihood of the image being a deepfake.
         """
         gate_results = self.gating_mechanism(image)
         expert_outputs = {}
@@ -77,4 +78,3 @@ class CAMODetector(DeepfakeDetector):
             return self.detectors['general'](image)
 
         return max(expert_outputs.values())
-

@@ -22,6 +22,7 @@ from base_miner.UCF.detectors import DETECTOR
 from base_miner.deepfake_detectors import DeepfakeDetector
 from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
 
+import bittensor as bt
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
 class UCFDetector(DeepfakeDetector):
@@ -33,11 +34,11 @@ class UCFDetector(DeepfakeDetector):
         model_name (str): Name of the detector instance.
         config (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
-        cuda (bool): Whether to enable cuda (GPU).
+        device (str): The type of device ('cpu' or 'cuda').
     """
     
-    def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', cuda: bool = True):
-        super().__init__(model_name, config, cuda)
+    def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', device: str = 'cpu'):
+        super().__init__(model_name, config, device)
     
     def ensure_weights_are_available(self, weight_filename):
         destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
@@ -84,6 +85,7 @@ class UCFDetector(DeepfakeDetector):
         self.ensure_weights_are_available(self.weights)
         self.ensure_weights_are_available(self.backbone_weights)
         model_class = DETECTOR[self.train_config['model_name']]
+        bt.logging.info(f"TEST PRINT: {self.train_config}")
         self.model = model_class(self.train_config).to(self.device)
         self.model.eval()
         weights_path = Path(WEIGHTS_DIR) / self.weights
