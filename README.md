@@ -14,8 +14,8 @@ e necessary information to get started, contribute, and understand our architect
 The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class experience for Bittensor miners. 
 
 ⚡ **Access Compute**: We offer a wide variety of CPU and GPU options<br>
-⚡ **Develop in VSCode**: Develop in a fully-fledged IDE -- no more basic Jupyter (though we support that too if you hate rich features)<br>
-⚡ **Fully Managed Devops:** Register and deploy your miner in just a few clicks; no more tinkering with networking configurations<br>
+⚡ **Develop in VSCode**: Develop in a feature-rich IDE (we support Jupyter too if you hate rich features)<br>
+⚡ **Fully Managed Devops:** No more tinkering with networking configuration - register and deploy your miner in just a few clicks <br>
 ⚡ **Monitor Emissions:** View the emissions for all of your miners in our Miner Dashboard
 
 
