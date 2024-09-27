@@ -77,8 +77,6 @@ btcli s register --netuid 34 --wallet.name [wallet_name] --wallet.hotkey [wallet
 btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
 ```
 
----
-
 ## Mining
 
 You can launch your miner with `run_neuron.py`.
@@ -127,9 +125,8 @@ Once you've trained your own detector model, you can simply update the configura
 - Your detector type and associated config file are set in `miner.env`. 
 - The detector config file (e.g., `ucf.yaml`) live in `base_miner/deepfake_detectors/configs/`.
 - The model weights file (e.g., `ckpt_best.pth`) should be placed in `base_miner/<detector_type>/weights`.
-   - Alternatively, you can upload your model weieghts and config file to Hugging Face, and update the `hf_repo` and `weights` fields of your detector config accordingly.
+  - If the weights specified in the config file do not exist, the miner will attempt to automatically download them from Hugging Face as specified by the `hf_repo` field in the config file. Feel free to use your own Hugging Face repository for hosting your model weights, and update the config file accordingly.
 
----
 
 ## Train
 
