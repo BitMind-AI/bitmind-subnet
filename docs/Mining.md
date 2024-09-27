@@ -81,16 +81,28 @@ You can launch your miner with `run_neuron.py`.
 
 First, make sure to update `miner.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
 
+
 ```bash
-MODEL_PATH=./mining_models/base.pth
-NEURON_PATH=./neurons/npr_miner.py
-NETUID=34 # or 168 
-SUBTENSOR_NETWORK=finney # or test
-SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443 # or wss://test.finney.opentensor.ai:443/
+DETECTOR=CAMO                                  # Options: CAMO, UCF, NPR
+DETECTOR_CONFIG=camo.yaml                      # Configurations: camo.yaml, ucf.yaml, npr.yaml
+                                               # config files located in base_miner/deepfake_detectors/configs
+DEVICE=cpu                                     # Options: cpu, cuda
+NETUID=34                                      # Network User ID options: 34, 168
+
+# Subtensor Network Configuration:
+SUBTENSOR_NETWORK=finney                       # Networks: finney, test
+SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
+                                                # Endpoints:
+                                                # - wss://entrypoint-finney.opentensor.ai:443
+                                                # - wss://test.finney.opentensor.ai:443/
+
+# Wallet Configuration:
 WALLET_NAME=default
 WALLET_HOTKEY=default
+
+# Miner Settings:
 MINER_AXON_PORT=8091
-BLACKLIST_FORCE_VALIDATOR_PERMIT=True
+BLACKLIST_FORCE_VALIDATOR_PERMIT=True          # Default setting to force validator permit for blacklisting
 ```
 
 Now you're ready to run your miner!
@@ -104,24 +116,37 @@ pm2 start run_neuron.py -- --miner
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
 
-### Bring Your Own Model
-If you want to outperform the base model, you'll need to train on more data or try experiment with different model architectures. 
+### BYOM (Bring Your Own Model)
+If you want to outperform the base model, you'll need to train on more data or try experiment with different hyperparameters and model architectures. See our [training](#train) section below for more details.
 
-- If you want to deploy a model you trained with your base miner code, you can simply update `MODEL_PATH` in `miner.env` to point to your new `.pth` file
-- If you try a different model architecture (which we encourage!), you'll also need to make the appropriate updates to `neurons/miner.py` and `bitmind/miner/predict.py` so that your miner can properly load and predict with your model.
+Once you've trained your own detector model, you can simply update the configuration file for your miner to point to your new `.pth` file. 
+- Your detector type and associated config file are set in `miner.env`. 
+- The detector config file (e.g., `ucf.yaml`) live in `base_miner/deepfake_detectors/configs/`.
+- The model weights file (e.g., `ckpt_best.pth`) should be placed in `base_miner/<detector_type>/weights`.
+   - Alternatively, you can upload your model weieghts and config file to Hugging Face, and update the `hf_repo` and `weights` fields of your detector config accordingly.
+
 ---
 
 ## Train
 
-To train a model, you can start with our base training script. If you prefer a notebook environment, you can use `base_miner/NPR/train_detector.ipynb`
+To see performance improvements over the base model weights provided for each model, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
 
+We are working on a unified interface for training models, but for now, each model has its own training script and logging systems that are functionality independent. 
+
+### NPR
 ```python
 cd base_miner/NPR/ && python train_detector.py
 ```
+The model with the lowest validation accuracy will be saved to `base_miner/NPR/checkpoints/<experiment_name>/model_epoch_best.pth`.<br>
 
-- The model with the lowest validation accuracy will be saved to `base_miner/checkpoints/<experiment_name>/model_epoch_best.pth`.<br>
-- Once you've trained your model, you can evaluate its performance and inspect its predictions in `base_miner/eval_detector.ipynb`.<br>
-- To see performance improvements, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
+### UCF
+```python
+cd base_miner/UCF/ && python train_detector.py
+```
+The model with the lowest validation accuracy will be saved to `base_miner/UCF/logs/training/<experiment_name>/`.<br>
+
+In this directory, you will find your model weights (`ckpt_best.pth`) and training configuration (`config.yaml`).
+
 
 ### Tensorboard 
 
