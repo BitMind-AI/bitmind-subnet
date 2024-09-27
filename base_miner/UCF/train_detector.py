@@ -55,21 +55,50 @@ from config.constants import (
     BACKBONE_CKPT
 )
 
+
 parser = argparse.ArgumentParser(description='Process some paths.')
 parser.add_argument('--detector_path', type=str, default=CONFIG_PATH, help='path to detector YAML file')
 parser.add_argument('--faces_only', dest='faces_only', action='store_true', default=False)
 parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', default=True)
 parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', default=True)
 parser.add_argument("--ddp", action='store_true', default=False)
-parser.add_argument('--local_rank', type=int, default=0)
+parser.add_argument('--device', type=str, choices=['cpu', 'gpu'], default='gpu',
+                    help='Specify whether to use CPU or GPU. Defaults to GPU if available.')
+parser.add_argument('--gpu_id', type=int, default=0, help='Specify the GPU ID to use if using GPU. Defaults to 0.')
 parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
                     help='number of workers for data loading')
 parser.add_argument('--epochs', type=int, default=None, help='number of training epochs')
-
 args = parser.parse_args()
-torch.cuda.set_device(args.local_rank)
-print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
-print(f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
+
+
+def set_device(device=args.device, gpu_id=args.gpu_id):
+    """
+    Determine the device to use based on user input and system availability.
+
+    Parameters:
+        device_arg (str, optional): The device specified by the user ('cpu', 'gpu', or None).
+                                    Defaults to None, in which case it automatically chooses.
+        gpu_id (int, optional): The specific GPU ID to set if using a GPU (defaults to 0).
+    
+    Returns:
+        torch.device: The device to be used (either 'cuda' or 'cpu').
+    """
+    if device == 'cpu':
+        return torch.device("cpu")
+    elif device == 'gpu':
+        if torch.cuda.is_available():
+            torch.cuda.set_device(gpu_id)  # Set the GPU ID
+            return torch.device(f"cuda:{gpu_id}")
+        else:
+            print("Warning: GPU specified but not available. Falling back to CPU.")
+            return torch.device("cpu")
+    else:
+        # Default: Use GPU if available, otherwise fall back to CPU
+        if torch.cuda.is_available():
+            torch.cuda.set_device(gpu_id)
+            return torch.device(f"cuda:{gpu_id}")
+        else:
+            return torch.device("cpu")
 
 
 def ensure_backbone_is_available(logger,
@@ -336,8 +365,9 @@ def save_config(config, outputs_dir):
 
 
 def main():
-
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        
     gc.collect()
 
     # parse options and load config
@@ -350,8 +380,8 @@ def main():
     config.update(config2)
 
     config['workers'] = args.workers
-    
-    config['local_rank'] = args.local_rank
+    config['device'] = set_device(args.device, args.gpu_id)
+    config['gpu_id'] = args.gpu_id
     if config['dry_run']:
         config['nEpochs'] = 0
         config['save_feat'] = False
@@ -415,7 +445,7 @@ def main():
     
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
-    model = model_class(config)
+    model = model_class(config).to(config['device'])
     
     # prepare the optimizer
     optimizer = choose_optimizer(model, config)
@@ -427,7 +457,7 @@ def main():
     metric_scoring = choose_metric(config)
 
     # prepare the trainer
-    trainer = Trainer(config, model, optimizer, scheduler, logger, metric_scoring)
+    trainer = Trainer(config, model, config['device'], optimizer, scheduler, logger, metric_scoring)
 
     # print configuration
     logger.info("--------------- Configuration ---------------")
