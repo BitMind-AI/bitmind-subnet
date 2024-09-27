@@ -20,7 +20,7 @@ DEVICE=cpu                                     # Options: cpu, cuda
 NETUID=34                                      # Network User ID options: 34, 168
 
 # Subtensor Network Configuration:
-SUBTENSOR_NETWORK=finney                       # Networks: finney, test
+SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
                                                 # Endpoints:
                                                 # - wss://entrypoint-finney.opentensor.ai:443

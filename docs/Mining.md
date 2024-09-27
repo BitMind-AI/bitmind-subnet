@@ -7,17 +7,15 @@
    - [Registration ✍️](#registration)
 2. [Mining ⛏️](#mining)
 3. [Train 🚂](#train)
-   - [Tensorboard 📈](#tensorboard)
-   - [Update Miner Detector Model 🔄](#update-miner-detector-model)
 4. [Predict 🔮](#predict)
 
-### Before you proceed ⚠️
+## Before you proceed ⚠️
 
 **Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
 
-**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). A GPU is recommended for training, although not required for basic inference.
+**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). A GPU is required for training (unless you want to wait weeks for training to complete), but is not required for inference while running a miner.
 
-### Installation
+## Installation
 
 Download the repository and navigate to the folder.
 ```bash
@@ -46,15 +44,21 @@ chmod +x setup_miner_env.sh
 
 ### Data
 
+*Only for training -- deployed miner instances do not require access to these datasets.*
+
 If you intend on training a miner, you can download the our open source datasets by running:
 
 ```bash
 python bitmind/download_data.py
 ```
 
-- For **miners**, this is only necessary when training a new model. Deployed miner instances do not need access to these datasets.
+This step is optional. If you choose not to run it, the dataset will be downloaded automatically when you run our training scripts.
 
-### Registration
+The download location of this script is `~/.cache/huggingface`
+
+
+
+## Registration
 
 To mine on our subnet, you must have a registered hotkey.
 
@@ -90,7 +94,7 @@ DEVICE=cpu                                     # Options: cpu, cuda
 NETUID=34                                      # Network User ID options: 34, 168
 
 # Subtensor Network Configuration:
-SUBTENSOR_NETWORK=finney                       # Networks: finney, test
+SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
                                                 # Endpoints:
                                                 # - wss://entrypoint-finney.opentensor.ai:443

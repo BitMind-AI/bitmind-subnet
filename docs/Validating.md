@@ -7,13 +7,13 @@
    - [Registration ✍️](#registration)
 2. [Validating ✅](#validating)
 
-### Before you proceed ⚠️
+## Before you proceed ⚠️
 
 **Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
 
 **Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). 
 
-### Installation
+## Installation
 
 Download the repository and navigate to the folder.
 ```bash
@@ -24,7 +24,7 @@ We recommend using a Conda virtual environment to install the necessary Python p
 You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and create a virtual environment with this command:
 
 ```bash
-conda create -y -n bitmind python=3.10 ipython jupyter ipykernel
+conda create -y -n bitmind python=3.10
 ```
 
 To activate your virtual environment, run `conda activate bitmind`. To deactivate, `conda deactivate`.
@@ -46,13 +46,12 @@ You can download the necessary datasets by running:
 python bitmind/download_data.py
 ```
 
-- For **validators**, we recommend you do this prior to registering and running your validator. Please note the minimum storage requirements specified in `min_compute.yml`.
+We recommend you do this prior to registering and running your validator. Please note the minimum storage requirements specified in `min_compute.yml`.
 
-- For **miners**, this is only necessary when training a new model. Deployed miner instances do not need access to these datasets.
 
-### Registration
+## Registration
 
-To validate on our subnet, must have a registered hotkey.
+To validate on our subnet, you must have a registered hotkey.
 
 #### Mainnet
 
@@ -66,7 +65,6 @@ btcli s register --netuid 34 --wallet.name [wallet_name] --wallet.hotkey [wallet
 btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
 ```
 
----
 
 ## Validating
 
@@ -75,15 +73,30 @@ You can launch your validator with `run_neuron.py`.
 First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **validator port**. This file was created for you during setup, and is not tracked by git.
 
 ```bash
-NETUID=34 # or 168 
-SUBTENSOR_NETWORK=finney # or test
-SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443 # or wss://test.finney.opentensor.ai:443/
+NETUID=34                                      # Network User ID options: 34, 168
+
+# Subtensor Network Configuration:
+SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
+SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
+                                                # Endpoints:
+                                                # - wss://entrypoint-finney.opentensor.ai:443
+                                                # - wss://test.finney.opentensor.ai:443/
+
+# Wallet Configuration:
 WALLET_NAME=default
 WALLET_HOTKEY=default
+
+# Validator Port Setting:
 VALIDATOR_AXON_PORT=8092
 ```
 
-Then, log into weights and biases by running `wandb login` and entering your API key. If you don't have an API key, please reach out to the BitMind team via Discord and we can provide one. 
+Then, log into weights and biases by running
+
+```bash
+wandb login
+```
+
+and entering your API key. If you don't have an API key, please reach out to the BitMind team via Discord and we can provide one. 
 
 Now you're ready to run your validator!
 
