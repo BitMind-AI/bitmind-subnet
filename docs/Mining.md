@@ -143,7 +143,9 @@ cd base_miner/UCF/ && python train_detector.py
 The model with the lowest validation accuracy will be saved to `base_miner/UCF/logs/training/<experiment_name>/`.<br>
 
 In this directory, you will find your model weights (`ckpt_best.pth`) and training configuration (`config.yaml`). Note that
-the training config, e.g. `config.yaml`, is different from the detector config, e.g. `ucf.yaml`. You will need to put the path to the training configuration file `config.yaml` into the detector configuration file `ucf.yaml` to instantiate `UCFDetector(DeepfakeDetector`, as it uses the settings from training time to reconstruct the correct model layer shapes for inference. By default, the paths in the detector configs are treated as HuggingFace repo paths to download, rather than local paths.
+the training config, e.g. `config.yaml`, is different from the detector config, e.g. `ucf.yaml`.
+
+You will need to put the path to the training configuration file `config.yaml` into the detector configuration file `ucf.yaml` to instantiate `UCFDetector(DeepfakeDetector`, as it uses the settings from training time to reconstruct the correct model layer shapes for inference.
 
 ## Deploy Your Model
 
