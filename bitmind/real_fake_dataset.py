@@ -10,8 +10,7 @@ class RealFakeDataset:
         fake_image_datasets: list,
         transforms=None,
         fake_prob=0.5,
-        source_label_mapping=None,
-        normalize_config=None
+        source_label_mapping=None
     ):
         """
         Initialize the RealFakeDataset instance.
@@ -22,29 +21,18 @@ class RealFakeDataset:
             transforms (transforms.Compose): Image transformations (default: None).
             fake_prob (float): Probability of selecting a fake image (default: 0.5).
             source_label_mapping (dict): A dictionary mapping dataset names to float labels.
-            normalize_config (dict): A dictionary containing mean and std for image normalization.
         """
         self.real_image_datasets = real_image_datasets
         self.fake_image_datasets = fake_image_datasets
         self.transforms = transforms
         self.fake_prob = fake_prob
         self.source_label_mapping = source_label_mapping
-        self.normalize_config = normalize_config
 
         self._history = {
             'source': [],
             'index': [],
             'label': [],
         }
-
-    def normalize_image(self, img):
-        """
-        Normalize an image using mean and std from configs.
-        """
-        mean = self.normalize_config['mean']
-        std = self.normalize_config['std']
-        normalize = T.Normalize(mean=mean, std=std)
-        return normalize(img)
     
     def __getitem__(self, index: int) -> tuple:
         """
@@ -82,13 +70,7 @@ class RealFakeDataset:
         except Exception as e:
             print(e)
             print(source.huggingface_dataset_path, index)
-            
-        if self.normalize_config:
-            if isinstance(image, torch.Tensor):
-                image = self.normalize_image(image)
-            else:
-                image = self.normalize_image(T.ToTensor()(image))
-                
+
         if self.source_label_mapping:
             source_label = self.source_label_mapping[source.huggingface_dataset_path]
             return image, label, source_label

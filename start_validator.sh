@@ -12,7 +12,7 @@ if pm2 list | grep -q "bitmind_validator"; then
 fi
 
 # Start the process with arguments from environment variables
-pm2 start python --name bitmind_validator -- neurons/validator.py \
+pm2 start neurons/validator.py --name bitmind_validator -- \
   --netuid $NETUID \
   --subtensor.network $SUBTENSOR_NETWORK \
   --subtensor.chain_endpoint $SUBTENSOR_CHAIN_ENDPOINT \

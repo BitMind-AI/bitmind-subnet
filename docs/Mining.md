@@ -7,17 +7,14 @@
    - [Registration ✍️](#registration)
 2. [Mining ⛏️](#mining)
 3. [Train 🚂](#train)
-   - [Tensorboard 📈](#tensorboard)
-   - [Update Miner Detector Model 🔄](#update-miner-detector-model)
-4. [Predict 🔮](#predict)
 
-### Before you proceed ⚠️
+## Before you proceed ⚠️
 
 **Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
 
-**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). A GPU is recommended for training, although not required for basic inference.
+**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). A GPU is required for training (unless you want to wait weeks for training to complete), but is not required for inference while running a miner.
 
-### Installation
+## Installation
 
 Download the repository and navigate to the folder.
 ```bash
@@ -46,19 +43,30 @@ chmod +x setup_miner_env.sh
 
 ### Data
 
+*Only for training -- deployed miner instances do not require access to these datasets.*
+
 If you intend on training a miner, you can download the our open source datasets by running:
 
 ```bash
 python bitmind/download_data.py
 ```
 
-- For **miners**, this is only necessary when training a new model. Deployed miner instances do not need access to these datasets.
+This step is optional. If you choose not to run it, the dataset will be downloaded automatically when you run our training scripts.
 
-### Registration
+The download location of this script is `~/.cache/huggingface`
+
+
+
+## Registration
 
 To mine on our subnet, you must have a registered hotkey.
 
 *Note: For testnet tao, you can make requests in the [Bittensor Discord's "Requests for Testnet Tao" channel](https://discord.com/channels/799672011265015819/1190048018184011867)*
+
+To reduce the risk of deregistration due to technical issues or a poor performing model, we recommend the following:
+1. Test your miner on testnet before you start mining on mainnet.
+2. Before registering your hotkey on mainnet, make sure your port is open by running `curl your_ip:your_port`
+3. If you've trained a custom model, test it's performance by deploying to testnet. You can use this [notebook](https://github.com/BitMind-AI/bitmind-utils/blob/main/wandb_data/wandb_miner_performance.ipynb) to query our tesnet Weights and Biases logs and compute your model's accuracy. Our testnet validator is running 24/7.
 
 
 #### Mainnet
@@ -73,24 +81,34 @@ btcli s register --netuid 34 --wallet.name [wallet_name] --wallet.hotkey [wallet
 btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [wallet.hotkey] --subtensor.network test
 ```
 
----
-
 ## Mining
 
 You can launch your miner with `run_neuron.py`.
 
 First, make sure to update `miner.env` with your **wallet**, **hotkey**, and **miner port**. This file was created for you during setup, and is not tracked by git.
 
+
 ```bash
-MODEL_PATH=./mining_models/base.pth
-NEURON_PATH=./neurons/npr_miner.py
-NETUID=34 # or 168 
-SUBTENSOR_NETWORK=finney # or test
-SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443 # or wss://test.finney.opentensor.ai:443/
+DETECTOR=CAMO                                  # Options: CAMO, UCF, NPR
+DETECTOR_CONFIG=camo.yaml                      # Configurations: camo.yaml, ucf.yaml, npr.yaml
+                                               # config files located in base_miner/deepfake_detectors/configs
+DEVICE=cpu                                     # Options: cpu, cuda
+NETUID=34                                      # Network User ID options: 34, 168
+
+# Subtensor Network Configuration:
+SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
+SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
+                                                # Endpoints:
+                                                # - wss://entrypoint-finney.opentensor.ai:443
+                                                # - wss://test.finney.opentensor.ai:443/
+
+# Wallet Configuration:
 WALLET_NAME=default
 WALLET_HOTKEY=default
+
+# Miner Settings:
 MINER_AXON_PORT=8091
-BLACKLIST_FORCE_VALIDATOR_PERMIT=True
+BLACKLIST_FORCE_VALIDATOR_PERMIT=True          # Default setting to force validator permit for blacklisting
 ```
 
 Now you're ready to run your miner!
@@ -103,27 +121,40 @@ pm2 start run_neuron.py -- --miner
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
+If you want to outperform the base model, you'll need to train on more data or try experiment with different hyperparameters and model architectures. See our [training](#train) section below for more details.
 
-### Bring Your Own Model
-If you want to outperform the base model, you'll need to train on more data or try experiment with different model architectures. 
-
-- If you want to deploy a model you trained with your base miner code, you can simply update `MODEL_PATH` in `miner.env` to point to your new `.pth` file
-- If you try a different model architecture (which we encourage!), you'll also need to make the appropriate updates to `neurons/miner.py` and `bitmind/miner/predict.py` so that your miner can properly load and predict with your model.
----
 
 ## Train
 
-To train a model, you can start with our base training script. If you prefer a notebook environment, you can use `base_miner/NPR/train_detector.ipynb`
+To see performance improvements over the base models, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
 
+*We are working on a unified interface for training models, but for now, each model has its own training script and logging systems that are functionality independent.*
+
+### NPR
 ```python
 cd base_miner/NPR/ && python train_detector.py
 ```
+The model with the lowest validation accuracy will be saved to `base_miner/NPR/checkpoints/<experiment_name>/model_epoch_best.pth`.<br>
 
-- The model with the lowest validation accuracy will be saved to `base_miner/checkpoints/<experiment_name>/model_epoch_best.pth`.<br>
-- Once you've trained your model, you can evaluate its performance and inspect its predictions in `base_miner/eval_detector.ipynb`.<br>
-- To see performance improvements, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
+### UCF
+```python
+cd base_miner/UCF/ && python train_detector.py
+```
+The model with the lowest validation accuracy will be saved to `base_miner/UCF/logs/training/<experiment_name>/`.<br>
 
-### Tensorboard 
+In this directory, you will find your model weights (`ckpt_best.pth`) and training configuration (`config.yaml`).
+
+## Deploy Your Model
+
+Once you've trained your own detector model, you can simply update the configuration file for your miner to point to your new `.pth` file. 
+- Your detector type and associated config file are set in `miner.env`. 
+- The detector config file (e.g., `ucf.yaml`) live in `base_miner/deepfake_detectors/configs/`.
+- The model weights file (e.g., `ckpt_best.pth`) should be placed in `base_miner/<detector_type>/weights`.
+  - If the weights specified in the config file do not exist, the miner will attempt to automatically download them from Hugging Face as specified by the `hf_repo` field in the config file. Feel free to use your own Hugging Face repository for hosting your model weights, and update the config file accordingly.
+
+
+
+## Tensorboard 
 
 Training metrics are logged with TensorboardX. You can view interactive graphs of these metrics by starting a tensorboard server with the following command, and navigating to `localhost:6006`.
 
@@ -142,10 +173,3 @@ with port forwarding enabled, you can start your tensorboard server on your remo
 ```bash
 tensorboard --logdir=./base_miner/checkpoints/<experiment_name> --host 0.0.0.0 --port 6006
 ```
-
-## Predict
-
-- Prediction logic specific to the trained model your miner is hosting resides in `bitmind/miner/predict.py`
-- If you train a custom model, or change the `base_transforms` used in training (defined in `bitmind.image_transforms`) you may need to update `predict.py` accordingly.
-- Miners return a single float between 0 and 1, where a value above 0.5 represents a prediction that the image is fake.
-- Rewards are based on accuracy. The reward from each challenge is binary.

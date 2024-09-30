@@ -6,7 +6,18 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-Welcome to the BitMind Subnet! This repository contains all the necessary information to get started, contribute, and understand our architecture.
+Welcome to the BitMind Subnet! This repository contains all th
+e necessary information to get started, contribute, and understand our architecture.
+
+## The BitMind Platform
+
+The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class developer experience for Bittensor miners. 
+
+⚡ **Access Compute**: We offer a wide variety of CPU and GPU options<br>
+⚡ **Develop in VSCode**: Develop in a feature-rich IDE (we support Jupyter too if you hate rich features)<br>
+⚡ **Fully Managed Devops:** No more tinkering with networking configuration - register and deploy your miner in just a few clicks <br>
+⚡ **Monitor Emissions:** View the emissions for all of your miners in our Miner Dashboard
+
 
 ## Quick Links
 
@@ -27,13 +38,16 @@ The proliferation of generative AI models has significantly increased the produc
 
 **Features:**
 
-- **API and Frontend (Coming Soon):** Accessibility will be broadened through an intuitive API and user interface, facilitating the integration and utilization of our detection technologies.
+- **Applications:** See [our applications page](https://www.bitmindlabs.ai/applications) for a list of applications that leverage the BitMind Subnet to detect AI-generated media
+  - [Agent Smith Browser Extension](https://chromewebstore.google.com/detail/bitmind-agent-smith/ejlhmbdnjjlifeeelpnlkkechnmojnhg)
+  - [BitMind ID](https://bitmindid.com/)
+  - [BitMind X Bot](https://x.com/bitmindbot)
+  - [BitMind Discord Bot Invite Link](https://discord.com/oauth2/authorize?client_id=1274036214361620560&permissions=139586825408&integration_type=0&scope=bot+applications.commands)
 - **Model Evolution:** Our platform continuously integrates the latest research and developments in AI to adapt to evolving generative techniques.
 
 **Core Components:**
 
 - **Miners:** Tasked with running binary classifiers that discern between genuine and AI-generated content.
-  - **Foundation Model:** Based on the insights from the 2024 CVPR paper [_Rethinking the Up-Sampling Operations in CNN-based Generative Network for Generalizable Deepfake Detection_](https://arxiv.org/abs/2312.10461), our primary model utilizes Neighborhood Pixel Relationships to detect specific discrepancies in AI-generated images.
   - **Research Integration:** We systematically update our detection models and methodologies in response to emerging academic research, offering resources like training codes and model weights to our community.
 - **Validators:** Responsible for challenging miners with a balanced mix of real and synthetic images, drawn from a diverse pool of sources.
   - **Resource Expansion:** We are committed to enhancing the validators' capabilities by increasing the diversity and volume of the image pool, which supports rigorous testing and validation processes.

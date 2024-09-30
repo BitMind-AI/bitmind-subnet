@@ -20,11 +20,11 @@ class NPRDetector(DeepfakeDetector):
         model_name (str): Name of the detector instance.
         config (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
-        cuda (bool): Whether to enable cuda (GPU).
+        device (str): The type of device ('cpu' or 'cuda').
     """
     
-    def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml', cuda: bool = False):
-        super().__init__(model_name, config, cuda)
+    def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml', device: str = 'cpu'):
+        super().__init__(model_name, config, device)
 
     def load_model(self):
         """
@@ -41,7 +41,7 @@ class NPRDetector(DeepfakeDetector):
             destination_path.parent.mkdir(parents=True, exist_ok=True)
         if not destination_path.exists():
             model_path = hf_hub_download(self.hf_repo, weight_filename)
-            model = torch.load(model_path)
+            model = torch.load(model_path, map_location=torch.device(self.device))
             torch.save(model, destination_path)
     
     def preprocess(self, image: Image) -> torch.Tensor:

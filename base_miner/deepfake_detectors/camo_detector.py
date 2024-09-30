@@ -2,7 +2,8 @@ from pathlib import Path
 import yaml
 import torch
 from PIL import Image
-from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
+from base_miner.gating_mechanisms import GatingMechanism
 from base_miner.deepfake_detectors import DeepfakeDetector
 
 
@@ -22,17 +23,22 @@ class CAMODetector(DeepfakeDetector):
         model_name (str): Name of the detector instance.
         config (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
-        cuda (bool): Whether to enable cuda (GPU).
+        device (str): The type of device ('cpu' or 'cuda').
     """
-    
-    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', cuda: bool = True):
+
+    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', device: str = 'cpu'):
         """
         Initialize the CAMODetector with dynamic model selection based on config.
         """
         self.detectors = {}
-        super().__init__(model_name, config, cuda)
-        self.gate = GATE_REGISTRY["GATING_MECHANISM"](object_detection=self.object_detection)
-    
+        super().__init__(model_name, config, device)
+
+        gate_names = [
+            content_type for content_type in self.content_type
+            if self.content_type[content_type].get('use_gate', False)
+        ]
+        self.gating_mechanism = GatingMechanism(gate_names)
+
     def load_model(self):
         """
         Load detectors dynamically based on the provided configuration and registry.
@@ -45,18 +51,30 @@ class CAMODetector(DeepfakeDetector):
                 self.detectors[content_type] = DETECTOR_REGISTRY[model_name](
                     model_name=f'{model_name}_{content_type.capitalize()}',
                     config=detector_config,
-                    cuda=self.device
+                    device=self.device
                 )
             else:
                 raise ValueError(f"Detector {model_name} not found in the registry for {content_type}.")
 
     def __call__(
-            self, image
+        self, image: Image
     ) -> float:
-        try:
-            # Determine image content type.
-            content_type, content_data = self.gate(image)
-            pred = self.detectors[content_type](content_data)
-        except Exception as e:
-            print(f"Error performing inference: {e}")
-        return pred
+        """
+        Perform inference using the CAMO detector.
+
+        Args:
+            image (PIL.Image): The input image to classify.
+
+        Returns:
+            float: The prediction score indicating the likelihood of the image being a deepfake.
+        """
+        gate_results = self.gating_mechanism(image)
+        expert_outputs = {}
+        for content_type, gate_output_image in gate_results.items():
+            pred = self.detectors[content_type](gate_output_image)
+            expert_outputs[content_type] = pred
+
+        if len(expert_outputs) == 0:
+            return self.detectors['general'](image)
+
+        return max(expert_outputs.values())

@@ -18,14 +18,14 @@ class DeepfakeDetector(ABC):
         model_name (str): Name of the detector instance.
         config (str): Name of the YAML file in deepfake_detectors/config/ to load
                       instance attributes from.
-        cuda (bool): Whether to enable cuda (GPU).
+        device (str): The type of device ('cpu' or 'cuda').
     """
     
-    def __init__(self, model_name: str, config = None, cuda: bool = False):
+    def __init__(self, model_name: str, config = None, device: str = 'cpu'):
         self.model_name = model_name
-        use_cuda = cuda and torch.cuda.is_available()
-        self.device = torch.device("cuda" if use_cuda else "cpu")
-        if config: self.load_and_apply_config(config)
+        self.device = torch.device(device if device == 'cuda' and torch.cuda.is_available() else 'cpu')
+        if config:
+            self.load_and_apply_config(config)
         self.load_model()
 
     @abstractmethod

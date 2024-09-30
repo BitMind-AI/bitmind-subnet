@@ -32,15 +32,13 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from sklearn import metrics
 from metrics.utils import get_test_metrics
 
-FFpp_pool=['FaceForensics++','FF-DF','FF-F2F','FF-FS','FF-NT']#
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class Trainer(object):
     def __init__(
         self,
         config,
         model,
+        device,
         optimizer,
         scheduler,
         logger,
@@ -53,6 +51,7 @@ class Trainer(object):
 
         self.config = config
         self.model = model
+        self.device = device
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.swa_model = swa_model
@@ -64,7 +63,7 @@ class Trainer(object):
             lambda: defaultdict(lambda: float('-inf')
             if self.metric_scoring != 'eer' else float('inf'))
         )
-        self.speed_up()  # move model to GPU
+        self.speed_up()
 
         # create directory path
         self.log_dir = self.config['log_dir']
@@ -91,14 +90,12 @@ class Trainer(object):
         return self.writers[writer_key]
 
     def speed_up(self):
-        self.model.to(device)
-        self.model.device = device
-        if self.config['ddp'] == True:
+        self.model.device = self.device
+        if 'cuda' in str(self.device) and self.config['ddp'] == True and torch.cuda.is_available():
             num_gpus = torch.cuda.device_count()
             print(f'avai gpus: {num_gpus}')
-            # local_rank=[i for i in range(0,num_gpus)]
-            self.model = DDP(self.model, device_ids=[self.config['local_rank']],find_unused_parameters=True, output_device=self.config['local_rank'])
-            #self.optimizer =  nn.DataParallel(self.optimizer, device_ids=[int(os.environ['LOCAL_RANK'])])
+            self.model = DDP(self.model, device_ids=[self.config['gpu_id']],
+                             find_unused_parameters=True, output_device=self.config['gpu_id'])
 
     def setTrain(self):
         self.model.train()
@@ -221,10 +218,11 @@ class Trainer(object):
 
         for iteration, data_dict in tqdm(enumerate(train_data_loader),total=len(train_data_loader)):
             self.setTrain()
-            # more elegant and more scalable way of moving data to GPU
-            for key in data_dict.keys():
-                if data_dict[key]!=None and key!='name':
-                    data_dict[key]=data_dict[key].cuda()
+            # if using GPU, move data to GPU
+            if 'cuda' in str(self.device):
+                for key in data_dict.keys():
+                    if data_dict[key] is not None and key!='name':
+                        data_dict[key] = data_dict[key].cuda()
 
             losses, predictions=self.train_step(data_dict)
             # update learning rate
@@ -247,7 +245,7 @@ class Trainer(object):
                 train_recorder_loss[name].update(value)
 
             # run tensorboard to visualize the training process
-            if iteration % 300 == 0 and self.config['local_rank']==0:
+            if iteration % 300 == 0 and self.config['gpu_id']==0:
                 if self.config['SWA'] and (epoch>self.config['swa_start'] or self.config['dry_run']):
                     self.scheduler.step()
                 # info for loss
@@ -326,10 +324,11 @@ class Trainer(object):
             if 'label_spe' in data_dict:
                 data_dict.pop('label_spe')  # remove the specific label
             data_dict['label'] = torch.where(data_dict['label']!=0, 1, 0)  # fix the label to 0 and 1 only
-            # move data to GPU elegantly
-            for key in data_dict.keys():
-                if data_dict[key]!=None:
-                    data_dict[key]=data_dict[key].cuda()
+            # if using GPU, move data to GPU
+            if 'cuda' in str(self.device):
+                for key in data_dict.keys():
+                    if data_dict[key] is not None:
+                        data_dict[key] = data_dict[key].cuda()
             # model forward without considering gradient computation
             predictions = self.inference(data_dict) #dict with keys cls, feat
             
@@ -364,7 +363,7 @@ class Trainer(object):
             if key == 'avg':
                 self.best_metrics_all_time[key]['dataset_dict'] = metric_one_dataset['dataset_dict']
             # Save checkpoint, feature, and metrics if specified in config
-            if eval_stage=='validation' and self.config['save_ckpt'] and key not in FFpp_pool:
+            if eval_stage=='validation' and self.config['save_ckpt']:
                 self.save_ckpt(eval_stage, key, f"{epoch}+{iteration}")
             self.save_metrics(eval_stage, metric_one_dataset, key)
         if losses_one_dataset_recorder is not None:

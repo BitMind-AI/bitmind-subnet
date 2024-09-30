@@ -1,16 +1,83 @@
-import datasets
+from typing import Optional
 from datasets import load_dataset
+from PIL import Image
+from io import BytesIO
+import datasets
 import argparse
 import time
 import sys
 import os
 import subprocess
 import glob
+import requests
 
 from bitmind.constants import DATASET_META, HUGGINGFACE_CACHE_DIR
 
 datasets.logging.set_verbosity_warning()
 datasets.disable_progress_bar()
+
+
+def load_huggingface_dataset(
+    path: str,
+    split: str = 'train',
+    name: Optional[str] = None,
+    download_mode: str = 'reuse_cache_if_exists',
+) -> datasets.Dataset:
+    """
+    Load a dataset from Hugging Face or a local directory.
+
+    Args:
+        path (str): Path to the dataset or 'imagefolder:<directory>' for image folder. Can either be to a publicly
+            hosted huggingface datset with the format <organizatoin>/<datset-name> or a local directory with the format
+            imagefolder:<path/to/directory>
+        split (str, optional): Name of the dataset split to load (default: None).
+            Make sure to check what splits are available for the datasets you're working with.
+        name (str, optional): Name of the dataset (if loading from Hugging Face, default: None).
+            Some huggingface datasets provide various subets of different sizes, which can be accessed via thi
+            parameter.
+        download_mode (str, optional): Download mode for the dataset (if loading from Hugging Face, default: None).
+            can be None or "force_redownload"
+    Returns:
+        Union[dict, load_dataset.Dataset]: The loaded dataset or a specific split of the dataset as requested.
+    """
+    if 'imagefolder' in path:
+        _, directory = path.split(':')
+        if name:
+            dataset = load_dataset(path='imagefolder', name=name, data_dir=directory)
+        else:
+            dataset = load_dataset(path='imagefolder', data_dir=directory)
+    else:
+        dataset = download_dataset(
+            dataset_path=path,
+            dataset_name=name,
+            download_mode=download_mode,
+            cache_dir=HUGGINGFACE_CACHE_DIR)
+
+    if split is None:
+        return dataset
+
+    return dataset[split]
+
+
+def download_image(url: str) -> Image.Image:
+    """
+    Download an image from a URL.
+
+    Args:
+        url (str): The URL of the image to download.
+
+    Returns:
+        Image.Image or None: The downloaded image as a PIL Image object if
+            successful, otherwise None.
+    """
+    response = requests.get(url)
+    if response.status_code == 200:
+        image_data = BytesIO(response.content)
+        return Image.open(image_data)
+
+    else:
+        #print(f"Failed to download image: {response.status_code}")
+        return None
 
 
 def clear_cache(cache_dir):
@@ -38,23 +105,25 @@ def fix_permissions(path):
         print(f"Failed to fix permissions for {path}: {e}")
 
 
-def download_dataset(dataset_path,
-                     download_mode: str,
-                     cache_dir: str,
-                     max_wait: int = 300,
-                     name: str = None):
+def download_dataset(
+    dataset_path: str,
+    dataset_name: str,
+    download_mode: str,
+    cache_dir: str,
+    max_wait: int = 300
+):
     """ Downloads the datasets present in datasets.json with exponential backoff
         download_mode: either 'force_redownload' or 'use_cache_if_exists'
         cache_dir: huggingface cache directory. ~/.cache/huggingface by default 
     """
     retry_wait = 10   # initial wait time in seconds
     attempts = 0     # initialize attempts counter
-    print(f"Downloading {dataset_path} dataset...")
+    print(f"Downloading {dataset_path} (subset={dataset_name}) dataset...")
     while True:
         try:
-            if name:
+            if dataset_name:
                 dataset = load_dataset(dataset_path,
-                                       name=name, #config/subset name
+                                       name=dataset_name, #config/subset name
                                        cache_dir=cache_dir,
                                        download_mode=download_mode,
                                        trust_remote_code=True)
@@ -104,4 +173,4 @@ if __name__ == '__main__':
 
     for dataset_type in DATASET_META:
         for dataset in DATASET_META[dataset_type]:
-            download_dataset(dataset['path'], download_mode, args.cache_dir)
+            download_dataset(dataset['path'], dataset.get('name', None), download_mode, args.cache_dir)

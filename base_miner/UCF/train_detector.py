@@ -45,8 +45,8 @@ from logger import create_logger, RankFilter
 from huggingface_hub import hf_hub_download
 
 # BitMind imports (not from original Deepfake Bench repo)
-from bitmind.dataset_processing.load_split_data import load_datasets, create_real_fake_datasets
-from bitmind.image_transforms import base_transforms, random_aug_transforms
+from bitmind.utils.data import load_and_split_datasets, create_real_fake_datasets
+from bitmind.image_transforms import base_transforms, random_aug_transforms, ucf_transforms
 from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
 from config.constants import (
     CONFIG_PATH,
@@ -55,21 +55,51 @@ from config.constants import (
     BACKBONE_CKPT
 )
 
+
 parser = argparse.ArgumentParser(description='Process some paths.')
 parser.add_argument('--detector_path', type=str, default=CONFIG_PATH, help='path to detector YAML file')
 parser.add_argument('--faces_only', dest='faces_only', action='store_true', default=False)
 parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', default=True)
 parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', default=True)
 parser.add_argument("--ddp", action='store_true', default=False)
-parser.add_argument('--local_rank', type=int, default=0)
+parser.add_argument('--device', type=str, choices=['cpu', 'gpu'], default='gpu',
+                    help='Specify whether to use CPU or GPU. Defaults to GPU if available.')
+parser.add_argument('--gpu_id', type=int, default=0, help='Specify the GPU ID to use if using GPU. Defaults to 0.')
 parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
                     help='number of workers for data loading')
 parser.add_argument('--epochs', type=int, default=None, help='number of training epochs')
-
 args = parser.parse_args()
-torch.cuda.set_device(args.local_rank)
-print(f"torch.cuda.device(0): {torch.cuda.device(0)}")
-print(f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
+
+
+def set_device(device=args.device, gpu_id=args.gpu_id):
+    """
+    Determine the device to use based on user input and system availability.
+
+    Parameters:
+        device_arg (str, optional): The device specified by the user ('cpu', 'gpu', or None).
+                                    Defaults to None, in which case it automatically chooses.
+        gpu_id (int, optional): The specific GPU ID to set if using a GPU (defaults to 0).
+    
+    Returns:
+        torch.device: The device to be used (either 'cuda' or 'cpu').
+    """
+    if device == 'cpu':
+        return torch.device("cpu")
+    elif device == 'gpu':
+        if torch.cuda.is_available():
+            torch.cuda.set_device(gpu_id)  # Set the GPU ID
+            return torch.device(f"cuda:{gpu_id}")
+        else:
+            print("Warning: GPU specified but not available. Falling back to CPU.")
+            return torch.device("cpu")
+    else:
+        # Default: Use GPU if available, otherwise fall back to CPU
+        if torch.cuda.is_available():
+            torch.cuda.set_device(gpu_id)
+            return torch.device(f"cuda:{gpu_id}")
+        else:
+            return torch.device("cpu")
+
 
 def ensure_backbone_is_available(logger,
                                  weights_dir=WEIGHTS_DIR,
@@ -92,6 +122,7 @@ def ensure_backbone_is_available(logger,
     else:
         logger.info(f"{model_filename} backbone already present at {destination_path}.")
 
+
 def init_seed(config):
     if config['manualSeed'] is None:
         config['manualSeed'] = random.randint(1, 10000)
@@ -99,6 +130,7 @@ def init_seed(config):
     if config['cuda']:
         torch.manual_seed(config['manualSeed'])
         torch.cuda.manual_seed_all(config['manualSeed'])
+
 
 def custom_collate_fn(batch):
     images, labels, source_labels = zip(*batch)
@@ -116,52 +148,57 @@ def custom_collate_fn(batch):
     }    
     return data_dict
 
+
 def prepare_datasets(config, logger):
     start_time = log_start_time(logger, "Loading and splitting individual datasets")
-    
-    real_datasets, fake_datasets = load_datasets(dataset_meta=config['dataset_meta'], 
-                                                 expert=config['faces_only'],
-                                                 split_transforms=config['split_transforms'])
+
+    fake_datasets = load_and_split_datasets(config['dataset_meta']['fake'])
+    real_datasets = load_and_split_datasets(config['dataset_meta']['real'])
 
     log_finish_time(logger, "Loading and splitting individual datasets", start_time)
     
     start_time = log_start_time(logger, "Creating real fake dataset splits")
-    train_dataset, val_dataset, test_dataset = \
-    create_real_fake_datasets(real_datasets,
-                              fake_datasets,
-                              config['split_transforms']['train']['transform'],
-                              config['split_transforms']['validation']['transform'],
-                              config['split_transforms']['test']['transform'],
-                              source_labels=True,
-                              normalize_config={'mean': config['mean'],
-                                                'std': config['std']})
+    train_dataset, val_dataset, test_dataset, source_label_mapping = create_real_fake_datasets(
+        real_datasets,
+        fake_datasets,
+        config['split_transforms']['train'],
+        config['split_transforms']['validation'],
+        config['split_transforms']['test'],
+        source_labels=True,
+        group_sources_by_name=True)
 
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
-    train_loader = torch.utils.data.DataLoader(train_dataset,
-                                               batch_size=config['train_batchSize'],
-                                               shuffle=True,
-                                               num_workers=config['workers'],
-                                               drop_last=True,
-                                               collate_fn=custom_collate_fn)
-    val_loader = torch.utils.data.DataLoader(val_dataset,
-                                             batch_size=config['train_batchSize'],
-                                             shuffle=True,
-                                             num_workers=config['workers'],
-                                             drop_last=True,
-                                             collate_fn=custom_collate_fn)
-    test_loader = torch.utils.data.DataLoader(test_dataset,
-                                              batch_size=config['train_batchSize'],
-                                              shuffle=True, 
-                                              num_workers=config['workers'],
-                                              drop_last=True,
-                                              collate_fn=custom_collate_fn)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config['train_batchSize'],
+        shuffle=True,
+        num_workers=config['workers'],
+        drop_last=True,
+        collate_fn=custom_collate_fn)
+
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=config['train_batchSize'],
+        shuffle=True,
+        num_workers=config['workers'],
+        drop_last=True,
+        collate_fn=custom_collate_fn)
+
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=config['train_batchSize'],
+        shuffle=True, 
+        num_workers=config['workers'],
+        drop_last=True,
+        collate_fn=custom_collate_fn)
 
     print(f"Train size: {len(train_loader.dataset)}")
     print(f"Validation size: {len(val_loader.dataset)}")
     print(f"Test size: {len(test_loader.dataset)}")
 
-    return train_loader, val_loader, test_loader
+    return train_loader, val_loader, test_loader, source_label_mapping
+
 
 def choose_optimizer(model, config):
     opt_name = config['optimizer']['type']
@@ -172,7 +209,6 @@ def choose_optimizer(model, config):
             momentum=config['optimizer'][opt_name]['momentum'],
             weight_decay=config['optimizer'][opt_name]['weight_decay']
         )
-        return optimizer
     elif opt_name == 'adam':
         optimizer = optim.Adam(
             params=model.parameters(),
@@ -182,7 +218,6 @@ def choose_optimizer(model, config):
             eps=config['optimizer'][opt_name]['eps'],
             amsgrad=config['optimizer'][opt_name]['amsgrad'],
         )
-        return optimizer
     elif opt_name == 'sam':
         optimizer = SAM(
             model.parameters(), 
@@ -197,21 +232,19 @@ def choose_optimizer(model, config):
 
 def choose_scheduler(config, optimizer):
     if config['lr_scheduler'] is None:
-        return None
+        scheduler = None
     elif config['lr_scheduler'] == 'step':
         scheduler = optim.lr_scheduler.StepLR(
             optimizer,
             step_size=config['lr_step'],
             gamma=config['lr_gamma'],
         )
-        return scheduler
     elif config['lr_scheduler'] == 'cosine':
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=config['lr_T_max'],
             eta_min=config['lr_eta_min'],
         )
-        return scheduler
     elif config['lr_scheduler'] == 'linear':
         scheduler = LinearDecayLR(
             optimizer,
@@ -220,6 +253,8 @@ def choose_scheduler(config, optimizer):
         )
     else:
         raise NotImplementedError('Scheduler {} is not implemented'.format(config['lr_scheduler']))
+    return scheduler
+
 
 def choose_metric(config):
     metric_scoring = config['metric_scoring']
@@ -227,11 +262,13 @@ def choose_metric(config):
         raise NotImplementedError('metric {} is not implemented'.format(metric_scoring))
     return metric_scoring
 
+
 def log_start_time(logger, process_name):
     """Log the start time of a process."""
     start_time = time.time()
     logger.info(f"{process_name} Start Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
     return start_time
+
 
 def log_finish_time(logger, process_name, start_time):
     """Log the finish time and elapsed time of a process."""
@@ -245,6 +282,7 @@ def log_finish_time(logger, process_name, start_time):
     # Log the finish time and elapsed time
     logger.info(f"{process_name} Finish Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(finish_time))}")
     logger.info(f"{process_name} Elapsed Time: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
+
 
 def save_config(config, outputs_dir):
     """
@@ -325,9 +363,13 @@ def save_config(config, outputs_dir):
     # Save as YAML
     save_dict_to_yaml(config, outputs_dir + '/config.yaml')
 
+
 def main():
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        
     gc.collect()
+
     # parse options and load config
     with open(args.detector_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -338,28 +380,26 @@ def main():
     config.update(config2)
 
     config['workers'] = args.workers
-    
-    config['local_rank']=args.local_rank
+    config['device'] = set_device(args.device, args.gpu_id)
+    config['gpu_id'] = args.gpu_id
     if config['dry_run']:
         config['nEpochs'] = 0
-        config['save_feat']=False
+        config['save_feat'] = False
 
-    if args.epochs: config['nEpochs'] = args.epochs
+    if args.epochs:
+        config['nEpochs'] = args.epochs
 
-    config['split_transforms'] = {'train': {'name': 'random_aug_transforms',
-                                            'transform': random_aug_transforms},
-                                  'validation': {'name': 'base_transforms',
-                                                 'transform': base_transforms},
-                                  'test': {'name': 'base_transforms',
-                                           'transform': base_transforms}}
-    config['faces_only'] = args.faces_only
-    config['dataset_meta'] = FACE_TRAINING_DATASET_META if config['faces_only'] else DATASET_META
+    config['split_transforms'] = {
+        'train': ucf_transforms,
+        'validation': ucf_transforms,
+        'test': ucf_transforms
+    }
+
+    config['dataset_meta'] = FACE_TRAINING_DATASET_META if args.faces_only else DATASET_META
     dataset_names = [item["path"] for datasets in config['dataset_meta'].values() for item in datasets]
     config['train_dataset'] = dataset_names
     config['save_ckpt'] = args.save_ckpt
     config['save_feat'] = args.save_feat
-
-    config['specific_task_number'] = len(config['dataset_meta']["fake"]) + 1
     
     if config['lmdb']:
         config['dataset_json_folder'] = 'preprocessing/dataset_json_v3'
@@ -368,9 +408,9 @@ def main():
     timenow=datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     
     outputs_dir =  os.path.join(
-                config['log_dir'],
-                config['model_name'] + '_' + timenow
-            )
+        config['log_dir'],
+        config['model_name'] + '_' + timenow
+    )
     
     os.makedirs(outputs_dir, exist_ok=True)
     logger = create_logger(os.path.join(outputs_dir, 'training.log'))
@@ -378,6 +418,10 @@ def main():
     logger.info('Save log to {}'.format(outputs_dir))
     
     config['ddp']= args.ddp
+
+    # prepare the data loaders
+    train_loader, val_loader, test_loader, source_label_mapping = prepare_datasets(config, logger)
+    config['specific_task_number'] = len(set(source_label_mapping.values()))
 
     # init seed
     init_seed(config)
@@ -393,13 +437,15 @@ def main():
         )
         logger.addFilter(RankFilter(0))
 
-    ensure_backbone_is_available(logger=logger,
-                                 model_filename=config['pretrained'].split('/')[-1],
-                                 hugging_face_repo_name='bitmind/' + config['model_name'])
+    ensure_backbone_is_available(
+        logger=logger,
+        model_filename=config['pretrained'].split('/')[-1],
+        hugging_face_repo_name='bitmind/' + config['model_name']
+    )
     
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
-    model = model_class(config)
+    model = model_class(config).to(config['device'])
     
     # prepare the optimizer
     optimizer = choose_optimizer(model, config)
@@ -411,10 +457,7 @@ def main():
     metric_scoring = choose_metric(config)
 
     # prepare the trainer
-    trainer = Trainer(config, model, optimizer, scheduler, logger, metric_scoring)
-
-    # prepare the data loaders
-    train_loader, val_loader, test_loader = prepare_datasets(config, logger)
+    trainer = Trainer(config, model, config['device'], optimizer, scheduler, logger, metric_scoring)
 
     # print configuration
     logger.info("--------------- Configuration ---------------")
@@ -422,10 +465,10 @@ def main():
     for key, value in config.items():
         params_string += "{}: {}".format(key, value) + "\n"
     logger.info(params_string)
-    
+
     # save training configs
     save_config(config, outputs_dir)
-    
+
     # start training
     start_time = log_start_time(logger, "Training")
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
@@ -437,9 +480,10 @@ def main():
                 )
         if best_metric is not None:
             logger.info(f"===> Epoch[{epoch}] end with validation {metric_scoring}: {parse_metric_for_print(best_metric)}!")
+
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
     log_finish_time(logger, "Training", start_time)
-   
+
     # test
     start_time = log_start_time(logger, "Test")
     trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
@@ -457,6 +501,7 @@ def main():
 
     torch.cuda.empty_cache()
     gc.collect()
+
 
 if __name__ == '__main__':
     main()
