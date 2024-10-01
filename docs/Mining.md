@@ -151,7 +151,7 @@ the training config, e.g. `config.yaml`, is different from the detector config, 
 Once you've trained your own detector model, you can simply update the configuration file for your miner to point to your new `.pth` file. 
 - Your detector type and associated config file are set in `miner.env`. 
 - The detector config file (e.g., `ucf.yaml`) lives in `base_miner/deepfake_detectors/configs/`.
-  - For UCF only: You will need to put the path to the training configuration file `config.yaml` into the detector configuration file `ucf.yaml` to instantiate `UCFDetector`, as it uses the settings from training time to reconstruct the correct model layer shapes for inference.
+  - *For UCF only:* You will need to set the `train_config` field in the detector configuration file (`base_miner/deepfake_detectors/configs/ucf.yaml`) to point to the training configuration file. This allows the instantiation of `UCFDetector` to use the settings from training time to reconstruct the correct model architecture. After training a model, the training config can be found in `base_miner/UCF/logs/<your_training_run>/config.yaml`. Feel free to move this to a different location, as long as the `train_config` field in `configs/ucf.yaml` reflects this. 
 - The model weights file (e.g., `ckpt_best.pth`) should be placed in `base_miner/<detector_type>/weights`.
   - If the weights specified in the config file do not exist, the miner will attempt to automatically download them from Hugging Face as specified by the `hf_repo` field in the config file. Feel free to use your own Hugging Face repository for hosting your model weights, and update the config file accordingly.
 
