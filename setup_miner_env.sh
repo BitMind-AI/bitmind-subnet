@@ -15,16 +15,17 @@ pip install -r requirements-miner.txt
 
 echo "# Default options:
 DETECTOR=CAMO                                  # Options: CAMO, UCF, NPR
-DETECTOR_CONFIG=camo.yaml                      # Configurations: camo.yaml, ucf.yaml, npr.yaml
+DETECTOR_CONFIG=camo.yaml                      # Configs live in base_miner/deepfake_detectors/configs
+                                               # Supply a filename or relative path
 DEVICE=cpu                                     # Options: cpu, cuda
 
 # Subtensor Network Configuration:
 NETUID=34                                      # Network User ID options: 34, 168
 SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
-                                                # Endpoints:
-                                                # - wss://entrypoint-finney.opentensor.ai:443
-                                                # - wss://test.finney.opentensor.ai:443/
+                                               # Endpoints:
+                                               # - wss://entrypoint-finney.opentensor.ai:443
+                                               # - wss://test.finney.opentensor.ai:443/
 
 # Wallet Configuration:
 WALLET_NAME=default

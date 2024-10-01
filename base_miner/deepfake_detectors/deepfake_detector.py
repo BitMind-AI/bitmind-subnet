@@ -68,7 +68,10 @@ class DeepfakeDetector(ABC):
         Args:
             config_path (str): Path to the YAML configuration file.
         """
-        detector_config_file = Path(__file__).resolve().parent / Path('configs/' + detector_config)
+        if Path(detector_config).exists():
+            detector_config_file = Path(detector_config)
+        else:
+            detector_config_file = Path(__file__).resolve().parent / Path('configs/' + detector_config)
         try:
             with open(detector_config_file, 'r') as file:
                 config_dict = yaml.safe_load(file)
