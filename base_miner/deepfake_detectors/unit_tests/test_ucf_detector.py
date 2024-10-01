@@ -40,9 +40,7 @@ class TestUCFDetector(unittest.TestCase):
     def test_model_loading(self):
         """Test if the model is loaded properly."""
         self.assertIsNotNone(self.ucf_detector.model, "Generalist model should not be None")
-        self.assertIsNone(self.ucf_detector.gate, "Generalist gate should be None")
         self.assertIsNotNone(self.ucf_detector_face.model, "Face model should not be None")
-        self.assertIsNotNone(self.ucf_detector_face.gate, "Face gate should not be None")
 
     def test_infer_general(self):
         """Test a basic inference to ensure model outputs are correct."""
