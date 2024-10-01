@@ -8,12 +8,12 @@ sudo apt install npm -y
 sudo npm install pm2@latest -g
 
 pip install -e .
-pip install -r requirements-validator.sh
+pip install -r requirements-validator.txt
 
 echo "# Default options:
-NETUID=34                                      # Network User ID options: 34, 168
 
 # Subtensor Network Configuration:
+NETUID=34                                      # Network User ID options: 34, 168
 SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
                                                 # Endpoints:
