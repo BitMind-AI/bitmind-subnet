@@ -30,11 +30,11 @@ class TestUCFDetector(unittest.TestCase):
         """Test if the weights are checked and downloaded if missing."""
         self.assertTrue((Path(WEIGHTS_DIR) / self.ucf_detector.weights).exists(),
                         "Model weights should be available after initialization.")
-        self.assertTrue((Path(WEIGHTS_DIR) / self.ucf_detector.backbone_weights).exists(),
+        self.assertTrue((Path(WEIGHTS_DIR) / self.ucf_detector.train_config['pretrained'].split('/')[-1]).exists(),
                         "Backbone weights should be available after initialization.")
         self.assertTrue((Path(WEIGHTS_DIR) / self.ucf_detector_face.weights).exists(),
                         "Face model weights should be available after initialization.")
-        self.assertTrue((Path(WEIGHTS_DIR) / self.ucf_detector_face.backbone_weights).exists(),
+        self.assertTrue((Path(WEIGHTS_DIR) / self.ucf_detector_face.train_config['pretrained'].split('/')[-1]).exists(),
                         "Face backbone weights should be available after initialization.")
 
     def test_model_loading(self):
