@@ -73,9 +73,8 @@ You can launch your validator with `run_neuron.py`.
 First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **validator port**. This file was created for you during setup, and is not tracked by git.
 
 ```bash
-NETUID=34                                      # Network User ID options: 34, 168
-
 # Subtensor Network Configuration:
+NETUID=34                                      # Network User ID options: 34, 168
 SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
                                                 # Endpoints:

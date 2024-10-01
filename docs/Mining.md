@@ -6,7 +6,7 @@
    - [Data 📊](#data)
    - [Registration ✍️](#registration)
 2. [Mining ⛏️](#mining)
-3. [Train 🚂](#train)
+3. [Training 🚂](#training)
 
 ## Before you proceed ⚠️
 
@@ -93,9 +93,9 @@ DETECTOR=CAMO                                  # Options: CAMO, UCF, NPR
 DETECTOR_CONFIG=camo.yaml                      # Configurations: camo.yaml, ucf.yaml, npr.yaml
                                                # config files located in base_miner/deepfake_detectors/configs
 DEVICE=cpu                                     # Options: cpu, cuda
-NETUID=34                                      # Network User ID options: 34, 168
 
 # Subtensor Network Configuration:
+NETUID=34                                      # Network User ID options: 34, 168
 SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
                                                 # Endpoints:
@@ -124,7 +124,7 @@ pm2 start run_neuron.py -- --miner
 If you want to outperform the base model, you'll need to train on more data or try experiment with different hyperparameters and model architectures. See our [training](#train) section below for more details.
 
 
-## Train
+## Training
 
 To see performance improvements over the base models, you'll need to train on more data, modify hyperparameters, or try a different modeling strategy altogether. Happy experimenting!
 
