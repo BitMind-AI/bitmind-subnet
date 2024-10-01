@@ -148,7 +148,10 @@ the training config, e.g. `config.yaml`, is different from the detector config, 
 
 ## Deploy Your Model
 
-Whether you have trained your own model, designed your own ``DeepfakeDetector`` subclass, or want to deploy a base miner using provided detectors in ``base_miner/deepfake_detectors/``, you can simply update the `miner.env` file to point to the desired detector class and config. We recommend consulting the `README` in the `base_miner/` directory for more information about the extensibility and modular design of our base miner detectors.
+Whether you have trained your own model, designed your own ``DeepfakeDetector`` subclass, or want to deploy a base miner using provided detectors in ``base_miner/deepfake_detectors/``, you can simply update the `miner.env` file to point to the desired detector class and config.
+
+We recommend consulting the `README` in `base_miner/` to learn about the extensibility and modular design of our base miner detectors.
+
 - The detector type (e.g. `UCF`) corresponds to the module name of the ``DeepfakeDetector`` subclass registered in ``base_miner/registry.py``'s ``DETECTOR_REGISTRY``.
 - The associated detector config file (e.g., `ucf.yaml`) lives in `base_miner/deepfake_detectors/configs/`.
   - *For UCF only:* You will need to set the `train_config` field in the detector configuration file (`base_miner/deepfake_detectors/configs/ucf.yaml`) to point to the training configuration file. This allows the instantiation of `UCFDetector` to use the settings from training time to reconstruct the correct model architecture. After training a model, the training config can be found in `base_miner/UCF/logs/<your_training_run>/config.yaml`. Feel free to move this to a different location, as long as the `train_config` field in `configs/ucf.yaml` reflects this. 
