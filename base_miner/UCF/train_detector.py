@@ -440,7 +440,7 @@ def main():
     ensure_backbone_is_available(
         logger=logger,
         model_filename=config['pretrained'].split('/')[-1],
-        hugging_face_repo_name='bitmind/' + config['model_name']
+        hugging_face_repo_name='bitmind/bm-ucf'
     )
     
     # prepare the model (detector)

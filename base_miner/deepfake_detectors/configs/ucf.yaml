@@ -2,4 +2,3 @@
 hf_repo: 'bitmind/bm-ucf'  # Hugging Face repository for downloading model files
 train_config: 'bm-general-config.yaml'  # pre-trained configuration file in HuggingFace
 weights: 'bm-general.pth'  # UCF model checkpoint in HuggingFace
-backbone_weights: 'xception-best.pth'  # backbone model checkpoint in HuggingFace

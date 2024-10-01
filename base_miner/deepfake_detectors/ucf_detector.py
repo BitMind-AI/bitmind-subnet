@@ -83,7 +83,7 @@ class UCFDetector(DeepfakeDetector):
         self.init_cudnn()
         self.init_seed()
         self.ensure_weights_are_available(self.weights)
-        self.ensure_weights_are_available(self.backbone_weights)
+        self.ensure_weights_are_available(self.train_config['pretrained'].split('/')[-1])
         model_class = DETECTOR[self.train_config['model_name']]
         bt.logging.info(f"Loaded config from training run: {self.train_config}")
         self.model = model_class(self.train_config).to(self.device)
