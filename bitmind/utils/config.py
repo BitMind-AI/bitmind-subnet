@@ -22,7 +22,7 @@ import bittensor as bt
 from bitmind.utils.logging import setup_events_logger
 
 
-def is_cuda_available():
+def get_device():
     try:
         output = subprocess.check_output(["nvidia-smi", "-L"], stderr=subprocess.STDOUT)
         if "NVIDIA" in output.decode("utf-8"):
@@ -81,7 +81,7 @@ def add_args(cls, parser):
         "--neuron.device",
         type=str,
         help="Device to run on.",
-        default=is_cuda_available(),
+        default=get_device(),
     )
 
     parser.add_argument(
