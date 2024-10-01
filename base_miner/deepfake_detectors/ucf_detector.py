@@ -86,7 +86,7 @@ class UCFDetector(DeepfakeDetector):
         self.ensure_weights_are_available(self.backbone_weights)
         self.train_config['pretrained'] =  '/'.join([WEIGHTS_DIR, self.backbone_weights])
         model_class = DETECTOR[self.train_config['model_name']]
-        #bt.logging.info(f"Loaded config from training run: {self.train_config}")
+        bt.logging.info(f"Loaded config from training run: {self.train_config}")
         self.model = model_class(self.train_config).to(self.device)
         self.model.eval()
         weights_path = Path(WEIGHTS_DIR) / self.weights

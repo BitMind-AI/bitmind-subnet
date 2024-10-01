@@ -11,7 +11,7 @@ sys.path.append(parent_directory)
 class TestDetectorRegistry(unittest.TestCase):
     
     def test_registry_contents(self):
-        from detector_registry import Registry
+        from base_miner.registry import Registry
         detector_registry = Registry()
         # Check if the registry has the expected keys (class names or custom names)
         registered_keys = list(detector_registry.data.keys())
@@ -25,7 +25,7 @@ class TestDetectorRegistry(unittest.TestCase):
         self.assertEqual(len(registered_keys), 0, "There should be no registered detectors.")
 
     def test_registry_contents_after_import(self):
-        from base_miner.deepfake_detectors import DETECTOR_REGISTRY
+        from base_miner import DETECTOR_REGISTRY
         # Check if the registry has the expected keys (class names or custom names)
         registered_keys = list(DETECTOR_REGISTRY.data.keys())
         
