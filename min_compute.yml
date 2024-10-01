@@ -57,17 +57,20 @@ compute_spec:
 
     gpu:
       required: True                         # Does the application require a GPU?
-      min_vram: 24                           # Minimum GPU VRAM (GB)
-      recommended_vram: 24                   # Recommended GPU VRAM (GB)
-      min_compute_capability: 6.0            # Minimum CUDA compute capability
-      recommended_compute_capability: 7.0    # Recommended CUDA compute capability
-      recommended_gpu: "NVIDIA RTX 4090"     # provide a recommended GPU to purchase/rent
+      min_vram: 33                           # Minimum GPU VRAM (GB)
+      recommended_vram: 48                   # Recommended GPU VRAM (GB)
+      min_compute_capability: 8.6            # Minimum CUDA compute capability
+      recommended_compute_capability: 8.6    # Recommended CUDA compute capability
+      recommended_gpu: "NVIDIA A40"          # Recommended GPU to purchase/rent
+      peak_fp16_tensor_tflops:               # Peak FP16 tensor TFLOPS (with FP16 accumulate)
+        min: 149.7
+        max: 299.4
 
     memory:
       min_ram: 32          # Minimum RAM (GB)
       min_swap: 4          # Minimum swap space (GB)
       recommended_swap: 8  # Recommended swap space (GB)
-      ram_type: "DDR4"     # RAM type (e.g., DDR4, DDR3, etc.)
+      ram_type: "DDR6"     # RAM type (e.g., DDR4, DDR3, etc.)
 
     storage:
       min_space: 300          # Minimum free storage space (GB)
