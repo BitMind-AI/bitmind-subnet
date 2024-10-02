@@ -26,7 +26,7 @@ from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticImageGenerator
 from bitmind.image_dataset import ImageDataset
-from bitmind.constants import DATASET_META, WANDB_PROJECT, WANDB_ENTITY
+from bitmind.constants import VALIDATOR_DATASET_META, WANDB_PROJECT, WANDB_ENTITY
 import bitmind
 
 
@@ -57,7 +57,7 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info("Loading real datasets")
         self.real_image_datasets = [
             ImageDataset(ds['path'], 'train', ds.get('name', None))
-            for ds in DATASET_META['real']
+            for ds in VALIDATOR_DATASET_META['real']
         ]
 
         self.synthetic_image_generator = SyntheticImageGenerator(
