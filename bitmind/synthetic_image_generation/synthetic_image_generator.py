@@ -142,7 +142,7 @@ class SyntheticImageGenerator:
         return gen_data
 
     def clear_gpu(self):
-         """
+        """
         Clears GPU memory by deleting the loaded diffuser and performing garbage collection.
         """
         if self.diffuser is not None:

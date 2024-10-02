@@ -17,14 +17,15 @@ def is_model_cached(model_name):
 
     # Check if the model directory exists
     if os.path.isdir(model_path):
-        bt.logging.info(f"Model {model_name} is already cached in {model_path}. Skipping...")
+        bt.logging.info(f"{model_name} is in HF cache. Skipping....")
         return True
     else:
-        bt.logging.info(f"Model {model_name} not cached in {model_path}.")
+        bt.logging.info(f"{model_name} is not cached. Downloading....")
         return False
 
 
 def main():
+    bt.logging.info("Verifying validator model downloads....")
     synthetic_image_generator = SyntheticImageGenerator(prompt_type='annotation',
                                                         use_random_diffuser=True,
                                                         diffuser_name=None)
