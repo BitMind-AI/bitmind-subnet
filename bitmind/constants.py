@@ -27,6 +27,15 @@ FACE_TRAINING_DATASET_META = {
     ]
 }
 
+VALIDATOR_DATASET_META = {
+    "real": [
+        {"path": "bitmind/bm-real"},
+        {"path": "bitmind/open-images-v7"},
+        {"path": "bitmind/celeb-a-hq"},
+        {"path": "bitmind/ffhq-256"}
+    ]
+}
+
 VALIDATOR_MODEL_META = {
     "prompt_generators": [
         {
