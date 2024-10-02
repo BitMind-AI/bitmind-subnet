@@ -6,8 +6,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-Welcome to the BitMind Subnet! This repository contains all th
-e necessary information to get started, contribute, and understand our architecture.
+Welcome to the BitMind Subnet! This repository contains all the necessary information to get started, understand our subnet architecture, and contribute.
 
 ## The BitMind Platform
 
