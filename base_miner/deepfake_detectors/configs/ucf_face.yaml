@@ -1,4 +1,4 @@
 # UCFDetector Face Expert Configuration
 hf_repo: 'bitmind/bm-ucf'  # Hugging Face repository for downloading model files
-train_config: 'bm-faces-config.yaml'  # pre-trained configuration file in HuggingFace
-weights: 'bm-faces.pth'  # UCF model checkpoint in HuggingFace
+train_config: 'bm-faces-config-v1.yaml'  # pre-trained configuration file in HuggingFace
+weights: 'bm-faces-v1.pth'  # UCF model checkpoint in HuggingFace
