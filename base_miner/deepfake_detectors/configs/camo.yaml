@@ -1,5 +1,5 @@
 # CAMO Configuration
-object_detection: False
+
 content_type:
   general:
     model: 'UCF'
@@ -7,3 +7,4 @@ content_type:
   face:
     model: 'UCF'
     detector_config: 'ucf_face.yaml'  # Default model for 'face'
+    use_gate: True

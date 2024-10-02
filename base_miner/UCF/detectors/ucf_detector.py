@@ -44,7 +44,7 @@ from torch.utils.tensorboard import SummaryWriter
 from metrics.base_metrics_class import calculate_metrics_for_train
 
 from .base_detector import AbstractDetector
-from detectors import DETECTOR
+from UCF.detectors import DETECTOR
 from networks import BACKBONE
 from loss import LOSSFUNC
 
@@ -469,3 +469,4 @@ class Head(nn.Module):
         x = self.mlp(x_feat)
         x = self.do(x)
         return x, x_feat
+

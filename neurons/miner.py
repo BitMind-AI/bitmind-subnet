@@ -31,18 +31,21 @@ import numpy as np
 from base_miner import DETECTOR_REGISTRY
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse
+from bitmind.utils.config import get_device
 
 
 class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
+        if self.config.neuron.device == 'auto':
+            self.config.neuron.device = get_device()
         self.load_detector()
 
     def load_detector(self):
         self.deepfake_detector = DETECTOR_REGISTRY[self.config.neuron.detector](
             config=self.config.neuron.detector_config,
-            cuda=self.config.neuron.device
+            device=self.config.neuron.device
         )
     
     async def forward(

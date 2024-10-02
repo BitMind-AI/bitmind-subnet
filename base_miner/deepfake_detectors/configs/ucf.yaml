@@ -1,6 +1,4 @@
 # UCFDetector Generalist Configuration
-hf_repo: 'bitmind/ucf'  # Hugging Face repository for downloading model files
-train_config: 'pretrained_config.yaml'  # pre-trained configuration file in HuggingFace
-weights: 'ucf-bitmind-30k.pth'  # UCF model checkpoint in HuggingFace
-backbone_weights: 'xception_best.pth'  # backbone model checkpoint in HuggingFace
-gate_name: null  # Gate mechanism to apply on images before processing, can be None if not used
+hf_repo: 'bitmind/bm-ucf'  # Hugging Face repository for downloading model files
+train_config: 'bm-general-config-v1.yaml'  # pre-trained configuration file in HuggingFace
+weights: 'bm-general-v1.pth'  # UCF model checkpoint in HuggingFace

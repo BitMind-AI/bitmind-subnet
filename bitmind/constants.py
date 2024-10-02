@@ -7,25 +7,28 @@ WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {
     "real": [
-        {"path": "bitmind/open-images-v7", "create_splits": False},
-        {"path": "bitmind/ffhq-256", "create_splits": False},
-        {"path": "bitmind/celeb-a-hq", "create_splits": False},
-        {"path": "bitmind/MS-COCO-unique-256", "create_splits": False}
+        {"path": "bitmind/bm-real"},
+        {"path": "bitmind/open-images-v7"},
+        {"path": "bitmind/celeb-a-hq"},
+        {"path": "bitmind/ffhq-256"},
+        {"path": "bitmind/MS-COCO-unique-256"}
     ],
     "fake": [
-        {"path": "bitmind/realvis-xl", "create_splits": False},
-        {"path": "bitmind/stable-diffusion-xl", "create_splits": False},
+        {"path": "bitmind/bm-realvisxl"},
+        {"path": "bitmind/bm-mobius"},
+        {"path": "bitmind/bm-sdxl"}
     ]
 }
 
 FACE_TRAINING_DATASET_META = {
     "real": [
-        {"path": "bitmind/celeb-a-hq_training_faces", "create_splits": False},
-        {"path": "bitmind/ffhq-256_training_faces", "create_splits": False},
+        {"path": "bitmind/ffhq-256_training_faces", "name": "base_transforms"},
+        {"path": "bitmind/celeb-a-hq_training_faces", "name": "base_transforms"}
+
     ],
     "fake": [
-        {"path": "bitmind/celeb-a-hq___stable-diffusion-xl-base-1.0___256_training_faces", "create_splits": False},
-        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "create_splits": False}
+        {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms"},
+        {"path": "bitmind/celeb-a-hq___stable-diffusion-xl-base-1.0___256_training_faces", "name": "base_transforms"}
     ]
 }
 
@@ -115,4 +118,3 @@ DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
 
 TEXT_MODERATION_MODEL = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit" 
-# "meta-llama/Meta-Llama-3.1-8B-Instruct"

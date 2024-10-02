@@ -26,8 +26,7 @@ class TestCAMODetector(unittest.TestCase):
 
     def test_load_gates(self):
         """Test if the models load properly with the given weight paths."""
-        self.assertIsNotNone(self.camo_detector.gate, "Gate should not be None")
-        self.assertIsNotNone(self.camo_detector.gate.gates, "GatingMechanism gates not be None")
+        self.assertIsNotNone(self.camo_detector.gating_mechanism, "GatingMechanism gates not be None")
 
     def test_call(self):
         """Test the __call__ method for inference on a given image."""

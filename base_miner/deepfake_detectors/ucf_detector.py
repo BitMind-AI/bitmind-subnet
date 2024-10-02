@@ -22,6 +22,7 @@ from base_miner.UCF.detectors import DETECTOR
 from base_miner.deepfake_detectors import DeepfakeDetector
 from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
 
+import bittensor as bt
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
 class UCFDetector(DeepfakeDetector):
@@ -33,13 +34,11 @@ class UCFDetector(DeepfakeDetector):
         model_name (str): Name of the detector instance.
         config (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
-        cuda (bool): Whether to enable cuda (GPU).
+        device (str): The type of device ('cpu' or 'cuda').
     """
     
-    def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', cuda: bool = True):
-        super().__init__(model_name, config, cuda)
-        if self.gate_name: self.gate = GATE_REGISTRY[self.gate_name]()
-        else: self.gate = None
+    def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', device: str = 'cpu'):
+        super().__init__(model_name, config, device)
     
     def ensure_weights_are_available(self, weight_filename):
         destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
@@ -55,6 +54,7 @@ class UCFDetector(DeepfakeDetector):
     
         if not destination_path.exists():
             local_config_path = hf_hub_download(self.hf_repo, self.train_config)
+            print(f"Downloaded {self.hf_repo}/{self.train_config} to {local_config_path}")
             config_dict = {}
             with open(local_config_path, 'r') as f:
                 config_dict = yaml.safe_load(f)
@@ -63,6 +63,7 @@ class UCFDetector(DeepfakeDetector):
             with destination_path.open('r') as f:
                 return yaml.safe_load(f)
         else:
+            print(f"Loaded local config from {destination_path}")
             with destination_path.open('r') as f:
                 return yaml.safe_load(f)
 
@@ -82,8 +83,9 @@ class UCFDetector(DeepfakeDetector):
         self.init_cudnn()
         self.init_seed()
         self.ensure_weights_are_available(self.weights)
-        self.ensure_weights_are_available(self.backbone_weights)
+        self.ensure_weights_are_available(self.train_config['pretrained'].split('/')[-1])
         model_class = DETECTOR[self.train_config['model_name']]
+        bt.logging.info(f"Loaded config from training run: {self.train_config}")
         self.model = model_class(self.train_config).to(self.device)
         self.model.eval()
         weights_path = Path(WEIGHTS_DIR) / self.weights
@@ -112,7 +114,6 @@ class UCFDetector(DeepfakeDetector):
         Returns:
             torch.Tensor: The preprocessed image tensor, ready for model inference.
         """
-        if self.gate: image = self.gate(image, res)
         # Convert image to RGB format to ensure consistent color handling.
         image = image.convert('RGB')
     
@@ -133,7 +134,7 @@ class UCFDetector(DeepfakeDetector):
         """ Perform inference using the model. """
         with torch.no_grad():
             self.model({'image': image_tensor}, inference=True)
-        return np.asarray(self.model.prob)
+        return self.model.prob[-1]
 
     def __call__(self, image: Image) -> float:
         image_tensor = self.preprocess(image)
