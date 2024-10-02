@@ -17,7 +17,6 @@ import httpx
 import threading
 import socket
 
-from bitmind.utils.miner_metrics import miner_metrics
 from bitmind.protocol import ImageSynapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
