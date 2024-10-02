@@ -1,0 +1,10 @@
+# CAMO Configuration
+
+content_type:
+  general:
+    model: 'UCF'
+    detector_config: 'ucf.yaml'  # Default model for 'general'
+  face:
+    model: 'UCF'
+    detector_config: 'ucf_face.yaml'  # Default model for 'face'
+    use_gate: True

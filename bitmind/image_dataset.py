@@ -1,20 +1,21 @@
 from typing import List, Tuple
+from datasets import Dataset
 from PIL import Image
 from io import BytesIO
 import bittensor as bt
 import numpy as np
 
-from bitmind.utils.data import load_huggingface_dataset, download_image
+from bitmind.download_data import load_huggingface_dataset, download_image
 
 
 class ImageDataset:
 
     def __init__(
         self,
-        huggingface_dataset_path: str,
+        huggingface_dataset_path: str = None,
         huggingface_dataset_split: str = 'train',
         huggingface_dataset_name: str = None,
-        create_splits: bool = False,
+        huggingface_dataset: Dataset = None,
         download_mode: str = None
     ):
         """
@@ -32,10 +33,23 @@ class ImageDataset:
             download_mode (str): Download mode for the dataset (default: None).
                 can be None or "force_redownload"
         """
-        self.huggingface_dataset_path = huggingface_dataset_path
-        self.huggingface_dataset_name = huggingface_dataset_name
-        self.dataset = load_huggingface_dataset(
-            huggingface_dataset_path, huggingface_dataset_split, huggingface_dataset_name, create_splits, download_mode)
+        assert huggingface_dataset_path is not None or huggingface_dataset is not None, \
+            "Either huggingface_dataset_path or huggingface_dataset must be provided."
+        
+        if huggingface_dataset:
+            self.dataset = huggingface_dataset
+            self.huggingface_dataset_path = self.dataset.info.dataset_name
+            self.huggingface_dataset_split = list(self.dataset.info.splits.keys())[0]
+            self.huggingface_dataset_name = self.dataset.info.config_name
+
+        else:
+            self.huggingface_dataset_path = huggingface_dataset_path
+            self.huggingface_dataset_name = huggingface_dataset_name
+            self.dataset = load_huggingface_dataset(
+                huggingface_dataset_path,
+                huggingface_dataset_split,
+                huggingface_dataset_name,
+                download_mode)
         self.sampled_images_idx = []
 
     def __getitem__(self, index: int) -> dict:
@@ -78,6 +92,9 @@ class ImageDataset:
         if 'url' in sample:
             image = download_image(sample['url'])
             image_id = sample['url']
+        elif 'image_url' in sample:
+            image = download_image(sample['image_url'])
+            image_id = sample['image_url']
         elif 'image' in sample:
             if isinstance(sample['image'], Image.Image):
                 image = sample['image']
@@ -97,7 +114,7 @@ class ImageDataset:
         else:
             raise NotImplementedError
 
-        # emove alpha channel if download didnt 404
+        # remove alpha channel if download didnt 404
         if image is not None:
             image = image.convert('RGB')
 

@@ -22,7 +22,7 @@ import bittensor as bt
 from bitmind.utils.logging import setup_events_logger
 
 
-def is_cuda_available():
+def get_device():
     try:
         output = subprocess.check_output(["nvidia-smi", "-L"], stderr=subprocess.STDOUT)
         if "NVIDIA" in output.decode("utf-8"):
@@ -81,7 +81,7 @@ def add_args(cls, parser):
         "--neuron.device",
         type=str,
         help="Device to run on.",
-        default=is_cuda_available(),
+        default=get_device(),
     )
 
     parser.add_argument(
@@ -138,12 +138,19 @@ def add_miner_args(cls, parser):
     """Add miner specific arguments to the parser."""
 
     parser.add_argument(
-        "--neuron.model_path",
+        "--neuron.detector_config",
         type=str,
-        help="Path to the .pth file for your trained model",
-        default="./mining_models/base.pth",
+        help=".yaml file name in base_miner/deepfake_detectors/configs/ to load for trained model.",
+        default="camo.yaml",
     )
 
+    parser.add_argument(
+        "--neuron.detector",
+        type=str,
+        help="The DETECTOR_REGISTRY module name of the DeepfakeDetector subclass to use for inference.",
+        default="CAMO",
+    )
+    
     parser.add_argument(
         "--neuron.name",
         type=str,

@@ -163,6 +163,7 @@ testing/
 data/
 checkpoints/
 .requirements_installed
+base_miner/NPR/weights/*
 base_miner/UCF/weights/*
 base_miner/UCF/logs/*
 miner_eval.py

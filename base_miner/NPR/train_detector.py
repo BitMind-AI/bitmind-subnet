@@ -8,8 +8,9 @@ import time
 import random
 import torch
 
+from bitmind.constants import DATASET_META
 from bitmind.image_transforms import base_transforms, random_aug_transforms
-from bitmind.dataset_processing.load_split_data import load_datasets, create_real_fake_datasets
+from bitmind.utils.data import load_and_split_datasets, create_real_fake_datasets
 from options import TrainOptions
 
 
@@ -33,7 +34,8 @@ def main():
     val_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "val"))
 
     # RealFakeDataseta will limit the number of images sampled per dataset to the length of the smallest dataset
-    real_datasets, fake_datasets = load_datasets()
+    real_datasets = load_and_split_datasets(DATASET_META['real'])
+    fake_datasets = load_and_split_datasets(DATASET_META['fake'])
     train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
         real_datasets,
         fake_datasets,

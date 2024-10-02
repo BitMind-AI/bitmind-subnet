@@ -28,6 +28,7 @@ from bitmind.utils.config import add_miner_args
 
 from typing import Union
 
+
 class BaseMinerNeuron(BaseNeuron):
     """
     Base class for Bittensor miners.
