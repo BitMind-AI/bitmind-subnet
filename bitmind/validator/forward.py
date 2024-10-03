@@ -115,9 +115,8 @@ async def forward(self):
     data_aug_params = random_aug_transforms.params
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
-    axons = [self.metagraph.axons[uid] for uid in miner_uids]
     responses = await self.dendrite(
-        axons=axons,
+        axons=[self.metagraph.axons[uid] for uid in miner_uids],
         synapse=prepare_image_synapse(image=image),
         deserialize=True
     )
@@ -126,7 +125,6 @@ async def forward(self):
     wandb_data['data_aug_params'] = data_aug_params
     wandb_data['label'] = label
     wandb_data['miner_uids'] = list(miner_uids)
-    wandb_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])
     wandb_data['predictions'] = responses
     wandb_data['correct'] = [
         np.round(y_hat) == y
