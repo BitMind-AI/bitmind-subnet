@@ -1,7 +1,6 @@
 <p align="center">
   <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="150"/>
 </p>
-<br>
 <h1 align="center">BitMind Subnet (Bittensor Subnet 34)</h1>
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
@@ -85,5 +84,4 @@ This repository is licensed under the MIT License.
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-```
 ```
