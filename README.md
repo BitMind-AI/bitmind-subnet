@@ -1,8 +1,10 @@
 <center>
-    <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="200"/>
+    <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="150"/>
 </center>
-
-# BitMind Subnet (Bittensor Subnet 34)
+<br>
+<center>
+<h1>BitMind Subnet (Bittensor Subnet 34)</h1>
+</center>
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
@@ -37,7 +39,7 @@ The proliferation of generative AI models has significantly increased the produc
 
 **Features:**
 
-- **Applications:** See [our applications page](https://www.bitmindlabs.ai/applications) for a list of applications that leverage the BitMind Subnet to detect AI-generated media
+- **Applications:** See [our applications page](https://www.bitmindlabs.ai/apps) for a list of applications that leverage the BitMind Subnet to detect AI-generated media
   - [Agent Smith Browser Extension](https://chromewebstore.google.com/detail/bitmind-agent-smith/ejlhmbdnjjlifeeelpnlkkechnmojnhg)
   - [BitMind ID](https://bitmindid.com/)
   - [BitMind X Bot](https://x.com/bitmindbot)
@@ -62,7 +64,7 @@ The proliferation of generative AI models has significantly increased the produc
   </a>
 </p>
 
-For real-time discussions, community support, and regular updates, join our Discord server. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
+For real-time discussions, community support, and regular updates, <a href="https://discord.gg/bitmind">join our Discord server</a>. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
 
 ## License
 
@@ -85,4 +87,5 @@ This repository is licensed under the MIT License.
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
+```
 ```
