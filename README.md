@@ -1,10 +1,8 @@
-<center>
-    <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="150"/>
-</center>
+<p align="center">
+  <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="150"/>
+</p>
 <br>
-<center>
-<h1>BitMind Subnet (Bittensor Subnet 34)</h1>
-</center>
+<h1 align="center">BitMind Subnet (Bittensor Subnet 34)</h1>
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
