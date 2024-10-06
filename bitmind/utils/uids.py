@@ -22,10 +22,6 @@ def check_uid_availability(
     if metagraph.validator_permit[uid]:
         if metagraph.S[uid] > vpermit_tao_limit:
             return False
-
-    # temporary check while I figure out why miners have validator permits on testnet..
-    if metagraph.Tv[uid] > 0:
-        return False
     # Available otherwise.
     return True
 
