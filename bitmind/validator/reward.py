@@ -57,7 +57,7 @@ def get_rewards(
                 performance_tracker.reset_miner_history(uid, miner_hotkey)
 
             performance_tracker.update(uid, pred_prob, label, miner_hotkey)
-            metrics = performance_tracker.get_metrics(uid)
+            metrics = performance_tracker.get_metrics(uid, window=100)
             reward = metrics['auc'] ** 2
             reward *= compute_penalty(pred_prob)
 
