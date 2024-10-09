@@ -1,4 +1,4 @@
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef, roc_auc_score
 from typing import Dict, List
 from collections import deque
 import bittensor as bt
@@ -60,7 +60,8 @@ class MinerPerformanceTracker:
             recent_labels = recent_labels[-window:]
 
         keep_idx = [i for i, p in enumerate(recent_preds) if p != -1]
-        predictions = np.array([recent_preds[i] for i in keep_idx])
+        pred_probs = np.array([recent_preds[i] for i in keep_idx])
+        predictions = np.round(pred_probs)
         labels = np.array([recent_labels[i] for i in keep_idx])
 
         if len(labels) == 0 or len(predictions) == 0:
@@ -72,6 +73,7 @@ class MinerPerformanceTracker:
             recall = recall_score(labels, predictions, zero_division=0)
             f1 = f1_score(labels, predictions, zero_division=0)
             mcc = matthews_corrcoef(labels, predictions) if len(np.unique(labels)) > 1 else 0.0
+            auc = roc_auc_score(labels, pred_probs) if len(np.unique(labels)) > 1 else 0.0
         except Exception as e:
             bt.logging.warning(f'Error in reward computation: {e}')
             return self._empty_metrics()
@@ -81,7 +83,8 @@ class MinerPerformanceTracker:
             'precision': precision,
             'recall': recall,
             'f1_score': f1,
-            'mcc': mcc
+            'mcc': mcc,
+            'auc': auc
         }
 
     def _empty_metrics(self):
@@ -93,7 +96,8 @@ class MinerPerformanceTracker:
             'precision': 0,
             'recall': 0,
             'f1_score': 0,
-            'mcc': 0
+            'mcc': 0,
+            'auc': 0
         }
 
     def get_prediction_count(self, uid: int) -> int:

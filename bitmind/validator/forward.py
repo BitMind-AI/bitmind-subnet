@@ -133,7 +133,12 @@ async def forward(self):
         for y_hat, y in zip(responses, [label] * len(responses))
     ]
 
-    rewards = get_rewards(label=label, responses=responses)
+    rewards = get_rewards(
+        label=label,
+        responses=responses,
+        uids=miner_uids,
+        axons=axons,
+        performance_tracker=self.performance_tracker)
     
     # Logging image source and verification details
     source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['dataset']
