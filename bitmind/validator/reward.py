@@ -49,6 +49,7 @@ def get_rewards(
     - np.array: An array of rewards for the given label and responses.
     """
     miner_rewards = []
+    miner_metrics = []
     for axon, uid, pred_prob in zip(axons, uids, responses):
         try:
             miner_hotkey = axon.hotkey
@@ -62,10 +63,11 @@ def get_rewards(
             reward *= compute_penalty(pred_prob)
 
             miner_rewards.append(reward)
+            miner_metrics.append(metrics)
 
         except Exception as e:
             bt.logging.error(f"Couldn't calculate reward for miner {uid}, prediction: {pred_prob}, label: {label}")
             bt.logging.exception(e)
             miner_rewards.append(0.0)
 
-    return np.array(miner_rewards)
+    return np.array(miner_rewards), miner_metrics
