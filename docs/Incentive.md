@@ -1,6 +1,23 @@
 # Bitmind Subnet Incentive Mechanism
 
-This document outlines the incentive mechanism for the Bitmind subnet, including how rewards are calculated, scores are determined, and weights are assigned to incentivize desired behaviors.
+This document covers the current state of SN34's incentive mechanism. 
+1. [Overview](#overview)
+2. [Rewards](#rewards)
+3. [Scores](#scores)
+4. [Weight Setting](#weight-setting)
+5. [Incentive Simulation](#incentive-simulation)
+
+## Overview
+
+Miners are rewarded based on their performance, which is measured by the squared ROC AUC of their last 100 predictions. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
+
+<p align="center">
+  <img src="../static/incentive.gif" alt="Incentive Mechanism">
+</p>
+<p align="center"><em>Simulation applying our latest iteration of our incentive mechanism on historical subnet data. Note that this graphic shows incentive changes at a much more granular timescale (one timestep per challenge) than that of actual weight setting (once per 360 blocks)<br><a href=https://github.com/BitMind-AI/incentive-simulator>incentive-simulator repository</a>
+</em></p>
+
+
 
 ## Rewards
 
@@ -66,16 +83,6 @@ $$I_j = \frac{R_j}{\sum_k R_k}$$
 where rank *R* is *W* (a matrix of validator weight vectors) weighted by validator stake vector *S*. 
 
 $$R_k = \sum_i S_i \cdot W_{ik}$$
-
-## Summary
-
-> Miners are rewarded based on their performance, which is measured by the squared ROC AUC of their predictions. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
-
-<p align="center">
-  <img src="../static/incentive.gif" alt="Incentive Mechanism">
-</p>
-<p align="center"><em>Simulation applying our latest iteration of our incentive mechanism on historical subnet data. Note that this graphic shows incentive changes at a much more granular timescale (one timestep per challenge) than that of actual weight setting (once per 360 blocks)<br><a href=https://github.com/BitMind-AI/incentive-simulator>incentive-simulator repository</a>
-</em></p>
 
 
 
