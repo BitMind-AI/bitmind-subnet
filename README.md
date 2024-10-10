@@ -19,8 +19,9 @@ The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class devel
 
 ## Quick Links
 
-- [Mining Guide 🔨](docs/Mining.md)
+- [Mining Guide ⛏️](docs/Mining.md)
 - [Validator Guide 🔧](docs/Validating.md)
+- [Incentive Mechanism 📈](docs/Incentive.md)
 - [Project Structure and Terminology 📖](docs/Glossary.md)
 - [Contributor Guide 🤝](docs/Contributor_Guide.md)
 
