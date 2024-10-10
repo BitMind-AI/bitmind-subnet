@@ -6,15 +6,21 @@ This document outlines the incentive mechanism for the Bitmind subnet, including
 
 > Miners rewards are computed as the squared [ROC AUC](https://en.wikipedia.org/wiki/Receiver_operating_characteristic) of (up to) their last 100 predictions. 
 
+Miner *i*'s reward is defined as
+
 $$
-\text{Reward} = \text{ROC AUC}^2
+A_i = \text{AUC}_i^2
 $$
 
-$$\text{ROC AUC =} \int_{0}^{1} \text{TPR}(t) \cdot \frac{d}{dt}\text{FPR}(t) dt$$
+$$\text{AUC}_i = \int_{0}^{1} \text{TPR}_i(t) \cdot \frac{d}{dt}\text{FPR}_i(t) dt$$
 
 where *t* is the classification threshold and
 
-$$\text{TPR} = \frac{\text{TP}}{\text{TP} + \text{FN}} \text{, and FPR} = \frac{\text{FP}}{\text{FP} + \text{TN}}$$
+$$\text{TPR}_i = \frac{\text{TP}_i}{\text{TP}_i + \text{FN}_i}$$
+
+and 
+
+$$\text{FPR}_i = \frac{\text{FP}_i}{\text{FP}_i + \text{TN}_i}$$
 
 
 ROC AUC, or Receiver Operating Characteristic Area Under the Curve, is a powerful metric for evaluating binary classification models. It was chosen for its following strenghts:
@@ -31,12 +37,10 @@ These characteristics make ROC AUC an ideal metric for evaluating miner performa
 
 >Validators set weights based on a score vector they use to keep track of miner performance. 
 
-For each challenge, a validator will randomly sample 50 miners, send them an image, and compute their rewards based on their respones. 
-
-These reward values are then normalized, and used to update the validator's score vector using an exponential moving average (EMA) with *&alpha;* = 0.01. 
+For each challenge, a validator will randomly sample 50 miners, send them an image, and compute their rewards based on their respones. These reward values are then used to update the validator's score vector *V* using an exponential moving average (EMA) with *&alpha;* = 0.01. 
 
 $$
-\text{Score}_t=0.01*\text{Rewards}_t+0.99*\text{Score}_{t-1}
+V_t = 0.01 \cdot A_t + 0.99 \cdot V_{t-1}
 $$
 
 A low *&alpha;* value places emphasis on a miner's historical performance, adding additional smoothing to avoid having a single prediction cause significant score fluctuations.
