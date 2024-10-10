@@ -31,7 +31,9 @@ These characteristics make ROC AUC an ideal metric for evaluating miner performa
 
 For each challenge, a validator will randomly sample 50 miners, send them an image, and compute their rewards based on their respones. These reward values are then normalized, and used to update the validator's score vector using an exponential moving average (EMA) with *&alpha;* = 0.01. 
 
-$$\text{Score}_t = 0.01 \cdot \text{Rewards}_t + 0.99 \cdot \text{Score}_{t-1}$$
+$$
+\text{Score}_t = 0.01 \cdot \text{Rewards}_t + 0.99 \cdot \text{Score}_{t-1}
+$$
 
 A low *&alpha;* value places emphasis on a miner's historical performance, adding additional smoothing to avoid having a single prediction cause significant score fluctuations.
 
@@ -40,6 +42,7 @@ A low *&alpha;* value places emphasis on a miner's historical performance, addin
 > Validators set weights around once per tempo (360 blocks) by sending a normalized score vector to the subtensor (in `UINT16` representation).
 
 Weight normalization by L1 norm:
+
 $$w = \frac{\text{Score}}{\|\text{Score}\|_1}$$
 
 
@@ -47,13 +50,12 @@ $$w = \frac{\text{Score}}{\|\text{Score}\|_1}$$
 > The [Yuma Consensus algorithm](https://docs.bittensor.com/yuma-consensus) translates the weight matrix *W* into incentives for the subnet miners and dividends for the subnet validators
 
 Specifically, for each miner *j*, incentive is a function of rank *R*:
-$$
-I_j = \frac{R_j}{\sum_k R_k}
-$$
+
+$$I_j = \frac{R_j}{\sum_k R_k}$$
+
 where rank *R* is *W* (a matrix of validator weight vectors) weighted by validator stake vector *S*. 
-$$
-R_k = \sum_i S_i \cdot W_{ik}
-$$
+
+$$R_k = \sum_i S_i \cdot W_{ik}$$
 
 ## Summary
 
