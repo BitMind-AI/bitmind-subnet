@@ -4,8 +4,8 @@ This document covers the current state of SN34's incentive mechanism.
 1. [Overview](#overview)
 2. [Rewards](#rewards)
 3. [Scores](#scores)
-4. [Weight Setting](#weight-setting)
-5. [Incentive Simulation](#incentive-simulation)
+4. [Weights](#weights)
+5. [Incentive](#incentives)
 
 ## Overview
 
