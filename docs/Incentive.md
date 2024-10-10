@@ -36,7 +36,7 @@ For each challenge, a validator will randomly sample 50 miners, send them an ima
 These reward values are then normalized, and used to update the validator's score vector using an exponential moving average (EMA) with *&alpha;* = 0.01. 
 
 $$
-\text{Score}_t=0.01\cdot\text{Rewards}_t+0.99\cdot\text{Score}_{t-1}
+\text{Score}_t=0.01*\text{Rewards}_t+0.99*\text{Score}_{t-1}
 $$
 
 A low *&alpha;* value places emphasis on a miner's historical performance, adding additional smoothing to avoid having a single prediction cause significant score fluctuations.
