@@ -4,14 +4,16 @@ This document outlines the incentive mechanism for the Bitmind subnet, including
 
 ## Rewards
 
-> Miners rewards are determined by the squared [ROC AUC](https://en.wikipedia.org/wiki/Receiver_operating_characteristic) of their last 100 predictions. 
+> Miners rewards are computed as the squared [ROC AUC](https://en.wikipedia.org/wiki/Receiver_operating_characteristic) of (up to) their last 100 predictions. 
 
 $$
 \text{Reward} = \text{ROC AUC}^2
 $$
 
 $$\text{ROC AUC =} \int_{0}^{1} \text{TPR}(t) \cdot \frac{d}{dt}\text{FPR}(t) dt$$
-where 
+
+where *t* is the classification threshold and
+
 $$\text{TPR} = \frac{\text{TP}}{\text{TP} + \text{FN}} \text{, and FPR} = \frac{\text{FP}}{\text{FP} + \text{TN}}$$
 
 
@@ -31,19 +33,17 @@ These characteristics make ROC AUC an ideal metric for evaluating miner performa
 
 For each challenge, a validator will randomly sample 50 miners, send them an image, and compute their rewards based on their respones. These reward values are then normalized, and used to update the validator's score vector using an exponential moving average (EMA) with *&alpha;* = 0.01. 
 
-$$
-\text{Score}_t = 0.01 \cdot \text{Rewards}_t + 0.99 \cdot \text{Score}_{t-1}
-$$
+$$\text{Score}_t = 0.01 \cdot \text{Rewards}_t + 0.99 \cdot \text{Score}_{t-1}$$
 
 A low *&alpha;* value places emphasis on a miner's historical performance, adding additional smoothing to avoid having a single prediction cause significant score fluctuations.
 
 ## Weights
 
-> Validators set weights around once per tempo (360 blocks) by sending a normalized score vector to the subtensor (in `UINT16` representation).
+> Validators set weights around once per tempo (360 blocks) by sending a normalized score vector to the Bittensor blockchain (in `UINT16` representation).
 
 Weight normalization by L1 norm:
 
-$$w = \frac{\text{Score}}{\|\text{Score}\|_1}$$
+$$w = \frac{\text{Score}}{\lVert\text{Score}\rVert_1}$$
 
 
 ## Incentives
@@ -59,7 +59,7 @@ $$R_k = \sum_i S_i \cdot W_{ik}$$
 
 ## Summary
 
-> Miners are rewarded based on their performance, which is measured by the ROC AUC of their predictions. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
+> Miners are rewarded based on their performance, which is measured by the squared ROC AUC of their predictions. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
 
 ![Incentive Mechanism](../static/incentive.gif)
 *Simulation applying our latest iteration of our incentive mechanism to historical subnet data using this repository: https://github.com/BitMind-AI/incentive-simulator.*
