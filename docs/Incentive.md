@@ -31,13 +31,15 @@ These characteristics make ROC AUC an ideal metric for evaluating miner performa
 
 >Validators set weights based on a score vector they use to keep track of miner performance. 
 
-For each challenge, a validator will randomly sample 50 miners, send them an image, and compute their rewards based on their respones. These reward values are then normalized, and used to update the validator's score vector using an exponential moving average (EMA) with *&alpha;* = 0.01. 
+For each challenge, a validator will randomly sample 50 miners, send them an image, and compute their rewards based on their respones. 
+
+These reward values are then normalized, and used to update the validator's score vector using an exponential moving average (EMA) with *&alpha;* = 0.01. 
+
+A low *&alpha;* value places emphasis on a miner's historical performance, adding additional smoothing to avoid having a single prediction cause significant score fluctuations.
 
 $$
 \text{Score}_t = 0.01 \cdot \text{Rewards}_t + 0.99 \cdot \text{Score}_{t-1}
 $$
-
-A low *&alpha;* value places emphasis on a miner's historical performance, adding additional smoothing to avoid having a single prediction cause significant score fluctuations.
 
 ## Weights
 
