@@ -17,25 +17,26 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+from traceback import print_exception
+from typing import List, Union
+import bittensor as bt
+import numpy as np
+import threading
+import argparse
+import asyncio
+import joblib
 import time
 import copy
-import numpy as np
-import asyncio
-import argparse
-import threading
-import bittensor as bt
+import os
 
-from typing import List, Union
-from traceback import print_exception
-
+from bitmind.validator.miner_performance_tracker import MinerPerformanceTracker
+from bitmind.utils.config import add_validator_args
+from bitmind.utils.mock import MockDendrite
 from bitmind.base.neuron import BaseNeuron
 from bitmind.base.utils.weight_utils import (
     process_weights_for_netuid,
     convert_weights_and_uids_for_emit,
-)  # TODO: Replace when bittensor switches to numpy
-
-from bitmind.utils.mock import MockDendrite
-from bitmind.utils.config import add_validator_args
+)
 
 
 class BaseValidatorNeuron(BaseNeuron):
@@ -52,6 +53,8 @@ class BaseValidatorNeuron(BaseNeuron):
 
     def __init__(self, config=None):
         super().__init__(config=config)
+
+        self.performance_tracker = MinerPerformanceTracker()
 
         # Save a copy of the hotkeys to local memory.
         self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
@@ -375,10 +378,14 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # Save the state of the validator to file.
         np.savez(
-            self.config.neuron.full_path + "/state.npz",
+            os.path.join(self.config.neuron.full_path, "state.npz"),
             step=self.step,
             scores=self.scores,
             hotkeys=self.hotkeys,
+        )
+        joblib.dump(
+            self.performance_tracker,
+            os.path.join(self.config.neuron.full_path, "miner_performance_tracker.pkl")
         )
 
     def load_state(self):
@@ -386,7 +393,12 @@ class BaseValidatorNeuron(BaseNeuron):
         bt.logging.info("Loading validator state.")
 
         # Load the state of the validator from file.
-        state = np.load(self.config.neuron.full_path + "/state.npz")
+        state = np.load(os.path.join(self.config.neuron.full_path, "state.npz"))
         self.step = state["step"]
         self.scores = state["scores"]
         self.hotkeys = state["hotkeys"]
+
+        tracker_path = os.path.join(
+            self.config.neuron.full_path, "miner_performance_tracker.pkl")
+        if os.path.exists(tracker_path):
+            self.performance_tracker = joblib.load(tracker_path)

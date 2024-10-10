@@ -133,7 +133,12 @@ async def forward(self):
         for y_hat, y in zip(responses, [label] * len(responses))
     ]
 
-    rewards = get_rewards(label=label, responses=responses)
+    rewards, metrics = get_rewards(
+        label=label,
+        responses=responses,
+        uids=miner_uids,
+        axons=axons,
+        performance_tracker=self.performance_tracker)
     
     # Logging image source and verification details
     source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['dataset']
@@ -145,6 +150,10 @@ async def forward(self):
     
     # Update the scores based on the rewards.
     self.update_scores(rewards, miner_uids)
+
+    metric_names = list(metrics[0].keys())
+    for metric_name in metric_names:
+        wandb_data[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
 
     # W&B logging if enabled
     if not self.config.wandb.off:
