@@ -61,8 +61,12 @@ $$R_k = \sum_i S_i \cdot W_{ik}$$
 
 > Miners are rewarded based on their performance, which is measured by the squared ROC AUC of their predictions. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
 
-![Incentive Mechanism](../static/incentive.gif)
-*Simulation applying our latest iteration of our incentive mechanism to historical subnet data using this repository: https://github.com/BitMind-AI/incentive-simulator.*
+<p align="center">
+  <img src="../static/incentive.gif" alt="Incentive Mechanism">
+</p>
+<p align="center"><em>Simulation applying our latest iteration of our incentive mechanism on historical subnet data. Note that this graphic shows incentive changes at a much more granular timescale (one timestep per challenge) than that of actual weight setting (once per 360 blocks)<br><a href=https://github.com/BitMind-AI/incentive-simulator>incentive-simulator repository</a>
+</em></p>
 
-*Note that this graphic shows incentive changes at a much more granular timescale (one timestep per challenge) than that of actual weight setting (once per 360 blocks)*
+
+
 
