@@ -11,7 +11,9 @@ $$
 r_i = \text{AUC}_i^2
 $$
 
-$$\text{AUC}_i = \int_{0}^{1} \text{TPR}_i(t) \cdot \frac{d}{dt}\text{FPR}_i(t) dt$$
+$$
+\text{AUC} = \int_{0}^{1} \text{TPR}(t) \cdot \frac{d}{dt}\text{FPR}(t) dt
+$$
 
 where *t* is the classification threshold and
 
@@ -36,7 +38,7 @@ These characteristics make ROC AUC an ideal metric for evaluating miner performa
 
 >Validators set weights based on a score vector they use to keep track of miner performance. 
 
-For each challenge, a validator will randomly sample 50 miners, send them an image, and compute their rewards based on their responses *C*. These reward values are then used to update the validator's score vector *V* using an exponential moving average (EMA) with *&alpha;* = 0.01. 
+For each challenge *t*, a validator will randomly sample 50 miners, send them an image, and compute their rewards *C* based on their responses. These reward values are then used to update the validator's score vector *V* using an exponential moving average (EMA) with *&alpha;* = 0.01. 
 
 $$
 V_t = 0.01 \cdot C_t + 0.99 \cdot V_{t-1}
