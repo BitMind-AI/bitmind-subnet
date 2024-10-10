@@ -385,7 +385,7 @@ class BaseValidatorNeuron(BaseNeuron):
         )
         joblib.dump(
             self.performance_tracker,
-            os.path.join(self.config.neuron.full_path, "/miner_performance_tracker.pkl")
+            os.path.join(self.config.neuron.full_path, "miner_performance_tracker.pkl")
         )
 
     def load_state(self):
