@@ -21,46 +21,53 @@
 from typing import List
 import bittensor as bt
 import numpy as np
-from sklearn.metrics import (
-    f1_score,
-    precision_score,
-    recall_score,
-    confusion_matrix,
-    average_precision_score
-)
 
 
-def count_penalty(y_pred: float) -> float:
-    bad = (y_pred < 0) | (y_pred > 1)
-    return 0. if bad else 1.
+def compute_penalty(y_pred: float) -> float:
+    bad = (y_pred < 0.0) or (y_pred > 1.0)
+    return 0.0 if bad else 1.0
 
 
 def get_rewards(
         label: float,
-        responses: List,
+        responses: List[float],
+        uids: List[int],
+        axons: List[bt.axon],
+        performance_tracker,
     ) -> np.array:
     """
-    Returns a tensor of rewards for the given query and responses.
+    Returns an array of rewards for the given label and miner responses.
 
     Args:
-    - label (float): 1 if image was fake, 0 if real.
+    - label (float): The true label (1.0 for fake, 0.0 for real).
     - responses (List[float]): A list of responses from the miners.
+    - uids (List[int]): List of miner UIDs.
+    - axons (List[bt.axon]): List of miner axons.
+    - performance_tracker (MinerPerformanceTracker): Tracks historical performance metrics per miner.
 
     Returns:
-    - np.array: A tensor of rewards for the given query and responses.
+    - np.array: An array of rewards for the given label and responses.
     """
     miner_rewards = []
-    for uid in range(len(responses)):
+    miner_metrics = []
+    for axon, uid, pred_prob in zip(axons, uids, responses):
         try:
-            pred = responses[uid]
-            reward = 1. if np.round(pred) == label else 0.
-            reward *= count_penalty(pred)
+            miner_hotkey = axon.hotkey
+            if uid in performance_tracker.miner_hotkeys and performance_tracker.miner_hotkeys[uid] != miner_hotkey:
+                bt.logging.info(f"Miner hotkey changed for UID {uid}. Resetting performance metrics.")
+                performance_tracker.reset_miner_history(uid, miner_hotkey)
+
+            performance_tracker.update(uid, pred_prob, label, miner_hotkey)
+            metrics = performance_tracker.get_metrics(uid, window=100)
+            reward = metrics['auc'] ** 2
+            reward *= compute_penalty(pred_prob)
+
             miner_rewards.append(reward)
+            miner_metrics.append(metrics)
 
         except Exception as e:
-            bt.logging.error("Couldn't count miner reward for {}, his predictions = {} and his labels = {}".format(
-                uid, responses[uid], label))
+            bt.logging.error(f"Couldn't calculate reward for miner {uid}, prediction: {pred_prob}, label: {label}")
             bt.logging.exception(e)
-            miner_rewards.append(0)
+            miner_rewards.append(0.0)
 
-    return np.array(miner_rewards)
+    return np.array(miner_rewards), miner_metrics

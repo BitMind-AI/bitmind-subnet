@@ -7,6 +7,7 @@ from typing import List
 from PIL import Image
 
 from bitmind.constants import DIFFUSER_NAMES
+from bitmind.validator.miner_performance_tracker import MinerPerformanceTracker
 
 
 def create_random_image():
@@ -70,6 +71,8 @@ class MockValidator:
     def __init__(self, config):
         self.config = config
         subtensor = MockSubtensor(config.netuid, wallet=bt.MockWallet())
+
+        self.performance_tracker = MinerPerformanceTracker()
 
         self.metagraph = MockMetagraph(
             netuid=config.netuid,

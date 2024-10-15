@@ -38,6 +38,14 @@ def get_device():
     return "cpu"
 
 
+def replace_empty_with_default(args: argparse.Namespace, parser: argparse.ArgumentParser):
+    for action in parser._actions:
+        arg_name = action.dest
+        if isinstance(getattr(args, arg_name), str) and getattr(args, arg_name) == "":
+            setattr(args, arg_name, action.default)
+    return args
+
+
 def check_config(cls, config: "bt.Config"):
     r"""Checks/validates the config namespace object."""
     bt.logging.check_config(config)
@@ -55,6 +63,8 @@ def check_config(cls, config: "bt.Config"):
     config.neuron.full_path = os.path.expanduser(full_path)
     if not os.path.exists(config.neuron.full_path):
         os.makedirs(config.neuron.full_path, exist_ok=True)
+
+    config = replace_empty_with_default(config, add_all_args(cls))
 
     if not config.neuron.dont_save_events:
         # Add custom event logger for the events.
@@ -236,7 +246,7 @@ def add_validator_args(cls, parser):
         "--neuron.moving_average_alpha",
         type=float,
         help="Moving average alpha parameter, how much to add of the new observation.",
-        default=0.1,
+        default=0.01,
     )
 
     parser.add_argument(
@@ -285,14 +295,19 @@ def add_validator_args(cls, parser):
     )
 
 
-def config(cls):
-    """
-    Returns the configuration object specific to this miner or validator after adding relevant arguments.
-    """
+def add_all_args(cls):
     parser = argparse.ArgumentParser()
     bt.wallet.add_args(parser)
     bt.subtensor.add_args(parser)
     bt.logging.add_args(parser)
     bt.axon.add_args(parser)
     cls.add_args(parser)
+    return parser
+
+
+def config(cls):
+    """
+    Returns the configuration object specific to this miner or validator after adding relevant arguments.
+    """
+    parser = add_all_args(cls)
     return bt.config(parser)
