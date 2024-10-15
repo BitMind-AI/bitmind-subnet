@@ -2,7 +2,7 @@ import os
 import torch
 
 
-WANDB_PROJECT = 'bitmind'
+WANDB_PROJECT = 'bitmind-subnet'
 WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {
