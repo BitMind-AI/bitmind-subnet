@@ -4,7 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 from PIL import Image
- from io import BytesIO
+from io import BytesIO
 import bittensor as bt
 import pandas as pd
 import numpy as np
@@ -25,6 +25,7 @@ from bitmind.protocol import ImageSynapse, prepare_image_synapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
 import bitmind
+
 
 def preprocess_image(b64_image):
     image_bytes = base64.b64decode(b64_image)
