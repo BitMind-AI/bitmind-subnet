@@ -136,7 +136,7 @@ class ValidatorProxy:
             axons=[metagraph.axons[uid] for uid in miner_uids],
     	    synapse=ImageSynapse(image=payload['image'], prediction=-1),
             deserialize=True,
-            timeout=10
+            timeout=9
         )
 
         bt.logging.info(f"[ORGANIC] {predictions}")
