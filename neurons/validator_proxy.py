@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 from starlette.concurrency import run_in_threadpool
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
+from PIL import Image
+from io import BytesIO
 import bittensor as bt
 import pandas as pd
 import numpy as np
@@ -16,11 +18,20 @@ import traceback
 import httpx
 import threading
 import socket
+import base64
 
-from bitmind.protocol import ImageSynapse
+from bitmind.image_transforms import base_transforms
+from bitmind.protocol import ImageSynapse, prepare_image_synapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
 import bitmind
+
+
+def preprocess_image(b64_image):
+    image_bytes = base64.b64decode(b64_image)
+    image_buffer = BytesIO(image_bytes)
+    pil_image = Image.open(image_buffer)
+    return base_transforms(pil_image)
 
 
 class ValidatorProxy:
@@ -131,11 +142,14 @@ class ValidatorProxy:
             bt.logging.warning("[ORGANIC] No recent miner uids found, sampling random uids")
             miner_uids = get_random_uids(self.validator, k=self.validator.config.neuron.sample_size)
 
+        image = preprocess_image(payload['image'])
+
         bt.logging.info(f"[ORGANIC] Querying {len(miner_uids)} miners...")
         predictions = await self.dendrite(
             axons=[metagraph.axons[uid] for uid in miner_uids],
-    	    synapse=ImageSynapse(image=payload['image'], prediction=-1),
-            deserialize=True
+    	    synapse=prepare_image_synapse(image=image),
+            deserialize=True,
+            timeout=9
         )
 
         bt.logging.info(f"[ORGANIC] {predictions}")
