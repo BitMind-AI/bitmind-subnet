@@ -119,7 +119,8 @@ async def forward(self):
     responses = await self.dendrite(
         axons=axons,
         synapse=prepare_image_synapse(image=image),
-        deserialize=True
+        deserialize=True,
+        timeout=9
     )
 
     # update logging data
