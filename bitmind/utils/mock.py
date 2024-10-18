@@ -95,6 +95,9 @@ class MockValidator:
     def update_scores(self, rewards, miner_uids):
         pass
 
+    def save_miner_history(self):
+        pass
+
 
 class MockSubtensor(bt.MockSubtensor):
     def __init__(self, netuid, n=16, wallet=None, network="mock"):
