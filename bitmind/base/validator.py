@@ -383,6 +383,12 @@ class BaseValidatorNeuron(BaseNeuron):
         if os.path.exists(self.history_cache_path):
             bt.logging.info(f"Loading miner performance history from {self.history_cache_path}")
             self.performance_tracker = joblib.load(self.history_cache_path)
+            pred_history = self.performance_tracker.prediction_history
+            num_miners_history = len([
+                uid for uid in pred_history
+                if len([p for p in pred_history[uid] if p != -1]) > 0
+            ])
+            bt.logging.info(f"Loaded history for {num_miners_history} miners")
         else:
             bt.logging.info(f"No miner performance history found at {self.history_cache_path} - starting fresh!")
             self.performance_tracker = MinerPerformanceTracker()
