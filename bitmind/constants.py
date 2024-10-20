@@ -92,3 +92,6 @@ DIFFUSER_PIPELINE = {
 DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-2.7b-coco"
+
+# Assuming the config file is in the root directory of your project
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yml')

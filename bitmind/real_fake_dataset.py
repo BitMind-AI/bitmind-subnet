@@ -11,7 +11,7 @@ class RealFakeDataset:
         transforms=None,
         fake_prob=0.5,
         source_label_mapping=None,
-        sampling_strategy='weighted'  # New parameter
+        sampling_strategy='weighted'
     ):
         """
         Initialize the RealFakeDataset instance.
@@ -39,6 +39,7 @@ class RealFakeDataset:
         
         self._setup_sampling_weights()
         self._setup_sampling_strategy()
+        self._setup_shuffled_indices()  # New method call
 
     def _setup_sampling_weights(self):
         """
@@ -62,25 +63,27 @@ class RealFakeDataset:
             self.total_real = sum(len(ds) for ds in self.real_image_datasets)
             self.total_fake = sum(len(ds) for ds in self.fake_image_datasets)
 
+    def _setup_shuffled_indices(self):
+        """
+        Set up a shuffled list of indices for accessing samples.
+        """
+        self.shuffled_indices = np.arange(len(self))
+        np.random.shuffle(self.shuffled_indices)
+
     def __getitem__(self, index: int) -> tuple:
         """
-        Retrieve an item (image, label) from the dataset.
-        Maintains balance between real and fake images based on fake_prob and sampling strategy.
-
-        Args:
-            index (int): Index of the item to retrieve.
-
-        Returns:
-            tuple: Tuple containing the image, its label (1 : fake, 0 : real),
-            and its source label (0 for real datasets and >= 1 for fake datasets).
+        Retrieve an item (image, label) from the dataset using shuffled indices.
         """
-        if len(self._history['index']) > index:
+        if len(self._history['index']) > len(self):
             self.reset()
 
+        # Use the shuffled index to determine the actual sample to retrieve
+        shuffled_index = self.shuffled_indices[index]
+
         if self.sampling_strategy == 'balanced':
-            is_fake = index >= self.samples_per_dataset
+            is_fake = shuffled_index >= self.samples_per_dataset
         elif self.sampling_strategy == 'full':
-            is_fake = index >= self.total_real
+            is_fake = shuffled_index >= self.total_real
         else:  # weighted
             is_fake = np.random.rand() < self.fake_prob
 
@@ -94,14 +97,14 @@ class RealFakeDataset:
             label = 0.0
 
         if self.sampling_strategy == 'balanced':
-            source_index = index % len(datasets)
+            source_index = shuffled_index % len(datasets)
             source = datasets[source_index]
-            valid_index = index % self.samples_per_dataset
+            valid_index = shuffled_index % self.samples_per_dataset
         elif self.sampling_strategy == 'full':
             cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
-            source_index = np.searchsorted(cumulative_sizes, index % (cumulative_sizes[-1]))
+            source_index = np.searchsorted(cumulative_sizes, shuffled_index % (cumulative_sizes[-1]))
             source = datasets[source_index]
-            valid_index = index - (cumulative_sizes[source_index - 1] if source_index > 0 else 0)
+            valid_index = shuffled_index - (cumulative_sizes[source_index - 1] if source_index > 0 else 0)
         else:  # weighted
             source_index = np.random.choice(len(datasets), p=weights)
             source = datasets[source_index]
@@ -155,3 +158,10 @@ class RealFakeDataset:
             'index': [],
             'label': [],
         }
+        self._setup_shuffled_indices()  # Reshuffle indices on reset
+
+    def on_epoch_end(self):
+        """
+        Method to be called at the end of each epoch to reshuffle the dataset.
+        """
+        self._setup_shuffled_indices()
