@@ -5,6 +5,24 @@ set -a
 source validator.env
 set +a
 
+# Login to Weights & Biases
+if ! wandb login $WANDB_API_KEY; then
+  echo "Failed to login to Weights & Biases with the provided API key."
+  exit 1
+fi
+
+# Login to Hugging Face
+if ! huggingface-cli login --token $HUGGING_FACE_TOKEN; then
+  echo "Failed to login to Hugging Face with the provided token."
+  exit 1
+fi
+
+echo "Verifying access to synthetic image generation models. This may take a few minutes."
+if ! python3 bitmind/validator/verify_models.py; then
+  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
+  exit 1
+fi
+
 # Check if the process is already running
 if pm2 list | grep -q "bitmind_validator"; then
   echo "Process 'bitmind_validator' is already running. Deleting it..."

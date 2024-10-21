@@ -1,5 +1,5 @@
 # Transformer models
-from transformers import AutoProcessor, Blip2ForConditionalGeneration
+from transformers import Blip2Processor, Blip2ForConditionalGeneration, pipeline
 
 # Logging and progress handling
 from transformers import logging as transformers_logging
@@ -14,27 +14,142 @@ import gc
 
 from bitmind.image_dataset import ImageDataset
 from bitmind.synthetic_image_generation.utils import image_utils
+from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
 disable_progress_bar()
 
-class ImageAnnotationGenerator:
-    def __init__(self, model_name: str, device: str = 'auto'):
-        self.device = torch.device('cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu')
-        self.model_name = model_name
-        self.processor = AutoProcessor.from_pretrained(self.model_name)
-        self.model = None
-        self.load_model()
 
-    def load_model(self):
-        self.model = Blip2ForConditionalGeneration.from_pretrained(self.model_name, torch_dtype=torch.float16)
+class ImageAnnotationGenerator:
+    """
+    A class responsible for generating text annotations for images using a transformer-based image captioning model.
+    It integrates text moderation to ensure the descriptions are concise and neutral.
+
+    Attributes:
+        device (torch.device): The device (CPU or GPU) on which the models are loaded.
+        model_name (str): The name of the BLIP model for generating image captions.
+        processor (Blip2Processor): The processor associated with the BLIP model.
+        model (Blip2ForConditionalGeneration): The BLIP model used for generating image captions.
+        apply_moderation (bool): Flag to determine whether text moderation should be applied to captions.
+        text_moderation_model_name (str): The name of the model used for moderating text descriptions.
+        text_moderation_pipeline (pipeline): A Hugging Face pipeline for text moderation.
+
+    Methods:
+        __init__(self, model_name: str, text_moderation_model_name: str, device: str = 'auto', apply_moderation: bool = True):
+            Initializes the ImageAnnotationGenerator with the specified model, device, and moderation settings.
+
+        load_models(self):
+            Loads the image annotation and text moderation models into memory.
+
+        clear_gpu(self):
+            Clears GPU memory to ensure that no residual data remains that could affect further operations.
+
+        moderate_description(self, description: str, max_new_tokens: int = 80) -> str:
+            Moderates the given description to make it more concise and neutral, using the text moderation model.
+
+        generate_description(self, image: PIL.Image.Image, verbose: bool = False, max_new_tokens: int = 20) -> str:
+            Generates a description for the provided image using the image captioning model.
+
+        generate_annotation(self, image_id, dataset_name: str, image: PIL.Image.Image, original_dimensions: tuple, resize: bool, verbose: int) -> dict:
+            Generates a text annotation for a given image, including handling image resizing and verbose logging.
+
+        process_image(self, image_info: dict, dataset_name: str, image_index: int, resize: bool, verbose: int) -> Tuple[Any, float]:
+            Processes a single image from a dataset to generate its annotation and measures the time taken.
+
+        generate_annotations(self, real_image_datasets: List[ImageDataset], verbose: int = 0, max_images: int = None, resize_images: bool = False) -> Dict[str, Dict[str, Any]]:
+            Generates text annotations for a batch of images from the specified datasets and calculates the average processing latency.
+    """
+    def __init__(
+        self, model_name: str, text_moderation_model_name: str, device: str = 'auto',
+        apply_moderation: bool = True
+    ):
+        """
+        Initializes the ImageAnnotationGenerator with specific models and device settings.
+        
+        Args:
+            model_name (str): The name of the BLIP model for generating image captions.
+            text_moderation_model_name (str): The name of the model used for moderating text descriptions.
+            device (str): The device to use ('auto' to choose automatically between 'cuda' and 'cpu').
+            apply_moderation (bool): Flag to determine whether text moderation should be applied to captions.
+        """
+        self.device = torch.device(
+            'cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu'
+        )
+        
+        self.model_name = model_name
+        self.processor = Blip2Processor.from_pretrained(
+            self.model_name, cache_dir=HUGGINGFACE_CACHE_DIR
+        )
+        self.model = None
+        
+        self.apply_moderation = apply_moderation
+        self.text_moderation_model_name = text_moderation_model_name
+        self.text_moderation_pipeline = None
+        
+    def load_models(self):
+        """
+        Loads the necessary models for image annotation and text moderation onto the specified device.
+        """
+        bt.logging.info(f"Loading image annotation model {self.model_name}")
+        self.model = Blip2ForConditionalGeneration.from_pretrained(
+            self.model_name, 
+            torch_dtype=torch.float16, 
+            cache_dir=HUGGINGFACE_CACHE_DIR
+        )
         self.model.to(self.device)
+        bt.logging.info(f"Loaded image annotation model {self.model_name}")
+        bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
+        if self.apply_moderation:
+            self.text_moderation_pipeline = pipeline(
+                "text-generation",
+                model=self.text_moderation_model_name,
+                model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}, 
+                device_map="auto"
+            )
+        bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
+        """
+        Clears GPU memory by moving models back to CPU and deleting them, followed by collecting garbage.
+        """
         bt.logging.debug(f"Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
+        if self.text_moderation_pipeline:
+            self.text_moderation_pipeline = None
         gc.collect()
         torch.cuda.empty_cache()
+
+    def moderate_description(self, description: str, max_new_tokens: int = 80) -> str:
+        """
+        Uses the text moderation pipeline to make the description more concise and neutral.
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": ("[INST]You always concisely rephrase given descriptions, eliminate redundancy, "
+                            "and remove all specific references to individuals by name. You do not respond with"
+                            "anything other than the revised description.[/INST]")
+            },
+            {
+                "role": "user",
+                "content": description
+            }
+        ]
+        try:
+            moderated_text = self.text_moderation_pipeline(messages, max_new_tokens=max_new_tokens,
+                                                           pad_token_id=self.text_moderation_pipeline.tokenizer.eos_token_id,
+                                                           return_full_text=False)
+            
+            if isinstance(moderated_text, list):
+                return moderated_text[0]['generated_text']
+                bt.logging.error("Failed to return moderated text.")
+            else:
+                bt.logging.error("Moderated text did not return a list.")
+            
+            return description  # Fallback to the original description if no suitable entry is found
+        except Exception as e:
+            bt.logging.error(f"An error occurred during moderation: {e}", exc_info=True)
+            return description  # Return the original description as a fallback
 
     def generate_description(self,
                              image: PIL.Image.Image,
@@ -56,8 +171,7 @@ class ImageAnnotationGenerator:
             transformers_logging.set_verbosity_error()
 
         description = ""
-        prompts = ["A picture of", "The setting is", "The background is", "The image type/style is"]
-        
+        prompts = ["An image of", "The setting is", "The background is", "The image type/style is"]
         for i, prompt in enumerate(prompts):
             description += prompt + ' '
             inputs = self.processor(image, text=description, return_tensors="pt").to(self.device, torch.float16)
@@ -80,11 +194,17 @@ class ImageAnnotationGenerator:
 
         if not verbose:
             transformers_logging.set_verbosity_info()
-            
+
+        if description.startswith(prompts[0]):
+                    description = description[len(prompts[0]):]
+        
         # Remove any trailing spaces and ensure the description ends with a period
         description = description.strip()
         if not description.endswith('.'):
             description += '.'
+        if self.apply_moderation:
+            moderated_description = self.moderate_description(description)
+            return moderated_description
         return description
 
     def generate_annotation(
@@ -135,6 +255,20 @@ class ImageAnnotationGenerator:
             image_index: int,
             resize: bool,
             verbose: int) -> Tuple[Any, float]:
+        """
+        Processes an individual image for annotation, including resizing and verbosity controls, 
+        and calculates the time taken to process the image.
+
+        Args:
+            image_info (dict): Dictionary containing image data and metadata.
+            dataset_name (str): The name of the dataset containing the image.
+            image_index (int): The index of the image within the dataset.
+            resize (bool): Whether to resize the image before processing.
+            verbose (int): Verbosity level for logging outputs.
+
+        Returns:
+            Tuple[Any, float]: A tuple containing the generated annotation (or None if failed) and the time taken to process.
+        """
 
         if image_info['image'] is None:
             if verbose > 1:

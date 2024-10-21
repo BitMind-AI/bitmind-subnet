@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Update system and install required packages
 sudo apt update -y
 sudo apt install python3-pip -y
 sudo apt install nano -y
@@ -10,6 +11,7 @@ sudo apt install build-essential cmake -y
 sudo apt install libopenblas-dev liblapack-dev -y
 sudo apt install libx11-dev libgtk-3-dev -y
 
+# Install Python dependencies
 pip install -e .
 pip install -r requirements-miner.txt
 

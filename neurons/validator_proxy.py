@@ -56,6 +56,12 @@ class ValidatorProxy:
             methods=["GET"],
             dependencies=[Depends(self.get_self)],
         )
+        self.app.add_api_route(
+            "/metagraph",
+            self.get_metagraph,
+            methods=["GET"],
+            dependencies=[Depends(self.get_self)],
+        )
 
         self.loop = asyncio.get_event_loop()
         self.proxy_counter = ProxyCounter(
@@ -119,6 +125,22 @@ class ValidatorProxy:
 
         self.authenticate_token(authorization)
         return {'status': 'healthy'}
+
+    async def get_metagraph(self, request: Request):
+        authorization: str = request.headers.get("authorization")
+
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header missing")
+
+        self.authenticate_token(authorization)
+
+        metagraph = self.validator.metagraph
+        return {
+            'uids': [str(uid) for uid in metagraph.uids],
+            'ranks': [float(r) for r in metagraph.R],
+            'incentives': [float(i) for i in metagraph.I],
+            'emissions': [float(e) for e in metagraph.E]
+        }
 
     async def forward(self, request: Request):
         authorization: str = request.headers.get("authorization")
