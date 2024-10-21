@@ -26,12 +26,6 @@ import pydantic
 import base64
 import torch
 
-def b64_encode(image):
-    if isinstance(image, torch.Tensor):
-        image = transforms.ToPILImage()(image.cpu().detach())
-    image_bytes = BytesIO()
-    image.save(image_bytes, format="JPEG")
-    return base64.b64encode(image_bytes.getvalue())
 
 def prepare_image_synapse(image: Image):
     """
@@ -43,7 +37,12 @@ def prepare_image_synapse(image: Image):
     Returns:
         ImageSynapse: An instance of ImageSynapse containing the encoded image and a default prediction value.
     """
-    b64_encoded_image = b64_encode(image)
+    if isinstance(image, torch.Tensor):
+        image = transforms.ToPILImage()(image.cpu().detach())
+
+    image_bytes = BytesIO()
+    image.save(image_bytes, format="JPEG")
+    b64_encoded_image = base64.b64encode(image_bytes.getvalue())
     return ImageSynapse(image=b64_encoded_image)
 
 

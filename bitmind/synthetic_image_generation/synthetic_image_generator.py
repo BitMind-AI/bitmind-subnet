@@ -1,3 +1,7 @@
+from transformers import pipeline
+from transformers import set_seed
+from diffusers import StableDiffusionXLPipeline, FluxPipeline
+import bittensor as bt
 import numpy as np
 import torch
 import random
@@ -10,33 +14,56 @@ import warnings
 from bitmind.constants import (
     PROMPT_GENERATOR_NAMES,
     PROMPT_GENERATOR_ARGS,
+    TEXT_MODERATION_MODEL,
     DIFFUSER_NAMES,
     DIFFUSER_ARGS,
     DIFFUSER_PIPELINE,
+    DIFFUSER_CPU_OFFLOAD_ENABLED,
+    GENERATE_ARGS,
     PROMPT_TYPES,
     IMAGE_ANNOTATION_MODEL,
     TARGET_IMAGE_SIZE
 )
 
-warnings.filterwarnings("ignore", category=FutureWarning, module='diffusers')
+future_warning_modules_to_ignore = [
+    'diffusers',
+    'transformers.tokenization_utils_base'
+]
+
+for module in future_warning_modules_to_ignore:
+    warnings.filterwarnings("ignore", category=FutureWarning, module=module)
+    
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 from transformers import pipeline, set_seed
-from diffusers import StableDiffusionXLPipeline, StableDiffusionPipeline, DiffusionPipeline
 import bittensor as bt
+
 from bitmind.synthetic_image_generation.image_annotation_generator import ImageAnnotationGenerator
+from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
 
 class SyntheticImageGenerator:
+    """
+    A class for generating synthetic images based on text prompts. Supports different prompt generation strategies
+    and can utilize various image diffuser models to create images.
 
+    Attributes:
+        use_random_diffuser (bool): Whether to randomly select a diffuser for each generation task.
+        prompt_type (str): The type of prompt generation strategy ('random', 'annotation').
+        prompt_generator_name (str): Name of the prompt generation model.
+        diffuser_name (str): Name of the image diffuser model.
+        image_annotation_generator (ImageAnnotationGenerator): The generator object for annotating images if required.
+        image_cache_dir (str): Directory to cache generated images.
+    """
     def __init__(
         self,
         prompt_type='random',
         prompt_generator_name=PROMPT_GENERATOR_NAMES[0],
         diffuser_name=DIFFUSER_NAMES[0],
         use_random_diffuser=False,
-        image_cache_dir=None
+        image_cache_dir=None,
+        gpu_id=0
     ):
         if prompt_type not in PROMPT_TYPES:
             raise ValueError(f"Invalid prompt type '{prompt_type}'. Options are {PROMPT_TYPES}")
@@ -49,6 +76,7 @@ class SyntheticImageGenerator:
         self.prompt_type = prompt_type
         self.prompt_generator_name = prompt_generator_name
 
+        self.diffuser = None
         if self.use_random_diffuser and diffuser_name is not None:
             bt.logging.warning("Warning: diffuser_name will be ignored (use_random_diffuser=True)")
             self.diffuser_name = None
@@ -57,9 +85,9 @@ class SyntheticImageGenerator:
 
         self.image_annotation_generator = None
         if self.prompt_type == 'annotation':
-            bt.logging.info(f"Loading image captioning model ({IMAGE_ANNOTATION_MODEL})...")
-            self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL)
-        else:
+            self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL,
+                                                                      text_moderation_model_name=TEXT_MODERATION_MODEL)
+        elif self.prompt_type == 'random':
             bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
             self.prompt_generator = pipeline(
                 'text-generation', **PROMPT_GENERATOR_ARGS[prompt_generator_name])
@@ -95,12 +123,12 @@ class SyntheticImageGenerator:
             ]
         else:
             raise NotImplementedError
-        
+
         if self.use_random_diffuser:
             self.load_diffuser('random')
         else:
             self.load_diffuser(self.diffuser_name)
-        
+
         bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
@@ -109,12 +137,14 @@ class SyntheticImageGenerator:
                 path = os.path.join(self.image_cache_dir, image_data['id'])
                 image_data['image'].save(path)
             gen_data.append(image_data)
-            
         self.clear_gpu()  # remove diffuser from gpu
 
         return gen_data
 
     def clear_gpu(self):
+        """
+        Clears GPU memory by deleting the loaded diffuser and performing garbage collection.
+        """
         if self.diffuser is not None:
             bt.logging.debug(f"Deleting previous diffuser, freeing memory")
             del self.diffuser
@@ -122,9 +152,13 @@ class SyntheticImageGenerator:
             torch.cuda.empty_cache()
             self.diffuser = None
 
-    def load_diffuser(self, diffuser_name) -> None:
+    def load_diffuser(self, diffuser_name, gpu_id=None) -> None:
         """
-        loads a huggingface diffuser model.
+        Loads a Hugging Face diffuser model to a specific GPU.
+        
+        Parameters:
+        diffuser_name (str): Name of the diffuser to load.
+        gpu_index (int): Index of the GPU to use. Defaults to 0.
         """
         if diffuser_name == 'random':
             diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
@@ -133,19 +167,36 @@ class SyntheticImageGenerator:
         self.diffuser_name = diffuser_name
         pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
         self.diffuser = pipeline_class.from_pretrained(diffuser_name,
-                                                       torch_dtype=torch.float16,
+                                                       cache_dir=HUGGINGFACE_CACHE_DIR,
                                                        **DIFFUSER_ARGS[diffuser_name],
                                                        add_watermarker=False)
         self.diffuser.set_progress_bar_config(disable=True)
-        self.diffuser.to("cuda")
-        print(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
+        if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
+            self.diffuser.enable_model_cpu_offload()
+        elif not gpu_id:
+            self.diffuser.to("cuda")
+        elif gpu_id:
+            self.diffuser.to(f"cuda:{gpu_id}")
+            
         bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
     def generate_image_caption(self, image_sample) -> str:
         """
-
+        Generates a descriptive caption for a given image sample.
+    
+        This function takes an image sample as input, processes the image using a pre-trained
+        model, and returns a generated caption describing the content of the image.
+    
+        Args:
+            image_sample (dict): A dictionary containing information about the image to be processed.
+                It includes:
+                    - 'source' (str): The dataset or source name of the image.
+                    - 'id' (int/str): The unique identifier of the image.
+    
+        Returns:
+            str: A descriptive caption generated for the input image.
         """
-        self.image_annotation_generator.load_model()
+        self.image_annotation_generator.load_models()
         annotation = self.image_annotation_generator.process_image(
             image_info=image_sample,
             dataset_name=image_sample['source'],
@@ -237,43 +288,71 @@ class SyntheticImageGenerator:
     
     def generate_image(self, prompt, name = None, generate_at_target_size = False) -> list:
         """
-        Generates an image based on a text prompt, optionally at a specified target size.
-    
+        Generates a synthetic image based on a text prompt. This function can optionally adjust the generation args of the 
+        diffusion model, such as dimensions and the number of inference steps.
+        
         Args:
-            prompt (str): The text prompt used for generating the image.
-            name (str, optional): The id associated with the generated image. Defaults to None.
-            generate_at_target_size (bool, optional): If True, generates the image at a specified target size.
-    
+            prompt (str): The text prompt used to inspire the image generation.
+            name (str, optional): An optional identifier for the generated image. If not provided, a timestamp-based
+                identifier is used.
+            generate_at_target_size (bool, optional): If True, the image is generated at the dimensions specified by the
+                TARGET_IMAGE_SIZE constant. Otherwise, dimensions are selected based on the diffuser's default or random settings.
+        
         Returns:
-            list: A dictionary containing the prompt (truncated if over max token length), generated image, and image ID.
+            dict: A dictionary containing:
+                - 'prompt': The possibly truncated version of the input prompt.
+                - 'image': The generated image object.
+                - 'id': The identifier of the generated image.
+                - 'gen_time': The time taken to generate the image, measured from the start of the process.
         """
         # Generate a unique image name based on current time if not provided
         image_name = name if name else f"{time.time():.0f}.jpg"
         # Check if the prompt is too long
         truncated_prompt = self.truncate_prompt_if_too_long(prompt)
+        gen_args = {}
+
+        # Load generation arguments based on diffuser settings
+        if self.diffuser_name in GENERATE_ARGS:
+            gen_args = GENERATE_ARGS[self.diffuser_name].copy()
+
+            if isinstance(gen_args.get('num_inference_steps'), dict):
+                gen_args['num_inference_steps'] = np.random.randint(
+                    gen_args['num_inference_steps']['min'],
+                    gen_args['num_inference_steps']['max'])
+
+            for dim in ('height', 'width'):
+                if isinstance(gen_args.get(dim), list):
+                    gen_args[dim] = np.random.choice(gen_args[dim])
+
         try:
             if generate_at_target_size:
                 #Attempt to generate an image with specified dimensions
-                gen_image = self.diffuser(prompt=truncated_prompt, height=TARGET_IMAGE_SIZE[0],
-                                      width=TARGET_IMAGE_SIZE[1]).images[0]
-            else:
-                #Generate an image using default dimensions supported by the pipeline
-                gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+                gen_args['height'] = TARGET_IMAGE_SIZE[0]
+                gen_args['width'] = TARGET_IMAGE_SIZE[1]
+            # Record the time taken to generate the image
+            start_time = time.time()
+            # Generate image using the diffuser with appropriate arguments
+            gen_image = self.diffuser(prompt=truncated_prompt, num_images_per_prompt=1, **gen_args).images[0]
+            # Calculate generation time
+            gen_time = time.time() - start_time
         except Exception as e:
             if generate_at_target_size:
-                bt.logging.warning(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
+                bt.logging.error(f"Attempt with custom dimensions failed, falling back to default dimensions. Error: {e}")
                 try:
                     # Fallback to generating an image without specifying dimensions
                     gen_image = self.diffuser(prompt=truncated_prompt).images[0]
+                    gen_time = time.time() - start_time
                 except Exception as fallback_error:
                     bt.logging.error(f"Failed to generate image with default dimensions after initial failure: {fallback_error}")
                     raise RuntimeError(f"Both attempts to generate image failed: {fallback_error}")
             else:
-                bt.logging.warning(f"Image generation error: {e}")
+                bt.logging.error(f"Image generation error: {e}")
+                raise RuntimeError(f"Failed to generate image: {e}")
             
         image_data = {
             'prompt': truncated_prompt,
             'image': gen_image,
-            'id': image_name
+            'id': image_name,
+            'gen_time': gen_time
         }
         return image_data
