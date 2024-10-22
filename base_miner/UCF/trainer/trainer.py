@@ -324,13 +324,13 @@ class Trainer(object):
                     eval_recorder_loss[name].update(value)
         return eval_recorder_loss, np.array(prediction_lists), np.array(label_lists),np.array(feature_lists)
 
-    def save_best(self,epoch,iteration,step,losses_one_dataset_recorder,key,metric_one_dataset,eval_stage):
+    def save_best(self, epoch, iteration, step, losses_one_dataset_recorder, key, metric_one_dataset, eval_stage):
         best_metric = self.best_metrics_all_time[key].get(self.metric_scoring,
-                                                          float('-inf') if self.metric_scoring != 'eer' else float(
-                                                              'inf'))
+                                                        float('-inf') if self.metric_scoring != 'eer' else float('inf'))
         # Check if the current score is an improvement
         improved = (metric_one_dataset[self.metric_scoring] > best_metric) if self.metric_scoring != 'eer' else (
-                    metric_one_dataset[self.metric_scoring] < best_metric)
+                metric_one_dataset[self.metric_scoring] < best_metric)
+
         if improved:
             # Update the best metric
             self.best_metrics_all_time[key][self.metric_scoring] = metric_one_dataset[self.metric_scoring]
@@ -340,34 +340,47 @@ class Trainer(object):
             if eval_stage=='validation' and self.config['save_ckpt']:
                 self.save_ckpt(eval_stage, key, f"{epoch}+{iteration}")
             self.save_metrics(eval_stage, metric_one_dataset, key)
+
+        # Initialize wandb log dictionary
+        log_dict = {
+            'epoch': epoch,
+            'step': step,
+            f'{eval_stage}/dataset': key
+        }
+
         if losses_one_dataset_recorder is not None:
             # info for each dataset
             loss_str = f"dataset: {key}    step: {step}    "
             for k, v in losses_one_dataset_recorder.items():
-                writer = self.get_writer(eval_stage, key, k)
                 v_avg = v.average()
                 if v_avg == None:
                     print(f'{k} is not calculated')
                     continue
-                # tensorboard-1. loss
-                writer.add_scalar(f'{eval_stage}_losses/{k}', v_avg, global_step=step)
+                # wandb logging for losses
+                log_dict[f'{eval_stage}_losses/{key}/{k}'] = v_avg
                 loss_str += f"{eval_stage}-loss, {k}: {v_avg}    "
             self.logger.info(loss_str)
-        # tqdm.write(loss_str)
+
         metric_str = f"dataset: {key}    step: {step}    "
         for k, v in metric_one_dataset.items():
             if k == 'pred' or k == 'label' or k=='dataset_dict':
                 continue
             metric_str += f"{eval_stage}-metric, {k}: {v}    "
-            # tensorboard-2. metric
-            writer = self.get_writer(eval_stage, key, k)
-            writer.add_scalar(f'{eval_stage}_metrics/{k}', v, global_step=step)
+            # wandb logging for metrics
+            log_dict[f'{eval_stage}_metrics/{key}/{k}'] = v
+
         if 'pred' in metric_one_dataset:
             acc_real, acc_fake = self.get_respect_acc(metric_one_dataset['pred'], metric_one_dataset['label'])
             metric_str += f'{eval_stage}-metric, acc_real:{acc_real}; acc_fake:{acc_fake}'
-            writer.add_scalar(f'{eval_stage}_metrics/acc_real', acc_real, global_step=step)
-            writer.add_scalar(f'{eval_stage}_metrics/acc_fake', acc_fake, global_step=step)
+            # wandb logging for real/fake accuracies
+            log_dict[f'{eval_stage}_metrics/{key}/acc_real'] = acc_real
+            log_dict[f'{eval_stage}_metrics/{key}/acc_fake'] = acc_fake
+
         self.logger.info(metric_str)
+
+        # Log all metrics at once to wandb
+        if self.wandb_data is not None and (not self.config['ddp'] or (self.config['ddp'] and dist.get_rank() == 0)):
+            self.wandb_data.log(log_dict, step=step)
 
     def eval(self, eval_data_loaders, eval_stage, step=None, epoch=None, iteration=None):
         # set model to eval mode
