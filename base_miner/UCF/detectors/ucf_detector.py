@@ -396,7 +396,7 @@ class Conditional_UNet(nn.Module):
         
         self.conv_last = nn.Conv2d(64, 3, 1)
         self.up_last = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
-        self.activation = nn.Tanh()
+        self.activation = nn.Sigmoid()
         #self.init_weight() 
         
     def forward(self, c, x):  # c is the style and x is the content
