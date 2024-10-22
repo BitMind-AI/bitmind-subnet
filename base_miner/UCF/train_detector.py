@@ -71,6 +71,46 @@ parser.add_argument('--epochs', type=int, default=None, help='number of training
 args = parser.parse_args()
 
 
+def log_model_to_wandb(run, model, weights_path, model_name="model"):
+    """
+    Log model weights and architecture to Weights & Biases.
+
+    Args:
+        run: wandb.Run object from your training script
+        model: PyTorch model to be logged
+        model_name: Name for the model artifact (default: "model")
+        log_gradients: Whether to track gradient distributions (default: False)
+    """
+    # Create a model artifact
+    model_artifact = wandb.Artifact(
+        name=model_name,
+        type="model",
+        description="Trained model weights and architecture"
+    )
+
+    # Save model architecture as string
+    architecture_str = str(model)
+    with model_artifact.new_file("model_architecture.txt") as f:
+        f.write(architecture_str)
+
+    # Save model weights
+    #torch.save(model.state_dict(), f"{model_name}_weights.pt")
+    model_artifact.add_file(weights_path)
+
+    # Log the artifact to W&B
+    run.log_artifact(model_artifact)
+
+    # Log model summary statistics
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    run.summary.update({
+        "total_parameters": total_params,
+        "trainable_parameters": trainable_params,
+        "model_size_mb": os.path.getsize(f"{model_name}_weights.pt") / (1024 * 1024)
+    })
+
+
 def sanitize_wandb_dict(d):
     """
     Recursively process dictionary to make it safe for wandb logging.
@@ -509,19 +549,24 @@ def main():
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
         trainer.model.epoch = epoch
         best_metric = trainer.train_epoch(
-                    epoch,
-                    train_data_loader=train_loader,
-                    validation_data_loaders={'val':val_loader}
-                )
+            epoch,
+            train_data_loader=train_loader,
+            validation_data_loaders={'val':val_loader}
+        )
         if best_metric is not None:
             logger.info(f"===> Epoch[{epoch}] end with validation {metric_scoring}: {parse_metric_for_print(best_metric)}!")
 
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
+    logger.info("Logging model and model metadata to w&b")
+    log_model_to_wandb(wandb_run, model, os.path.join(trainer.log_dir, "ckpt_best.pth"))
     log_finish_time(logger, "Training", start_time)
 
     # test
     start_time = log_start_time(logger, "Test")
-    trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
+    metrics = trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
+    print(metrics)
+    wandb_run.log(metrics)
+
     log_finish_time(logger, "Test", start_time)
     
     # update
