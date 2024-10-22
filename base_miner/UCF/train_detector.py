@@ -530,10 +530,6 @@ def main():
     if scheduler is not None:
         scheduler.step()
 
-    # close the tensorboard writers
-    for writer in trainer.writers.values():
-        writer.close()
-
     torch.cuda.empty_cache()
     gc.collect()
 
