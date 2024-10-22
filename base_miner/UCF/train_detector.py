@@ -37,8 +37,8 @@ from torch.utils.data import DataLoader
 from optimizor.SAM import SAM
 from optimizor.LinearLR import LinearDecayLR
 
+from base_miner.UCF.detectors import DETECTOR
 from trainer.trainer import Trainer
-from detectors import DETECTOR
 from metrics.utils import parse_metric_for_print
 from logger import create_logger, RankFilter
 
