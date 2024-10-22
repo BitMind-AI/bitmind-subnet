@@ -2,7 +2,6 @@
 # originally authored by Zhiyuan Yan (zhiyuanyan@link.cuhk.edu.cn)
 
 # Original: https://github.com/SCLBD/DeepfakeBench/blob/main/training/train.py
-
 import os
 import sys
 current_file_path = os.path.abspath(__file__)
@@ -10,7 +9,6 @@ parent_dir = os.path.dirname(os.path.dirname(current_file_path))
 project_root_dir = os.path.dirname(parent_dir)
 sys.path.append(parent_dir)
 sys.path.append(project_root_dir)
-
 import pickle
 import datetime
 import logging
@@ -47,7 +45,7 @@ class Trainer(object):
         ):
         # check if all the necessary components are implemented
         if config is None or model is None or optimizer is None or logger is None:
-            raise ValueError("config, model, optimizier, logger, and tensorboard writer must be implemented")
+            raise ValueError("config, model, optimizier, and logger must be set")
 
         self.config = config
         self.model = model
