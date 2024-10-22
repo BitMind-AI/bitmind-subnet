@@ -43,7 +43,8 @@ class Trainer(object):
         scheduler,
         logger,
         metric_scoring='auc',
-        swa_model=None
+        swa_model=None,
+        wandb_run=None
         ):
         # check if all the necessary components are implemented
         if config is None or model is None or optimizer is None or logger is None:
@@ -55,9 +56,9 @@ class Trainer(object):
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.swa_model = swa_model
-        self.writers = {}  # dict to maintain different tensorboard writers for each dataset and metric
         self.logger = logger
         self.metric_scoring = metric_scoring
+        self.wandb_run = wandb_run
         # maintain the best metric of all epochs
         self.best_metrics_all_time = defaultdict(
             lambda: defaultdict(lambda: float('-inf')
@@ -69,25 +70,6 @@ class Trainer(object):
         self.log_dir = self.config['log_dir']
         print("Making dir ", self.log_dir)
         os.makedirs(self.log_dir, exist_ok=True)
-
-    def get_writer(self, phase, dataset_key, metric_key):
-        phase = phase.split('/')[-1]
-        dataset_key = dataset_key.split('/')[-1]
-        metric_key = metric_key.split('/')[-1]
-        writer_key = f"{phase}-{dataset_key}-{metric_key}"
-        if writer_key not in self.writers:
-            # update directory path
-            writer_path = os.path.join(
-                self.log_dir,
-                phase,
-                dataset_key,
-                metric_key,
-                "metric_board"
-            )
-            os.makedirs(writer_path, exist_ok=True)
-            # update writers dictionary
-            self.writers[writer_key] = SummaryWriter(writer_path)
-        return self.writers[writer_key]
 
     def speed_up(self):
         self.model.device = self.device
@@ -207,8 +189,6 @@ class Trainer(object):
         else:
             times_per_epoch = 1
 
-
-        #times_per_epoch=4
         validation_step = len(train_data_loader) // times_per_epoch    # validate 10 times per epoch
         step_cnt = epoch * len(train_data_loader)
         
@@ -218,7 +198,6 @@ class Trainer(object):
 
         for iteration, data_dict in tqdm(enumerate(train_data_loader),total=len(train_data_loader)):
             self.setTrain()
-            # if using GPU, move data to GPU
             if 'cuda' in str(self.device):
                 for key in data_dict.keys():
                     if data_dict[key] is not None and key!='name':
@@ -226,7 +205,6 @@ class Trainer(object):
 
             losses, predictions=self.train_step(data_dict)
             # update learning rate
-
             if 'SWA' in self.config and self.config['SWA'] and epoch>self.config['swa_start']:
                 self.swa_model.update_parameters(self.model)
 
@@ -236,33 +214,29 @@ class Trainer(object):
             else:
                 batch_metrics = self.model.get_train_metrics(data_dict, predictions)
 
-            # store data by recorder
-            ## store metric
             for name, value in batch_metrics.items():
                 train_recorder_metric[name].update(value)
-            ## store loss
+
             for name, value in losses.items():
                 train_recorder_loss[name].update(value)
 
-            # run tensorboard to visualize the training process
+            # run wandb logging to visualize the training process
             if iteration % 300 == 0 and self.config['gpu_id']==0:
                 if self.config['SWA'] and (epoch>self.config['swa_start'] or self.config['dry_run']):
                     self.scheduler.step()
-                # info for loss
                 loss_str = f"Iter: {step_cnt}    "
+                log_dict = {}  # Create a dictionary to store all metrics for wandb
+
                 for k, v in train_recorder_loss.items():
                     v_avg = v.average()
                     if v_avg == None:
                         loss_str += f"training-loss, {k}: not calculated"
                         continue
                     loss_str += f"training-loss, {k}: {v_avg}    "
-                    # tensorboard-1. loss
-                    processed_train_dataset = [dataset.split('/')[-1] for dataset in self.config['train_dataset']]
-                    processed_train_dataset = ','.join(processed_train_dataset)
-                    writer = self.get_writer('train', processed_train_dataset, k)
-                    writer.add_scalar(f'train_loss/{k}', v_avg, global_step=step_cnt)
+                    # wandb logging for loss
+                    log_dict[f'train_loss/{k}'] = v_avg
                 self.logger.info(loss_str)
-                # info for metric
+
                 metric_str = f"Iter: {step_cnt}    "
                 for k, v in train_recorder_metric.items():
                     v_avg = v.average()
@@ -270,15 +244,15 @@ class Trainer(object):
                         metric_str += f"training-metric, {k}: not calculated    "
                         continue
                     metric_str += f"training-metric, {k}: {v_avg}    "
-                    # tensorboard-2. metric
-                    processed_train_dataset = [dataset.split('/')[-1] for dataset in self.config['train_dataset']]
-                    processed_train_dataset = ','.join(processed_train_dataset)
-                    writer = self.get_writer('train', processed_train_dataset, k)
-                    writer.add_scalar(f'train_metric/{k}', v_avg, global_step=step_cnt)
+                    log_dict[f'train_metric/{k}'] = v_avg
                 self.logger.info(metric_str)
 
-                # clear recorder.
-                # Note we only consider the current 300 samples for computing batch-level loss/metric
+                log_dict['step'] = step_cnt
+                log_dict['epoch'] = epoch
+                if self.wandb_run:
+                    self.wandb_run.log(log_dict)
+
+                # only consider the current 300 samples for computing batch-level loss/metric
                 for name, recorder in train_recorder_loss.items():  # clear loss recorder
                     recorder.clear()
                 for name, recorder in train_recorder_metric.items():  # clear metric recorder

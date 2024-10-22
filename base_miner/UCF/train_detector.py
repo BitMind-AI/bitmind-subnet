@@ -22,6 +22,7 @@ from datetime import timedelta
 from copy import deepcopy
 from PIL import Image as pil_image
 from pathlib import Path
+import wandb
 import gc
 
 import torch
@@ -33,7 +34,6 @@ import torch.optim as optim
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.utils.data import DataLoader
-
 from optimizor.SAM import SAM
 from optimizor.LinearLR import LinearDecayLR
 
@@ -69,6 +69,36 @@ parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
                     help='number of workers for data loading')
 parser.add_argument('--epochs', type=int, default=None, help='number of training epochs')
 args = parser.parse_args()
+
+
+def sanitize_wandb_dict(d):
+    """
+    Recursively process dictionary to make it safe for wandb logging.
+    Handles nested dicts, lists, tuples, and converts non-standard types to strings.
+    
+    Args:
+        d (dict): Input dictionary with arbitrary types
+
+    Returns:
+        dict: Dictionary with all values converted to wandb-safe types
+    """
+    wandb_safe = {}
+
+    for k, v in d.items():
+        # Convert key to string if it's not already
+        k = str(k)
+
+        # Handle different value types
+        if isinstance(v, dict):
+            v = sanitize_wandb_dict(v)
+        elif isinstance(v, (list, tuple)):
+            v = [sanitize_wandb_dict(x) if isinstance(x, dict) else str(x) if not isinstance(x, (int, float, str, bool)) else x for x in v]
+        elif not isinstance(v, (int, float, str, bool, type(None))):
+            v = str(v)
+
+        wandb_safe[k] = v
+
+    return wandb_safe
 
 
 def set_device(device=args.device, gpu_id=args.gpu_id):
@@ -442,7 +472,12 @@ def main():
         model_filename=config['pretrained'].split('/')[-1],
         hugging_face_repo_name='bitmind/bm-ucf'
     )
-    
+
+    wandb_run = wandb.init(
+        project="detector-training",
+        config=sanitize_wandb_dict(config),
+        name=f"{config['model_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
     model = model_class(config).to(config['device'])
@@ -457,7 +492,7 @@ def main():
     metric_scoring = choose_metric(config)
 
     # prepare the trainer
-    trainer = Trainer(config, model, config['device'], optimizer, scheduler, logger, metric_scoring)
+    trainer = Trainer(config, model, config['device'], optimizer, scheduler, logger, metric_scoring, wandb_run)
 
     # print configuration
     logger.info("--------------- Configuration ---------------")
