@@ -85,8 +85,8 @@ def create_source_label_mapping(
     for split, dataset_list in fake_datasets.items():
         for dataset in dataset_list:
             source = dataset.huggingface_dataset_path
-            if group_by_name and '__' in source:
-                model_name = source.split('__')[1]
+            if group_by_name and '___' in source:
+                model_name = source.split('___')[1]
                 if model_name in grouped_source_labels:
                     fake_source_label = grouped_source_labels[model_name]
                 else:
