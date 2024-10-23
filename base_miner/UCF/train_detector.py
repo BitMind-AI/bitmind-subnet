@@ -563,11 +563,7 @@ def main():
 
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
     logger.info("Logging model and model metadata to w&b")
-<<<<<<< HEAD
     log_model_to_wandb(wandb_run, model, os.path.join(outputs_dir, "ckpt_best.pth"))
-=======
-    log_model_to_wandb(wandb_run, model, os.path.join(trainer.log_dir, "ckpt_best.pth"))
->>>>>>> origin/staging
     log_finish_time(logger, "Training", start_time)
 
     # test
