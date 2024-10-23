@@ -1,0 +1,1 @@
+{"total_parameters": 46838430, "trainable_parameters": 46838430, "model_size_mb": 179.2984561920166, "val": {"auc": 0.5018235233388544}, "avg": {"auc": 0.5043517536624642, "dataset_dict": {"test": 0.5043517536624642}}, "test": {"auc": 0.5043517536624642}, "_timestamp": 1729665986.7879066, "_runtime": 213.618168592453, "_step": 0, "_wandb": {"runtime": 213}}

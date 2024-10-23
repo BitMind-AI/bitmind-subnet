@@ -78,6 +78,8 @@ class RealFakeDataset:
                 self.total_fake = sum(self.fake_samples)
                 self.real_cumulative = np.cumsum([0] + self.real_samples[:-1])
                 self.fake_cumulative = np.cumsum([0] + self.fake_samples[:-1])
+                self.real_shuffled_indices = [np.random.permutation(samples) for samples in self.real_samples]
+                self.fake_shuffled_indices = [np.random.permutation(samples) for samples in self.fake_samples]
     
     def _print_dataset_info(self):
         print(f"\n{self.split} dataset information:")
@@ -170,13 +172,21 @@ class RealFakeDataset:
     def _max_samples_sampling(self, shuffled_index, datasets, is_fake):
         samples = self.fake_samples if is_fake else self.real_samples
         cumulative = self.fake_cumulative if is_fake else self.real_cumulative
+        shuffled_indices = self.fake_shuffled_indices if is_fake else self.real_shuffled_indices
         
         source_index = np.searchsorted(cumulative, shuffled_index, side='right') - 1
+        source_index = max(0, min(source_index, len(datasets) - 1))  # Ensure source_index is within bounds
         source = datasets[source_index]
-        valid_index = shuffled_index - cumulative[source_index]
         
-        if valid_index >= samples[source_index]:
-            valid_index = valid_index % self.max_samples_per_dataset
+        # Calculate valid_index relative to the current dataset
+        if source_index > 0:
+            relative_index = shuffled_index - cumulative[source_index]
+        else:
+            relative_index = shuffled_index
+        
+        relative_index = relative_index % samples[source_index]
+        # Use the pre-shuffled indices for this dataset
+        valid_index = shuffled_indices[source_index][relative_index]
         
         return source, valid_index
 
@@ -240,3 +250,7 @@ class RealFakeDataset:
         Method to be called at the end of each epoch to reshuffle the dataset.
         """
         self._setup_shuffled_indices()
+        if self.sampling_strategy == 'max_samples':
+            # Reshuffle indices for each dataset
+            self.real_shuffled_indices = [np.random.permutation(samples) for samples in self.real_samples]
+            self.fake_shuffled_indices = [np.random.permutation(samples) for samples in self.fake_samples]

@@ -1,0 +1,241 @@
+wandb_version: 1
+
+log_dir:
+  desc: null
+  value: ./logs/training/ucf_2024-10-23-02-33-22
+pretrained:
+  desc: null
+  value: ../weights/xception-best.pth
+model_name:
+  desc: null
+  value: ucf
+backbone_name:
+  desc: null
+  value: xception
+encoder_feat_dim:
+  desc: null
+  value: 512
+backbone_config:
+  desc: null
+  value:
+    mode: adjust_channel
+    num_classes: 2
+    inc: 3
+    dropout: false
+compression:
+  desc: null
+  value: c23
+train_batchSize:
+  desc: null
+  value: 32
+test_batchSize:
+  desc: null
+  value: 32
+workers:
+  desc: null
+  value: 7
+frame_num:
+  desc: null
+  value:
+    train: 32
+    test: 32
+resolution:
+  desc: null
+  value: 256
+with_mask:
+  desc: null
+  value: false
+with_landmark:
+  desc: null
+  value: false
+save_ckpt:
+  desc: null
+  value: true
+save_feat:
+  desc: null
+  value: true
+specific_task_number:
+  desc: null
+  value: 5
+mean:
+  desc: null
+  value:
+  - 0.5
+  - 0.5
+  - 0.5
+std:
+  desc: null
+  value:
+  - 0.5
+  - 0.5
+  - 0.5
+optimizer:
+  desc: null
+  value:
+    type: adam
+    adam:
+      lr: 0.0002
+      beta1: 0.9
+      beta2: 0.999
+      eps: 1.0e-08
+      weight_decay: 0.0005
+      amsgrad: false
+    sgd:
+      lr: 0.0002
+      momentum: 0.9
+      weight_decay: 0.0005
+lr_scheduler:
+  desc: null
+  value: null
+nEpochs:
+  desc: null
+  value: 1
+start_epoch:
+  desc: null
+  value: 0
+save_epoch:
+  desc: null
+  value: 1
+rec_iter:
+  desc: null
+  value: 100
+logdir:
+  desc: null
+  value: ./logs
+manualSeed:
+  desc: null
+  value: 1024
+loss_func:
+  desc: null
+  value:
+    cls_loss: cross_entropy
+    spe_loss: cross_entropy
+    con_loss: contrastive_regularization
+    rec_loss: l1loss
+losstype:
+  desc: null
+  value: null
+metric_scoring:
+  desc: null
+  value: auc
+cuda:
+  desc: null
+  value: true
+cudnn:
+  desc: null
+  value: true
+mode:
+  desc: null
+  value: train
+lmdb:
+  desc: null
+  value: true
+dry_run:
+  desc: null
+  value: false
+rgb_dir:
+  desc: null
+  value: ./datasets/rgb
+lmdb_dir:
+  desc: null
+  value: ./datasets/lmdb
+dataset_json_folder:
+  desc: null
+  value: preprocessing/dataset_json_v3
+SWA:
+  desc: null
+  value: false
+save_avg:
+  desc: null
+  value: true
+device:
+  desc: null
+  value: cuda:0
+gpu_id:
+  desc: null
+  value: 0
+split_transforms:
+  desc: null
+  value:
+    train: "Compose(\n    <bitmind.image_transforms.ConvertToRGB object at 0x7ff7c0574f70>\n\
+      \    <function CenterCrop.<locals>.fn at 0x7ff7ca7f60e0>\n    Resize(size=(256,\
+      \ 256), interpolation=bilinear, max_size=None, antialias=True)\n    <bitmind.image_transforms.CLAHE\
+      \ object at 0x7ff7c0574fd0>\n    ToTensor()\n)"
+    validation: "Compose(\n    <bitmind.image_transforms.ConvertToRGB object at 0x7ff7c0574f70>\n\
+      \    <function CenterCrop.<locals>.fn at 0x7ff7ca7f60e0>\n    Resize(size=(256,\
+      \ 256), interpolation=bilinear, max_size=None, antialias=True)\n    <bitmind.image_transforms.CLAHE\
+      \ object at 0x7ff7c0574fd0>\n    ToTensor()\n)"
+    test: "Compose(\n    <bitmind.image_transforms.ConvertToRGB object at 0x7ff7c0574f70>\n\
+      \    <function CenterCrop.<locals>.fn at 0x7ff7ca7f60e0>\n    Resize(size=(256,\
+      \ 256), interpolation=bilinear, max_size=None, antialias=True)\n    <bitmind.image_transforms.CLAHE\
+      \ object at 0x7ff7c0574fd0>\n    ToTensor()\n)"
+dataset_meta:
+  desc: null
+  value:
+    real:
+    - path: bitmind/bm-real
+    - path: bitmind/celeb-a-hq
+    - path: bitmind/MS-COCO-unique
+    - path: bitmind/ffhq-256
+    fake:
+    - path: bitmind/bm-realvisxl
+    - path: bitmind/bm-mobius
+    - path: bitmind/bm-sdxl
+    - path: bitmind/celeb-a-hq___FLUX.1-dev
+    - path: bitmind/ffhq-256___FLUX.1-dev
+    - path: bitmind/MS-COCO-unique___FLUX.1-dev
+train_dataset:
+  desc: null
+  value:
+  - bitmind/bm-real
+  - bitmind/celeb-a-hq
+  - bitmind/MS-COCO-unique
+  - bitmind/ffhq-256
+  - bitmind/bm-realvisxl
+  - bitmind/bm-mobius
+  - bitmind/bm-sdxl
+  - bitmind/celeb-a-hq___FLUX.1-dev
+  - bitmind/ffhq-256___FLUX.1-dev
+  - bitmind/MS-COCO-unique___FLUX.1-dev
+ddp:
+  desc: null
+  value: false
+_wandb:
+  desc: null
+  value:
+    python_version: 3.10.15
+    cli_version: 0.17.6
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1729651162
+    t:
+      1:
+      - 1
+      - 2
+      - 3
+      - 5
+      - 41
+      - 49
+      - 51
+      - 53
+      - 55
+      2:
+      - 1
+      - 2
+      - 3
+      - 5
+      - 41
+      - 49
+      - 51
+      - 53
+      - 55
+      3:
+      - 13
+      - 16
+      - 23
+      4: 3.10.15
+      5: 0.17.6
+      8:
+      - 5
+      13: linux-x86_64
