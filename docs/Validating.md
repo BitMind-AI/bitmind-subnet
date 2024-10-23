@@ -87,6 +87,10 @@ WALLET_HOTKEY=default
 
 # Validator Port Setting:
 VALIDATOR_AXON_PORT=8092
+
+# API Keys:
+WANDB_API_KEY=your_wandb_api_key_here
+HUGGING_FACE_TOKEN=your_hugging_face_token_here
 ```
 
 Then, log into weights and biases by running
