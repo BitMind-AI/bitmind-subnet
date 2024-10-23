@@ -88,7 +88,6 @@ class RealFakeDataset:
         print("Fake datasets:")
         for i, (ds, size) in enumerate(zip(self.fake_image_datasets, self.fake_samples)):
             print(f"  {i}: {ds.huggingface_dataset_path} - Size: {size}")
-
     
     def _setup_shuffled_indices(self):
         """
