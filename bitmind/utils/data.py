@@ -59,8 +59,8 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
             image_dataset = ImageDataset(huggingface_dataset=data)
             datasets[split].append(image_dataset)
 
-        split_lengths = ', '.join([f"{split} len={len(datasets[split][0])}" for split in splits])
-        print(f'done, {split_lengths}')
+        split_lengths = ', '.join([f"{split} len={len(data)}" for split, data in zip(splits, [train_ds, val_ds, test_ds])])
+        print(f'Split sizes: {split_lengths}')
 
     return datasets
 
