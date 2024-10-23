@@ -107,7 +107,8 @@ def log_model_to_wandb(run, model, weights_path, model_name="model"):
     run.summary.update({
         "total_parameters": total_params,
         "trainable_parameters": trainable_params,
-        "model_size_mb": os.path.getsize(f"{model_name}_weights.pt") / (1024 * 1024)
+        "model_size_mb": os.path.getsize(f"{weights_path}") / (1024 * 1024)
+        #"model_size_mb": os.path.getsize(f"{model_name}_weights.pt") / (1024 * 1024)
     })
 
 
@@ -236,6 +237,10 @@ def prepare_datasets(config, logger):
         config['split_transforms']['test'],
         source_labels=True,
         group_sources_by_name=True)
+    
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Validation dataset size: {len(val_dataset)}")
+    print(f"Test dataset size: {len(test_dataset)}")
 
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
@@ -558,7 +563,7 @@ def main():
 
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
     logger.info("Logging model and model metadata to w&b")
-    log_model_to_wandb(wandb_run, model, os.path.join(trainer.log_dir, "ckpt_best.pth"))
+    log_model_to_wandb(wandb_run, model, os.path.join(outputs_dir, "ckpt_best.pth"))
     log_finish_time(logger, "Training", start_time)
 
     # test
