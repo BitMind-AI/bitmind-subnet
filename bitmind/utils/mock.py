@@ -89,10 +89,13 @@ class MockValidator:
         ]
         self.synthetic_image_generator = MockSyntheticImageGenerator(
             prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
-
+        self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
         self._fake_prob = config.fake_prob
 
     def update_scores(self, rewards, miner_uids):
+        pass
+
+    def save_miner_history(self):
         pass
 
 

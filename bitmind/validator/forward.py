@@ -123,17 +123,6 @@ async def forward(self):
         timeout=9
     )
 
-    # update logging data
-    wandb_data['data_aug_params'] = data_aug_params
-    wandb_data['label'] = label
-    wandb_data['miner_uids'] = list(miner_uids)
-    wandb_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])
-    wandb_data['predictions'] = responses
-    wandb_data['correct'] = [
-        np.round(y_hat) == y
-        for y_hat, y in zip(responses, [label] * len(responses))
-    ]
-
     rewards, metrics = get_rewards(
         label=label,
         responses=responses,
@@ -152,6 +141,19 @@ async def forward(self):
     # Update the scores based on the rewards.
     self.update_scores(rewards, miner_uids)
 
+    # update logging data
+    wandb_data['data_aug_params'] = data_aug_params
+    wandb_data['label'] = label
+    wandb_data['miner_uids'] = list(miner_uids)
+    wandb_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])
+    wandb_data['predictions'] = responses
+    wandb_data['correct'] = [
+        np.round(y_hat) == y
+        for y_hat, y in zip(responses, [label] * len(responses))
+    ]
+    wandb_data['rewards'] = list(rewards)
+    wandb_data['scores'] = list(self.scores)
+
     metric_names = list(metrics[0].keys())
     for metric_name in metric_names:
         wandb_data[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
@@ -159,6 +161,9 @@ async def forward(self):
     # W&B logging if enabled
     if not self.config.wandb.off:
         wandb.log(wandb_data)
+
+    # ensure state is saved after each challenge
+    self.save_miner_history()
 
     # Track miners who have responded
     self.last_responding_miner_uids = []

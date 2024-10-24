@@ -54,7 +54,10 @@ class BaseValidatorNeuron(BaseNeuron):
     def __init__(self, config=None):
         super().__init__(config=config)
 
-        self.performance_tracker = MinerPerformanceTracker()
+        self.history_cache_path = os.path.join(
+            self.config.neuron.full_path, "miner_performance_tracker.pkl")
+
+        self.load_miner_history()
 
         # Save a copy of the hotkeys to local memory.
         self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
@@ -372,6 +375,24 @@ class BaseValidatorNeuron(BaseNeuron):
         self.scores: np.ndarray = alpha * scattered_rewards + (1 - alpha) * self.scores
         bt.logging.debug(f"Updated moving avg scores: {self.scores}")
 
+    def save_miner_history(self):
+        bt.logging.info(f"Saving miner performance history to {self.history_cache_path}")
+        joblib.dump(self.performance_tracker, self.history_cache_path)
+
+    def load_miner_history(self):
+        if os.path.exists(self.history_cache_path):
+            bt.logging.info(f"Loading miner performance history from {self.history_cache_path}")
+            self.performance_tracker = joblib.load(self.history_cache_path)
+            pred_history = self.performance_tracker.prediction_history
+            num_miners_history = len([
+                uid for uid in pred_history
+                if len([p for p in pred_history[uid] if p != -1]) > 0
+            ])
+            bt.logging.info(f"Loaded history for {num_miners_history} miners")
+        else:
+            bt.logging.info(f"No miner performance history found at {self.history_cache_path} - starting fresh!")
+            self.performance_tracker = MinerPerformanceTracker()
+
     def save_state(self):
         """Saves the state of the validator to a file."""
         bt.logging.info("Saving validator state.")
@@ -383,10 +404,7 @@ class BaseValidatorNeuron(BaseNeuron):
             scores=self.scores,
             hotkeys=self.hotkeys,
         )
-        joblib.dump(
-            self.performance_tracker,
-            os.path.join(self.config.neuron.full_path, "miner_performance_tracker.pkl")
-        )
+        self.save_miner_history()
 
     def load_state(self):
         """Loads the state of the validator from a file."""
@@ -397,8 +415,4 @@ class BaseValidatorNeuron(BaseNeuron):
         self.step = state["step"]
         self.scores = state["scores"]
         self.hotkeys = state["hotkeys"]
-
-        tracker_path = os.path.join(
-            self.config.neuron.full_path, "miner_performance_tracker.pkl")
-        if os.path.exists(tracker_path):
-            self.performance_tracker = joblib.load(tracker_path)
+        self.load_miner_history()
