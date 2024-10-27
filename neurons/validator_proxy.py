@@ -153,10 +153,6 @@ class ValidatorProxy:
         bt.logging.info("Received an organic request!")
 
         payload = await request.json()
-
-        if "seed" not in payload:
-            payload["seed"] = random.randint(0, 1e9)
-
         metagraph = self.validator.metagraph
 
         miner_uids = self.validator.last_responding_miner_uids
