@@ -11,8 +11,8 @@ class RealFakeDataset:
         transforms=None,
         fake_prob=0.5,
         source_label_mapping=None,
-        sampling_strategy='max_samples',
-        max_samples_per_dataset=40000,
+        sampling_strategy='balanced',
+        max_samples_per_dataset=20000,
         split='train'
     ):
         """d
@@ -46,6 +46,7 @@ class RealFakeDataset:
         self._setup_sampling_strategy()
         self._setup_shuffled_indices()  # New method call
         self._print_dataset_info()
+        self._verify_label_distribution()
 
     def _setup_sampling_weights(self):
         """
@@ -62,9 +63,13 @@ class RealFakeDataset:
         Set up the sampling strategy based on the chosen option.
         """
         if self.sampling_strategy == 'balanced':
-            min_real = min(len(ds) for ds in self.real_image_datasets)
-            min_fake = min(len(ds) for ds in self.fake_image_datasets)
-            self.samples_per_dataset = min(min_real, min_fake)
+            real_sizes = [len(ds) for ds in self.real_image_datasets]
+            fake_sizes = [len(ds) for ds in self.fake_image_datasets]
+            self.samples_per_dataset = min(min(real_sizes), min(fake_sizes))
+            self.total_samples = self.samples_per_dataset * (len(self.real_image_datasets) + len(self.fake_image_datasets))
+            # min_real = min(len(ds) for ds in self.real_image_datasets)
+            # min_fake = min(len(ds) for ds in self.fake_image_datasets)
+            # self.samples_per_dataset = min(min_real, min_fake)
         elif self.sampling_strategy == 'full':
             self.total_real = sum(len(ds) for ds in self.real_image_datasets)
             self.total_fake = sum(len(ds) for ds in self.fake_image_datasets)
@@ -82,14 +87,50 @@ class RealFakeDataset:
                 self.fake_shuffled_indices = [np.random.permutation(samples) for samples in self.fake_samples]
     
     def _print_dataset_info(self):
-        print(f"\n{self.split} dataset information:")
+        print(f"\nDataset information:")
         print(f"Total samples: {len(self)}")
         print("Real datasets:")
-        for i, (ds, size) in enumerate(zip(self.real_image_datasets, self.real_samples)):
+        for i, ds in enumerate(self.real_image_datasets):
+            if self.sampling_strategy == 'max_samples':
+                size = min(len(ds), self.max_samples_per_dataset)
+            elif self.sampling_strategy == 'balanced':
+                size = self.samples_per_dataset
+            else:
+                size = len(ds)
             print(f"  {i}: {ds.huggingface_dataset_path} - Size: {size}")
         print("Fake datasets:")
-        for i, (ds, size) in enumerate(zip(self.fake_image_datasets, self.fake_samples)):
+        for i, ds in enumerate(self.fake_image_datasets):
+            if self.sampling_strategy == 'max_samples':
+                size = min(len(ds), self.max_samples_per_dataset)
+            elif self.sampling_strategy == 'balanced':
+                size = self.samples_per_dataset
+            else:
+                size = len(ds)
             print(f"  {i}: {ds.huggingface_dataset_path} - Size: {size}")
+            
+    def _verify_label_distribution(self):
+        """Verify the distribution of labels in the dataset."""
+        total = len(self)
+        
+        if self.sampling_strategy == 'balanced':
+            real_count = self.samples_per_dataset * len(self.real_image_datasets)
+            fake_count = self.samples_per_dataset * len(self.fake_image_datasets)
+        elif self.sampling_strategy == 'full':
+            real_count = self.total_real
+            fake_count = self.total_fake
+        elif self.sampling_strategy == 'max_samples':
+            real_count = sum(self.real_samples)
+            fake_count = sum(self.fake_samples)
+        else:  # weighted
+            # For weighted strategy, use the theoretical distribution
+            real_count = int(total * (1 - self.fake_prob))
+            fake_count = int(total * self.fake_prob)
+        
+        print(f"Label distribution in {self.split} set:")
+        print(f"Real images: {real_count} ({real_count/total:.2%})")
+        print(f"Fake images: {fake_count} ({fake_count/total:.2%})")
+        if real_count == 0 or fake_count == 0:
+            print("WARNING: One class is missing from the dataset!")
     
     def _setup_shuffled_indices(self):
         """
@@ -120,13 +161,18 @@ class RealFakeDataset:
         
         self._update_history(source, label, valid_index)
         
-        image = self._apply_transforms(image, source, valid_index)
+        if self.transforms:
+            image = self._apply_transforms(image, source, valid_index)
         
         return self._prepare_output(image, label, source)
 
+    def _setup_shuffled_indices(self):
+        """Create and shuffle indices to ensure balanced sampling."""
+        self.shuffled_indices = torch.randperm(len(self)).tolist()
+
     def _determine_fake(self, shuffled_index):
         if self.sampling_strategy == 'balanced':
-            return shuffled_index >= self.samples_per_dataset
+            return shuffled_index >= self.samples_per_dataset * len(self.real_image_datasets)
         elif self.sampling_strategy == 'full':
             return shuffled_index >= self.total_real
         elif self.sampling_strategy == 'weighted':
@@ -228,7 +274,8 @@ class RealFakeDataset:
             int: Total length of the dataset.
         """
         if self.sampling_strategy == 'balanced':
-            return self.samples_per_dataset * 2
+            return self.total_samples
+            #return self.samples_per_dataset * 2
         elif self.sampling_strategy == 'full':
             return self.total_real + self.total_fake
         elif self.sampling_strategy == 'weighted':
