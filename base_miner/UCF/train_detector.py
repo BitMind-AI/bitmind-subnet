@@ -207,8 +207,17 @@ def custom_collate_fn(batch):
     images, labels, source_labels = zip(*batch)
     
     images = torch.stack(images, dim=0)  # Stack image tensors into a single tensor
-    labels = torch.LongTensor(labels) 
-    source_labels = torch.LongTensor(source_labels) 
+    
+    # Convert labels to torch.long and ensure they are 0 and 1
+    labels = torch.tensor([int(label) for label in labels], dtype=torch.long)
+    source_labels = torch.tensor([int(label) for label in source_labels], dtype=torch.long)
+    
+    # Debug: Print label distribution in each batch
+    unique_labels, counts = torch.unique(labels, return_counts=True)
+    label_dist = {l.item(): c.item() for l, c in zip(unique_labels, counts)}
+    
+    if len(label_dist) < 2:
+        print(f"Warning: Batch contains only labels: {label_dist}")
     
     data_dict = {
         'image': images,
@@ -250,7 +259,8 @@ def prepare_datasets(config, logger):
         shuffle=True,
         num_workers=config['workers'],
         drop_last=True,
-        collate_fn=custom_collate_fn)
+        collate_fn=custom_collate_fn,
+        generator=torch.Generator().manual_seed(config['manualSeed']))
 
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
@@ -258,7 +268,8 @@ def prepare_datasets(config, logger):
         shuffle=True,
         num_workers=config['workers'],
         drop_last=True,
-        collate_fn=custom_collate_fn)
+        collate_fn=custom_collate_fn,
+        generator=torch.Generator().manual_seed(config['manualSeed']))
 
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
@@ -266,7 +277,8 @@ def prepare_datasets(config, logger):
         shuffle=True, 
         num_workers=config['workers'],
         drop_last=True,
-        collate_fn=custom_collate_fn)
+        collate_fn=custom_collate_fn,
+        generator=torch.Generator().manual_seed(config['manualSeed'])) 
 
     print(f"Train size: {len(train_loader.dataset)}")
     print(f"Validation size: {len(val_loader.dataset)}")
@@ -357,6 +369,35 @@ def log_finish_time(logger, process_name, start_time):
     # Log the finish time and elapsed time
     logger.info(f"{process_name} Finish Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(finish_time))}")
     logger.info(f"{process_name} Elapsed Time: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
+    
+def check_batch_labels(loader, logger, split_name, max_batches=10):
+    """
+    Check label distribution in a subset of batches.
+    
+    Args:
+        loader: DataLoader to check
+        logger: Logger instance
+        split_name: Name of the split (e.g., "Training")
+        max_batches: Maximum number of batches to check (default: 10)
+    """
+    all_labels = []
+    for i, batch in enumerate(loader):
+        if i >= max_batches:
+            break
+            
+        labels = batch['label']
+        all_labels.extend(labels.cpu().numpy())
+        
+        # Check each batch
+        unique_batch, counts_batch = np.unique(labels.cpu().numpy(), return_counts=True)
+        if len(unique_batch) < 2:
+            logger.warning(f"{split_name} batch {i} contains only labels: {dict(zip(unique_batch, counts_batch))}")
+    
+    unique_all, counts_all = np.unique(all_labels, return_counts=True)
+    logger.info(f"{split_name} sample distribution (from {len(all_labels)} samples):")
+    for label, count in zip(unique_all, counts_all):
+        logger.info(f"Label {label}: {count} samples ({count/len(all_labels):.2%})")
+    return all_labels
 
 
 def save_config(config, outputs_dir):
@@ -548,6 +589,11 @@ def main():
 
     # save training configs
     save_config(config, outputs_dir)
+    
+    logger.info("Verifying data loaders...")
+    train_labels = check_batch_labels(train_loader, logger, "Training")
+    val_labels = check_batch_labels(val_loader, logger, "Validation")
+    test_labels = check_batch_labels(test_loader, logger, "Test")
 
     # start training
     start_time = log_start_time(logger, "Training")
