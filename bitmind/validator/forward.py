@@ -146,7 +146,7 @@ async def forward(self):
         performance_tracker=self.performance_tracker)
     
     # Logging image source and verification details
-    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['dataset']
+    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['source_dataset']
     bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
     
     # Logging responses and rewards
