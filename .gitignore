@@ -166,5 +166,6 @@ checkpoints/
 base_miner/NPR/weights/*
 base_miner/UCF/weights/*
 base_miner/UCF/logs/*
+base_miner/UCF/wandb/*
 miner_eval.py
 *.env
