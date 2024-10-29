@@ -38,7 +38,12 @@ VALIDATOR_DATASET_META = {
         {"path": "bitmind/open-images-v7"},
         {"path": "bitmind/celeb-a-hq"},
         {"path": "bitmind/ffhq-256"},
-        {"path": "bitmind/MS-COCO-unique-256"}
+        {"path": "bitmind/MS-COCO-unique-256"},
+        {"path": "bitmind/AFHQ"},
+        {"path": "bitmind/lfw"},
+        {"path": "bitmind/caltech-256"},
+        {"path": "bitmind/caltech-101"},
+        {"path": "bitmind/dtd"}
     ]
 }
 
