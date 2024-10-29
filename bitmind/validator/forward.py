@@ -33,6 +33,14 @@ from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_aug_transforms
 
 
+def sample_real_image(datasets, index):
+    cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
+    source_index = np.searchsorted(cumulative_sizes, index % (cumulative_sizes[-1]))
+    source = datasets[source_index]
+    valid_index = index - (cumulative_sizes[source_index - 1] if source_index > 0 else 0)
+    return source, valid_index
+
+
 async def forward(self):
     """
     The forward function is called by the validator every time step.
@@ -60,15 +68,11 @@ async def forward(self):
         bt.logging.info('sampling real image')
 
         label = 0
-        real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
-        real_dataset = self.real_image_datasets[real_dataset_index]
-        samples, idx = real_dataset.sample(k=1)  # {'image': PIL Image ,'id': int}
-        sample = samples[0]
-
-        wandb_data['dataset'] = source_dataset
-        wandb_data['image_index'] = idx[0]
-        wandb_data['image_name'] = sample['id']
-
+        random_idx = np.random.randint(0, self.total_real_images)
+        source_dataset, local_index = sample_real_image(self.real_image_datasets, random_idx)
+        wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
+        wandb_data['source_image_index'] = local_index
+        sample = source_dataset[local_index]
     else:
         label = 1
 
@@ -79,19 +83,12 @@ async def forward(self):
             while retries > 0:
                 retries -= 1
 
-                # sample image(s) from real dataset for captioning
-                real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
-                real_dataset = self.real_image_datasets[real_dataset_index]
-                images_to_caption, image_indexes = real_dataset.sample(k=1)  # [{'image': PIL Image ,'id': int}, ...]
-
-                # generate captions for the real images, then synthetic images from these captions
-                sample = self.synthetic_image_generator.generate(
-                    k=1, real_images=images_to_caption)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
-
+                random_idx = np.random.randint(0, self.total_real_images)
+                source_dataset, local_index = sample_real_image(self.real_image_datasets, random_idx)
+                sample = source_dataset[local_index]
                 wandb_data['model'] = self.synthetic_image_generator.diffuser_name
-                wandb_data['source_dataset'] = source_dataset
-                wandb_data['source_image_name'] = images_to_caption[0]['id']
-                wandb_data['source_image_index'] = image_indexes[0]
+                wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
+                wandb_data['source_image_index'] = local_index
                 wandb_data['image'] = wandb.Image(sample['image'])
                 wandb_data['prompt'] = sample['prompt']
                 if not np.any(np.isnan(sample['image'])):
