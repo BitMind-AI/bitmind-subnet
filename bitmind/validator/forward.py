@@ -78,11 +78,11 @@ async def forward(self):
         bt.logging.info('sampling real image')
 
         label = 0
-        random_idx = np.random.randint(0, self.total_real_images)
         source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
         wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
         wandb_data['source_image_index'] = local_index
         sample = source_dataset[local_index]
+
     else:
         label = 1
 
@@ -111,8 +111,8 @@ async def forward(self):
                 wandb_data['prompt'] = sample['prompt']
                 if not np.any(np.isnan(sample['image'])):
                     break
-                bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
 
+                bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
 
         elif self.config.neuron.prompt_type == 'random':
             bt.logging.info('generating fake image using prompt_generator')
@@ -138,6 +138,24 @@ async def forward(self):
         timeout=9
     )
 
+    rewards, metrics = get_rewards(
+        label=label,
+        responses=responses,
+        uids=miner_uids,
+        axons=axons,
+        performance_tracker=self.performance_tracker)
+    
+    # Logging image source and verification details
+    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['dataset']
+    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+    
+    # Logging responses and rewards
+    bt.logging.info(f"Received responses: {responses}")
+    bt.logging.info(f"Scored responses: {rewards}")
+    
+    # Update the scores based on the rewards.
+    self.update_scores(rewards, miner_uids)
+
     # update logging data
     wandb_data['data_aug_params'] = data_aug_params
     wandb_data['label'] = label
@@ -148,24 +166,8 @@ async def forward(self):
         np.round(y_hat) == y
         for y_hat, y in zip(responses, [label] * len(responses))
     ]
-
-    rewards, metrics = get_rewards(
-        label=label,
-        responses=responses,
-        uids=miner_uids,
-        axons=axons,
-        performance_tracker=self.performance_tracker)
-    
-    # Logging image source and verification details
-    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['source_dataset']
-    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
-    
-    # Logging responses and rewards
-    bt.logging.info(f"Received responses: {responses}")
-    bt.logging.info(f"Scored responses: {rewards}")
-    
-    # Update the scores based on the rewards.
-    self.update_scores(rewards, miner_uids)
+    wandb_data['rewards'] = list(rewards)
+    wandb_data['scores'] = list(self.scores)
 
     metric_names = list(metrics[0].keys())
     for metric_name in metric_names:
@@ -174,6 +176,9 @@ async def forward(self):
     # W&B logging if enabled
     if not self.config.wandb.off:
         wandb.log(wandb_data)
+
+    # ensure state is saved after each challenge
+    self.save_miner_history()
 
     # Track miners who have responded
     self.last_responding_miner_uids = []
