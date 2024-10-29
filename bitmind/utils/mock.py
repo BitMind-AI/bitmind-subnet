@@ -25,7 +25,7 @@ class MockImageDataset:
             download_mode: str = None):
 
         self.huggingface_dataset_path = huggingface_dataset_path
-        self.huggingface_datset_name = huggingface_datset_name
+        self.huggingface_dataset_name = huggingface_datset_name
         self.dataset = ""
         self.sampled_images_idx = []
 
