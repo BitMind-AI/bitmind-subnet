@@ -85,7 +85,12 @@ async def forward(self):
 
                 random_idx = np.random.randint(0, self.total_real_images)
                 source_dataset, local_index = sample_real_image(self.real_image_datasets, random_idx)
-                sample = source_dataset[local_index]
+                source_image = source_dataset[local_index]['image']
+
+                # generate captions for the real images, then synthetic images from these captions
+                sample = self.synthetic_image_generator.generate(
+                    k=1, real_images=[source_image])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+
                 wandb_data['model'] = self.synthetic_image_generator.diffuser_name
                 wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
                 wandb_data['source_image_index'] = local_index
