@@ -44,7 +44,7 @@ class RealFakeDataset:
         
         self._setup_sampling_weights()
         self._setup_sampling_strategy()
-        self._setup_shuffled_indices()  # New method call
+        self._setup_shuffled_indices()
         self._print_dataset_info()
         self._verify_label_distribution()
 
@@ -67,9 +67,6 @@ class RealFakeDataset:
             fake_sizes = [len(ds) for ds in self.fake_image_datasets]
             self.samples_per_dataset = min(min(real_sizes), min(fake_sizes))
             self.total_samples = self.samples_per_dataset * (len(self.real_image_datasets) + len(self.fake_image_datasets))
-            # min_real = min(len(ds) for ds in self.real_image_datasets)
-            # min_fake = min(len(ds) for ds in self.fake_image_datasets)
-            # self.samples_per_dataset = min(min_real, min_fake)
         elif self.sampling_strategy == 'full':
             self.total_real = sum(len(ds) for ds in self.real_image_datasets)
             self.total_fake = sum(len(ds) for ds in self.fake_image_datasets)
@@ -121,8 +118,7 @@ class RealFakeDataset:
         elif self.sampling_strategy == 'max_samples':
             real_count = sum(self.real_samples)
             fake_count = sum(self.fake_samples)
-        else:  # weighted
-            # For weighted strategy, use the theoretical distribution
+        elif self.sampling_strategy == 'weighted':
             real_count = int(total * (1 - self.fake_prob))
             fake_count = int(total * self.fake_prob)
         
@@ -275,7 +271,6 @@ class RealFakeDataset:
         """
         if self.sampling_strategy == 'balanced':
             return self.total_samples
-            #return self.samples_per_dataset * 2
         elif self.sampling_strategy == 'full':
             return self.total_real + self.total_fake
         elif self.sampling_strategy == 'weighted':
