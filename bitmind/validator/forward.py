@@ -33,6 +33,16 @@ from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_aug_transforms
 
 
+def sample_random_real_image(datasets, total_images, retries=10):
+    random_idx = np.random.randint(0, total_images)
+    source, idx = sample_real_image(datasets, random_idx)
+    if source[idx]['image'] is None:
+        if retries:
+            return sample_random_real_image(datasets, total_images, retries-1)
+        return None, None
+    return source, idx
+
+
 def sample_real_image(datasets, index):
     cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
     source_index = np.searchsorted(cumulative_sizes, index % (cumulative_sizes[-1]))
@@ -69,7 +79,7 @@ async def forward(self):
 
         label = 0
         random_idx = np.random.randint(0, self.total_real_images)
-        source_dataset, local_index = sample_real_image(self.real_image_datasets, random_idx)
+        source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
         wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
         wandb_data['source_image_index'] = local_index
         sample = source_dataset[local_index]
@@ -83,13 +93,16 @@ async def forward(self):
             while retries > 0:
                 retries -= 1
 
-                random_idx = np.random.randint(0, self.total_real_images)
-                source_dataset, local_index = sample_real_image(self.real_image_datasets, random_idx)
-                source_image = source_dataset[local_index]['image']
+                source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
+                source_sample = source_dataset[local_index]
+                source_image = source_sample['image']
+                if source_image is None:
+                    bt.logging.warning(f"Missing image encountered at {source_image['id']}, resampling...")
+                    continue
 
                 # generate captions for the real images, then synthetic images from these captions
                 sample = self.synthetic_image_generator.generate(
-                    k=1, real_images=[source_image])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+                    k=1, real_images=[source_sample])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
 
                 wandb_data['model'] = self.synthetic_image_generator.diffuser_name
                 wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
@@ -98,8 +111,8 @@ async def forward(self):
                 wandb_data['prompt'] = sample['prompt']
                 if not np.any(np.isnan(sample['image'])):
                     break
-
                 bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
+
 
         elif self.config.neuron.prompt_type == 'random':
             bt.logging.info('generating fake image using prompt_generator')
@@ -144,7 +157,7 @@ async def forward(self):
         performance_tracker=self.performance_tracker)
     
     # Logging image source and verification details
-    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['dataset']
+    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['source_dataset']
     bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
     
     # Logging responses and rewards
