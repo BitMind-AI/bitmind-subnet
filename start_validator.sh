@@ -17,16 +17,16 @@ if ! huggingface-cli login --token $HUGGING_FACE_TOKEN; then
   exit 1
 fi
 
-echo "Verifying access to synthetic image generation models. This may take a few minutes."
-if ! python3 bitmind/validator/verify_models.py; then
-  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
-  exit 1
-fi
-
 # Check if the process is already running
 if pm2 list | grep -q "bitmind_validator"; then
   echo "Process 'bitmind_validator' is already running. Deleting it..."
   pm2 delete bitmind_validator
+fi
+
+echo "Verifying access to synthetic image generation models. This may take a few minutes."
+if ! python3 bitmind/validator/verify_models.py; then
+  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
+  exit 1
 fi
 
 # Start the process with arguments from environment variables
