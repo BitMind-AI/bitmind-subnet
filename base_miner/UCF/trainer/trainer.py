@@ -100,7 +100,12 @@ class Trainer(object):
     def save_ckpt(self, phase, dataset_key,ckpt_info=None):
         save_dir = self.log_dir
         os.makedirs(save_dir, exist_ok=True)
-        ckpt_name = f"ckpt_best.pth"
+        
+        i = 0
+        while os.path.exists(os.path.join(save_dir, f"ckpt_best_{i}.pth")):
+            i += 1
+        ckpt_name = f"ckpt_best_{i}.pth"
+    
         save_path = os.path.join(save_dir, ckpt_name)
         if self.config['ddp'] == True:
             torch.save(self.model.state_dict(), save_path)
@@ -376,8 +381,8 @@ class Trainer(object):
         self.logger.info(metric_str)
 
         # Log all metrics at once to wandb
-        if self.wandb_data is not None and (not self.config['ddp'] or (self.config['ddp'] and dist.get_rank() == 0)):
-            self.wandb_data.log(log_dict, step=step)
+        if self.wandb_run is not None and (not self.config['ddp'] or (self.config['ddp'] and dist.get_rank() == 0)):
+            self.wandb_run.log(log_dict, step=step)
 
     def eval(self, eval_data_loaders, eval_stage, step=None, epoch=None, iteration=None):
         # set model to eval mode
