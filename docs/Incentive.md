@@ -9,7 +9,7 @@ This document covers the current state of SN34's incentive mechanism.
 
 ## Overview
 
-Miners are rewarded based on their performance, which is measured by the squared ROC AUC of their last 100 predictions. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
+Miners are rewarded based on the accuracy of their predictions, which is a weighted combination of the MCC of their last 100 predictions and the accuracy of their last 10. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
 
 <p align="center">
   <img src="../static/incentive.gif" alt="Incentive Mechanism">
@@ -21,44 +21,21 @@ Miners are rewarded based on their performance, which is measured by the squared
 
 ## Rewards
 
-> Miners rewards are computed as the squared [ROC AUC](https://en.wikipedia.org/wiki/Receiver_operating_characteristic) of (up to) their last 100 predictions. 
+> Miners rewards are computed based on the Matthews Correlation Coefficient (MCC) (https://en.wikipedia.org/wiki/Phi_coefficient) of (up to) their last 100 predictions, combined with the accuracy of their last 10 predictions. 
 
-
+$$ 
+0.5 \times MCC_{100} + 0.5 \times Accuracy_{10} 
 $$
-r_i = \text{AUC}_i^2
-$$
-
-$$
-\text{AUC} = \int_{0}^{1} \text{TPR}(t) \cdot \frac{d}{dt}\text{FPR}(t) dt
-$$
-
-where *t* is the classification threshold and
-
-$$\text{TPR} = \frac{\text{TP}}{\text{TP} + \text{FN}}$$
-
-and
-
-$$\text{ FPR} = \frac{\text{FP}}{\text{FP} + \text{TN}}$$
-
-
-ROC AUC, or Receiver Operating Characteristic Area Under the Curve, is a powerful metric for evaluating binary classification models. It was chosen for its following strenghts:
-
-- Robustness to class imbalance: performs well even when one class is more common than the other (to avoid volatilitiy in cases where miners receieve a series of all fake or all real images).
-- Interpretability: provides a single scalar value between 0 and 1, where 1 indicates perfect classification.
-- Sensitivity and specificity balance: considers both true positive and false positive rates.
-
-These characteristics make ROC AUC an ideal metric for evaluating miner performance in our subnet, where accurate classification of real and synthetic images is crucial.
-
 
 
 ## Scores
 
 >Validators set weights based on a score vector they use to keep track of miner performance. 
 
-For each challenge *t*, a validator will randomly sample 50 miners, send them an image, and compute their rewards *C* based on their responses. These reward values are then used to update the validator's score vector *V* using an exponential moving average (EMA) with *&alpha;* = 0.01. 
+For each challenge *t*, a validator will randomly sample 50 miners, send them an image, and compute their rewards *C* based on their responses. These reward values are then used to update the validator's score vector *V* using an exponential moving average (EMA) with *&alpha;* = 0.02. 
 
 $$
-V_t = 0.01 \cdot C_t + 0.99 \cdot V_{t-1}
+V_t = 0.02 \cdot C_t + 0.98 \cdot V_{t-1}
 $$
 
 A low *&alpha;* value places emphasis on a miner's historical performance, adding additional smoothing to avoid having a single prediction cause significant score fluctuations.
