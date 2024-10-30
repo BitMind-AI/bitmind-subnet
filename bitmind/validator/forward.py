@@ -30,7 +30,7 @@ from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
-from bitmind.image_transforms import random_aug_transforms
+from bitmind.image_transforms import random_aug_transforms, base_transforms
 
 
 def sample_random_real_image(datasets, total_images, retries=10):
@@ -131,6 +131,7 @@ async def forward(self):
         image = random_aug_transforms(image)
         data_aug_params = random_aug_transforms.params
     else:
+        image = base_transforms(image)
         data_aug_params = {}
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
