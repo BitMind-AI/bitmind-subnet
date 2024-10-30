@@ -35,5 +35,7 @@ WALLET_HOTKEY=default
 
 # Miner Settings:
 MINER_AXON_PORT=8091
-BLACKLIST_FORCE_VALIDATOR_PERMIT=True          # Default setting to force validator permit for blacklisting" > miner.env
+BLACKLIST_FORCE_VALIDATOR_PERMIT=True          # Default setting to force validator permit for blacklisting
+MINER_AXON_EXTERNAL_IP=                        # Optional setting to specify external IP for Axon
+MINER_AXON_EXTERNAL_PORT=                      # Optional setting to specify external port for Axon " > miner.env
 

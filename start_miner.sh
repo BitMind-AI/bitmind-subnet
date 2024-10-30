@@ -11,6 +11,15 @@ if pm2 list | grep -q "bitmind_miner"; then
   pm2 delete bitmind_miner
 fi
 
+# Prepare optional arguments
+optional_args=()
+if [[ -n "$MINER_AXON_EXTERNAL_IP" ]]; then
+  optional_args+=(--axon.external_ip "$MINER_AXON_EXTERNAL_IP")
+fi
+if [[ -n "$MINER_AXON_EXTERNAL_PORT" ]]; then
+  optional_args+=(--axon.external_port "$MINER_AXON_EXTERNAL_PORT")
+fi
+
 # Start the process with arguments from environment variables
 pm2 start neurons/miner.py --name bitmind_miner -- \
   --neuron.detector $DETECTOR \
@@ -22,4 +31,5 @@ pm2 start neurons/miner.py --name bitmind_miner -- \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
   --axon.port $MINER_AXON_PORT \
-  --blacklist.force_validator_permit $BLACKLIST_FORCE_VALIDATOR_PERMIT
+  --blacklist.force_validator_permit $BLACKLIST_FORCE_VALIDATOR_PERMIT \
+  "${optional_args[@]}"
