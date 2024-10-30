@@ -37,7 +37,13 @@ VALIDATOR_DATASET_META = {
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-images-v7"},
         {"path": "bitmind/celeb-a-hq"},
-        {"path": "bitmind/ffhq-256"}
+        {"path": "bitmind/ffhq-256"},
+        {"path": "bitmind/MS-COCO-unique-256"},
+        {"path": "bitmind/AFHQ"},
+        {"path": "bitmind/lfw"},
+        {"path": "bitmind/caltech-256"},
+        {"path": "bitmind/caltech-101"},
+        {"path": "bitmind/dtd"}
     ]
 }
 
@@ -126,4 +132,4 @@ DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
 
-TEXT_MODERATION_MODEL = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit" 
+TEXT_MODERATION_MODEL = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"

@@ -25,7 +25,7 @@ class MockImageDataset:
             download_mode: str = None):
 
         self.huggingface_dataset_path = huggingface_dataset_path
-        self.huggingface_datset_name = huggingface_datset_name
+        self.huggingface_dataset_name = huggingface_datset_name
         self.dataset = ""
         self.sampled_images_idx = []
 
@@ -35,6 +35,9 @@ class MockImageDataset:
             'id': index,
             'source': self.huggingface_dataset_path
         }
+
+    def __len__(self):
+        return 100  # mock length
 
     def sample(self, k=1):
         return [self.__getitem__(i) for i in range(k)], [i for i in range(k)]
@@ -89,6 +92,7 @@ class MockValidator:
         ]
         self.synthetic_image_generator = MockSyntheticImageGenerator(
             prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
+        self.total_real_images = sum([len(ds) for ds in self.real_image_datasets])
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
         self._fake_prob = config.fake_prob
 
