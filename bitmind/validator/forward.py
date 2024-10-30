@@ -126,8 +126,11 @@ async def forward(self):
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
             raise NotImplementedError
 
-    image = random_aug_transforms(sample['image'])
-    data_aug_params = random_aug_transforms.params
+    if np.random.rand() > 0.25:
+        image = random_aug_transforms(sample['image'])
+        data_aug_params = random_aug_transforms.params
+    else:
+        data_aug_params = {}
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
@@ -145,7 +148,7 @@ async def forward(self):
         axons=axons,
         performance_tracker=self.performance_tracker)
     
-    # Logging image source and verification details
+    # Logging image source (model for synthetic, dataset for real) and verification details
     source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['source_dataset']
     bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
     
