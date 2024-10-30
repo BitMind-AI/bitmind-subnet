@@ -126,8 +126,9 @@ async def forward(self):
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
             raise NotImplementedError
 
+    image = sample['image']
     if np.random.rand() > 0.25:
-        image = random_aug_transforms(sample['image'])
+        image = random_aug_transforms(image)
         data_aug_params = random_aug_transforms.params
     else:
         data_aug_params = {}
