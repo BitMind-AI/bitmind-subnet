@@ -52,9 +52,16 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
     datasets = {split: [] for split in splits}
 
     for meta in dataset_meta:
+        # Load dataset and combine all available Hugging Face splits
         dataset = load_huggingface_dataset(meta['path'], None, meta.get('name'))
-        train_ds, val_ds, test_ds = split_dataset(dataset)
+        combined_dataset = datasets.DatasetDict()
+        combined_dataset['train'] = datasets.concatenate_datasets([
+            dataset[split] for split in dataset.keys()
+        ])
+        
+        train_ds, val_ds, test_ds = split_dataset(combined_dataset)
 
+        # Define new splits
         for split, data in zip(splits, [train_ds, val_ds, test_ds]):
             image_dataset = ImageDataset(huggingface_dataset=data)
             datasets[split].append(image_dataset)
