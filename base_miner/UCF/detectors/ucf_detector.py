@@ -212,23 +212,25 @@ class UCFDetector(AbstractDetector):
         return loss_dict
 
     def get_train_metrics(self, data_dict: dict, pred_dict: dict) -> dict:
-        def get_accracy(label, output):
-            _, prediction = torch.max(output, 1)    # argmax
+        def get_accuracy(label, output):
+            # Apply softmax to get probabilities
+            probs = torch.softmax(output, dim=1)
+            # Get probability of positive class
+            pos_probs = probs[:, 1]
+            # Use same threshold as test
+            prediction = (pos_probs > 0.5).long()
             correct = (prediction == label).sum().item()
             accuracy = correct / prediction.size(0)
             return accuracy
         
-        # get pred and label
         label = data_dict['label']
         pred = pred_dict['cls']
         label_spe = data_dict['label_spe']
         pred_spe = pred_dict['cls_spe']
 
-        # compute metrics for batch data
         auc, eer, acc, ap = calculate_metrics_for_train(label.detach(), pred.detach())
-        acc_spe = get_accracy(label_spe.detach(), pred_spe.detach())
+        acc_spe = get_accuracy(label_spe.detach(), pred_spe.detach())
         metric_batch_dict = {'acc': acc, 'acc_spe': acc_spe, 'auc': auc, 'eer': eer, 'ap': ap}
-        # we dont compute the video-level metrics for training
         return metric_batch_dict
 
     def forward(self, data_dict: dict, inference=False) -> dict:
@@ -396,7 +398,7 @@ class Conditional_UNet(nn.Module):
         
         self.conv_last = nn.Conv2d(64, 3, 1)
         self.up_last = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
-        self.activation = nn.Tanh()
+        self.activation = nn.Sigmoid()
         #self.init_weight() 
         
     def forward(self, c, x):  # c is the style and x is the content

@@ -22,6 +22,7 @@ from datetime import timedelta
 from copy import deepcopy
 from PIL import Image as pil_image
 from pathlib import Path
+import wandb
 import gc
 
 import torch
@@ -33,12 +34,11 @@ import torch.optim as optim
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.utils.data import DataLoader
-
 from optimizor.SAM import SAM
 from optimizor.LinearLR import LinearDecayLR
 
+from base_miner.UCF.detectors import DETECTOR
 from trainer.trainer import Trainer
-from detectors import DETECTOR
 from metrics.utils import parse_metric_for_print
 from logger import create_logger, RankFilter
 
@@ -69,6 +69,77 @@ parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
                     help='number of workers for data loading')
 parser.add_argument('--epochs', type=int, default=None, help='number of training epochs')
 args = parser.parse_args()
+
+
+def log_model_to_wandb(run, model, weights_path, model_name="model"):
+    """
+    Log model weights and architecture to Weights & Biases.
+
+    Args:
+        run: wandb.Run object from your training script
+        model: PyTorch model to be logged
+        model_name: Name for the model artifact (default: "model")
+        log_gradients: Whether to track gradient distributions (default: False)
+    """
+    # Create a model artifact
+    model_artifact = wandb.Artifact(
+        name=model_name,
+        type="model",
+        description="Trained model weights and architecture"
+    )
+
+    # Save model architecture as string
+    architecture_str = str(model)
+    with model_artifact.new_file("model_architecture.txt") as f:
+        f.write(architecture_str)
+
+    # Save model weights
+    #torch.save(model.state_dict(), f"{model_name}_weights.pt")
+    model_artifact.add_file(weights_path)
+
+    # Log the artifact to W&B
+    run.log_artifact(model_artifact)
+
+    # Log model summary statistics
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    run.summary.update({
+        "total_parameters": total_params,
+        "trainable_parameters": trainable_params,
+        "model_size_mb": os.path.getsize(f"{weights_path}") / (1024 * 1024)
+        #"model_size_mb": os.path.getsize(f"{model_name}_weights.pt") / (1024 * 1024)
+    })
+
+
+def sanitize_wandb_dict(d):
+    """
+    Recursively process dictionary to make it safe for wandb logging.
+    Handles nested dicts, lists, tuples, and converts non-standard types to strings.
+    
+    Args:
+        d (dict): Input dictionary with arbitrary types
+
+    Returns:
+        dict: Dictionary with all values converted to wandb-safe types
+    """
+    wandb_safe = {}
+
+    for k, v in d.items():
+        # Convert key to string if it's not already
+        k = str(k)
+
+        # Handle different value types
+        if isinstance(v, dict):
+            v = sanitize_wandb_dict(v)
+        elif isinstance(v, (list, tuple)):
+            v = [sanitize_wandb_dict(x) if isinstance(x, dict) else str(x) if not isinstance(x, (int, float, str, bool)) else x for x in v]
+        elif not isinstance(v, (int, float, str, bool, type(None))):
+            v = str(v)
+
+        wandb_safe[k] = v
+
+    return wandb_safe
 
 
 def set_device(device=args.device, gpu_id=args.gpu_id):
@@ -136,8 +207,17 @@ def custom_collate_fn(batch):
     images, labels, source_labels = zip(*batch)
     
     images = torch.stack(images, dim=0)  # Stack image tensors into a single tensor
-    labels = torch.LongTensor(labels) 
-    source_labels = torch.LongTensor(source_labels) 
+    
+    # Convert labels to torch.long and ensure they are 0 and 1
+    labels = torch.tensor([int(label) for label in labels], dtype=torch.long)
+    source_labels = torch.tensor([int(label) for label in source_labels], dtype=torch.long)
+    
+    # Debug: Print label distribution in each batch
+    unique_labels, counts = torch.unique(labels, return_counts=True)
+    label_dist = {l.item(): c.item() for l, c in zip(unique_labels, counts)}
+    
+    if len(label_dist) < 2:
+        print(f"Warning: Batch contains only labels: {label_dist}")
     
     data_dict = {
         'image': images,
@@ -166,6 +246,10 @@ def prepare_datasets(config, logger):
         config['split_transforms']['test'],
         source_labels=True,
         group_sources_by_name=True)
+    
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Validation dataset size: {len(val_dataset)}")
+    print(f"Test dataset size: {len(test_dataset)}")
 
     log_finish_time(logger, "Creating real fake dataset splits", start_time)
     
@@ -175,7 +259,8 @@ def prepare_datasets(config, logger):
         shuffle=True,
         num_workers=config['workers'],
         drop_last=True,
-        collate_fn=custom_collate_fn)
+        collate_fn=custom_collate_fn,
+        generator=torch.Generator().manual_seed(config['manualSeed']))
 
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
@@ -183,7 +268,8 @@ def prepare_datasets(config, logger):
         shuffle=True,
         num_workers=config['workers'],
         drop_last=True,
-        collate_fn=custom_collate_fn)
+        collate_fn=custom_collate_fn,
+        generator=torch.Generator().manual_seed(config['manualSeed']))
 
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
@@ -191,7 +277,8 @@ def prepare_datasets(config, logger):
         shuffle=True, 
         num_workers=config['workers'],
         drop_last=True,
-        collate_fn=custom_collate_fn)
+        collate_fn=custom_collate_fn,
+        generator=torch.Generator().manual_seed(config['manualSeed'])) 
 
     print(f"Train size: {len(train_loader.dataset)}")
     print(f"Validation size: {len(val_loader.dataset)}")
@@ -282,6 +369,35 @@ def log_finish_time(logger, process_name, start_time):
     # Log the finish time and elapsed time
     logger.info(f"{process_name} Finish Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(finish_time))}")
     logger.info(f"{process_name} Elapsed Time: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
+    
+def check_batch_labels(loader, logger, split_name, max_batches=10):
+    """
+    Check label distribution in a subset of batches.
+    
+    Args:
+        loader: DataLoader to check
+        logger: Logger instance
+        split_name: Name of the split (e.g., "Training")
+        max_batches: Maximum number of batches to check (default: 10)
+    """
+    all_labels = []
+    for i, batch in enumerate(loader):
+        if i >= max_batches:
+            break
+            
+        labels = batch['label']
+        all_labels.extend(labels.cpu().numpy())
+        
+        # Check each batch
+        unique_batch, counts_batch = np.unique(labels.cpu().numpy(), return_counts=True)
+        if len(unique_batch) < 2:
+            logger.warning(f"{split_name} batch {i} contains only labels: {dict(zip(unique_batch, counts_batch))}")
+    
+    unique_all, counts_all = np.unique(all_labels, return_counts=True)
+    logger.info(f"{split_name} sample distribution (from {len(all_labels)} samples):")
+    for label, count in zip(unique_all, counts_all):
+        logger.info(f"Label {label}: {count} samples ({count/len(all_labels):.2%})")
+    return all_labels
 
 
 def save_config(config, outputs_dir):
@@ -442,7 +558,12 @@ def main():
         model_filename=config['pretrained'].split('/')[-1],
         hugging_face_repo_name='bitmind/bm-ucf'
     )
-    
+
+    wandb_run = wandb.init(
+        project="detector-training",
+        config=sanitize_wandb_dict(config),
+        name=f"{config['model_name']}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
     model = model_class(config).to(config['device'])
@@ -457,7 +578,7 @@ def main():
     metric_scoring = choose_metric(config)
 
     # prepare the trainer
-    trainer = Trainer(config, model, config['device'], optimizer, scheduler, logger, metric_scoring)
+    trainer = Trainer(config, model, config['device'], optimizer, scheduler, logger, metric_scoring, wandb_run)
 
     # print configuration
     logger.info("--------------- Configuration ---------------")
@@ -468,25 +589,35 @@ def main():
 
     # save training configs
     save_config(config, outputs_dir)
+    
+    logger.info("Verifying data loaders...")
+    train_labels = check_batch_labels(train_loader, logger, "Training")
+    val_labels = check_batch_labels(val_loader, logger, "Validation")
+    test_labels = check_batch_labels(test_loader, logger, "Test")
 
     # start training
     start_time = log_start_time(logger, "Training")
     for epoch in range(config['start_epoch'], config['nEpochs'] + 1):
         trainer.model.epoch = epoch
         best_metric = trainer.train_epoch(
-                    epoch,
-                    train_data_loader=train_loader,
-                    validation_data_loaders={'val':val_loader}
-                )
+            epoch,
+            train_data_loader=train_loader,
+            validation_data_loaders={'val':val_loader}
+        )
         if best_metric is not None:
             logger.info(f"===> Epoch[{epoch}] end with validation {metric_scoring}: {parse_metric_for_print(best_metric)}!")
 
     logger.info("Stop Training on best Validation metric {}".format(parse_metric_for_print(best_metric))) 
+    logger.info("Logging model and model metadata to w&b")
+    log_model_to_wandb(wandb_run, model, os.path.join(outputs_dir, "ckpt_best.pth"))
     log_finish_time(logger, "Training", start_time)
 
     # test
     start_time = log_start_time(logger, "Test")
-    trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
+    metrics = trainer.eval(eval_data_loaders={'test':test_loader}, eval_stage="test")
+    print(metrics)
+    wandb_run.log(metrics)
+
     log_finish_time(logger, "Test", start_time)
     
     # update
@@ -494,10 +625,6 @@ def main():
         model.update_R(epoch)
     if scheduler is not None:
         scheduler.step()
-
-    # close the tensorboard writers
-    for writer in trainer.writers.values():
-        writer.close()
 
     torch.cuda.empty_cache()
     gc.collect()

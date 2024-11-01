@@ -53,14 +53,19 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
 
     for meta in dataset_meta:
         dataset = load_huggingface_dataset(meta['path'], None, meta.get('name'))
-        train_ds, val_ds, test_ds = split_dataset(dataset)
+        combined_dataset = datasets.DatasetDict()
+        combined_dataset['train'] = datasets.concatenate_datasets([
+            dataset[split] for split in dataset.keys()
+        ])
+        dataset = None
+        train_ds, val_ds, test_ds = split_dataset(combined_dataset)
 
         for split, data in zip(splits, [train_ds, val_ds, test_ds]):
             image_dataset = ImageDataset(huggingface_dataset=data)
             datasets[split].append(image_dataset)
 
-        split_lengths = ', '.join([f"{split} len={len(datasets[split][0])}" for split in splits])
-        print(f'done, {split_lengths}')
+        split_lengths = ', '.join([f"{split} len={len(data)}" for split, data in zip(splits, [train_ds, val_ds, test_ds])])
+        print(f'Split sizes: {split_lengths}')
 
     return datasets
 
@@ -85,8 +90,8 @@ def create_source_label_mapping(
     for split, dataset_list in fake_datasets.items():
         for dataset in dataset_list:
             source = dataset.huggingface_dataset_path
-            if group_by_name and '__' in source:
-                model_name = source.split('__')[1]
+            if group_by_name and '___' in source:
+                model_name = source.split('___')[1]
                 if model_name in grouped_source_labels:
                     fake_source_label = grouped_source_labels[model_name]
                 else:

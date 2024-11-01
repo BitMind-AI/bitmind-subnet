@@ -21,6 +21,7 @@ from base_miner.gating_mechanisms import FaceGate
 from base_miner.UCF.detectors import DETECTOR
 from base_miner.deepfake_detectors import DeepfakeDetector
 from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
+from bitmind.image_transforms import ucf_transforms
 
 import bittensor as bt
 
@@ -114,20 +115,9 @@ class UCFDetector(DeepfakeDetector):
         Returns:
             torch.Tensor: The preprocessed image tensor, ready for model inference.
         """
-        # Convert image to RGB format to ensure consistent color handling.
-        image = image.convert('RGB')
     
         # Define transformation sequence for image preprocessing.
-        transform = transforms.Compose([
-            transforms.Resize((res, res), interpolation=Image.LANCZOS),  # Resize image to specified resolution.
-            transforms.ToTensor(),  # Convert the image to a PyTorch tensor.
-            transforms.Normalize(mean=self.train_config['mean'], std=self.train_config['std'])  # Normalize the image tensor.
-        ])
-        
-        # Apply transformations and add a batch dimension for model inference.
-        image_tensor = transform(image).unsqueeze(0)
-        
-        # Move the image tensor to the specified device (e.g., GPU).
+        image_tensor = ucf_transforms(image).unsqueeze(0)
         return image_tensor.to(self.device)
 
     def infer(self, image_tensor):

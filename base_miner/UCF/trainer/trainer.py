@@ -2,7 +2,6 @@
 # originally authored by Zhiyuan Yan (zhiyuanyan@link.cuhk.edu.cn)
 
 # Original: https://github.com/SCLBD/DeepfakeBench/blob/main/training/train.py
-
 import os
 import sys
 current_file_path = os.path.abspath(__file__)
@@ -10,7 +9,6 @@ parent_dir = os.path.dirname(os.path.dirname(current_file_path))
 project_root_dir = os.path.dirname(parent_dir)
 sys.path.append(parent_dir)
 sys.path.append(project_root_dir)
-
 import pickle
 import datetime
 import logging
@@ -24,7 +22,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.nn import DataParallel
-from torch.utils.tensorboard import SummaryWriter
 from metrics.base_metrics_class import Recorder
 from torch.optim.swa_utils import AveragedModel, SWALR
 from torch import distributed as dist
@@ -43,11 +40,12 @@ class Trainer(object):
         scheduler,
         logger,
         metric_scoring='auc',
-        swa_model=None
+        swa_model=None,
+        wandb_run=None
         ):
         # check if all the necessary components are implemented
         if config is None or model is None or optimizer is None or logger is None:
-            raise ValueError("config, model, optimizier, logger, and tensorboard writer must be implemented")
+            raise ValueError("config, model, optimizier, and logger must be set")
 
         self.config = config
         self.model = model
@@ -55,9 +53,9 @@ class Trainer(object):
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.swa_model = swa_model
-        self.writers = {}  # dict to maintain different tensorboard writers for each dataset and metric
         self.logger = logger
         self.metric_scoring = metric_scoring
+        self.wandb_run = wandb_run
         # maintain the best metric of all epochs
         self.best_metrics_all_time = defaultdict(
             lambda: defaultdict(lambda: float('-inf')
@@ -69,25 +67,6 @@ class Trainer(object):
         self.log_dir = self.config['log_dir']
         print("Making dir ", self.log_dir)
         os.makedirs(self.log_dir, exist_ok=True)
-
-    def get_writer(self, phase, dataset_key, metric_key):
-        phase = phase.split('/')[-1]
-        dataset_key = dataset_key.split('/')[-1]
-        metric_key = metric_key.split('/')[-1]
-        writer_key = f"{phase}-{dataset_key}-{metric_key}"
-        if writer_key not in self.writers:
-            # update directory path
-            writer_path = os.path.join(
-                self.log_dir,
-                phase,
-                dataset_key,
-                metric_key,
-                "metric_board"
-            )
-            os.makedirs(writer_path, exist_ok=True)
-            # update writers dictionary
-            self.writers[writer_key] = SummaryWriter(writer_path)
-        return self.writers[writer_key]
 
     def speed_up(self):
         self.model.device = self.device
@@ -121,7 +100,12 @@ class Trainer(object):
     def save_ckpt(self, phase, dataset_key,ckpt_info=None):
         save_dir = self.log_dir
         os.makedirs(save_dir, exist_ok=True)
-        ckpt_name = f"ckpt_best.pth"
+        
+        i = 0
+        while os.path.exists(os.path.join(save_dir, f"ckpt_best_{i}.pth")):
+            i += 1
+        ckpt_name = f"ckpt_best_{i}.pth"
+    
         save_path = os.path.join(save_dir, ckpt_name)
         if self.config['ddp'] == True:
             torch.save(self.model.state_dict(), save_path)
@@ -207,8 +191,6 @@ class Trainer(object):
         else:
             times_per_epoch = 1
 
-
-        #times_per_epoch=4
         validation_step = len(train_data_loader) // times_per_epoch    # validate 10 times per epoch
         step_cnt = epoch * len(train_data_loader)
         
@@ -218,7 +200,6 @@ class Trainer(object):
 
         for iteration, data_dict in tqdm(enumerate(train_data_loader),total=len(train_data_loader)):
             self.setTrain()
-            # if using GPU, move data to GPU
             if 'cuda' in str(self.device):
                 for key in data_dict.keys():
                     if data_dict[key] is not None and key!='name':
@@ -226,7 +207,6 @@ class Trainer(object):
 
             losses, predictions=self.train_step(data_dict)
             # update learning rate
-
             if 'SWA' in self.config and self.config['SWA'] and epoch>self.config['swa_start']:
                 self.swa_model.update_parameters(self.model)
 
@@ -236,33 +216,29 @@ class Trainer(object):
             else:
                 batch_metrics = self.model.get_train_metrics(data_dict, predictions)
 
-            # store data by recorder
-            ## store metric
             for name, value in batch_metrics.items():
                 train_recorder_metric[name].update(value)
-            ## store loss
+
             for name, value in losses.items():
                 train_recorder_loss[name].update(value)
 
-            # run tensorboard to visualize the training process
+            # run wandb logging to visualize the training process
             if iteration % 300 == 0 and self.config['gpu_id']==0:
                 if self.config['SWA'] and (epoch>self.config['swa_start'] or self.config['dry_run']):
                     self.scheduler.step()
-                # info for loss
                 loss_str = f"Iter: {step_cnt}    "
+                log_dict = {}  # Create a dictionary to store all metrics for wandb
+
                 for k, v in train_recorder_loss.items():
                     v_avg = v.average()
                     if v_avg == None:
                         loss_str += f"training-loss, {k}: not calculated"
                         continue
                     loss_str += f"training-loss, {k}: {v_avg}    "
-                    # tensorboard-1. loss
-                    processed_train_dataset = [dataset.split('/')[-1] for dataset in self.config['train_dataset']]
-                    processed_train_dataset = ','.join(processed_train_dataset)
-                    writer = self.get_writer('train', processed_train_dataset, k)
-                    writer.add_scalar(f'train_loss/{k}', v_avg, global_step=step_cnt)
+                    # wandb logging for loss
+                    log_dict[f'train_loss/{k}'] = v_avg
                 self.logger.info(loss_str)
-                # info for metric
+
                 metric_str = f"Iter: {step_cnt}    "
                 for k, v in train_recorder_metric.items():
                     v_avg = v.average()
@@ -270,15 +246,15 @@ class Trainer(object):
                         metric_str += f"training-metric, {k}: not calculated    "
                         continue
                     metric_str += f"training-metric, {k}: {v_avg}    "
-                    # tensorboard-2. metric
-                    processed_train_dataset = [dataset.split('/')[-1] for dataset in self.config['train_dataset']]
-                    processed_train_dataset = ','.join(processed_train_dataset)
-                    writer = self.get_writer('train', processed_train_dataset, k)
-                    writer.add_scalar(f'train_metric/{k}', v_avg, global_step=step_cnt)
+                    log_dict[f'train_metric/{k}'] = v_avg
                 self.logger.info(metric_str)
 
-                # clear recorder.
-                # Note we only consider the current 300 samples for computing batch-level loss/metric
+                log_dict['step'] = step_cnt
+                log_dict['epoch'] = epoch
+                if self.wandb_run:
+                    self.wandb_run.log(log_dict)
+
+                # only consider the current 300 samples for computing batch-level loss/metric
                 for name, recorder in train_recorder_loss.items():  # clear loss recorder
                     recorder.clear()
                 for name, recorder in train_recorder_metric.items():  # clear metric recorder
@@ -305,13 +281,37 @@ class Trainer(object):
                     data_dict[key]=data_dict[key].cpu()
         return validation_best_metric
     
-    def get_respect_acc(self,prob,label):
+    # def get_respect_acc(self,prob,label):
+    #     pred = np.where(prob > 0.5, 1, 0)
+    #     judge = (pred == label)
+    #     zero_num = len(label) - np.count_nonzero(label)
+    #     acc_fake = np.count_nonzero(judge[zero_num:]) / len(judge[zero_num:])
+    #     acc_real = np.count_nonzero(judge[:zero_num]) / len(judge[:zero_num])
+    #     return acc_real,acc_fake
+    
+    def get_respect_acc(self, prob, label):
+        """
+        Calculate separate accuracies for real and fake classes.
+        
+        Args:
+            prob (np.ndarray): Model predictions (probabilities or logits)
+            label (np.ndarray): Ground truth labels
+            
+        Returns:
+            tuple: (real_accuracy, fake_accuracy)
+        """
+        # Convert probabilities to binary predictions
         pred = np.where(prob > 0.5, 1, 0)
-        judge = (pred == label)
-        zero_num = len(label) - np.count_nonzero(label)
-        acc_fake = np.count_nonzero(judge[zero_num:]) / len(judge[zero_num:])
-        acc_real = np.count_nonzero(judge[:zero_num]) / len(judge[:zero_num])
-        return acc_real,acc_fake
+        
+        # Separate real and fake samples
+        real_mask = (label == 0)
+        fake_mask = (label == 1)
+        
+        # Calculate accuracies for each class
+        acc_real = np.mean(pred[real_mask] == label[real_mask]) if np.any(real_mask) else 0
+        acc_fake = np.mean(pred[fake_mask] == label[fake_mask]) if np.any(fake_mask) else 0
+        
+        return acc_real, acc_fake
 
     def eval_one_dataset(self, data_loader):
         # define eval recorder
@@ -350,13 +350,13 @@ class Trainer(object):
                     eval_recorder_loss[name].update(value)
         return eval_recorder_loss, np.array(prediction_lists), np.array(label_lists),np.array(feature_lists)
 
-    def save_best(self,epoch,iteration,step,losses_one_dataset_recorder,key,metric_one_dataset,eval_stage):
+    def save_best(self, epoch, iteration, step, losses_one_dataset_recorder, key, metric_one_dataset, eval_stage):
         best_metric = self.best_metrics_all_time[key].get(self.metric_scoring,
-                                                          float('-inf') if self.metric_scoring != 'eer' else float(
-                                                              'inf'))
+                                                        float('-inf') if self.metric_scoring != 'eer' else float('inf'))
         # Check if the current score is an improvement
         improved = (metric_one_dataset[self.metric_scoring] > best_metric) if self.metric_scoring != 'eer' else (
-                    metric_one_dataset[self.metric_scoring] < best_metric)
+                metric_one_dataset[self.metric_scoring] < best_metric)
+
         if improved:
             # Update the best metric
             self.best_metrics_all_time[key][self.metric_scoring] = metric_one_dataset[self.metric_scoring]
@@ -366,34 +366,47 @@ class Trainer(object):
             if eval_stage=='validation' and self.config['save_ckpt']:
                 self.save_ckpt(eval_stage, key, f"{epoch}+{iteration}")
             self.save_metrics(eval_stage, metric_one_dataset, key)
+
+        # Initialize wandb log dictionary
+        log_dict = {
+            'epoch': epoch,
+            'step': step,
+            f'{eval_stage}/dataset': key
+        }
+
         if losses_one_dataset_recorder is not None:
             # info for each dataset
             loss_str = f"dataset: {key}    step: {step}    "
             for k, v in losses_one_dataset_recorder.items():
-                writer = self.get_writer(eval_stage, key, k)
                 v_avg = v.average()
                 if v_avg == None:
                     print(f'{k} is not calculated')
                     continue
-                # tensorboard-1. loss
-                writer.add_scalar(f'{eval_stage}_losses/{k}', v_avg, global_step=step)
+                # wandb logging for losses
+                log_dict[f'{eval_stage}_losses/{key}/{k}'] = v_avg
                 loss_str += f"{eval_stage}-loss, {k}: {v_avg}    "
             self.logger.info(loss_str)
-        # tqdm.write(loss_str)
+
         metric_str = f"dataset: {key}    step: {step}    "
         for k, v in metric_one_dataset.items():
             if k == 'pred' or k == 'label' or k=='dataset_dict':
                 continue
             metric_str += f"{eval_stage}-metric, {k}: {v}    "
-            # tensorboard-2. metric
-            writer = self.get_writer(eval_stage, key, k)
-            writer.add_scalar(f'{eval_stage}_metrics/{k}', v, global_step=step)
+            # wandb logging for metrics
+            log_dict[f'{eval_stage}_metrics/{key}/{k}'] = v
+
         if 'pred' in metric_one_dataset:
             acc_real, acc_fake = self.get_respect_acc(metric_one_dataset['pred'], metric_one_dataset['label'])
             metric_str += f'{eval_stage}-metric, acc_real:{acc_real}; acc_fake:{acc_fake}'
-            writer.add_scalar(f'{eval_stage}_metrics/acc_real', acc_real, global_step=step)
-            writer.add_scalar(f'{eval_stage}_metrics/acc_fake', acc_fake, global_step=step)
+            # wandb logging for real/fake accuracies
+            log_dict[f'{eval_stage}_metrics/{key}/acc_real'] = acc_real
+            log_dict[f'{eval_stage}_metrics/{key}/acc_fake'] = acc_fake
+
         self.logger.info(metric_str)
+
+        # Log all metrics at once to wandb
+        if self.wandb_run is not None and (not self.config['ddp'] or (self.config['ddp'] and dist.get_rank() == 0)):
+            self.wandb_run.log(log_dict, step=step)
 
     def eval(self, eval_data_loaders, eval_stage, step=None, epoch=None, iteration=None):
         # set model to eval mode
