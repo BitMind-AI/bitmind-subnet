@@ -223,7 +223,7 @@ class Trainer(object):
                 train_recorder_loss[name].update(value)
 
             # run wandb logging to visualize the training process
-            if iteration % 300 == 0 and self.config['gpu_id']==0:
+            if iteration % 300 == 0 and self.config['local_rank']==0:
                 if self.config['SWA'] and (epoch>self.config['swa_start'] or self.config['dry_run']):
                     self.scheduler.step()
                 loss_str = f"Iter: {step_cnt}    "
