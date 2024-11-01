@@ -49,7 +49,7 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
         'test': [<ImageDataset object>, <ImageDataset object>]}
     """
     splits = ['train', 'validation', 'test']
-    datasets = {split: [] for split in splits}
+    dataset_splits = {split: [] for split in splits}
 
     for meta in dataset_meta:
         dataset = load_huggingface_dataset(meta['path'], None, meta.get('name'))
@@ -62,12 +62,12 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
 
         for split, data in zip(splits, [train_ds, val_ds, test_ds]):
             image_dataset = ImageDataset(huggingface_dataset=data)
-            datasets[split].append(image_dataset)
+            dataset_splits[split].append(image_dataset)
 
         split_lengths = ', '.join([f"{split} len={len(data)}" for split, data in zip(splits, [train_ds, val_ds, test_ds])])
         print(f'Split sizes: {split_lengths}')
 
-    return datasets
+    return dataset_splits
 
 
 def create_source_label_mapping(
