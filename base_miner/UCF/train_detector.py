@@ -256,7 +256,7 @@ def prepare_datasets(config, logger):
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=config['train_batchSize'],
-        shuffle=True,
+        shuffle=not config['ddp'],
         num_workers=config['workers'],
         drop_last=True,
         collate_fn=custom_collate_fn,
@@ -266,7 +266,7 @@ def prepare_datasets(config, logger):
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=config['train_batchSize'],
-        shuffle=True,
+        shuffle=not config['ddp'],
         num_workers=config['workers'],
         drop_last=True,
         collate_fn=custom_collate_fn,
@@ -276,7 +276,7 @@ def prepare_datasets(config, logger):
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
         batch_size=config['train_batchSize'],
-        shuffle=True, 
+        shuffle=not config['ddp'], 
         num_workers=config['workers'],
         drop_last=True,
         collate_fn=custom_collate_fn,
@@ -537,12 +537,6 @@ def main():
     logger.info('Save log to {}'.format(outputs_dir))
     
     config['ddp']= args.ddp
-
-    # prepare the data loaders
-    train_loader, val_loader, test_loader, source_label_mapping = prepare_datasets(config, logger)
-    config['specific_task_number'] = len(set(source_label_mapping.values()))
-
-    # init seed
     init_seed(config)
 
     # set cudnn benchmark if needed
@@ -550,6 +544,7 @@ def main():
         cudnn.benchmark = True
     if config['ddp']:
         # dist.init_process_group(backend='gloo')
+        logger.info("Initializing process group")
         dist.init_process_group(
             backend='nccl',
             timeout=timedelta(minutes=30)
@@ -561,6 +556,10 @@ def main():
         model_filename=config['pretrained'].split('/')[-1],
         hugging_face_repo_name='bitmind/bm-ucf'
     )
+
+    # prepare the data loaders
+    train_loader, val_loader, test_loader, source_label_mapping = prepare_datasets(config, logger)
+    config['specific_task_number'] = len(set(source_label_mapping.values()))
 
     wandb_run = wandb.init(
         project="detector-training",
