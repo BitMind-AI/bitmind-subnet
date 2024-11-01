@@ -64,7 +64,7 @@ parser.add_argument('--no-save_feat', dest='save_feat', action='store_false', de
 parser.add_argument("--ddp", action='store_true', default=False)
 parser.add_argument('--device', type=str, choices=['cpu', 'gpu'], default='gpu',
                     help='Specify whether to use CPU or GPU. Defaults to GPU if available.')
-parser.add_argument('--gpu_id', type=int, default=0, help='Specify the GPU ID to use if using GPU. Defaults to 0.')
+parser.add_argument('--local-rank', type=int, default=0, help='Specify the GPU ID to use if using GPU. Defaults to 0.')
 parser.add_argument('--workers', type=int, default=os.cpu_count() - 1,
                     help='number of workers for data loading')
 parser.add_argument('--epochs', type=int, default=None, help='number of training epochs')
@@ -142,7 +142,7 @@ def sanitize_wandb_dict(d):
     return wandb_safe
 
 
-def set_device(device=args.device, gpu_id=args.gpu_id):
+def set_device(device=args.device, gpu_id=args.local_rank):
     """
     Determine the device to use based on user input and system availability.
 
@@ -260,6 +260,7 @@ def prepare_datasets(config, logger):
         num_workers=config['workers'],
         drop_last=True,
         collate_fn=custom_collate_fn,
+        sampler=DistributedSampler(train_dataset) if config['ddp'] else None,
         generator=torch.Generator().manual_seed(config['manualSeed']))
 
     val_loader = torch.utils.data.DataLoader(
@@ -269,6 +270,7 @@ def prepare_datasets(config, logger):
         num_workers=config['workers'],
         drop_last=True,
         collate_fn=custom_collate_fn,
+        sampler=DistributedSampler(val_dataset) if config['ddp'] else None,
         generator=torch.Generator().manual_seed(config['manualSeed']))
 
     test_loader = torch.utils.data.DataLoader(
@@ -278,6 +280,7 @@ def prepare_datasets(config, logger):
         num_workers=config['workers'],
         drop_last=True,
         collate_fn=custom_collate_fn,
+        sampler=DistributedSampler(test_dataset) if config['ddp'] else None,
         generator=torch.Generator().manual_seed(config['manualSeed'])) 
 
     print(f"Train size: {len(train_loader.dataset)}")
@@ -496,8 +499,8 @@ def main():
     config.update(config2)
 
     config['workers'] = args.workers
-    config['device'] = set_device(args.device, args.gpu_id)
-    config['gpu_id'] = args.gpu_id
+    config['device'] = set_device(args.device, args.local_rank)
+    config['local_rank'] = args.local_rank
     if config['dry_run']:
         config['nEpochs'] = 0
         config['save_feat'] = False
