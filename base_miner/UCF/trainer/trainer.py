@@ -281,13 +281,37 @@ class Trainer(object):
                     data_dict[key]=data_dict[key].cpu()
         return validation_best_metric
     
-    def get_respect_acc(self,prob,label):
+    # def get_respect_acc(self,prob,label):
+    #     pred = np.where(prob > 0.5, 1, 0)
+    #     judge = (pred == label)
+    #     zero_num = len(label) - np.count_nonzero(label)
+    #     acc_fake = np.count_nonzero(judge[zero_num:]) / len(judge[zero_num:])
+    #     acc_real = np.count_nonzero(judge[:zero_num]) / len(judge[:zero_num])
+    #     return acc_real,acc_fake
+    
+    def get_respect_acc(self, prob, label):
+        """
+        Calculate separate accuracies for real and fake classes.
+        
+        Args:
+            prob (np.ndarray): Model predictions (probabilities or logits)
+            label (np.ndarray): Ground truth labels
+            
+        Returns:
+            tuple: (real_accuracy, fake_accuracy)
+        """
+        # Convert probabilities to binary predictions
         pred = np.where(prob > 0.5, 1, 0)
-        judge = (pred == label)
-        zero_num = len(label) - np.count_nonzero(label)
-        acc_fake = np.count_nonzero(judge[zero_num:]) / len(judge[zero_num:])
-        acc_real = np.count_nonzero(judge[:zero_num]) / len(judge[:zero_num])
-        return acc_real,acc_fake
+        
+        # Separate real and fake samples
+        real_mask = (label == 0)
+        fake_mask = (label == 1)
+        
+        # Calculate accuracies for each class
+        acc_real = np.mean(pred[real_mask] == label[real_mask]) if np.any(real_mask) else 0
+        acc_fake = np.mean(pred[fake_mask] == label[fake_mask]) if np.any(fake_mask) else 0
+        
+        return acc_real, acc_fake
 
     def eval_one_dataset(self, data_loader):
         # define eval recorder
