@@ -58,12 +58,13 @@ def get_rewards(
                 performance_tracker.reset_miner_history(uid, miner_hotkey)
 
             performance_tracker.update(uid, pred_prob, label, miner_hotkey)
-            metrics = performance_tracker.get_metrics(uid, window=100)
-            reward = metrics['auc'] ** 2
+            metrics_100 = performance_tracker.get_metrics(uid, window=100)
+            metrics_10 = performance_tracker.get_metrics(uid, window=10)
+            reward = 0.5 * metrics_100['mcc'] + 0.5 * metrics_10['accuracy']
             reward *= compute_penalty(pred_prob)
 
             miner_rewards.append(reward)
-            miner_metrics.append(metrics)
+            miner_metrics.append(metrics_100)
 
         except Exception as e:
             bt.logging.error(f"Couldn't calculate reward for miner {uid}, prediction: {pred_prob}, label: {label}")

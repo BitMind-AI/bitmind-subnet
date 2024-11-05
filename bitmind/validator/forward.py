@@ -30,7 +30,25 @@ from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
-from bitmind.image_transforms import random_aug_transforms
+from bitmind.image_transforms import random_aug_transforms, base_transforms
+
+
+def sample_random_real_image(datasets, total_images, retries=10):
+    random_idx = np.random.randint(0, total_images)
+    source, idx = sample_real_image(datasets, random_idx)
+    if source[idx]['image'] is None:
+        if retries:
+            return sample_random_real_image(datasets, total_images, retries-1)
+        return None, None
+    return source, idx
+
+
+def sample_real_image(datasets, index):
+    cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
+    source_index = np.searchsorted(cumulative_sizes, index % (cumulative_sizes[-1]))
+    source = datasets[source_index]
+    valid_index = index - (cumulative_sizes[source_index - 1] if source_index > 0 else 0)
+    return source, valid_index
 
 
 async def forward(self):
@@ -60,14 +78,10 @@ async def forward(self):
         bt.logging.info('sampling real image')
 
         label = 0
-        real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
-        real_dataset = self.real_image_datasets[real_dataset_index]
-        samples, idx = real_dataset.sample(k=1)  # {'image': PIL Image ,'id': int}
-        sample = samples[0]
-
-        wandb_data['dataset'] = source_dataset
-        wandb_data['image_index'] = idx[0]
-        wandb_data['image_name'] = sample['id']
+        source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
+        wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
+        wandb_data['source_image_index'] = local_index
+        sample = source_dataset[local_index]
 
     else:
         label = 1
@@ -79,19 +93,20 @@ async def forward(self):
             while retries > 0:
                 retries -= 1
 
-                # sample image(s) from real dataset for captioning
-                real_dataset_index, source_dataset = sample_dataset_index_name(self.real_image_datasets)
-                real_dataset = self.real_image_datasets[real_dataset_index]
-                images_to_caption, image_indexes = real_dataset.sample(k=1)  # [{'image': PIL Image ,'id': int}, ...]
+                source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
+                source_sample = source_dataset[local_index]
+                source_image = source_sample['image']
+                if source_image is None:
+                    bt.logging.warning(f"Missing image encountered at {source_image['id']}, resampling...")
+                    continue
 
                 # generate captions for the real images, then synthetic images from these captions
                 sample = self.synthetic_image_generator.generate(
-                    k=1, real_images=images_to_caption)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+                    k=1, real_images=[source_sample])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
 
                 wandb_data['model'] = self.synthetic_image_generator.diffuser_name
-                wandb_data['source_dataset'] = source_dataset
-                wandb_data['source_image_name'] = images_to_caption[0]['id']
-                wandb_data['source_image_index'] = image_indexes[0]
+                wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
+                wandb_data['source_image_index'] = local_index
                 wandb_data['image'] = wandb.Image(sample['image'])
                 wandb_data['prompt'] = sample['prompt']
                 if not np.any(np.isnan(sample['image'])):
@@ -111,8 +126,13 @@ async def forward(self):
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
             raise NotImplementedError
 
-    image = random_aug_transforms(sample['image'])
-    data_aug_params = random_aug_transforms.params
+    image = sample['image']
+    if np.random.rand() > 0.25:
+        image = random_aug_transforms(image)
+        data_aug_params = random_aug_transforms.params
+    else:
+        image = base_transforms(image)
+        data_aug_params = {}
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
@@ -122,6 +142,24 @@ async def forward(self):
         deserialize=True,
         timeout=9
     )
+
+    rewards, metrics = get_rewards(
+        label=label,
+        responses=responses,
+        uids=miner_uids,
+        axons=axons,
+        performance_tracker=self.performance_tracker)
+    
+    # Logging image source (model for synthetic, dataset for real) and verification details
+    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['source_dataset']
+    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+    
+    # Logging responses and rewards
+    bt.logging.info(f"Received responses: {responses}")
+    bt.logging.info(f"Scored responses: {rewards}")
+    
+    # Update the scores based on the rewards.
+    self.update_scores(rewards, miner_uids)
 
     # update logging data
     wandb_data['data_aug_params'] = data_aug_params
@@ -133,24 +171,8 @@ async def forward(self):
         np.round(y_hat) == y
         for y_hat, y in zip(responses, [label] * len(responses))
     ]
-
-    rewards, metrics = get_rewards(
-        label=label,
-        responses=responses,
-        uids=miner_uids,
-        axons=axons,
-        performance_tracker=self.performance_tracker)
-    
-    # Logging image source and verification details
-    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['dataset']
-    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
-    
-    # Logging responses and rewards
-    bt.logging.info(f"Received responses: {responses}")
-    bt.logging.info(f"Scored responses: {rewards}")
-    
-    # Update the scores based on the rewards.
-    self.update_scores(rewards, miner_uids)
+    wandb_data['rewards'] = list(rewards)
+    wandb_data['scores'] = list(self.scores)
 
     metric_names = list(metrics[0].keys())
     for metric_name in metric_names:
@@ -159,6 +181,9 @@ async def forward(self):
     # W&B logging if enabled
     if not self.config.wandb.off:
         wandb.log(wandb_data)
+
+    # ensure state is saved after each challenge
+    self.save_miner_history()
 
     # Track miners who have responded
     self.last_responding_miner_uids = []
