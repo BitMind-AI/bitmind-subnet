@@ -80,8 +80,6 @@ class RealFakeDataset:
                 self.total_fake = sum(self.fake_samples)
                 self.real_cumulative = np.cumsum([0] + self.real_samples[:-1])
                 self.fake_cumulative = np.cumsum([0] + self.fake_samples[:-1])
-                self.real_shuffled_indices = [np.random.permutation(samples) for samples in self.real_samples]
-                self.fake_shuffled_indices = [np.random.permutation(samples) for samples in self.fake_samples]
     
     def _print_dataset_info(self):
         print(f"\nDataset information:")
@@ -148,9 +146,7 @@ class RealFakeDataset:
         shuffled_index = self.shuffled_indices[index]
         is_fake = self._determine_fake(shuffled_index)
         datasets, weights, label = self._get_dataset_info(is_fake)
-        
         source, valid_index = self._get_source_and_index(shuffled_index, datasets, weights, is_fake)
-        
         assert 0 <= valid_index < len(source), f"Invalid index: {valid_index} for source of length {len(source)}"
         
         image = self._get_image(source, valid_index, label)
@@ -164,7 +160,12 @@ class RealFakeDataset:
 
     def _setup_shuffled_indices(self):
         """Create and shuffle indices to ensure balanced sampling."""
-        self.shuffled_indices = torch.randperm(len(self)).tolist()
+        if self.sampling_strategy == 'max_samples':
+            # Reshuffle indices for each dataset
+            self.real_shuffled_indices = [np.random.permutation(samples) for samples in self.real_samples]
+            self.fake_shuffled_indices = [np.random.permutation(samples) for samples in self.fake_samples]
+        else:
+            self.shuffled_indices = torch.randperm(len(self)).tolist()
 
     def _determine_fake(self, shuffled_index):
         if self.sampling_strategy == 'balanced':
@@ -186,7 +187,7 @@ class RealFakeDataset:
         if self.sampling_strategy == 'balanced':
             return self._balanced_sampling(shuffled_index, datasets)
         elif self.sampling_strategy == 'full':
-            return self._full_sampling(shuffled_index, datasets)
+            return self._full_sampling(shuffled_index)
         elif self.sampling_strategy == 'weighted':
             return self._weighted_sampling(datasets, weights)
         elif self.sampling_strategy == 'max_samples':
@@ -198,7 +199,8 @@ class RealFakeDataset:
         valid_index = shuffled_index % self.samples_per_dataset
         return source, valid_index
 
-    def _full_sampling(self, shuffled_index, datasets):
+    def _full_sampling(self, shuffled_index):
+        datasets = self.real_image_datasets + self.fake_image_datasets
         cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
         source_index = np.searchsorted(cumulative_sizes, shuffled_index % (cumulative_sizes[-1]))
         source = datasets[source_index]
@@ -292,7 +294,3 @@ class RealFakeDataset:
         Method to be called at the end of each epoch to reshuffle the dataset.
         """
         self._setup_shuffled_indices()
-        if self.sampling_strategy == 'max_samples':
-            # Reshuffle indices for each dataset
-            self.real_shuffled_indices = [np.random.permutation(samples) for samples in self.real_samples]
-            self.fake_shuffled_indices = [np.random.permutation(samples) for samples in self.fake_samples]
