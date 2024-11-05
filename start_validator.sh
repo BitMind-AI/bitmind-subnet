@@ -5,6 +5,9 @@ set -a
 source validator.env
 set +a
 
+# Set VALIDATOR_PROXY_PORT with a default of 10913 if not already set
+: ${VALIDATOR_PROXY_PORT:=10913}
+
 # Login to Weights & Biases
 if ! wandb login $WANDB_API_KEY; then
   echo "Failed to login to Weights & Biases with the provided API key."
@@ -36,4 +39,5 @@ pm2 start neurons/validator.py --name bitmind_validator -- \
   --subtensor.chain_endpoint $SUBTENSOR_CHAIN_ENDPOINT \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
-  --axon.port $VALIDATOR_AXON_PORT
+  --axon.port $VALIDATOR_AXON_PORT \
+  --proxy.port $VALIDATOR_PROXY_PORT
