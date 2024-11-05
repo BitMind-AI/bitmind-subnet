@@ -73,8 +73,8 @@ class Trainer(object):
         if 'cuda' in str(self.device) and self.config['ddp'] == True and torch.cuda.is_available():
             num_gpus = torch.cuda.device_count()
             print(f'avai gpus: {num_gpus}')
-            self.model = DDP(self.model, device_ids=[self.config['gpu_id']],
-                             find_unused_parameters=True, output_device=self.config['gpu_id'])
+            self.model = DDP(self.model, device_ids=[self.config['local_rank']],
+                             find_unused_parameters=True, output_device=self.config['local_rank'])
 
     def setTrain(self):
         self.model.train()
@@ -223,7 +223,7 @@ class Trainer(object):
                 train_recorder_loss[name].update(value)
 
             # run wandb logging to visualize the training process
-            if iteration % 300 == 0 and self.config['gpu_id']==0:
+            if iteration % 300 == 0 and self.config['local_rank']==0:
                 if self.config['SWA'] and (epoch>self.config['swa_start'] or self.config['dry_run']):
                     self.scheduler.step()
                 loss_str = f"Iter: {step_cnt}    "
