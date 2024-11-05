@@ -26,8 +26,10 @@ SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
 WALLET_NAME=default
 WALLET_HOTKEY=default
 
+# Note: If you're using RunPod, you must select a port >= 70000 for symmetric mapping
 # Validator Port Setting:
 VALIDATOR_AXON_PORT=8092
+VALIDATOR_PROXY_PORT=10913
 
 # API Keys:
 WANDB_API_KEY=your_wandb_api_key_here
