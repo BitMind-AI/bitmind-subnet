@@ -228,7 +228,7 @@ class SyntheticDataGenerator:
             tuple: A tuple containing the tokenizer and its maximum token length.
         """
         # Check if a second tokenizer is available in the t2vis_model
-        if self.t2vis_model.tokenizer_2:
+        if hasattr(self.t2vis_model, 'tokenizer_2'):
             if self.t2vis_model.tokenizer.model_max_length > self.t2vis_model.tokenizer_2.model_max_length:
                 return self.t2vis_model.tokenizer_2, self.t2vis_model.tokenizer_2.model_max_length
         return self.t2vis_model.tokenizer, self.t2vis_model.tokenizer.model_max_length
