@@ -136,23 +136,31 @@ PROMPT_GENERATOR_ARGS = {
 
 PROMPT_GENERATOR_NAMES = list(PROMPT_GENERATOR_ARGS.keys())
 
+T2V_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2v_models']])
+T2I_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2i_models']])
+MODEL_NAMES = T2I_MODEL_NAMES + T2V_MODEL_NAMES
+
+IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
+
+TEXT_MODERATION_MODEL = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
+
 # args for .from_pretrained
 MODEL_INIT_ARGS = {
     m['path']: {
         k: v for k, v in m.items()
         if k not in ('path', 'pipeline', 'generate_args', 'enable_cpu_offload', 'vae_enable_tiling')
-    } for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2v_models']
+    } for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2i_models']
 }
 
 GENERATE_ARGS = {
     m['path']: m['generate_args']
-    for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2v_models']
+    for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2i_models']
     if 'generate_args' in m
 }
 
 MODEL_CPU_OFFLOAD_ENABLED = {
     m['path']: m.get('enable_cpu_offload', False)
-    for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2v_models']
+    for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2i_models']
 }
 
 MODEL_VAE_ENABLE_TILING = {
@@ -164,10 +172,3 @@ MODEL_PIPELINE = {
     m['path']: m['pipeline'] for m in VALIDATOR_MODEL_META['diffusers'] if 'pipeline' in m
 }
 
-T2V_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2v_models']])
-T2I_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2i_models']])
-MODEL_NAMES = T2I_MODEL_NAMES + T2V_MODEL_NAMES
-
-IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
-
-TEXT_MODERATION_MODEL = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
