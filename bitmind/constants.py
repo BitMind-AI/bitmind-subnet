@@ -169,6 +169,8 @@ MODEL_VAE_ENABLE_TILING = {
 }
 
 MODEL_PIPELINE = {
-    m['path']: m['pipeline'] for m in VALIDATOR_MODEL_META['diffusers'] if 'pipeline' in m
+    m['path']: m['pipeline'] 
+    for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2i_models'] 
+    if 'pipeline' in m
 }
 
