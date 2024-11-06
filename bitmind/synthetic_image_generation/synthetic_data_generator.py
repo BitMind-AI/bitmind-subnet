@@ -280,7 +280,7 @@ class SyntheticDataGenerator:
         # Load generation arguments based on t2vis_model settings
         if self.t2vis_model_name in GENERATE_ARGS:
             gen_args = GENERATE_ARGS[self.t2vis_model_name].copy()
-            for k, v in gen_args:
+            for k, v in gen_args.items():
                 if isinstance(v, dict):
                     gen_args[k] = np.random.randint(
                         gen_args[k]['min'],
