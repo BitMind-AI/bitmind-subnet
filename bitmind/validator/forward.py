@@ -28,7 +28,7 @@ import wandb
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
-from bitmind.protocol import prepare_image_synapse
+from bitmind.protocol import prepare_synapse
 from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import random_aug_transforms, base_transforms
 
@@ -73,15 +73,21 @@ async def forward(self):
     """
     wandb_data = {}
 
+    modality = 'video' if np.random.rand() > 0.5 else 'image'
+
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
     if np.random.rand() > self._fake_prob:
-        bt.logging.info('sampling real image')
+        if modality == 'video':
+            bt.logging.warning('TODO')
+            return 
 
-        label = 0
-        source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-        wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
-        wandb_data['source_image_index'] = local_index
-        sample = source_dataset[local_index]
+        elif modality == 'image':
+            bt.logging.info('sampling real image')
+            label = 0
+            source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
+            wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
+            wandb_data['source_image_index'] = local_index
+            sample = source_dataset[local_index]
 
     else:
         label = 1
@@ -102,43 +108,39 @@ async def forward(self):
 
                 # generate captions for the real images, then synthetic images from these captions
                 sample = self.synthetic_image_generator.generate(
-                    k=1, real_images=[source_sample])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+                    k=1, real_images=[source_sample], modality=modality)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
 
-                wandb_data['model'] = self.synthetic_image_generator.diffuser_name
+                wandb_data['model'] = self.synthetic_data_generator.t2v_model_name
                 wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
                 wandb_data['source_image_index'] = local_index
-                wandb_data['image'] = wandb.Image(sample['image'])
                 wandb_data['prompt'] = sample['prompt']
-                if not np.any(np.isnan(sample['image'])):
+                if modality == 'image':
+                    wandb_data['image'] = wandb.Image(sample['image'])
+                else:
+                    wandb_data['video'] = wandb.Video(sample['video'])
+    
+                if not np.any(np.isnan(sample[modality])):
                     break
 
                 bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
-
-        elif self.config.neuron.prompt_type == 'random':
-            bt.logging.info('generating fake image using prompt_generator')
-            sample = self.synthetic_image_generator.generate(k=1)[0]
-
-            wandb_data['model'] = self.synthetic_image_generator.diffuser_name
-            wandb_data['image'] = wandb.Image(sample['image'])
-            wandb_data['prompt'] = sample['prompt']
 
         else:
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
             raise NotImplementedError
 
-    image = sample['image']
+    input_data = sample[modality]  # extract video or image
     if np.random.rand() > 0.25:
-        image = random_aug_transforms(image)
+        input_data = random_aug_transforms(input_data)
         data_aug_params = random_aug_transforms.params
     else:
-        image = base_transforms(image)
+        input_data = base_transforms(input_data)
         data_aug_params = {}
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
     responses = await self.dendrite(
         axons=axons,
-        synapse=prepare_image_synapse(image=image),
+        synapse=prepare_synapse(input_data, modality=modality),
         deserialize=True,
         timeout=9
     )

@@ -55,7 +55,7 @@ VALIDATOR_MODEL_META = {
             "device": -1
         }
     ],
-    "diffusers": [
+    "t2i_models": [
         {
             "path": "stabilityai/stable-diffusion-xl-base-1.0",
             "use_safetensors": True,
@@ -90,6 +90,37 @@ VALIDATOR_MODEL_META = {
             "enable_cpu_offload": False,
             "pipeline": "FluxPipeline"
         }
+    ],
+    "t2v_models": [
+        {
+            "path": 'THUDM/CogVideoX-5b',
+            "use_safetensors": True,
+            "torch_dtype": torch.bfloat16,
+            "enable_cpu_offload": False,
+            "vae_enable_tiling": True,
+            "generate_args": {
+                "guidance_scale": 2,
+                "num_videos_per_prompt": 1,
+                "num_inference_steps": {"min": 50, "max": 125},
+                "num_frames": {"min": 30, "max": 60},
+                "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
+            },
+            "pipeline": "CogVideoXPipeline",
+        },
+        '''
+        {
+            "path": 'ByteDance/AnimateDiff-Lightning',
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+
+            "generate_args": {
+                "guidance_scale": 2,
+                "num_inference_steps": {"min": 50, "max": 125},
+            },
+            "pipeline": "AnimateDiffPipeline",
+            "base": "emilianJR/epiCRealism"
+        },
+        '''
     ]
 }
 
@@ -106,29 +137,36 @@ PROMPT_GENERATOR_ARGS = {
 PROMPT_GENERATOR_NAMES = list(PROMPT_GENERATOR_ARGS.keys())
 
 # args for .from_pretrained
-DIFFUSER_ARGS = {
+MODEL_INIT_ARGS = {
     m['path']: {
         k: v for k, v in m.items()
-        if k not in ('path', 'pipeline', 'generate_args', 'enable_cpu_offload')
-    } for m in VALIDATOR_MODEL_META['diffusers']
+        if k not in ('path', 'pipeline', 'generate_args', 'enable_cpu_offload', 'vae_enable_tiling')
+    } for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2v_models']
 }
 
 GENERATE_ARGS = {
     m['path']: m['generate_args']
-    for m in VALIDATOR_MODEL_META['diffusers']
+    for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2v_models']
     if 'generate_args' in m
 }
 
-DIFFUSER_CPU_OFFLOAD_ENABLED = {
+MODEL_CPU_OFFLOAD_ENABLED = {
     m['path']: m.get('enable_cpu_offload', False)
-    for m in VALIDATOR_MODEL_META['diffusers']
+    for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2v_models']
 }
 
-DIFFUSER_PIPELINE = {
+MODEL_VAE_ENABLE_TILING = {
+    m['path']: m.get('vae_enable_tiling', False)
+    for m in VALIDATOR_MODEL_META['t2v_models']
+}
+
+MODEL_PIPELINE = {
     m['path']: m['pipeline'] for m in VALIDATOR_MODEL_META['diffusers'] if 'pipeline' in m
 }
 
-DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
+T2V_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2v_models']])
+T2I_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2i_models']])
+MODEL_NAMES = T2I_MODEL_NAMES + T2V_MODEL_NAMES
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
 

@@ -24,7 +24,7 @@ import time
 from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
-from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticImageGenerator
+from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticDataGenerator
 from bitmind.image_dataset import ImageDataset
 from bitmind.constants import VALIDATOR_DATASET_META, WANDB_PROJECT, WANDB_ENTITY
 import bitmind
@@ -63,8 +63,8 @@ class Validator(BaseValidatorNeuron):
             len(ds) for ds in self.real_image_datasets
         ])
 
-        self.synthetic_image_generator = SyntheticImageGenerator(
-            prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
+        self.synthetic_image_generator = SyntheticDataGenerator(
+            prompt_type='annotation', use_random_t2vis_model=True)
 
         self._fake_prob = self.config.get('fake_prob', 0.5)
 

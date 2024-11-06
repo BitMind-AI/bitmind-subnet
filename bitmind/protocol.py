@@ -17,7 +17,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from pydantic import root_validator, validator
+from pydantic import BaseModel
 from torchvision import transforms
 from io import BytesIO
 from PIL import Image
@@ -25,6 +25,30 @@ import bittensor as bt
 import pydantic
 import base64
 import torch
+import zlib
+
+# ---- miner ----
+# Example usage:
+#   def miner_forward( synapse: ImageSynapse ) -> ImageSynapse:
+#       ...
+#       synapse.predictions = deepfake_detection_model_outputs
+#       return synapse
+#   axon = bt.axon().attach( miner_forward ).serve(netuid=...).start()
+
+# ---- validator ---
+# Example usage:
+#   dendrite = bt.dendrite()
+#   b64_images = [b64_img_1, ..., b64_img_n]
+#   predictions = dendrite.query( ImageSynapse( images = b64_images ) )
+#   assert len(predictions) == len(b64_images)
+
+def prepare_synapse(input_data, modality):
+    if modality == 'image':
+        return prepare_image_synapse(modality)
+    elif modality == 'video':
+        return prepare_video_synapse(modality)
+    else:
+        raise NotImplementedError(f"Unsupported modality: {modality}")
 
 
 def prepare_image_synapse(image: Image):
@@ -46,22 +70,6 @@ def prepare_image_synapse(image: Image):
     return ImageSynapse(image=b64_encoded_image)
 
 
-# ---- miner ----
-# Example usage:
-#   def miner_forward( synapse: ImageSynapse ) -> ImageSynapse:
-#       ...
-#       synapse.predictions = deepfake_detection_model_outputs
-#       return synapse
-#   axon = bt.axon().attach( miner_forward ).serve(netuid=...).start()
-
-# ---- validator ---
-# Example usage:
-#   dendrite = bt.dendrite()
-#   b64_images = [b64_img_1, ..., b64_img_n]
-#   predictions = dendrite.query( ImageSynapse( images = b64_images ) )
-#   assert len(predictions) == len(b64_images)
-
-
 class ImageSynapse(bt.Synapse):
     """
     This protocol helps in handling image/prediction request and response communication between
@@ -77,6 +85,50 @@ class ImageSynapse(bt.Synapse):
     image: str = pydantic.Field(
         title="Image",
         description="A base64 encoded image",
+        default="",
+        frozen=False
+    )
+
+    # Optional request output, filled by receiving axon.
+    prediction: float = pydantic.Field(
+        title="Prediction",
+        description="Probability that the image is AI generated/modified",
+        default=-1.,
+        frozen=False
+    )
+
+    def deserialize(self) -> float:
+        """
+        Deserialize the output. This method retrieves the response from
+        the miner, deserializes it and returns it as the output of the dendrite.query() call.
+
+        Returns:
+        - float: The deserialized miner prediction
+        prediction probabilities
+        """
+        return self.prediction
+
+
+def prepare_video_synapse(filepath: str):
+    with open(filepath, 'rb') as file:
+        file_data = file.read()
+    compressed_data = zlib.compress(file_data)
+    encoded_data = base64.b85encode(compressed_data).decode('utf-8')
+    return VideoSynapse(filename=filepath.split('/')[-1], content=encoded_data)
+
+
+class VideoSynapse(bt.Synapse):
+    """
+    Naive initial VideoSynapse 
+    Better option would be to modify the Dendrite interface to allow multipart/form-data here:
+    https://github.com/opentensor/bittensor/blob/master/bittensor/core/dendrite.py#L533
+    Another higher lift option would be to look into Epistula or Fiber
+    """
+
+    # Required request input, filled by sending dendrite caller.
+    video: str = pydantic.Field(
+        title="Video",
+        description="A wildly inefficient means of sending video data",
         default="",
         frozen=False
     )
