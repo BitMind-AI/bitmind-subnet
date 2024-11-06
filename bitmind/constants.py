@@ -88,7 +88,7 @@ VALIDATOR_MODEL_META = {
                 "guidance_scale": 2,
                 "num_videos_per_prompt": 1,
                 "num_inference_steps": {"min": 50, "max": 125},
-                "num_frames": {"min": 30, "max": 60},
+                "num_frames": 48,
                 "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
             },
             "pipeline": "CogVideoXPipeline",
