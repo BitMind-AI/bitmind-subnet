@@ -65,23 +65,25 @@ class Miner(BaseMinerNeuron):
             ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
 
         """
+        if isinstance(synapse, VideoSynapse):
+            bt.logging.info("Received video challenge!")
+            synapse.pred = 1
+
         if isinstance(synapse, ImageSynapse):
             bt.logging.info("Received image challenge!")
-        elif isinstance(synapse, VideoSynapse):
-            bt.logging.info("Received video challenge!")
-        try:
-            image_bytes = base64.b64decode(synapse.image)
-            image = Image.open(io.BytesIO(image_bytes))
+            try:
+                image_bytes = base64.b64decode(synapse.image)
+                image = Image.open(io.BytesIO(image_bytes))
 
-            pred = self.deepfake_detector(image)
+                pred = self.deepfake_detector(image)
 
-            synapse.prediction = pred
+                synapse.prediction = pred
             
-        except Exception as e:
-            bt.logging.error("Error performing inference")
-            bt.logging.error(e)
+            except Exception as e:
+                bt.logging.error("Error performing inference")
+                bt.logging.error(e)
 
-        bt.logging.info(f"PREDICTION: {synapse.prediction}")
+                bt.logging.info(f"PREDICTION: {synapse.prediction}")
         return synapse
 
     async def blacklist(
