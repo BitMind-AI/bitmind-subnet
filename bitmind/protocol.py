@@ -17,6 +17,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+from typing import List
 from pydantic import BaseModel
 from torchvision import transforms
 from io import BytesIO
@@ -109,13 +110,19 @@ class ImageSynapse(bt.Synapse):
         return self.prediction
 
 
-def prepare_video_synapse(filepath: str):
-    with open(filepath, 'rb') as file:
-        file_data = file.read()
-    compressed_data = zlib.compress(file_data)
-    encoded_data = base64.b85encode(compressed_data).decode('utf-8')
-    return VideoSynapse(filename=filepath.split('/')[-1], content=encoded_data)
+def prepare_video_synapse(frames: List[Image.Image]):
+    """
+    """
+    frame_bytes = []
+    for frame in frames:
+        buffer = BytesIO()
+        frame.save(buffer, format="JPEG")
+        frame_bytes.append(buffer.getvalue())
 
+    combined_bytes = b''.join(frame_bytes)
+    compressed_data = zlib.compress(combined_bytes)
+    encoded_data = base64.b85encode(compressed_data).decode('utf-8')
+    return VideoSynapse(video=encoded_data)
 
 class VideoSynapse(bt.Synapse):
     """

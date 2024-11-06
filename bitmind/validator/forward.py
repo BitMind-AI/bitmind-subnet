@@ -120,7 +120,8 @@ async def forward(self):
                     wandb_data['image'] = wandb.Image(gen_output)
                 elif modality == 'video':
                     gen_output = sample['gen_output'].frames[0]
-                    wandb_data['video'] = wandb.Video(gen_output)
+                    np_video = np.stack([np.array(img) for img in gen_output], axis=0)
+                    wandb_data['video'] = wandb.Video(np_video)
     
                 if not np.any(np.isnan(gen_output)):
                     break
