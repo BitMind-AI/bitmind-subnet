@@ -17,14 +17,15 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from PIL import Image
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
+from PIL import Image
 import bittensor as bt
 import pandas as pd
 import numpy as np
-import os
 import wandb
+import time
+import os
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
@@ -73,10 +74,10 @@ async def forward(self):
     """
     wandb_data = {}
 
-    modality = 'video' if np.random.rand() > 0.5 else 'image'
+    modality = 'video' if np.random.rand() > 0.0 else 'image'
 
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    if np.random.rand() > self._fake_prob:
+    if np.random.rand() > 1.:#self._fake_prob:
         if modality == 'video':
             bt.logging.warning('TODO')
             return 
@@ -107,19 +108,21 @@ async def forward(self):
                     continue
 
                 # generate captions for the real images, then synthetic images from these captions
-                sample = self.synthetic_image_generator.generate(
+                sample = self.synthetic_data_generator.generate(
                     k=1, real_images=[source_sample], modality=modality)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
 
-                wandb_data['model'] = self.synthetic_data_generator.t2v_model_name
+                wandb_data['model'] = self.synthetic_data_generator.t2vis_model_name
                 wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
                 wandb_data['source_image_index'] = local_index
                 wandb_data['prompt'] = sample['prompt']
                 if modality == 'image':
-                    wandb_data['image'] = wandb.Image(sample['image'])
-                else:
-                    wandb_data['video'] = wandb.Video(sample['video'])
+                    gen_output = sample['gen_output'].images[0]
+                    wandb_data['image'] = wandb.Image(gen_output)
+                elif modality == 'video':
+                    gen_output = sample['gen_output'].frames[0]
+                    wandb_data['video'] = wandb.Video(gen_output)
     
-                if not np.any(np.isnan(sample[modality])):
+                if not np.any(np.isnan(gen_output)):
                     break
 
                 bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
@@ -138,12 +141,14 @@ async def forward(self):
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
+    start = time.time()
     responses = await self.dendrite(
         axons=axons,
         synapse=prepare_synapse(input_data, modality=modality),
         deserialize=True,
         timeout=9
     )
+    bt.logging.info(f"Responses received in {time.time() - start}s")
 
     rewards, metrics = get_rewards(
         label=label,

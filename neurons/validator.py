@@ -63,7 +63,7 @@ class Validator(BaseValidatorNeuron):
             len(ds) for ds in self.real_image_datasets
         ])
 
-        self.synthetic_image_generator = SyntheticDataGenerator(
+        self.synthetic_data_generator = SyntheticDataGenerator(
             prompt_type='annotation', use_random_t2vis_model=True)
 
         self._fake_prob = self.config.get('fake_prob', 0.5)
