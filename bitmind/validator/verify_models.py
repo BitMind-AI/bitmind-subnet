@@ -1,5 +1,5 @@
 import os
-from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticDataGenerator
+from bitmind.synthetic_image_generation import SyntheticDataGenerator
 from bitmind.constants import MODEL_NAMES, IMAGE_ANNOTATION_MODEL, TEXT_MODERATION_MODEL
 import bittensor as bt
 
@@ -40,7 +40,7 @@ def main():
     bt.logging.info("Verifying validator model downloads....")
     synthetic_image_generator = SyntheticDataGenerator(
         prompt_type='annotation',
-        use_random_t2v_model=True
+        use_random_t2vis_model=True
     )
 
     # Check and load annotation and moderation models if not cached
@@ -53,10 +53,10 @@ def main():
         if not is_model_cached(model_name):
             synthetic_image_generator = SyntheticDataGenerator(
                 prompt_type='annotation',
-                use_random_diffuser=False,
-                diffuser_name=model_name
+                use_random_t2vis_model=False,
+                t2vis_model_name=model_name
             )
-            synthetic_image_generator.load_t2v_model(model_name)
+            synthetic_image_generator.load_t2vis_model(model_name)
             synthetic_image_generator.clear_gpu()
 
 

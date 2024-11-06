@@ -1,3 +1,4 @@
+from diffusers import StableDiffusionXLPipeline, FluxPipeline, CogVideoXPipeline
 from transformers import set_seed
 import bittensor as bt
 import numpy as np
@@ -184,8 +185,8 @@ class SyntheticDataGenerator:
             self.t2vis_model.to("cuda")
         elif self.gpu_id:
             self.t2vis_model.to(f"cuda:{self.gpu_id}")
-        if MODEL_VAE_ENABLE_TILING:
-            self.t2vis_model.vae.enable_tiling()
+        #if MODEL_VAE_ENABLE_TILING:
+        #    self.t2vis_model.vae.enable_tiling()
             
         bt.logging.info(f"Loaded {t2vis_model_name} using {pipeline_class.__name__}.")
 

@@ -24,7 +24,7 @@ import time
 from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
-from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticDataGenerator
+from bitmind.synthetic_image_generation import SyntheticDataGenerator
 from bitmind.image_dataset import ImageDataset
 from bitmind.constants import VALIDATOR_DATASET_META, WANDB_PROJECT, WANDB_ENTITY
 import bitmind

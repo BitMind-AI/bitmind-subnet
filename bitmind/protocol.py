@@ -44,9 +44,9 @@ import zlib
 
 def prepare_synapse(input_data, modality):
     if modality == 'image':
-        return prepare_image_synapse(modality)
+        return prepare_image_synapse(input_data)
     elif modality == 'video':
-        return prepare_video_synapse(modality)
+        return prepare_video_synapse(input_data)
     else:
         raise NotImplementedError(f"Unsupported modality: {modality}")
 

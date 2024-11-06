@@ -2,7 +2,7 @@ import os
 import torch
 
 
-WANDB_PROJECT = 'bitmind-subnet'
+WANDB_PROJECT = 'bitmind'
 WANDB_ENTITY = 'bitmindai'
 
 DATASET_META = {
@@ -75,20 +75,6 @@ VALIDATOR_MODEL_META = {
             "use_safetensors": True,
             "torch_dtype": torch.float16,
             "pipeline": "StableDiffusionXLPipeline"
-        },
-        {
-            "path": 'black-forest-labs/FLUX.1-dev',
-            "use_safetensors": True,
-            "torch_dtype": torch.bfloat16,
-            "generate_args": {
-                "guidance_scale": 2,
-                "num_inference_steps": {"min": 50, "max": 125},
-                "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
-                "height": [512, 768],
-                "width": [512, 768]
-            },
-            "enable_cpu_offload": False,
-            "pipeline": "FluxPipeline"
         }
     ],
     "t2v_models": [
@@ -107,20 +93,6 @@ VALIDATOR_MODEL_META = {
             },
             "pipeline": "CogVideoXPipeline",
         },
-        '''
-        {
-            "path": 'ByteDance/AnimateDiff-Lightning',
-            "use_safetensors": True,
-            "torch_dtype": torch.float16,
-
-            "generate_args": {
-                "guidance_scale": 2,
-                "num_inference_steps": {"min": 50, "max": 125},
-            },
-            "pipeline": "AnimateDiffPipeline",
-            "base": "emilianJR/epiCRealism"
-        },
-        '''
     ]
 }
 
@@ -173,4 +145,3 @@ MODEL_PIPELINE = {
     for m in VALIDATOR_MODEL_META['t2v_models'] + VALIDATOR_MODEL_META['t2i_models'] 
     if 'pipeline' in m
 }
-
