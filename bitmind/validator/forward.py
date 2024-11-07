@@ -72,7 +72,7 @@ async def forward(self):
         self (:obj:`bittensor.neuron.Neuron`): The neuron object which contains all the necessary state for the validator.
 
     """
-    wandb_data = {}
+    challenge_data = {}
 
     modality = 'video' if np.random.rand() > 0.0 else 'image'
 
@@ -85,10 +85,12 @@ async def forward(self):
         elif modality == 'image':
             bt.logging.info('sampling real image')
             label = 0
-            source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-            wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
-            wandb_data['source_image_index'] = local_index
-            sample = source_dataset[local_index]
+            dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
+            sample = dataset[local_index]
+
+            challenge_data[modality] = sample[modality]
+            challenge_data['dataset'] = dataset.huggingface_dataset_name
+            challenge_data['image_index'] = local_index
 
     else:
         label = 1
@@ -100,28 +102,31 @@ async def forward(self):
             while retries > 0:
                 retries -= 1
 
-                source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-                source_sample = source_dataset[local_index]
-                source_image = source_sample['image']
-                if source_image is None:
-                    bt.logging.warning(f"Missing image encountered at {source_image['id']}, resampling...")
+                # sample real data from which to generate prompt
+                prompt_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
+                prompt_sample = prompt_dataset[local_index]
+                prompt_image = prompt_sample['image']
+                if prompt_image is None:
+                    bt.logging.warning(f"Missing image encountered at {prompt_sample['id']}, resampling...")
                     continue
 
                 # generate captions for the real images, then synthetic images from these captions
                 sample = self.synthetic_data_generator.generate(
-                    k=1, real_images=[source_sample], modality=modality)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+                    k=1, real_images=[prompt_sample], modality=modality)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
 
-                wandb_data['model'] = self.synthetic_data_generator.t2vis_model_name
-                wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
-                wandb_data['source_image_index'] = local_index
-                wandb_data['prompt'] = sample['prompt']
+                challenge_data['model'] = self.synthetic_data_generator.t2vis_model_name
+                challenge_data['prompt_dataset'] = prompt_dataset.huggingface_dataset_name
+                challenge_data['prompt_image_index'] = local_index
+                challenge_data['prompt'] = sample['prompt']
                 if modality == 'image':
                     gen_output = sample['gen_output'].images[0]
-                    wandb_data['image'] = wandb.Image(gen_output)
+                    sample['image'] = gen_output
+                    challenge_data['image'] = wandb.Image(gen_output)
                 elif modality == 'video':
                     gen_output = sample['gen_output'].frames[0]
+                    sample['video'] = gen_output
                     np_video = np.stack([np.array(img) for img in gen_output], axis=0)
-                    wandb_data['video'] = wandb.Video(np_video)
+                    challenge_data['video'] = wandb.Video(np_video)
     
                 if not np.any(np.isnan(gen_output)):
                     break
@@ -159,7 +164,7 @@ async def forward(self):
         performance_tracker=self.performance_tracker)
     
     # Logging image source (model for synthetic, dataset for real) and verification details
-    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['source_dataset']
+    source_name = challenge_data['model'] if 'model' in challenge_data else challenge_data['dataset']
     bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
     
     # Logging responses and rewards
@@ -170,25 +175,25 @@ async def forward(self):
     self.update_scores(rewards, miner_uids)
 
     # update logging data
-    wandb_data['data_aug_params'] = data_aug_params
-    wandb_data['label'] = label
-    wandb_data['miner_uids'] = list(miner_uids)
-    wandb_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])
-    wandb_data['predictions'] = responses
-    wandb_data['correct'] = [
+    challenge_data['data_aug_params'] = data_aug_params
+    challenge_data['label'] = label
+    challenge_data['miner_uids'] = list(miner_uids)
+    challenge_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])
+    challenge_data['predictions'] = responses
+    challenge_data['correct'] = [
         np.round(y_hat) == y
         for y_hat, y in zip(responses, [label] * len(responses))
     ]
-    wandb_data['rewards'] = list(rewards)
-    wandb_data['scores'] = list(self.scores)
+    challenge_data['rewards'] = list(rewards)
+    challenge_data['scores'] = list(self.scores)
 
     metric_names = list(metrics[0].keys())
     for metric_name in metric_names:
-        wandb_data[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
+        challenge_data[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
 
     # W&B logging if enabled
     if not self.config.wandb.off:
-        wandb.log(wandb_data)
+        wandb.log(challenge_data)
 
     # ensure state is saved after each challenge
     self.save_miner_history()
