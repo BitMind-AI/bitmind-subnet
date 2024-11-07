@@ -46,6 +46,10 @@ import zlib
 def prepare_synapse(input_data, modality):
     if isinstance(input_data, torch.Tensor):
         input_data = transforms.ToPILImage()(input_data.cpu().detach())
+    if isinstance(input_data, list) and isinstance(input_data[0], torch.Tensor):
+        for i, img in enumerate(input_data):
+            input_data[i] = transforms.ToPILImage()(img.cpu().detach())
+
     if modality == 'image':
         return prepare_image_synapse(input_data)
     elif modality == 'video':
