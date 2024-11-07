@@ -53,16 +53,16 @@ class Miner(BaseMinerNeuron):
     ) -> bt.Synapse:
         """
         Loads the deepfake detection model (a PyTorch binary classifier) from the path specified in --neuron.model_path.
-        Processes the incoming ImageSynapse and passes the image to the loaded model for classification.
+        Processes the incoming Synapse and passes the image to the loaded model for classification.
         The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
         their model file as a means of updating their miner's predictor.
 
         Args:
-            synapse (ImageSynapse): The synapse object containing the list of b64 encoded images in the
+            synapse (bt.Synapse): The synapse object containing the list of b64 encoded images in the
             'images' field.
 
         Returns:
-            ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
+            bt.Synapse: The synapse object with the 'predictions' field populated with a list of probabilities
 
         """
         if isinstance(synapse, VideoSynapse):
@@ -87,7 +87,7 @@ class Miner(BaseMinerNeuron):
         return synapse
 
     async def blacklist(
-        self, synapse: ImageSynapse
+        self, synapse: bt.Synapse
     ) -> typing.Tuple[bool, str]:
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
@@ -98,7 +98,7 @@ class Miner(BaseMinerNeuron):
         requests before they are deserialized to avoid wasting resources on requests that will be ignored.
 
         Args:
-            synapse (ImageSynapse): A synapse object constructed from the headers of the incoming request.
+            synapse (bt.Synapse): A synapse object constructed from the headers of the incoming request.
 
         Returns:
             Tuple[bool, str]: A tuple containing a boolean indicating whether the synapse's hotkey is blacklisted,
@@ -147,7 +147,7 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
-    async def priority(self, synapse: ImageSynapse) -> float:
+    async def priority(self, synapse: bt.Synapse) -> float:
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.
@@ -155,7 +155,7 @@ class Miner(BaseMinerNeuron):
         This implementation assigns priority to incoming requests based on the calling entity's stake in the metagraph.
 
         Args:
-            synapse (ImageSynapse): The synapse object that contains metadata about the incoming request.
+            synapse (bt.Synapse): The synapse object that contains metadata about the incoming request.
 
         Returns:
             float: A priority score derived from the stake of the calling entity.
