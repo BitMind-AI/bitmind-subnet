@@ -20,10 +20,17 @@ class RandomResizedCropWithParams(transforms.RandomResizedCrop):
         super().__init__(*args, **kwargs)
         self.params = None
 
-    def get_params(self, img, scale, ratio):
-        params = super().get_params(img, scale, ratio)
-        self.params = params
-        return params
+    #def get_params(self, img, scale, ratio):
+    #    params = super().get_params(img, scale, ratio)
+    #    self.params = params
+    #    return params
+
+    def __call__(self, img, scale=None, ratio=None):
+        effective_scale = scale if scale is not None else self.scale
+        effective_ratio = ratio if ratio is not None else self.ratio
+        self.params = {'scale': scale, 'ratio': ratio}
+        i, j, h, w = self.get_params(img, effective_scale, effective_ratio)
+        return transforms.functional.resized_crop(img, i, j, h, w, self.size, self.interpolation)
 
 
 class RandomHorizontalFlipWithParams(transforms.RandomHorizontalFlip):
@@ -31,12 +38,12 @@ class RandomHorizontalFlipWithParams(transforms.RandomHorizontalFlip):
         super().__init__(*args, **kwargs)
         self.params = None
 
-    def forward(self, img):
-        if torch.rand(1) < self.p:
-            self.params = True
+    def forward(self, img, do_flip=False):
+        if torch.rand(1) < self.p or do_flip:
+            self.params = {'do_flip': True}
             return transforms.functional.hflip(img)
         else:
-            self.params = False
+            self.params = {'do_flip': False}
             return img
 
 
@@ -45,12 +52,12 @@ class RandomVerticalFlipWithParams(transforms.RandomVerticalFlip):
         super().__init__(*args, **kwargs)
         self.params = None
 
-    def forward(self, img):
-        if torch.rand(1) < self.p:
-            self.params = True
+    def forward(self, img, do_flip=False):
+        if torch.rand(1) < self.p or do_flip:
+            self.params = {'do_flip': True}
             return transforms.functional.vflip(img)
         else:
-            self.params = False
+            self.params = {'do_flip': False}
             return img
 
 
@@ -59,9 +66,10 @@ class RandomRotationWithParams(transforms.RandomRotation):
         super().__init__(*args, **kwargs)
         self.params = None
 
-    def forward(self, img):
-        angle = self.get_params(self.degrees)
-        self.params = angle
+    def forward(self, img, angle=None):
+        if angle is None:
+            angle = self.get_params(self.degrees)
+        self.params = {'angle': angle}
         return transforms.functional.rotate(img, angle)
 
 
@@ -89,31 +97,45 @@ class CLAHE:
 
         # Convert back to PIL image
         clahe_image = Image.fromarray(clahe_image_np)
-
         return clahe_image
+
 
 class ComposeWithParams:
     def __init__(self, transforms):
         self.transforms = transforms
         self.params = {}
 
-    def __call__(self, img):
+    def __call__(self, input_data):
         transform_params = {
             RandomResizedCropWithParams: 'RandomResizedCrop',
             RandomHorizontalFlipWithParams: 'RandomHorizontalFlip',
             RandomVerticalFlipWithParams: 'RandomVerticalFlip',
             RandomRotationWithParams: 'RandomRotation'
         }
+        output_data = []
+        list_input = True
+        if not isinstance(input_data, list):
+            input_data = [input_data]
+            list_input = False
 
-        for t in self.transforms:
-            img = t(img)
-            if type(t) in transform_params:
-                self.params[transform_params[type(t)]] = t.params
-        return img
+        for img in input_data:
+            for t in self.transforms:
+                if type(t) in transform_params and transform_params[type(t)] in self.params:
+                    params = self.params[transform_params[type(t)]]
+                    img = t(img, **params)
+                else:
+                    img = t(img)
+                    if type(t) in transform_params:
+                        self.params[transform_params[type(t)]] = t.params
+            output_data.append(img)
+
+        if list_input:
+            return output_data
+        return output_data[0]
 
 
 # transforms to prepare an image for the base miner
-base_transforms = transforms.Compose([
+base_transforms = ComposeWithParams([
     ConvertToRGB(),
     CenterCrop(),
     transforms.Resize(TARGET_IMAGE_SIZE),

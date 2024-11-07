@@ -44,6 +44,8 @@ import zlib
 #   assert len(predictions) == len(b64_images)
 
 def prepare_synapse(input_data, modality):
+    if isinstance(input_data, torch.Tensor):
+        input_data = transforms.ToPILImage()(input_data.cpu().detach())
     if modality == 'image':
         return prepare_image_synapse(input_data)
     elif modality == 'video':
@@ -62,9 +64,6 @@ def prepare_image_synapse(image: Image):
     Returns:
         ImageSynapse: An instance of ImageSynapse containing the encoded image and a default prediction value.
     """
-    if isinstance(image, torch.Tensor):
-        image = transforms.ToPILImage()(image.cpu().detach())
-
     image_bytes = BytesIO()
     image.save(image_bytes, format="JPEG")
     b64_encoded_image = base64.b64encode(image_bytes.getvalue())
