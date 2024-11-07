@@ -99,7 +99,7 @@ class Miner(BaseMinerNeuron):
 
         """
         bt.logging.info("Received video challenge!")
-        synapse.pred = 1
+        synapse.prediction = 1
 
     async def blacklist(
         self, synapse: bt.Synapse
