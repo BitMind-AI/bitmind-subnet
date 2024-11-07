@@ -162,6 +162,12 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
+    async def blacklist_image(self, synapse: ImageSynapse) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
+
+    async def blacklist_video(self, synapse: VideoSynapse) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
+
     async def priority(self, synapse: bt.Synapse) -> float:
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
@@ -198,6 +204,12 @@ class Miner(BaseMinerNeuron):
             f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
         )
         return prirority
+
+    async def priority_image(self, synapse: ImageSynapse) -> float:
+        return await self.priority(synapse)
+
+    async def priority_video(self, synapse: VideoSynapse) -> float:
+        return await self.priority(synapse)
 
     def save_state(self):
         pass
