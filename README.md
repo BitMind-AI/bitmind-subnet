@@ -52,7 +52,7 @@ The proliferation of generative AI models has significantly increased the produc
   - **Resource Expansion:** We are committed to enhancing the validators' capabilities by increasing the diversity and volume of the image pool, which supports rigorous testing and validation processes.
 
 **Subnet Architecture Diagram**
-![Subnet Architecture](static/subnet_arch_dark.png)
+![Subnet Architecture](static/Subnet-Arch.png)
 
 ## Community
 

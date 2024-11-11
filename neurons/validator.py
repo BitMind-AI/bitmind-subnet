@@ -59,6 +59,9 @@ class Validator(BaseValidatorNeuron):
             ImageDataset(ds['path'], 'train', ds.get('name', None))
             for ds in VALIDATOR_DATASET_META['real']
         ]
+        self.total_real_images = sum([
+            len(ds) for ds in self.real_image_datasets
+        ])
 
         self.synthetic_image_generator = SyntheticImageGenerator(
             prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
