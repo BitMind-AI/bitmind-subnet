@@ -45,7 +45,7 @@ def sample_random_real_image(datasets, total_images, retries=10):
 
 def sample_real_image(datasets, index):
     cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
-    source_index = np.searchsorted(cumulative_sizes, index % (cumulative_sizes[-1]))
+    source_index = np.searchsorted(cumulative_sizes - 1, index % (cumulative_sizes[-1]))
     source = datasets[source_index]
     valid_index = index - (cumulative_sizes[source_index - 1] if source_index > 0 else 0)
     return source, valid_index
