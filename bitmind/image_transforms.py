@@ -301,9 +301,9 @@ random_aug_transforms_medium = ComposeWithParams([
     RandomResizedCropWithParams(TARGET_IMAGE_SIZE, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
     RandomHorizontalFlipWithParams(),
     RandomVerticalFlipWithParams(),
-    ApplyDeeperForensicsDistortion('CS', level_min=1, level_max=1),
-    ApplyDeeperForensicsDistortion('CC', level_min=1, level_max=1),
-    ApplyDeeperForensicsDistortion('JPEG', level_min=1, level_max=1)
+    ApplyDeeperForensicsDistortion('CS', level_min=0, level_max=1),
+    ApplyDeeperForensicsDistortion('CC', level_min=0, level_max=1),
+    ApplyDeeperForensicsDistortion('JPEG', level_min=0, level_max=1)
 ])
 
 # Hard difficulty transforms with more severe distortions
@@ -314,9 +314,67 @@ random_aug_transforms_hard = ComposeWithParams([
     RandomResizedCropWithParams(TARGET_IMAGE_SIZE, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
     RandomHorizontalFlipWithParams(),
     RandomVerticalFlipWithParams(),
-    ApplyDeeperForensicsDistortion('CS', level_min=1, level_max=2),
-    ApplyDeeperForensicsDistortion('CC', level_min=1, level_max=2), 
-    ApplyDeeperForensicsDistortion('JPEG', level_min=1, level_max=2),
-    ApplyDeeperForensicsDistortion('GNC', level_min=1, level_max=2),
-    ApplyDeeperForensicsDistortion('GB', level_min=1, level_max=2)
+    ApplyDeeperForensicsDistortion('CS', level_min=0, level_max=2),
+    ApplyDeeperForensicsDistortion('CC', level_min=0, level_max=2), 
+    ApplyDeeperForensicsDistortion('JPEG', level_min=0, level_max=2),
+    ApplyDeeperForensicsDistortion('GNC', level_min=0, level_max=2),
+    ApplyDeeperForensicsDistortion('GB', level_min=0, level_max=2)
 ])
+
+def apply_augmentation_by_level(image, level_probs={
+        0: 0.25,  # No augmentations (base transforms)
+        1: 0.45,  # Basic augmentations
+        2: 0.15,  # Medium distortions
+        3: 0.15   # Hard distortions
+    }):
+    """
+    Apply image transformations based on randomly selected level.
+    
+    Args:
+        image: PIL Image to transform
+        level_probs: dict with augmentation levels and their probabilities.
+            Default probabilities:
+            - Level 0 (25%): No augmentations (base transforms)
+            - Level 1 (45%): Basic augmentations  
+            - Level 2 (15%): Medium distortions
+            - Level 3 (15%): Hard distortions
+        
+    Returns:
+        tuple: (transformed_image, level, transform_params)
+        
+    Raises:
+        ValueError: If probabilities don't sum to 1.0 (within floating point precision)
+    """
+    # Validate probabilities
+    if not math.isclose(sum(level_probs.values()), 1.0, rel_tol=1e-9):
+        raise ValueError("Probabilities of levels must sum to 1.0")
+    
+    # Calculate cumulative probabilities
+    cumulative_probs = {}
+    cumsum = 0
+    for level, prob in sorted(level_probs.items()):
+        cumsum += prob
+        cumulative_probs[level] = cumsum
+    
+    # Select augmentation level
+    rand_val = np.random.random()
+    for curr_level, cum_prob in cumulative_probs.items():
+        if rand_val <= cum_prob:
+            level = curr_level
+            break
+    
+    # Apply appropriate transform
+    if level == 0:
+        transformed = base_transforms(image)
+        params = {}
+    elif level == 1:
+        transformed = random_aug_transforms(image)
+        params = random_aug_transforms.params
+    elif level == 2:
+        transformed = random_aug_transforms_medium(image)
+        params = random_aug_transforms_medium.params
+    else:  # level == 3
+        transformed = random_aug_transforms_hard(image)
+        params = random_aug_transforms_hard.params
+        
+    return transformed, level, params
