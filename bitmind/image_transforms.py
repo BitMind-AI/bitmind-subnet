@@ -8,7 +8,6 @@ import cv2
 
 from bitmind.constants import TARGET_IMAGE_SIZE
 
-
 def center_crop():
     def fn(img):
         m = min(img.size)
@@ -74,19 +73,61 @@ class ConvertToRGB:
 
 
 # DeeperForensics Distortion Functions
-
 def get_distortion_parameter(distortion_type, level):
-    """Get distortion parameter based on type and level."""
+    """Get distortion parameter based on type and level.
+    
+    Parameters are arranged from least severe (level 1) to most severe (level 5).
+    Each distortion type has different parameter behavior:
+    
+    CS (Color Saturation):
+        - Range: [0.4 -> 0.0]
+        - Lower values = worse distortion
+        - 0.4 = slight desaturation
+        - 0.0 = complete desaturation (grayscale)
+    
+    CC (Color Contrast):
+        - Range: [0.85 -> 0.35]
+        - Lower values = worse distortion
+        - 0.85 = slight contrast reduction
+        - 0.35 = severe contrast reduction
+    
+    BW (Block Wise):
+        - Range: [16 -> 80]
+        - Higher values = worse distortion
+        - Controls number of random blocks added
+        - 16 = few blocks
+        - 80 = many blocks
+    
+    GNC (Gaussian Noise Color):
+        - Range: [0.001 -> 0.05]
+        - Higher values = worse distortion
+        - Controls noise variance
+        - 0.001 = subtle noise
+        - 0.05 = very noisy
+    
+    GB (Gaussian Blur):
+        - Range: [7 -> 21]
+        - Higher values = worse distortion
+        - Controls blur kernel size
+        - 7 = slight blur
+        - 21 = heavy blur
+    
+    JPEG (JPEG Compression):
+        - Range: [2 -> 6]
+        - Higher values = worse distortion
+        - Controls downsampling factor
+        - 2 = mild compression
+        - 6 = severe compression
+    """
     param_dict = {
-        'CS': [0.4, 0.3, 0.2, 0.1, 0.0],  # smaller, worse
-        'CC': [0.85, 0.725, 0.6, 0.475, 0.35],  # smaller, worse
-        'BW': [16, 32, 48, 64, 80],  # larger, worse
-        'GNC': [0.001, 0.002, 0.005, 0.01, 0.05],  # larger, worse
-        'GB': [7, 9, 13, 17, 21],  # larger, worse
-        'JPEG': [2, 3, 4, 5, 6]  # larger, worse
+        'CS': [0.4, 0.3, 0.2, 0.1, 0.0],
+        'CC': [0.85, 0.725, 0.6, 0.475, 0.35],
+        'BW': [16, 32, 48, 64, 80],
+        'GNC': [0.001, 0.002, 0.005, 0.01, 0.05],
+        'GB': [7, 9, 13, 17, 21],
+        'JPEG': [2, 3, 4, 5, 6]
     }
     return param_dict[distortion_type][level - 1]
-
 
 def get_distortion_function(distortion_type):
     """Get distortion function based on type."""
@@ -100,7 +141,6 @@ def get_distortion_function(distortion_type):
     }
     return func_dict[distortion_type]
 
-
 def rgb_to_bgr(tensor_img):
     """Convert a PyTorch tensor image from RGB to BGR format.
     
@@ -110,7 +150,6 @@ def rgb_to_bgr(tensor_img):
     if tensor_img.shape[0] == 3:
         tensor_img = tensor_img[[2, 1, 0], ...]
     return tensor_img
-
 
 def bgr_to_rgb(tensor_img):
     """Convert a PyTorch tensor image from BGR to RGB format.
@@ -122,7 +161,6 @@ def bgr_to_rgb(tensor_img):
         tensor_img = tensor_img[[2, 1, 0], ...]
     return tensor_img
 
-
 def bgr2ycbcr(img_bgr):
     """Convert BGR image to YCbCr color space."""
     img_bgr = img_bgr.astype(np.float32)
@@ -131,7 +169,6 @@ def bgr2ycbcr(img_bgr):
     img_ycbcr[:, :, 0] = (img_ycbcr[:, :, 0] * (235 - 16) + 16) / 255.0
     img_ycbcr[:, :, 1:] = (img_ycbcr[:, :, 1:] * (240 - 16) + 16) / 255.0
     return img_ycbcr
-
 
 def ycbcr2bgr(img_ycbcr):
     """Convert YCbCr image to BGR color space."""
@@ -142,7 +179,6 @@ def ycbcr2bgr(img_ycbcr):
     img_bgr = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCR_CB2BGR)
     return img_bgr
 
-
 def color_saturation(img, param):
     """Apply color saturation distortion."""
     ycbcr = bgr2ycbcr(img)
@@ -151,12 +187,10 @@ def color_saturation(img, param):
     img = ycbcr2bgr(ycbcr).astype(np.uint8)
     return img
 
-
 def color_contrast(img, param):
     """Apply color contrast distortion."""
     img = img.astype(np.float32) * param
     return img.astype(np.uint8)
-
 
 def block_wise(img, param):
     """Apply block-wise distortion."""
@@ -169,7 +203,6 @@ def block_wise(img, param):
         img[r_h:r_h + width, r_w:r_w + width, :] = block
     return img
 
-
 def gaussian_noise_color(img, param):
     """Apply colored Gaussian noise."""
     ycbcr = bgr2ycbcr(img) / 255
@@ -178,11 +211,9 @@ def gaussian_noise_color(img, param):
     b = ycbcr2bgr(b)
     return np.clip(b, 0, 255).astype(np.uint8)
 
-
 def gaussian_blur(img, param):
     """Apply Gaussian blur."""
     return cv2.GaussianBlur(img, (param, param), param * 1.0 / 6)
-
 
 def jpeg_compression(img, param):
     """Apply JPEG compression distortion."""
@@ -346,6 +377,7 @@ random_aug_transforms_hard = ComposeWithParams([
     ApplyDeeperForensicsDistortion('GNC', level_min=0, level_max=2),
     ApplyDeeperForensicsDistortion('GB', level_min=0, level_max=2)
 ])
+
 
 def apply_augmentation_by_level(image, level_probs={
         0: 0.25,  # No augmentations (base transforms)
