@@ -5,7 +5,10 @@ import torch
 WANDB_PROJECT = 'bitmind'
 WANDB_ENTITY = 'bitmindai'
 
-DATASET_META = {
+HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
+TARGET_IMAGE_SIZE = (224, 224)#(256, 256)
+
+IMAGE_DATASET_META = {
     "real": [
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-images-v7"},
@@ -20,7 +23,7 @@ DATASET_META = {
     ]
 }
 
-FACE_TRAINING_DATASET_META = {
+FACE_IMAGE_DATASET_META = {
     "real": [
         {"path": "bitmind/ffhq-256_training_faces", "name": "base_transforms"},
         {"path": "bitmind/celeb-a-hq_training_faces", "name": "base_transforms"}
@@ -29,6 +32,17 @@ FACE_TRAINING_DATASET_META = {
     "fake": [
         {"path": "bitmind/ffhq-256___stable-diffusion-xl-base-1.0_training_faces", "name": "base_transforms"},
         {"path": "bitmind/celeb-a-hq___stable-diffusion-xl-base-1.0___256_training_faces", "name": "base_transforms"}
+    ]
+}
+
+VIDEO_DATASET_META = {
+    "real": [
+        {
+            "path": "nkp37/OpenVid-1M", 
+            "local_data_path": os.path.join(HUGGINGFACE_CACHE_DIR, 'OpenVid-1M-data')
+        }
+    ],
+    "fake": [
     ]
 }
 
@@ -95,10 +109,6 @@ VALIDATOR_MODEL_META = {
         },
     ]
 }
-
-HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
-
-TARGET_IMAGE_SIZE = (256, 256)
 
 PROMPT_TYPES = ('random', 'annotation', 'none')
 

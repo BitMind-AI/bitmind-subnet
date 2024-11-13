@@ -7,6 +7,7 @@ sudo apt install nano -y
 sudo apt install libgl1 -y
 sudo apt install npm -y
 sudo npm install pm2@latest -g
+sudo apt install -y unzip
 
 # Install Python dependencies
 pip install -e .

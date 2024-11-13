@@ -20,7 +20,7 @@ import threading
 import socket
 import base64
 
-from bitmind.image_transforms import base_transforms
+from bitmind.utils.image_transforms import base_transforms
 from bitmind.protocol import ImageSynapse, prepare_image_synapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter

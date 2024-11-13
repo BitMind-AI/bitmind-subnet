@@ -1,9 +1,12 @@
-import typing
+from huggingface_hub import hf_hub_download
 from abc import ABC, abstractmethod
 from pathlib import Path
-import yaml
-import torch
 from PIL import Image
+import typing
+import torch
+import yaml
+
+from base_miner.UCF.config.constants import CONFIGS_DIR, WEIGHTS_DIR
 
 
 class DeepfakeDetector(ABC):
@@ -26,6 +29,7 @@ class DeepfakeDetector(ABC):
         self.device = torch.device(device if device == 'cuda' and torch.cuda.is_available() else 'cpu')
         if config:
             self.load_and_apply_config(config)
+            self.load_train_config()
         self.load_model()
 
     @abstractmethod
@@ -83,3 +87,27 @@ class DeepfakeDetector(ABC):
         except Exception as e:
             print(f"Error loading detector configurations from {detector_config_file}: {e}")
             raise
+
+    def ensure_weights_are_available(self, weights_dir, weights_filename):
+        """
+        
+        """
+        destination_path = Path(weights_dir) / Path(weights_filename)
+        if not Path(weights_dir).exists():
+            Path(weights_dir).mkdir(parents=True, exist_ok=True)
+        if not destination_path.exists():
+            hf_hub_download(self.hf_repo, weights_filename, cache_dir=weights_dir)
+
+    def load_train_config(self):
+        destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
+        if destination_path.exists():
+            print(f"Loaded local config from {destination_path}")
+            with destination_path.open('r') as f:
+                config = yaml.safe_load(f)
+        else:
+            local_config_path = hf_hub_download(self.hf_repo, self.train_config, cache_dir=CONFIGS_DIR)
+            print(f"Downloaded {self.hf_repo}/{self.train_config} to {local_config_path}")
+            with local_config_path.open('r') as f:
+                config = yaml.safe_load(f)
+        self.config = config
+        return config

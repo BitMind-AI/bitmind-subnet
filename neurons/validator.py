@@ -24,8 +24,8 @@ import time
 from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.base.validator import BaseValidatorNeuron
-from bitmind.synthetic_image_generation import SyntheticDataGenerator
-from bitmind.image_dataset import ImageDataset
+from bitmind.synthetic_data_generation import SyntheticDataGenerator
+from bitmind.dataset.image_dataset import ImageDataset
 from bitmind.constants import VALIDATOR_DATASET_META, WANDB_PROJECT, WANDB_ENTITY
 import bitmind
 
@@ -49,7 +49,7 @@ class Validator(BaseValidatorNeuron):
         self.load_state()
 
         self.last_responding_miner_uids = []
-        self.validator_proxy = ValidatorProxy(self)
+        self.validator_proxy = None#ValidatorProxy(self)
         
         bt.logging.info("init_wandb()")
         self.init_wandb()
@@ -57,7 +57,7 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info("Loading real datasets")
         self.real_image_datasets = [
             ImageDataset(ds['path'], 'train', ds.get('name', None))
-            for ds in VALIDATOR_DATASET_META['real']
+            for ds in VALIDATOR_DATASET_META['real'][-1:]
         ]
         self.total_real_images = sum([
             len(ds) for ds in self.real_image_datasets

@@ -32,6 +32,73 @@ from base_miner import DETECTOR_REGISTRY
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse, VideoSynapse
 from bitmind.utils.config import get_device
+from bitmind.utils.image_transforms import base_transforms
+
+import torch
+import base64
+import zlib
+from io import BytesIO
+from PIL import Image
+import numpy as np
+from typing import List
+
+def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
+    """
+    Decodes a VideoSynapse object back into a list of torch tensors.
+
+    Args:
+        synapse: VideoSynapse object containing the encoded video data
+
+    Returns:
+        List of torch tensors, each representing a frame from the video
+    """
+    compressed_data = base64.b85decode(synapse.video.encode('utf-8'))
+    combined_bytes = zlib.decompress(compressed_data)
+
+    # Split the combined bytes into individual JPEG files
+    # Look for JPEG markers: FF D8 (start) and FF D9 (end)
+    frames = []
+    current_pos = 0
+    data_length = len(combined_bytes)
+
+    while current_pos < data_length:
+        # Find start of JPEG (FF D8)
+        while current_pos < data_length - 1:
+            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD8:
+                break
+            current_pos += 1
+
+        if current_pos >= data_length - 1:
+            break
+
+        start_pos = current_pos
+
+        # Find end of JPEG (FF D9)
+        while current_pos < data_length - 1:
+            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD9:
+                current_pos += 2
+                break
+            current_pos += 1
+
+        if current_pos > start_pos:
+            # Extract the JPEG data
+            jpeg_data = combined_bytes[start_pos:current_pos]
+            try:
+                # Convert to PIL Image
+                img = Image.open(BytesIO(jpeg_data))
+                # Convert to numpy array
+                frames.append(img)
+            except Exception as e:
+                print(f"Error processing frame: {e}")
+                continue
+q
+    frames = frames[:32]  # temp
+    bt.logging.info('transforming inputs')
+    frames = base_transforms(frames)
+
+    frames = torch.stack(frames, dim=0)
+    frames = frames.unsqueeze(0)
+    return frames
 
 
 class Miner(BaseMinerNeuron):
@@ -47,15 +114,15 @@ class Miner(BaseMinerNeuron):
             config=self.config.neuron.detector_config,
             device=self.config.neuron.device
         )
+        self.deepfake_detector.model.eval()
+
+        bt.logging.info(f"Loaded detection model: {self.config.neuron.detector}")
 
     async def forward_image(
         self, synapse: ImageSynapse
     ) -> ImageSynapse:
         """
-        Loads the deepfake detection model (a PyTorch binary classifier) from the path specified in --neuron.model_path.
-        Processes the incoming Synapse and passes the image to the loaded model for classification.
-        The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
-        their model file as a means of updating their miner's predictor.
+        Perform inference on image
 
         Args:
             synapse (bt.Synapse): The synapse object containing the list of b64 encoded images in the
@@ -71,25 +138,20 @@ class Miner(BaseMinerNeuron):
             image = Image.open(io.BytesIO(image_bytes))
 
             pred = self.deepfake_detector(image)
-
             synapse.prediction = pred
 
         except Exception as e:
             bt.logging.error("Error performing inference")
             bt.logging.error(e)
 
-            bt.logging.info(f"PREDICTION: {synapse.prediction}")
+        bt.logging.info(f"PREDICTION: {synapse.prediction}")
         return synapse
 
     async def forward_video(
         self, synapse: VideoSynapse
     ) -> VideoSynapse:
         """
-        Loads the deepfake detection model (a PyTorch binary classifier) from the path specified in --neuron.model_path.
-        Processes the incoming Synapse and passes the image to the loaded model for classification.
-        The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
-        their model file as a means of updating their miner's predictor.
-
+        Perform inference on video 
         Args:
             synapse (bt.Synapse): The synapse object containing the list of b64 encoded images in the
             'images' field.
@@ -99,7 +161,17 @@ class Miner(BaseMinerNeuron):
 
         """
         bt.logging.info("Received video challenge!")
-        synapse.prediction = 1
+        try:
+            frames = decode_video_synapse(synapse)
+            pred = self.deepfake_detector({'image': frames})
+            synapse.prediction = torch.max(pred)
+
+        except Exception as e:
+            bt.logging.error("Error performing inference")
+            bt.logging.error(e)
+
+        bt.logging.info(f"PREDICTION: {synapse.prediction}")
+        return synapse
 
     async def blacklist(
         self, synapse: bt.Synapse

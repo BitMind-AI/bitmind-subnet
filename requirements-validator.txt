@@ -6,3 +6,4 @@ bitsandbytes==0.43.3
 imageio==2.35.1
 imageio-ffmpeg==0.5.1
 moviepy==1.0.3
+av==13.1.0

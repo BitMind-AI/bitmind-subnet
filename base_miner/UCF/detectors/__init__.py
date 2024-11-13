@@ -9,3 +9,4 @@ sys.path.append(project_root_dir)
 from metrics.registry import DETECTOR
 
 from .ucf_detector import UCFDetector
+from .tall_detector import TALLDetector

@@ -6,8 +6,8 @@ import requests
 import datasets
 
 from bitmind.download_data import load_huggingface_dataset
-from bitmind.real_fake_dataset import RealFakeDataset
-from bitmind.image_dataset import ImageDataset
+from bitmind.dataset.real_fake_dataset import RealFakeDataset
+from bitmind.dataset.image_dataset import ImageDataset
 
 datasets.logging.set_verbosity_error()
 datasets.disable_progress_bar()

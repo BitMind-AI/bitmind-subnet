@@ -31,7 +31,7 @@ from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_synapse
 from bitmind.validator.reward import get_rewards
-from bitmind.image_transforms import random_aug_transforms, base_transforms
+from bitmind.utils.image_transforms import random_aug_transforms, base_transforms
 
 
 def sample_random_real_image(datasets, total_images, retries=10):
@@ -76,7 +76,7 @@ async def forward(self):
 
     modality = 'video' if np.random.rand() > 0.0 else 'image'
 
-    miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
+    miner_uids = get_random_uids(self, k=self.metagraph.n) # self.config.neuron.sample_size)
     if np.random.rand() > 1.:#self._fake_prob:
         if modality == 'video':
             bt.logging.warning('TODO')
@@ -125,6 +125,7 @@ async def forward(self):
                 elif modality == 'video':
                     gen_output = sample['gen_output'].frames[0]
                     sample['video'] = gen_output
+                    print(f'{len(sample["video"])} frames')
                     np_video = np.stack([np.array(img) for img in gen_output], axis=0)
                     challenge_data['video'] = wandb.Video(np_video)
     

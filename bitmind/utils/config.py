@@ -291,7 +291,7 @@ def add_validator_args(cls, parser):
         "--proxy.proxy_client_url",
         type=str,
         help="The url initialize credentials for proxy.",
-        default="https://subnet-api.bitmindlabs.ai"
+        default=""
     )
 
 
