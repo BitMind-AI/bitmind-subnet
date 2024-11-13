@@ -230,19 +230,45 @@ class ApplyDeeperForensicsDistortion:
 
 class CLAHE:
     """Contrast Limited Adaptive Histogram Equalization."""
-    
-    def __call__(self, image, clip_limit=1.0, tile_grid_size=(8, 8)):
+
+    def __init__(self):
+        self.clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8,8))
+        
+    def __call__(self, image):
+        # Convert PIL image to NumPy array
         image_np = np.array(image)
-        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
-
-        if len(image_np.shape) == 3:
+        
+        # Apply CLAHE to each channel separately if it's a color image
+        if len(image_np.shape) == 3:  # Color image
             channels = cv2.split(image_np)
-            clahe_channels = [clahe.apply(ch) for ch in channels]
+            clahe_channels = [self.clahe.apply(ch) for ch in channels]
             clahe_image_np = cv2.merge(clahe_channels)
-        else:
-            clahe_image_np = clahe.apply(image_np)
+        else:  # Grayscale image
+            clahe_image_np = self.clahe.apply(image_np)
 
-        return Image.fromarray(clahe_image_np)
+        # Convert back to PIL image
+        clahe_image = Image.fromarray(clahe_image_np)
+
+        return clahe_image
+    
+    
+class TensorCLAHE:
+    def __init__(self):
+        self.clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8,8))
+        
+    def __call__(self, tensor):
+        # Convert tensor to numpy array (H,W,C) format
+        img_np = tensor.permute(1, 2, 0).numpy() * 255
+        img_np = img_np.astype(np.uint8)
+        
+        # Apply CLAHE to each channel
+        channels = cv2.split(img_np)
+        clahe_channels = [self.clahe.apply(ch) for ch in channels]
+        clahe_image_np = cv2.merge(clahe_channels)
+        
+        # Convert back to tensor
+        tensor = torch.from_numpy(clahe_image_np).float() / 255.0
+        return tensor.permute(2, 0, 1)
 
 
 class ComposeWithParams:
