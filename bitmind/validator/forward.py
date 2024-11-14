@@ -30,7 +30,7 @@ from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
-from bitmind.image_transforms import random_aug_transforms, base_transforms
+from bitmind.image_transforms import apply_augmentation_by_level
 
 
 def sample_random_real_image(datasets, total_images, retries=10):
@@ -45,7 +45,7 @@ def sample_random_real_image(datasets, total_images, retries=10):
 
 def sample_real_image(datasets, index):
     cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
-    source_index = np.searchsorted(cumulative_sizes, index % (cumulative_sizes[-1]))
+    source_index = np.searchsorted(cumulative_sizes - 1, index % (cumulative_sizes[-1]))
     source = datasets[source_index]
     valid_index = index - (cumulative_sizes[source_index - 1] if source_index > 0 else 0)
     return source, valid_index
@@ -127,12 +127,8 @@ async def forward(self):
             raise NotImplementedError
 
     image = sample['image']
-    if np.random.rand() > 0.25:
-        image = random_aug_transforms(image)
-        data_aug_params = random_aug_transforms.params
-    else:
-        image = base_transforms(image)
-        data_aug_params = {}
+    
+    image, level, data_aug_params = apply_augmentation_by_level(image)
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
@@ -167,6 +163,7 @@ async def forward(self):
     wandb_data['miner_uids'] = list(miner_uids)
     wandb_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])
     wandb_data['predictions'] = responses
+    wandb_data['data_aug_level'] = level
     wandb_data['correct'] = [
         np.round(y_hat) == y
         for y_hat, y in zip(responses, [label] * len(responses))
