@@ -92,6 +92,7 @@ def search_and_download_youtube_videos(query: str, num_videos: int) -> List[Vide
 
 
 def seconds_to_str(seconds):
+    seconds = int(float(seconds))
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
     seconds = seconds % 60
@@ -100,14 +101,18 @@ def seconds_to_str(seconds):
 
 def clip_video(video_path: str, start: int, num_seconds: int) -> Optional[BinaryIO]:
     temp_fileobj = tempfile.NamedTemporaryFile(suffix=".mp4")
-    (
-        ffmpeg
-        .input(video_path, ss=seconds_to_str(start), t=str(num_seconds))
-        .output(temp_fileobj.name, c="copy", vf='fps=1/')  # copy flag prevents decoding and re-encoding
-        .overwrite_output()
-        .run(quiet=True)
-    )
-    return temp_fileobj
+    try:
+        (
+            ffmpeg
+            .input(video_path, ss=seconds_to_str(start), t=str(num_seconds))
+            .output(temp_fileobj.name, vf='fps=1')
+            .overwrite_output()
+            .run(capture_stderr=True) 
+        )
+        return temp_fileobj
+    except ffmpeg.Error as e:
+        bt.logging.error(f"FFmpeg error: {e.stderr.decode()}") 
+        raise
 
 
 def skip_live(info_dict):

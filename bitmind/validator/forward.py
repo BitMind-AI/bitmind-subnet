@@ -81,6 +81,7 @@ async def forward(self):
 
     miner_uids = get_random_uids(self, k=self.metagraph.n) # self.config.neuron.sample_size)
     if np.random.rand() > 0.:#self._fake_prob:
+        label = 0
         if modality == 'video':
             bt.logging.info('sampling real video frames')
             clip_length = random.randint(
@@ -88,13 +89,11 @@ async def forward(self):
                 self.config.neuron.clip_length_max)
             sample = self.video_cache.sample_random_video_frames(clip_length)
             challenge_data['clip_length_s'] = clip_length
-            challenge_data.update({k: v for k, v in sample.items() if k not in ('video', 'path')})
-            challenge_data['video_url'] = f"https://www.youtube.com/watch?v={sample['video_id']}"
-            bt.logging.info(f"sampled {clip_length}s of video from {challenge_data['video_url']}")
+            challenge_data.update({k: v for k, v in sample.items() if k not in ('video')})
+            bt.logging.info(f"sampled {clip_length}s of video from {challenge_data['path']}")
 
         elif modality == 'image':
             bt.logging.info('sampling real image')
-            label = 0
             dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
             sample = dataset[local_index]
 
@@ -143,7 +142,6 @@ async def forward(self):
                     break
 
                 bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
-
         else:
             bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
             raise NotImplementedError
@@ -176,7 +174,7 @@ async def forward(self):
     
     # Logging image source (model for synthetic, dataset for real) and verification details
     source_name = challenge_data['model'] if 'model' in challenge_data else challenge_data['dataset']
-    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
+    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}')
     
     # Logging responses and rewards
     bt.logging.info(f"Received responses: {responses}")
