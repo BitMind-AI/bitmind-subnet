@@ -1,12 +1,15 @@
-import os
+from pathlib import Path
 import torch
 
 
 WANDB_PROJECT = 'bitmind'
 WANDB_ENTITY = 'bitmindai'
 
-HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
-TARGET_IMAGE_SIZE = (224, 224)#(256, 256)
+HUGGINGFACE_CACHE_DIR = Path.home() / '.cache' / 'huggingface'
+VIDEO_CACHE_DIR = Path.home() / '.cache' / 'sn34-video'
+COMPRESSED_VIDEO_CACHE_DIR = VIDEO_CACHE_DIR / 'sources'
+
+TARGET_IMAGE_SIZE = (224, 224)  #(256, 256)
 
 IMAGE_DATASET_META = {
     "real": [
@@ -39,7 +42,7 @@ VIDEO_DATASET_META = {
     "real": [
         {
             "path": "nkp37/OpenVid-1M", 
-            "local_data_path": os.path.join(HUGGINGFACE_CACHE_DIR, 'OpenVid-1M-data')
+            "local_data_path": HUGGINGFACE_CACHE_DIR / 'OpenVid-1M-data'
         }
     ],
     "fake": [

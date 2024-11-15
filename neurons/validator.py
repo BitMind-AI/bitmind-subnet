@@ -23,6 +23,7 @@ import time
 
 from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
+from bitmind.validator.video_cache import VideoCache
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.synthetic_data_generation import SyntheticDataGenerator
 from bitmind.dataset.image_dataset import ImageDataset
@@ -50,6 +51,8 @@ class Validator(BaseValidatorNeuron):
 
         self.last_responding_miner_uids = []
         self.validator_proxy = None#ValidatorProxy(self)
+
+        self.video_cache = VideoCache()
         
         bt.logging.info("init_wandb()")
         self.init_wandb()

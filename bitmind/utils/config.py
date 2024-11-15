@@ -208,6 +208,20 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
+        "--neuron.clip_length_min",
+        type=int,
+        help="Min length in seconds for video challenge",
+        default=2,
+    )
+
+    parser.add_argument(
+        "--neuron.clip_length_max",
+        type=int,
+        help="Max length in seconds for video challenge",
+        default=8,
+    )
+
+    parser.add_argument(
         "--neuron.name",
         type=str,
         help="Trials for this neuron go in neuron.root / (wallet_cold - wallet_hot) / neuron.name. ",

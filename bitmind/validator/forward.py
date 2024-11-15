@@ -23,10 +23,12 @@ from PIL import Image
 import bittensor as bt
 import pandas as pd
 import numpy as np
+import random
 import wandb
 import time
 import os
 
+from bitmind.constants import VIDEO_CACHE_DIR
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_synapse
@@ -75,12 +77,20 @@ async def forward(self):
     challenge_data = {}
 
     modality = 'video' if np.random.rand() > 0.0 else 'image'
+    challenge_data['modality'] = modality
 
     miner_uids = get_random_uids(self, k=self.metagraph.n) # self.config.neuron.sample_size)
-    if np.random.rand() > 1.:#self._fake_prob:
+    if np.random.rand() > 0.:#self._fake_prob:
         if modality == 'video':
-            bt.logging.warning('TODO')
-            return 
+            bt.logging.info('sampling real video frames')
+            clip_length = random.randint(
+                self.config.neuron.clip_length_min, 
+                self.config.neuron.clip_length_max)
+            sample = self.video_cache.sample_random_video_frames(clip_length)
+            challenge_data['clip_length_s'] = clip_length
+            challenge_data.update({k: v for k, v in sample.items() if k not in ('video', 'path')})
+            challenge_data['video_url'] = f"https://www.youtube.com/watch?v={sample['video_id']}"
+            bt.logging.info(f"sampled {clip_length}s of video from {challenge_data['video_url']}")
 
         elif modality == 'image':
             bt.logging.info('sampling real image')

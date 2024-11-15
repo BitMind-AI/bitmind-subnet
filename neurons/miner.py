@@ -91,7 +91,7 @@ def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
             except Exception as e:
                 print(f"Error processing frame: {e}")
                 continue
-q
+
     frames = frames[:32]  # temp
     bt.logging.info('transforming inputs')
     frames = base_transforms(frames)
