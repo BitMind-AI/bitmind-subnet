@@ -3,3 +3,4 @@ diffusers==0.30.0
 transformers==4.44.0
 sentencepiece==0.2.0
 bitsandbytes==0.43.3
+peft==0.13.2
