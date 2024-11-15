@@ -91,6 +91,19 @@ VALIDATOR_MODEL_META = {
             "enable_cpu_offload": False,
             "pipeline": "FluxPipeline"
         }
+    ],
+    "painters": [
+        {
+            "path": "stabilityai/stable-diffusion-2-inpainting",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "variant": "fp16",
+            "pipeline": "StableDiffusionInpaintPipeline",
+            "generate_args": {
+                "num_inference_steps": 30,
+                "guidance_scale": 7.5
+            }
+        }
     ]
 }
 
@@ -130,6 +143,31 @@ DIFFUSER_PIPELINE = {
 }
 
 DIFFUSER_NAMES = list(DIFFUSER_ARGS.keys())
+
+# Add painter configurations similar to diffusers
+PAINTER_ARGS = {
+    m['path']: {
+        k: v for k, v in m.items()
+        if k not in ('path', 'pipeline', 'generate_args', 'enable_cpu_offload')
+    } for m in VALIDATOR_MODEL_META['painters']
+}
+
+PAINTER_GENERATE_ARGS = {
+    m['path']: m['generate_args']
+    for m in VALIDATOR_MODEL_META['painters']
+    if 'generate_args' in m
+}
+
+PAINTER_CPU_OFFLOAD_ENABLED = {
+    m['path']: m.get('enable_cpu_offload', False)
+    for m in VALIDATOR_MODEL_META['painters']
+}
+
+PAINTER_PIPELINE = {
+    m['path']: m['pipeline'] for m in VALIDATOR_MODEL_META['painters'] if 'pipeline' in m
+}
+
+PAINTER_NAMES = list(PAINTER_ARGS.keys())
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
 

@@ -25,12 +25,14 @@ import pandas as pd
 import numpy as np
 import os
 import wandb
+import time
 
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_image_synapse
 from bitmind.validator.reward import get_rewards
 from bitmind.image_transforms import apply_augmentation_by_level
+from bitmind.synthetic_image_generation.inpainting_image_generator import InpaintingImageGenerator
 
 
 def sample_random_real_image(datasets, total_images, retries=10):
@@ -85,8 +87,43 @@ async def forward(self):
 
     else:
         label = 1
-
-        if self.config.neuron.prompt_type == 'annotation':
+        
+        # Add inpainting probability check
+        if np.random.rand() < self._inpainting_prob:
+            bt.logging.info('generating fake image using inpainting')
+            
+            retries = 10
+            while retries > 0:
+                retries -= 1
+                
+                source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
+                source_sample = source_dataset[local_index]
+                source_image = source_sample['image']
+                if source_image is None:
+                    bt.logging.warning(f"Missing image encountered at {source_image['id']}, resampling...")
+                    continue
+                
+                # Process image with inpainting
+                inpainted = self.inpainting_generator.process_image(source_image)
+                sample = {
+                    'image': inpainted['image'],
+                    'id': f"inpaint_{time.time():.0f}",
+                    'prompt': inpainted['prompt']
+                }
+                
+                wandb_data['model'] = self.inpainting_generator.model_name
+                wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
+                wandb_data['source_image_index'] = local_index
+                wandb_data['image'] = wandb.Image(sample['image'])
+                wandb_data['mask'] = wandb.Image(inpainted['mask'])
+                wandb_data['prompt'] = sample['prompt']
+                
+                if not np.any(np.isnan(sample['image'])):
+                    break
+                    
+                bt.logging.warning("NaN encountered in inpainting generation, retrying...")
+                
+        elif self.config.neuron.prompt_type == 'annotation':
             bt.logging.info('generating fake image from annotation of real image')
 
             retries = 10
