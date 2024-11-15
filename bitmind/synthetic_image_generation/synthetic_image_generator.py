@@ -63,7 +63,8 @@ class SyntheticImageGenerator:
         diffuser_name=DIFFUSER_NAMES[0],
         use_random_diffuser=False,
         image_cache_dir=None,
-        gpu_id=0
+        gpu_id=0,
+        lora_weights=None
     ):
         if prompt_type not in PROMPT_TYPES:
             raise ValueError(f"Invalid prompt type '{prompt_type}'. Options are {PROMPT_TYPES}")
@@ -75,6 +76,7 @@ class SyntheticImageGenerator:
         self.use_random_diffuser = use_random_diffuser
         self.prompt_type = prompt_type
         self.prompt_generator_name = prompt_generator_name
+        self.lora_weights = lora_weights
 
         self.diffuser = None
         if self.use_random_diffuser and diffuser_name is not None:
@@ -160,16 +162,37 @@ class SyntheticImageGenerator:
         diffuser_name (str): Name of the diffuser to load.
         gpu_index (int): Index of the GPU to use. Defaults to 0.
         """
+        # Clear GPU memory first
+        torch.cuda.empty_cache()
+        gc.collect()
+        
         if diffuser_name == 'random':
             diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
         
         bt.logging.info(f"Loading image generation model ({diffuser_name})...")
+        if self.lora_weights:
+            bt.logging.info(f"Using LoRA weights ({self.lora_weights})...")
+        else:
+            bt.logging.info(f"No LoRA weights ({self.lora_weights})...")
         self.diffuser_name = diffuser_name
         pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
+        
+        # Get the args for this specific diffuser
+        diffuser_args = DIFFUSER_ARGS[diffuser_name].copy()
+        bt.logging.info(f"diffuser_args: {diffuser_args}")
+        # Remove lora_weights from the initial loading args if present
+        lora_weights = diffuser_args.pop('lora_weights', None)
+        
         self.diffuser = pipeline_class.from_pretrained(diffuser_name,
                                                        cache_dir=HUGGINGFACE_CACHE_DIR,
-                                                       **DIFFUSER_ARGS[diffuser_name],
+                                                       **diffuser_args,
                                                        add_watermarker=False)
+        
+        # Load LoRA weights if specified in constructor
+        if self.lora_weights:
+            bt.logging.info(f"Loading LoRA weights ({self.lora_weights})...")
+            self.diffuser.load_lora_weights(self.lora_weights)
+        
         self.diffuser.set_progress_bar_config(disable=True)
         if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
             self.diffuser.enable_model_cpu_offload()

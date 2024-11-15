@@ -80,6 +80,7 @@ VALIDATOR_MODEL_META = {
             "path": 'black-forest-labs/FLUX.1-dev',
             "use_safetensors": True,
             "torch_dtype": torch.bfloat16,
+            "lora_weights": "Jovie/Midjourney",
             "generate_args": {
                 "guidance_scale": 2,
                 "num_inference_steps": {"min": 50, "max": 125},
