@@ -182,14 +182,22 @@ class ValidatorProxy:
             if len(valid_preds) > 0:
                 self.proxy_counter.update(is_success=True)
                 self.proxy_counter.save()
+
+                rich_response: bool = request.headers.get("rich", "false").lower() == "true"
+
                 data = {
-                    'uids': [int(uid) for uid in valid_pred_uids],
                     'preds': [float(p) for p in list(valid_preds)],
-                    'ranks': [float(self.validator.metagraph.R[uid]) for uid in valid_pred_uids],
-                    'incentives': [float(self.validator.metagraph.I[uid]) for uid in valid_pred_uids],
-                    'emissions': [float(self.validator.metagraph.E[uid]) for uid in valid_pred_uids],
                     'fqdn': socket.getfqdn()
                 }
+
+                if rich_response:
+                    data['uids'] = [int(uid) for uid in valid_pred_uids],
+                    data['ranks'] = [float(metagraph.R[uid]) for uid in valid_pred_uids],
+                    data['incentives'] = [float(metagraph.I[uid]) for uid in valid_pred_uids]
+                    data['emissions'] = [float(metagraph.E[uid]) for uid in valid_pred_uids]
+                    data['hotkeys'] = [str(metagraph.hotkeys[uid]) for uid in valid_pred_uids]
+                    data['coldkeys'] = [str(metagraph.coldkeys[uid]) for uid in valid_pred_uids]
+
                 return data
 
         self.proxy_counter.update(is_success=False)
