@@ -11,7 +11,6 @@ import torch
 from transformers import pipeline, set_seed
 from PIL import Image
 
-from .prompt_utils import truncate_prompt_if_too_long
 from bitmind.validator.config import (
     TEXT_MODERATION_MODEL,
     IMAGE_ANNOTATION_MODEL,
@@ -22,6 +21,7 @@ from bitmind.validator.config import (
     select_random_t2vis_model,
     TARGET_IMAGE_SIZE
 )
+from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.image_annotation_generator import ImageAnnotationGenerator
 from bitmind.constants import HUGGINGFACE_CACHE_DIR
 
