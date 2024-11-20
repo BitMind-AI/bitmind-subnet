@@ -28,7 +28,7 @@ import wandb
 import time
 import os
 
-from bitmind.constants import VIDEO_CACHE_DIR
+from bitmind.validator.config import VIDEO_CACHE_DIR
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_synapse
@@ -111,7 +111,7 @@ async def forward(self):
             while retries > 0:
                 retries -= 1
 
-                # sample real data from which to generate prompt
+                # sample real image to use for prompt generation
                 prompt_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
                 prompt_sample = prompt_dataset[local_index]
                 prompt_image = prompt_sample['image']
@@ -119,9 +119,9 @@ async def forward(self):
                     bt.logging.warning(f"Missing image encountered at {prompt_sample['id']}, resampling...")
                     continue
 
-                # generate captions for the real images, then synthetic images from these captions
+                # run t2v/t2i generation pipeline
                 sample = self.synthetic_data_generator.generate(
-                    k=1, real_images=[prompt_sample], modality=modality)[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
+                    real_image=prompt_image, modality=modality)  # {'prompt': str, 'image': PIL Image ,'id': int}
 
                 challenge_data['model'] = self.synthetic_data_generator.t2vis_model_name
                 challenge_data['prompt_dataset'] = prompt_dataset.huggingface_dataset_name
