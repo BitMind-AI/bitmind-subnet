@@ -113,20 +113,15 @@ async def forward(self):
 
                 # sample real image to use for prompt generation
                 prompt_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-                prompt_sample = prompt_dataset[local_index]
-                prompt_image = prompt_sample['image']
+                prompt_image = prompt_dataset[local_index].get('image', None)
                 if prompt_image is None:
-                    bt.logging.warning(f"Missing image encountered at {prompt_sample['id']}, resampling...")
+                    bt.logging.warning(f"Missing image encountered at {prompt_dataset}:{local_index}, resampling...")
                     continue
 
                 # run t2v/t2i generation pipeline
                 sample = self.synthetic_data_generator.generate(
-                    real_image=prompt_image, modality=modality)  # {'prompt': str, 'image': PIL Image ,'id': int}
+                    real_image=prompt_image, modality=modality)
 
-                challenge_data['model'] = self.synthetic_data_generator.t2vis_model_name
-                challenge_data['prompt_dataset'] = prompt_dataset.huggingface_dataset_name
-                challenge_data['prompt_image_index'] = local_index
-                challenge_data['prompt'] = sample['prompt']
                 if modality == 'image':
                     gen_output = sample['gen_output'].images[0]
                     sample['image'] = gen_output
@@ -137,7 +132,12 @@ async def forward(self):
                     print(f'{len(sample["video"])} frames')
                     np_video = np.stack([np.array(img) for img in gen_output], axis=0)
                     challenge_data['video'] = wandb.Video(np_video)
-    
+
+                challenge_data['model'] = self.synthetic_data_generator.t2vis_model_name
+                challenge_data['prompt_dataset'] = prompt_dataset.huggingface_dataset_name
+                challenge_data['prompt_image_index'] = local_index
+                challenge_data['prompt'] = sample['prompt']
+
                 if not np.any(np.isnan(gen_output)):
                     break
 
