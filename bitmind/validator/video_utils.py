@@ -1,3 +1,5 @@
+from zipfile import ZipFile, BadZipFile
+from pathlib import Path
 from typing import Optional, BinaryIO, List
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
@@ -13,6 +15,170 @@ import json
 import os
 
 VIDEO_DOWNLOAD_LENGTH = 60
+
+
+def get_most_recent_update_time(directory: Path) -> float:
+    """Get the most recent modification time of any file in directory."""
+    try:
+        mtimes = [f.stat().st_mtime for f in directory.iterdir()]
+        return max(mtimes) if mtimes else 0
+    except Exception as e:
+        bt.logging.error(f"Error getting modification times: {e}")
+        return 0
+
+
+def is_zip_complete(zip_path: str | Path) -> bool:
+    """Check if a zip file is complete and valid.
+    Args:
+        zip_path: Path to zip file
+    Returns:
+        bool: True if zip is complete and valid, False otherwise
+    """
+    try:
+        with ZipFile(zip_path) as zf:
+            # Try to get zip info - will fail if file is corrupted
+            zf.testzip()
+            return True
+    except (BadZipFile, Exception) as e:
+        bt.logging.error(f"Zip file {zip_path} is incomplete or corrupted: {e}")
+        return False
+
+from pathlib import Path
+import bittensor as bt
+import numpy as np
+import subprocess
+import os
+
+
+def download_zips(
+    base_zip_url, 
+    output_directory, 
+    max_zip_id, 
+    min_zip_id=0, 
+    num_zips=1, 
+    download_all=False,
+    err_handler_fn=None):
+    """ Downloads a configurable number of video data zips from video dataset urls """
+
+    zip_indices = range(min_zip_id, max_zip_id)
+    if not download_all:
+        zip_indices = np.random.choice(zip_indices, num_zips)
+
+    output_path = Path(output_directory)
+    base_filename = base_zip_url.split('/')[-1]
+    error_log_path = output_path / "download_log.txt"
+
+    downloaded_zips = []
+    for i in zip_indices:
+        file_path = output_path / f"{base_filename}{i}.zip"
+        url = base_zip_url + f'{i}.zip'
+        if file_path.exists():
+            bt.logging.warning(f"file {file_path} exits.")
+            continue
+        command = ["wget", "-O", str(file_path), url]
+        try:
+            bt.logging.debug(f"Downloading {url}")
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            bt.logging.info(f"{url} saved to {file_path}")
+            downloaded_zips.append(file_path)
+        except subprocess.CalledProcessError as e:
+            error_message = f"file {url} download failed: {e.stderr}\n"
+            bt.logging.error(error_message)
+            with open(error_log_path, "a") as error_log_file:
+                error_log_file.write(error_message)
+            if err_handler_fn is not None:
+                file_path = err_handler_fn(base_zip_url, output_path, i)
+                downloaded_zips.append(file_path)
+
+    return downloaded_zips
+
+
+def openvid1m_err_handler(base_zip_url, output_path, part_index):
+    part_urls = [
+        f"{base_zip_url}{part_index}_partaa", 
+        f"{base_zip_url}{part_index}_partab",
+    ]
+    for part_url in part_urls:
+        part_file_path = output_path / Path(part_url).name
+        if part_file_path.exists():
+            bt.logging.warning(f"file {part_file_path} exits.")
+            continue
+
+        part_command = ["wget", "-O", str(part_file_path), part_url]
+        try:
+           result = subprocess.run(part_command, check=True, capture_output=True, text=True)
+           bt.logging.info(f"file {part_url} saved to {part_file_path}")
+        except subprocess.CalledProcessError as part_e:
+           part_error_message = f"file {part_url} download failed: {part_e.stderr}\n"
+           bt.logging.error(part_error_message)
+           with open(error_log_path, "a") as error_log_file:
+               error_log_file.write(part_error_message)
+        file_path = output_path / f"OpenVid_part{i}.zip"
+        cat_command = f"cat {output_path}/OpenVid_part{i}_part* > {file_path}"
+        subprocess.run(cat_command, shell=True)
+
+
+def download_openvid1m_zips(output_directory, download_all=False, num_zips=1):
+    """ Downloads a configurable number of video data zips from the OpenVid-1M huggingface dataset """
+    output_path = Path(output_directory)
+    error_log_path = output_path / "download_log.txt"
+    zip_indices = range(0, 186)
+    downloaded_zips = []
+    if not download_all:
+        zip_indices = np.random.choice(zip_indices, num_zips)
+
+    for i in zip_indices:
+        url = f"https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/OpenVid_part{i}.zip"
+        file_path = output_path / f"OpenVid_part{i}.zip"
+        if file_path.exists():
+            bt.logging.warning(f"file {file_path} exits.")
+            continue
+        command = ["wget", "-O", str(file_path), url]
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            bt.logging.info(f"file {url} saved to {file_path}")
+        except subprocess.CalledProcessError as e:
+            error_message = f"file {url} download failed: {e.stderr}\n"
+            bt.logging.error(error_message)
+            with open(error_log_path, "a") as error_log_file:
+                error_log_file.write(error_message)
+            
+            part_urls = [
+                f"https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/OpenVid_part{i}_partaa",
+                f"https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/OpenVid_part{i}_partab"
+            ]
+            for part_url in part_urls:
+                part_file_path = output_path / Path(part_url).name
+                if part_file_path.exists():
+                    bt.logging.warning(f"file {part_file_path} exits.")
+                    continue
+
+                part_command = ["wget", "-O", str(part_file_path), part_url]
+                try:
+                   result = subprocess.run(part_command, check=True, capture_output=True, text=True)
+                   bt.logging.info(f"file {part_url} saved to {part_file_path}")
+                except subprocess.CalledProcessError as part_e:
+                   part_error_message = f"file {part_url} download failed: {part_e.stderr}\n"
+                   bt.logging.error(part_error_message)
+                   with open(error_log_path, "a") as error_log_file:
+                       error_log_file.write(part_error_message)
+                file_path = output_path / f"OpenVid_part{i}.zip"
+                cat_command = f"cat {output_path}/OpenVid_part{i}_part* > {file_path}"
+                subprocess.run(cat_command, shell=True)
+        downloaded_zips.append(file_path)
+    """
+    data_folder = output_path / "data" / "train"
+    data_folder.mkdir(parents=True, exist_ok=True)
+    data_urls = [
+        "https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/data/train/OpenVid-1M.csv",
+        "https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/data/train/OpenVidHD.csv"
+    ]
+    for data_url in data_urls:
+        data_path = data_folder / Path(data_url).name
+        command = ["wget", "-O", str(data_path), data_url]
+        subprocess.run(command, check=True)
+    """
+    return downloaded_zips
 
 
 def get_description(yt: YoutubeDL, video_path: str) -> str:
