@@ -56,12 +56,6 @@ class ValidatorProxy:
             methods=["GET"],
             dependencies=[Depends(self.get_self)],
         )
-        self.app.add_api_route(
-            "/metagraph",
-            self.get_metagraph,
-            methods=["GET"],
-            dependencies=[Depends(self.get_self)],
-        )
 
         self.loop = asyncio.get_event_loop()
         self.proxy_counter = ProxyCounter(
@@ -126,39 +120,19 @@ class ValidatorProxy:
         self.authenticate_token(authorization)
         return {'status': 'healthy'}
 
-    async def get_metagraph(self, request: Request):
-        authorization: str = request.headers.get("authorization")
-
-        if not authorization:
-            raise HTTPException(status_code=401, detail="Authorization header missing")
-
-        self.authenticate_token(authorization)
-
-        metagraph = self.validator.metagraph
-        return {
-            'uids': [str(uid) for uid in metagraph.uids],
-            'ranks': [float(r) for r in metagraph.R],
-            'incentives': [float(i) for i in metagraph.I],
-            'emissions': [float(e) for e in metagraph.E]
-        }
-
     async def forward(self, request: Request):
         authorization: str = request.headers.get("authorization")
-
         if not authorization:
             raise HTTPException(status_code=401, detail="Authorization header missing")
-
         self.authenticate_token(authorization)
 
         bt.logging.info("Received an organic request!")
-
         payload = await request.json()
 
         if "seed" not in payload:
             payload["seed"] = random.randint(0, 1e9)
 
         metagraph = self.validator.metagraph
-
         miner_uids = self.validator.last_responding_miner_uids
         if len(miner_uids) == 0:
             bt.logging.warning("[ORGANIC] No recent miner uids found, sampling random uids")
@@ -183,13 +157,12 @@ class ValidatorProxy:
                 self.proxy_counter.update(is_success=True)
                 self.proxy_counter.save()
 
-                rich_response: bool = request.headers.get("rich", "false").lower() == "true"
-
                 data = {
                     'preds': [float(p) for p in list(valid_preds)],
                     'fqdn': socket.getfqdn()
                 }
 
+                rich_response: bool = payload.get("rich", "false").lower() == "true"
                 if rich_response:
                     data['uids'] = [int(uid) for uid in valid_pred_uids],
                     data['ranks'] = [float(metagraph.R[uid]) for uid in valid_pred_uids],
