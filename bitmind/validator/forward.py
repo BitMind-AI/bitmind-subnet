@@ -80,7 +80,7 @@ async def forward(self):
     challenge_data['modality'] = modality
 
     miner_uids = get_random_uids(self, k=self.metagraph.n) # self.config.neuron.sample_size)
-    if np.random.rand() > 0.:#self._fake_prob:
+    if np.random.rand() > self._fake_prob:
         label = 0
         if modality == 'video':
             bt.logging.info('sampling real video frames')

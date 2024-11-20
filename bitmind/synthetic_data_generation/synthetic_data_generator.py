@@ -135,11 +135,10 @@ class SyntheticDataGenerator:
         else:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
 
-        bt.logging.info(
-            f"Loading image generation model ({self.t2vis_model_name})..."
-        )
         if self.use_random_t2vis_model:
             self.t2vis_model_name = select_random_t2vis_model(modality)
+
+        bt.logging.info(f"Loading {self.t2vis_model_name}")
         self.load_t2vis_model()
 
         bt.logging.info("Generating synthetic data...")
@@ -171,9 +170,7 @@ class SyntheticDataGenerator:
             RuntimeError: If generation fails.
         """
         gen_args = T2VIS_MODELS[self.t2vis_model_name].get(
-            'generate_args',
-            {}
-        ).copy()
+            'generate_args', {}).copy()
         
         for k, v in gen_args.items():
             if isinstance(v, dict):
