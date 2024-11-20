@@ -26,7 +26,7 @@ VIDEO_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34-video'
 COMPRESSED_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / 'sources'
 
 # Image datasets configuration
-DATASETS: Dict[str, List[Dict[str, str]]] = {
+IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
     "real": [
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-images-v7"},
@@ -40,6 +40,28 @@ DATASETS: Dict[str, List[Dict[str, str]]] = {
         {"path": "bitmind/dtd"}
     ]
 }
+
+VIDEO_DATASETS = {
+    "real": [
+        {
+            "path": "nkp37/OpenVid-1M",
+            "min_zip_id": 0,
+            "max_zip_id": 186,
+            "base_zip_url": "https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/OpenVid_part"
+        },
+        {
+            "path": "shangxd/imagenet-vidvrd",
+            "min_zip_id": 1,
+            "max_zip_id": 2,
+            "base_zip_url": "https://huggingface.co/datasets/shangxd/imagenet-vidvrd/resolve/main/vidvrd-videos-part"
+	}
+    ],
+    "fake": [
+    ]
+}
+}
+
+
 
 # Prompt generation model configurations
 IMAGE_ANNOTATION_MODEL: str = "Salesforce/blip2-opt-6.7b-coco"
