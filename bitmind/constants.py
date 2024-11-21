@@ -89,6 +89,18 @@ VALIDATOR_MODEL_META = {
             },
             "enable_cpu_offload": False,
             "pipeline": "FluxPipeline"
+        },
+        {
+            "path": "prompthero/openjourney-v4",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "pipeline": "StableDiffusionPipeline"
+        },
+        {
+            "path": "cagliostrolab/animagine-xl-3.1",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "pipeline": "StableDiffusionXLPipeline"
         }
     ]
 }

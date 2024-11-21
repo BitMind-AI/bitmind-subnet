@@ -1,6 +1,6 @@
 from transformers import pipeline
 from transformers import set_seed
-from diffusers import StableDiffusionXLPipeline, FluxPipeline
+from diffusers import StableDiffusionXLPipeline, FluxPipeline, StableDiffusionPipeline
 import bittensor as bt
 import numpy as np
 import torch
@@ -260,7 +260,7 @@ class SyntheticImageGenerator:
             tuple: A tuple containing the tokenizer and its maximum token length.
         """
         # Check if a second tokenizer is available in the diffuser
-        if self.diffuser.tokenizer_2:
+        if hasattr(self.diffuser, 'tokenizer_2'):
             if self.diffuser.tokenizer.model_max_length > self.diffuser.tokenizer_2.model_max_length:
                 return self.diffuser.tokenizer_2, self.diffuser.tokenizer_2.model_max_length
         return self.diffuser.tokenizer, self.diffuser.tokenizer.model_max_length
