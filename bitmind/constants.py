@@ -110,6 +110,15 @@ VALIDATOR_MODEL_META = {
             },
             "pipeline": "CogVideoXPipeline",
         },
+    ],
+    "i2i_models": [
+        {
+            "path": "stabilityai/stable-diffusion-xl-base-1.0-inpainting",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "variant": "fp16",
+            "pipeline": "StableDiffusionXLInpaintPipeline"
+        }
     ]
 }
 
@@ -123,7 +132,8 @@ PROMPT_GENERATOR_NAMES = list(PROMPT_GENERATOR_ARGS.keys())
 
 T2V_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2v_models']])
 T2I_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['t2i_models']])
-MODEL_NAMES = T2I_MODEL_NAMES + T2V_MODEL_NAMES
+I2I_MODEL_NAMES = list([m['path'] for m in VALIDATOR_MODEL_META['i2i_models']])
+MODEL_NAMES = T2I_MODEL_NAMES + T2V_MODEL_NAMES + I2I_MODEL_NAMES
 
 IMAGE_ANNOTATION_MODEL = "Salesforce/blip2-opt-6.7b-coco"
 

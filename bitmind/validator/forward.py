@@ -126,14 +126,25 @@ async def forward(self):
                     bt.logging.warning(f"Missing image encountered at {prompt_dataset}:{local_index}, resampling...")
                     continue
 
+                # (10% chance for i2i when modality is image)
+                i2i = modality == 'image' and np.random.rand() < 0.1
+
                 # run t2v/t2i generation pipeline
                 sample = self.synthetic_data_generator.generate(
-                    real_image=prompt_image, modality=modality)
+                    real_image=prompt_image, 
+                    modality=modality,
+                    i2i=i2i # in_painting
+                )
 
                 if modality == 'image':
                     gen_output = sample['gen_output'].images[0]
                     sample['image'] = gen_output
                     challenge_data['image'] = wandb.Image(gen_output)
+                    if i2i:  # Changed from in_painting
+                        challenge_data['generation_type'] = 'i2i'
+                        challenge_data['i2i_mask'] = sample.get('mask', None)
+                    else:
+                        challenge_data['generation_type'] = 'full_image'
                 elif modality == 'video':
                     gen_output = sample['gen_output'].frames[0]
                     sample['video'] = gen_output

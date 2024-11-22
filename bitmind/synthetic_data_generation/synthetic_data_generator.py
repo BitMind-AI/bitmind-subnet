@@ -3,7 +3,7 @@ import os
 import re
 import time
 import warnings
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Tuple
 
 import bittensor as bt
 import numpy as np
@@ -107,7 +107,8 @@ class SyntheticDataGenerator:
     def generate(
         self,
         real_image: Optional[Image.Image] = None,
-        modality: str = 'image'
+        modality: str = 'image',
+        i2i: bool = False
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on input parameters.
@@ -115,6 +116,7 @@ class SyntheticDataGenerator:
         Args:
             real_image: Input image for annotation-based generation.
             modality: Type of media to generate ('image' or 'video').
+            i2i: Whether to perform image-to-image transformation.
 
         Returns:
             Dictionary containing generated data information.
@@ -136,13 +138,23 @@ class SyntheticDataGenerator:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
 
         if self.use_random_t2vis_model:
-            self.t2vis_model_name = select_random_t2vis_model(modality)
+            # Select appropriate model based on task
+            if i2i:
+                self.t2vis_model_name = random.choice(I2I_MODEL_NAMES)
+            elif modality == 'video':
+                self.t2vis_model_name = random.choice(T2V_MODEL_NAMES)
+            else:
+                self.t2vis_model_name = random.choice(T2I_MODEL_NAMES)
 
         bt.logging.info(f"Loading {self.t2vis_model_name}")
         self.load_t2vis_model()
 
         bt.logging.info("Generating synthetic data...")
-        gen_data = self.run_t2vis(prompt)
+        if i2i and modality == 'image':
+            gen_data = self.run_i2i(prompt, real_image)
+        else:
+            gen_data = self.run_t2vis(prompt)
+        
         self.clear_gpu()
 
         if self.image_cache_dir is not None:
@@ -289,3 +301,79 @@ class SyntheticDataGenerator:
             gc.collect()
             torch.cuda.empty_cache()
             self.t2vis_model = None
+
+    def run_i2i(
+        self,
+        prompt: str,
+        original_image: Image.Image,
+    ) -> Dict[str, Any]:
+        """
+        Generate image-to-image transformation based on a text prompt.
+
+        Args:
+            prompt: The text prompt used to inspire the generation.
+            original_image: The image to be transformed.
+
+        Returns:
+            Dictionary containing generated data and metadata.
+        """
+        # Create random mask based on input image size
+        mask = self.create_random_mask(original_image.size)
+        
+        try:
+            truncated_prompt = truncate_prompt_if_too_long(prompt, self.t2vis_model)
+            
+            start_time = time.time()
+            gen_output = self.t2vis_model(
+                prompt=truncated_prompt,
+                image=original_image,
+                mask_image=mask,
+                num_inference_steps=50,
+                guidance_scale=7.5,
+            )
+            gen_time = time.time() - start_time
+
+        except Exception as e:
+            bt.logging.error(f"I2I generation error: {e}")
+            raise RuntimeError(f"Failed to generate i2i image: {e}")
+
+        return {
+            'prompt': truncated_prompt,
+            'prompt_long': prompt,
+            'gen_output': gen_output,
+            'mask': mask,
+            'id': time.time(),
+            'gen_time': gen_time
+        }
+
+    def create_random_mask(self, size: Tuple[int, int] = (256, 256)) -> Image.Image:
+        """
+        Create a random mask for i2i transformation.
+        
+        Args:
+            size: Tuple of (width, height) from the input image.
+            
+        Returns:
+            PIL Image with random mask (white areas will be transformed).
+        """
+        w, h = size
+        mask = Image.new('RGB', size, 'black')
+        
+        if np.random.rand() < 0.5:
+            # Rectangular mask in middle third of image
+            x1 = np.random.randint(w//4, w//2)
+            y1 = np.random.randint(h//4, h//2)
+            x2 = np.random.randint(w//2, 3*w//4)
+            y2 = np.random.randint(h//2, 3*h//4)
+            mask.paste('white', (x1, y1, x2, y2))
+        else:
+            # Circular mask in center
+            from PIL import ImageDraw
+            draw = ImageDraw.Draw(mask)
+            center_x = w//2
+            center_y = h//2
+            radius = np.random.randint(min(w,h)//8, min(w,h)//4)  # Radius between 1/8 and 1/4 of smallest dimension
+            draw.ellipse([center_x-radius, center_y-radius, 
+                         center_x+radius, center_y+radius], fill='white')
+        
+        return mask
