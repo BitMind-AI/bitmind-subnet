@@ -59,7 +59,6 @@ VIDEO_DATASETS = {
     "fake": [
     ]
 }
-}
 
 
 
@@ -109,7 +108,9 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "num_inference_steps": {"min": 50, "max": 125},
             "num_frames": 48,
         },
-        "enable_cpu_offload": False,
+        "enable_model_cpu_offload": True,
+        "enable_sequential_cpu_offload": True,
+        "vae_enable_slicing": True,
         "vae_enable_tiling": True
     },
     'ByteDance/AnimateDiff-Lightning': {
@@ -155,11 +156,11 @@ def select_random_t2vis_model(modality: Optional[str] = None) -> str:
         NotImplementedError: If the specified modality is not supported.
     """
     if modality is None or modality == 'random':
-        modality = np.random.choice(['image', 'video'])[0]
+        modality = np.random.choice(['image', 'video'])
 
     if modality == 'image':
-        return np.random.choice(T2I_MODEL_NAMES)[0]
+        return np.random.choice(T2I_MODEL_NAMES)
     elif modality == 'video':
-        return np.random.choice(T2V_MODEL_NAMES)[0]
+        return np.random.choice(T2V_MODEL_NAMES)
     else:
         raise NotImplementedError(f"Unsupported modality: {modality}")

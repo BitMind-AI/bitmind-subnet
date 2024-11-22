@@ -27,7 +27,7 @@ from bitmind.validator.video_cache import VideoCache
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.synthetic_data_generation import SyntheticDataGenerator
 from bitmind.dataset.image_dataset import ImageDataset
-from bitmind.constants import VALIDATOR_DATASET_META, WANDB_PROJECT, WANDB_ENTITY
+from bitmind.validator.config import DATASETS, WANDB_PROJECT, WANDB_ENTITY
 import bitmind
 
 

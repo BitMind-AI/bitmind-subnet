@@ -253,11 +253,22 @@ class SyntheticDataGenerator:
                 **sched_args
             )
 
-        if T2VIS_MODELS[self.t2vis_model_name].get('cpu_offload_enabled', False):
+        if T2VIS_MODELS[self.t2vis_model_name].get('enable_model_cpu_offload', False):
+            bt.logging.info(f"Enabling cpu offload for {self.t2vis_model_name}")
             self.t2vis_model.enable_model_cpu_offload()
-        elif not self.gpu_id:
+        if T2VIS_MODELS[self.t2vis_model_name].get('enable_sequential_cpu_offload', False):
+            bt.logging.info(f"Enabling sequential cpu offload for {self.t2vis_model_name}")
+            self.t2vis_model.enable_sequential_cpu_offload()
+        if T2VIS_MODELS[self.t2vis_model_name].get('vae_enable_slicing', False):
+            bt.logging.info(f"Enabling vae slicing {self.t2vis_model_name}")
+            self.t2vis_model.vae.enable_slicing()
+        if T2VIS_MODELS[self.t2vis_model_name].get('vae_enable_tiling', False):
+            bt.logging.info(f"Enabling vae tiling {self.t2vis_model_name}")
+            self.t2vis_model.vae.enable_tiling()
+
+        if self.gpu_id is None:
             self.t2vis_model.to("cuda")
-        elif self.gpu_id:
+        else:
             self.t2vis_model.to(f"cuda:{self.gpu_id}")
 
         bt.logging.info(
@@ -270,7 +281,7 @@ class SyntheticDataGenerator:
         model and performing garbage collection.
         """
         if self.t2vis_model is not None:
-            bt.logging.debug(
+            bt.logging.info(
                 "Deleting previous text-to-image or text-to-video model, "
                 "freeing memory"
             )
