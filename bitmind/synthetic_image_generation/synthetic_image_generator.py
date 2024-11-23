@@ -55,6 +55,7 @@ class SyntheticImageGenerator:
         diffuser_name (str): Name of the image diffuser model.
         image_annotation_generator (ImageAnnotationGenerator): The generator object for annotating images if required.
         image_cache_dir (str): Directory to cache generated images.
+        gpu_id (int): ID of the CUDA GPU device to use for model inference. Defaults to 0.
     """
     def __init__(
         self,
@@ -75,6 +76,7 @@ class SyntheticImageGenerator:
         self.use_random_diffuser = use_random_diffuser
         self.prompt_type = prompt_type
         self.prompt_generator_name = prompt_generator_name
+        self.gpu_id = gpu_id
 
         self.diffuser = None
         if self.use_random_diffuser and diffuser_name is not None:
@@ -86,7 +88,8 @@ class SyntheticImageGenerator:
         self.image_annotation_generator = None
         if self.prompt_type == 'annotation':
             self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL,
-                                                                      text_moderation_model_name=TEXT_MODERATION_MODEL)
+                                                                      text_moderation_model_name=TEXT_MODERATION_MODEL,
+                                                                      gpu_id = self.gpu_id)
         elif self.prompt_type == 'random':
             bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
             self.prompt_generator = pipeline(
@@ -152,13 +155,12 @@ class SyntheticImageGenerator:
             torch.cuda.empty_cache()
             self.diffuser = None
 
-    def load_diffuser(self, diffuser_name, gpu_id=None) -> None:
+    def load_diffuser(self, diffuser_name) -> None:
         """
         Loads a Hugging Face diffuser model to a specific GPU.
         
         Parameters:
         diffuser_name (str): Name of the diffuser to load.
-        gpu_index (int): Index of the GPU to use. Defaults to 0.
         """
         if diffuser_name == 'random':
             diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
@@ -173,10 +175,10 @@ class SyntheticImageGenerator:
         self.diffuser.set_progress_bar_config(disable=True)
         if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
             self.diffuser.enable_model_cpu_offload()
-        elif not gpu_id:
+        elif not self.gpu_id:
             self.diffuser.to("cuda")
-        elif gpu_id:
-            self.diffuser.to(f"cuda:{gpu_id}")
+        elif self.gpu_id:
+            self.diffuser.to(f"cuda:{self.gpu_id}")
             
         bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
