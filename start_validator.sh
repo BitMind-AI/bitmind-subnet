@@ -40,4 +40,5 @@ pm2 start neurons/validator.py --name bitmind_validator -- \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
   --axon.port $VALIDATOR_AXON_PORT \
-  --proxy.port $VALIDATOR_PROXY_PORT
+  --proxy.port $VALIDATOR_PROXY_PORT \
+  --neuron.device $DEVICE
