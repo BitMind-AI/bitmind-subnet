@@ -68,7 +68,7 @@ class ImageAnnotationGenerator:
         Args:
             model_name (str): The name of the BLIP model for generating image captions.
             text_moderation_model_name (str): The name of the model used for moderating text descriptions.
-            device (int): Device to use for model inference. Defaults to cuda.
+            device (str): Device to use for model inference. Defaults to "cuda".
             apply_moderation (bool): Flag to determine whether text moderation should be applied to captions.
         """
         self.device = device

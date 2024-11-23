@@ -55,7 +55,7 @@ class SyntheticImageGenerator:
         diffuser_name (str): Name of the image diffuser model.
         image_annotation_generator (ImageAnnotationGenerator): The generator object for annotating images if required.
         image_cache_dir (str): Directory to cache generated images.
-        device (int): Device to use for model inference. Defaults to cuda.
+        device (str): Device to use for model inference. Defaults to "cuda".
     """
     def __init__(
         self,
