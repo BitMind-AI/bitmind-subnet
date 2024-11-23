@@ -92,7 +92,7 @@ class ImageAnnotationGenerator:
             torch_dtype=torch.float16, 
             cache_dir=HUGGINGFACE_CACHE_DIR
         )
-        self.model.to(device)
+        self.model.to(self.device)
         bt.logging.info(f"Loaded image annotation model {self.model_name}")
         bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
         if self.apply_moderation:
@@ -100,7 +100,7 @@ class ImageAnnotationGenerator:
                 "text-generation",
                 model=self.text_moderation_model_name,
                 model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}, 
-                device_map=device
+                device_map=self.device
             )
         bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
