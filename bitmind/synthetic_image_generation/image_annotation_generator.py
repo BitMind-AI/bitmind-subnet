@@ -34,7 +34,7 @@ class ImageAnnotationGenerator:
         text_moderation_pipeline (pipeline): A Hugging Face pipeline for text moderation.
 
     Methods:
-        __init__(self, model_name: str, text_moderation_model_name: str, gpu_id: int = 0, apply_moderation: bool = True):
+        __init__(self, model_name: str, text_moderation_model_name: str, device: str = cuda, apply_moderation: bool = True):
             Initializes the ImageAnnotationGenerator with the specified model, device, and moderation settings.
 
         load_models(self):
@@ -59,7 +59,7 @@ class ImageAnnotationGenerator:
             Generates text annotations for a batch of images from the specified datasets and calculates the average processing latency.
     """
     def __init__(
-        self, model_name: str, text_moderation_model_name: str, gpu_id: int = 0,
+        self, model_name: str, text_moderation_model_name: str, device: str = "cuda",
         apply_moderation: bool = True
     ):
         """
@@ -68,11 +68,10 @@ class ImageAnnotationGenerator:
         Args:
             model_name (str): The name of the BLIP model for generating image captions.
             text_moderation_model_name (str): The name of the model used for moderating text descriptions.
-            gpu_id (int): ID of the CUDA GPU device to use for model inference. Defaults to 0.
+            device (int): Device to use for model inference. Defaults to cuda.
             apply_moderation (bool): Flag to determine whether text moderation should be applied to captions.
         """
-        self.gpu_id = gpu_id
-        
+        self.device = device
         self.model_name = model_name
         self.processor = Blip2Processor.from_pretrained(
             self.model_name, cache_dir=HUGGINGFACE_CACHE_DIR
@@ -93,7 +92,7 @@ class ImageAnnotationGenerator:
             torch_dtype=torch.float16, 
             cache_dir=HUGGINGFACE_CACHE_DIR
         )
-        self.model.to(f"cuda:{self.gpu_id}")
+        self.model.to(device)
         bt.logging.info(f"Loaded image annotation model {self.model_name}")
         bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
         if self.apply_moderation:
@@ -101,7 +100,7 @@ class ImageAnnotationGenerator:
                 "text-generation",
                 model=self.text_moderation_model_name,
                 model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}, 
-                device_map=f"cuda:{self.gpu_id}"
+                device_map=device
             )
         bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
