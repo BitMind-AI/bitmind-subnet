@@ -1,5 +1,6 @@
 # Transformer models
-from transformers import Blip2Processor, Blip2ForConditionalGeneration, pipeline
+from transformers import Blip2Processor, Blip2ForConditionalGeneration, AutoModelForCausalLM, AutoTokenizer, pipeline
+import torch
 
 # Logging and progress handling
 from transformers import logging as transformers_logging
@@ -96,12 +97,22 @@ class ImageAnnotationGenerator:
         bt.logging.info(f"Loaded image annotation model {self.model_name}")
         bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
         if self.apply_moderation:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.text_moderation_model_name,
+                torch_dtype=torch.bfloat16,
+                cache_dir=HUGGINGFACE_CACHE_DIR
+            )
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.text_moderation_model_name,
+                cache_dir=HUGGINGFACE_CACHE_DIR
+            )
+            model = model.to(self.device)
             self.text_moderation_pipeline = pipeline(
                 "text-generation",
-                model=self.text_moderation_model_name,
-                model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}
+                model=model,
+                tokenizer=tokenizer
             )
-            self.text_moderation_pipeline.to(self.device)
         bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
@@ -113,7 +124,7 @@ class ImageAnnotationGenerator:
         del self.model
         self.model = None
         if self.text_moderation_pipeline:
-            self.text_moderation_pipeline.to('cpu')
+            self.text_moderation_pipeline.model.to('cpu')
             del self.text_moderation_pipeline
             self.text_moderation_pipeline = None
         gc.collect()
