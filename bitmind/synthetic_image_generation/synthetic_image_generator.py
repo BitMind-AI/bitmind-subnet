@@ -140,7 +140,6 @@ class SyntheticImageGenerator:
         Clears GPU memory by deleting the loaded diffuser and performing garbage collection.
         """
         if self.diffuser is not None:
-            bt.logging.debug(f"Deleting previous diffuser, freeing memory")
             del self.diffuser
             gc.collect()
             torch.cuda.empty_cache()
@@ -156,7 +155,6 @@ class SyntheticImageGenerator:
         if diffuser_name == 'random':
             diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
         
-        bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
         pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
         self.diffuser = pipeline_class.from_pretrained(diffuser_name,
@@ -167,8 +165,6 @@ class SyntheticImageGenerator:
         self.diffuser.to(self.device)
         if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
             self.diffuser.enable_model_cpu_offload()
-            
-        bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
     def generate_image_caption(self, image_sample) -> str:
         """
