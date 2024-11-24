@@ -175,12 +175,9 @@ class SyntheticImageGenerator:
                                                        **DIFFUSER_ARGS[diffuser_name],
                                                        add_watermarker=False)
         self.diffuser.set_progress_bar_config(disable=True)
+        self.diffuser.to(self.device)
         if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
             self.diffuser.enable_model_cpu_offload()
-        elif not self.device:
-            self.diffuser.to("cuda")
-        elif self.device:
-            self.diffuser.to(self.device)
             
         bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
