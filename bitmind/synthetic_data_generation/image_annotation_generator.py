@@ -32,7 +32,7 @@ class ImageAnnotationGenerator:
         self,
         model_name: str,
         text_moderation_model_name: str,
-        device: str = 'auto',
+        device: str = 'cuda',
         apply_moderation: bool = True
     ) -> None:
         """
@@ -42,8 +42,7 @@ class ImageAnnotationGenerator:
             model_name: The name of the BLIP model for generating image captions.
             text_moderation_model_name: The name of the model used for moderating
                 text descriptions.
-            device: The device to use ('auto' to choose automatically between
-                'cuda' and 'cpu').
+            device: The device to use
             apply_moderation: Flag to determine whether text moderation should be
                 applied to captions.
         """
@@ -57,9 +56,7 @@ class ImageAnnotationGenerator:
         self.text_moderation_model_name = text_moderation_model_name
         self.text_moderation_pipeline = None
         self.model = None
-        self.device = torch.device(
-            'cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu'
-        )
+        self.device = device
 
     def is_model_loaded(self) -> bool:
         return self.model != None
@@ -92,8 +89,8 @@ class ImageAnnotationGenerator:
                     "torch_dtype": torch.bfloat16,
                     "cache_dir": HUGGINGFACE_CACHE_DIR
                 },
-                device_map="auto"
             )
+            self.text_moderation_pipeline.to(self.device)
         bt.logging.info(
             f"Loaded annotation moderation model {self.text_moderation_model_name}."
         )
@@ -106,7 +103,10 @@ class ImageAnnotationGenerator:
         bt.logging.info("Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
+        self.model = None
         if self.text_moderation_pipeline:
+            self.text_moderation_pipeline.to('cpu')
+            del self.text_moderation_pipeline
             self.text_moderation_pipeline = None
         gc.collect()
         torch.cuda.empty_cache()
