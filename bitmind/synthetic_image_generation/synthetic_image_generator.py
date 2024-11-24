@@ -90,12 +90,8 @@ class SyntheticImageGenerator:
             self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL,
                                                                       text_moderation_model_name=TEXT_MODERATION_MODEL,
                                                                       device = self.device)
-        elif self.prompt_type == 'random':
-            bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
-            self.prompt_generator = pipeline(
-                'text-generation', 
-                device=self.device
-                **PROMPT_GENERATOR_ARGS[prompt_generator_name])
+        else:
+            raise NotImplementedError(f"Unsupported prompt_type: {self.prompt_type}")
 
         self.image_cache_dir = image_cache_dir
         if image_cache_dir is not None:
@@ -113,18 +109,12 @@ class SyntheticImageGenerator:
         Returns:
             list: List of dictionaries containing 'prompt', 'image', and 'id'.
         """
-        bt.logging.info("Generating prompts...")
         if self.prompt_type == 'annotation':
             if real_images is None:
                 raise ValueError(f"real_images can't be None if self.prompt_type is 'annotation'")
             prompts = [
                 self.generate_image_caption(real_images[i])
                 for i in range(k)
-            ]
-        elif self.prompt_type == 'random':
-            prompts = [
-                self.generate_random_prompt(retry_attempts=10)
-                for _ in range(k)
             ]
         else:
             raise NotImplementedError
@@ -134,7 +124,6 @@ class SyntheticImageGenerator:
         else:
             self.load_diffuser(self.diffuser_name)
 
-        bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
             image_data = self.generate_image(prompt)
@@ -207,48 +196,6 @@ class SyntheticImageGenerator:
         )[0]
         self.image_annotation_generator.clear_gpu()
         return annotation['description']
-
-    def generate_random_prompt(self, retry_attempts: int = 10) -> str:
-        """
-        Generates a prompt for image generation.
-
-        Args:
-            retry_attempts (int): Number of attempts to generate a valid prompt.
-
-        Returns:
-            str: Generated prompt.
-        """
-        seed = random.randint(100, 1000000)
-        set_seed(seed)
-
-        starters = [
-            'A photorealistic portrait',
-            'A photorealistic image of a person',
-            'A photorealistic landscape',
-            'A photorealistic scene'
-        ]
-        quality = [
-            'RAW photo', 'subject', '8k uhd',  'soft lighting', 'high quality', 'film grain'
-        ]
-        device = [
-            'Fujifilm XT3', 'iphone', 'canon EOS r8' , 'dslr',
-        ]
-
-        for _ in range(retry_attempts):
-            starting_text = np.random.choice(starters, 1)[0]
-            response = self.prompt_generator(
-                starting_text, max_length=(77 - len(starting_text)), num_return_sequences=1, truncation=True)
-
-            prompt = response[0]['generated_text'].strip()
-            prompt = re.sub('[^ ]+\.[^ ]+','', prompt)
-            prompt = prompt.replace("<", "").replace(">", "")
-
-            # temporary removal of extra context (like "featured on artstation") until we've trained our own prompt generator
-            prompt = re.split('[,;]', prompt)[0] + ', '
-            prompt += ', '.join(np.random.choice(quality, np.random.randint(len(quality)//2, len(quality))))
-            prompt += ', ' + np.random.choice(device, 1)[0]
-            if prompt != "":
-                return prompt
 
     def get_tokenizer_with_min_len(self):
         """
