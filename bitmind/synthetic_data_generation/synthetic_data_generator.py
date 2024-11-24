@@ -1,6 +1,7 @@
 import gc
 import os
 import re
+import sys
 import time
 import warnings
 from typing import Dict, List, Optional, Any, Union
@@ -9,6 +10,7 @@ import bittensor as bt
 import numpy as np
 import torch
 from transformers import pipeline, set_seed
+from diffusers.utils import export_to_video
 from PIL import Image
 
 from bitmind.validator.config import (
@@ -51,7 +53,7 @@ class SyntheticDataGenerator:
         prompt_generator_name: Name of the prompt generation model.
         t2vis_model_name: Name of the t2v or t2i model.
         image_annotation_generator: The generator object for annotating images if required.
-        image_cache_dir: Directory to cache generated images.
+        cache_dir: Directory to cache generated data.
     """
 
     def __init__(
@@ -59,8 +61,9 @@ class SyntheticDataGenerator:
         t2vis_model_name: Optional[str] = None,
         use_random_t2vis_model: bool = True,
         prompt_type: str = 'annotation',
-        image_cache_dir: Optional[str] = None,
-        gpu_id: int = 0
+        cache_dir: Optional[str] = None,
+        device: str = 'cuda',
+        run_async: bool = False
     ) -> None:
         """
         Initialize the SyntheticDataGenerator.
@@ -69,8 +72,8 @@ class SyntheticDataGenerator:
             t2vis_model_name: Name of the text-to-video or text-to-image model.
             use_random_t2vis_model: Whether to randomly select models for generation.
             prompt_type: The type of prompt generation strategy.
-            image_cache_dir: Directory to cache generated images.
-            gpu_id: GPU device identifier.
+            cache_dir: Directory to cache generated data.
+            device: Device identifier.
 
         Raises:
             ValueError: If an invalid model name is provided.
@@ -99,21 +102,55 @@ class SyntheticDataGenerator:
         else:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
 
-        self.gpu_id = gpu_id
-        self.image_cache_dir = image_cache_dir
-        if image_cache_dir is not None:
-            os.makedirs(self.image_cache_dir, exist_ok=True)
+        self.device = device
+        self.cache_dir = cache_dir
+        if self.cache_dir:
+            os.makedirs(self.cache_dir, exist_ok=True)
+
+        if run_async:
+            if not self.cache_dir:
+                bt.logging.error("cache_dir must be set (run_async==True)")
+                sys.exit(1)
+            try:
+                self.loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self.loop = asyncio.get_event_loop()
+
+            self._generator_task = self.loop.create_task(
+                self._generate_async()
+            )
+
+    async def _generate_async(self, batch_size=5):
+        while True:
+            prompts = []
+            for i in range(batch_size):
+                prompts.append(self.generate_prompt(IMAGE, clear_gpu=i==batch_size-1))
+
+            for model_name in T2VIS_MODEL_NAMES
+                for prompt in prompts:
+                    # generate image/video from current model and prompt
+                    output = self.run_t2vis(prompt, t2vis_model_name=MODEL_NAME)
+                    self.clear_gpu()
+
+                    # save data and metadata to cache
+                    base_path = os.path.join(self.cache_dir, str(gen_data['time']))
+                    with open(base_path + '.json', 'w') as json_file:
+                        json.dump({k: v for k, v in output if k != 'gen_output'}, json_file)
+                    if isinstance(output['gen_output'], Image.Image):
+                        output['gen_output'].save(base_path + '.png')
+                    else:
+                        export_to_video(output['gen_output'], base_path + '.mp4', fps=30)
 
     def generate(
         self,
-        real_image: Optional[Image.Image] = None,
+        image: Optional[Image.Image] = None,
         modality: str = 'image'
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on input parameters.
 
         Args:
-            real_image: Input image for annotation-based generation.
+            image: Input image for annotation-based generation.
             modality: Type of media to generate ('image' or 'video').
 
         Returns:
@@ -123,17 +160,7 @@ class SyntheticDataGenerator:
             ValueError: If real_image is None when using annotation prompt type.
             NotImplementedError: If prompt type is not supported.
         """
-        bt.logging.info("Generating prompts...")
-        if self.prompt_type == 'annotation':
-            if real_image is None:
-                raise ValueError(
-                    "real_image can't be None if self.prompt_type is 'annotation'"
-                )
-            self.image_annotation_generator.load_models()
-            prompt = self.image_annotation_generator.generate(real_image)
-            self.image_annotation_generator.clear_gpu()
-        else:
-            raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
+        prompt = self.generate_prompt(image, clear_gpu=True)
 
         if self.use_random_t2vis_model:
             self.t2vis_model_name = select_random_t2vis_model(modality)
@@ -145,16 +172,31 @@ class SyntheticDataGenerator:
         gen_data = self.run_t2vis(prompt)
         self.clear_gpu()
 
-        if self.image_cache_dir is not None:
-            path = os.path.join(self.image_cache_dir, str(gen_data['id']))
+        if self.cache_dir is not None:
+            path = os.path.join(self.cache_dir, str(gen_data['id']))
             gen_data['gen_output'].save(path)  # TODO update for video
 
         return gen_data
 
+    def generate_prompt(self, image=None, clear_gpu=True):
+        bt.logging.info("Generating prompt")
+        if self.prompt_type == 'annotation':
+            if real_image is None:
+                raise ValueError(
+                    "real_image can't be None if self.prompt_type is 'annotation'"
+                )
+            self.image_annotation_generator.load_models()
+            prompt = self.image_annotation_generator.generate(image)
+            self.image_annotation_generator.clear_gpu()
+        else:
+            raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
+        return prompt
+
     def run_t2vis(
         self,
         prompt: str,
-        generate_at_target_size: bool = False
+        generate_at_target_size: bool = False,
+        t2vis_model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on a text prompt.
@@ -169,6 +211,9 @@ class SyntheticDataGenerator:
         Raises:
             RuntimeError: If generation fails.
         """
+        if t2vis_modele_name is not None:
+            self.t2vis_model_name = t2vis_model_name
+
         gen_args = T2VIS_MODELS[self.t2vis_model_name].get(
             'generate_args', {}).copy()
         
@@ -178,11 +223,9 @@ class SyntheticDataGenerator:
                     gen_args[k]['min'],
                     gen_args[k]['max']
                 )
-
             for dim in ('height', 'width'):
                 if isinstance(gen_args.get(dim), list):
                     gen_args[dim] = np.random.choice(gen_args[dim])
-
         try:
             if generate_at_target_size:
                 gen_args['height'] = TARGET_IMAGE_SIZE[0]
@@ -192,7 +235,6 @@ class SyntheticDataGenerator:
                 prompt,
                 self.t2vis_model
             )
-
             start_time = time.time()
             gen_output = self.t2vis_model(
                 prompt=truncated_prompt,
@@ -225,7 +267,8 @@ class SyntheticDataGenerator:
             'prompt': truncated_prompt,
             'prompt_long': prompt,
             'gen_output': gen_output,  # image or video
-            'id': time.time(),
+            'time': time.time(),
+            'model_name': self.t2vis_model_name,
             'gen_time': gen_time
         }
 
@@ -273,10 +316,7 @@ class SyntheticDataGenerator:
             except Exception as e:
                 self.t2vis_model.enable_vae_tiling()
 
-        if self.gpu_id is None:
-            self.t2vis_model.to("cuda")
-        else:
-            self.t2vis_model.to(f"cuda:{self.gpu_id}")
+        self.t2vis_model.to(device)
 
         bt.logging.info(
             f"Loaded {self.t2vis_model_name} using {pipeline_cls.__name__}."
