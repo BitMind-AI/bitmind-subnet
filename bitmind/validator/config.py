@@ -22,8 +22,8 @@ WANDB_ENTITY: str = 'bitmindai'
 
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
-VIDEO_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34-video'
-COMPRESSED_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / 'sources'
+VIDEO_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'video'
+IMAGE_CACHE_DIR:  Path = Path.home() / '.cache' / 'sn34' / 'image'
 
 # Image datasets configuration
 IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
@@ -45,18 +45,12 @@ VIDEO_DATASETS = {
     "real": [
         {
             "path": "nkp37/OpenVid-1M",
-            "min_zip_id": 0,
-            "max_zip_id": 186,
-            "base_zip_url": "https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/OpenVid_part"
+            "filetype": "zip"
         },
         {
             "path": "shangxd/imagenet-vidvrd",
-            "min_zip_id": 1,
-            "max_zip_id": 2,
-            "base_zip_url": "https://huggingface.co/datasets/shangxd/imagenet-vidvrd/resolve/main/vidvrd-videos-part"
-	}
-    ],
-    "fake": [
+            "filetype": "zip"
+    	}
     ]
 }
 

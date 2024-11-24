@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import bittensor as bt
 
+from bitmind.validator.video_utils import get_most_recent_update_time
+
+
 class BaseCache(ABC):
     """
     Abstract base class for managing file caches with compressed sources.
@@ -19,7 +22,7 @@ class BaseCache(ABC):
     def __init__(
         self,
         cache_dir: Union[str, Path],
-        compressed_dir: Union[str, Path],
+        datasets: dict,
         extracted_update_interval: int,
         compressed_update_interval: int,
         num_samples_per_source: int,
@@ -30,7 +33,6 @@ class BaseCache(ABC):
         
         Args:
             cache_dir: Path to store extracted files
-            compressed_dir: Path to store compressed source files
             extracted_update_interval: Hours between extracted cache updates
             compressed_update_interval: Hours between compressed cache updates
             num_samples_per_source: Number of items to extract per source
@@ -39,22 +41,30 @@ class BaseCache(ABC):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True, parents=True)
         
-        self.compressed_dir = Path(compressed_dir)
+        self.compressed_dir = Path(compressed_dir) / 'sources'
         self.compressed_dir.mkdir(exist_ok=True, parents=True)
+
+        self.datasets = datasets
         
         self.extracted_update_interval = extracted_update_interval * 60 * 60
         self.compressed_update_interval = compressed_update_interval * 60 * 60
         self.num_samples_per_source = num_samples_per_source
         self.file_extensions = file_extensions
-        
+
+        self.metadata_file = self.cache_dir / 'metadata.json'
+        self.metadata = {}
+        if self.metadata_file.exists():
+            with open(self.metadata_file, 'r') as f:
+                self.metadata = json.load(f)
+
         try:
             self.loop = asyncio.get_running_loop()
         except RuntimeError:
             self.loop = asyncio.get_event_loop()
             
-        # Initialize caches
+        # Initialize caches, blocking to ensure data are available for validator
         bt.logging.info(f"Setting up cache at {cache_dir}")
-        self._clear_incomplete_sources()
+        await self._clear_incomplete_sources()
         
         if self._compressed_cache_empty():
             self._refresh_compressed_cache()
@@ -69,22 +79,22 @@ class BaseCache(ABC):
         self._compressed_updater_task = self.loop.create_task(
             self._run_compressed_updater()
         )
-    
+
     def _get_cached_files(self) -> List[Path]:
         """Get list of all extracted files in cache directory."""
         return [
             f for f in self.cache_dir.iterdir() 
             if f.suffix.lower() in self.file_extensions
         ]
-    
+
     def _get_compressed_files(self) -> List[Path]:
         """Get list of all compressed files in compressed directory."""
         return list(self.compressed_dir.iterdir())
-    
+
     def _extracted_cache_empty(self) -> bool:
         """Check if extracted cache directory is empty."""
         return len(self._get_cached_files()) == 0
-    
+
     def _compressed_cache_empty(self) -> bool:
         """Check if compressed cache directory is empty."""
         return len(self._get_compressed_files()) == 0
@@ -93,7 +103,7 @@ class BaseCache(ABC):
         """Asynchronously refresh extracted files according to update interval."""
         while True:
             try:
-                last_update = self._get_most_recent_update_time(self.cache_dir)
+                last_update = get_most_recent_update_time(self.cache_dir)
                 time_elapsed = time.time() - last_update
 
                 if time_elapsed >= self.extracted_update_interval:
@@ -112,6 +122,7 @@ class BaseCache(ABC):
         """Asynchronously refresh compressed files according to update interval."""
         while True:
             try:
+                await self._clear_incomplete_sources()
                 last_update = self._get_most_recent_update_time(self.compressed_dir)
                 time_elapsed = time.time() - last_update
 
@@ -128,7 +139,7 @@ class BaseCache(ABC):
                 await asyncio.sleep(60)
 
     @abstractmethod
-    def _clear_incomplete_sources(self) -> None:
+    async def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted source files from cache."""
         pass
 
@@ -143,7 +154,7 @@ class BaseCache(ABC):
         pass
 
     @abstractmethod
-    def sample_random_items(self, num_samples: int) -> Optional[Dict[str, Any]]:
+    def sample(self, num_samples: int) -> Optional[Dict[str, Any]]:
         """Sample random items from the cache."""
         pass
 

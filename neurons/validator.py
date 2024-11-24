@@ -27,7 +27,14 @@ from bitmind.validator.video_cache import VideoCache
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.synthetic_data_generation import SyntheticDataGenerator
 from bitmind.dataset.image_dataset import ImageDataset
-from bitmind.validator.config import DATASETS, WANDB_PROJECT, WANDB_ENTITY
+from bitmind.validator import config import (
+    DATASETS,
+    WANDB_PROJECT,
+    WANDB_ENTITY,
+    VIDEO_CACHE_DIR,
+    IMAGE_CACHE_DIR
+)
+
 import bitmind
 
 
@@ -52,12 +59,13 @@ class Validator(BaseValidatorNeuron):
         self.last_responding_miner_uids = []
         self.validator_proxy = None#ValidatorProxy(self)
 
-        self.video_cache = VideoCache()
-        self.image_cache = ImageCache()
+        self.video_cache = VideoCache(VIDEO_CACHE_DIR, VIDEO_DATASETS['real'])
+        self.image_cache = ImageCache(IMAGE_CACHE_DIR, IMAGE_DATASETS['real'])
         self.synthetic_data_generator = SyntheticDataGenerator(
             prompt_type='annotation', 
             use_random_t2vis_model=True,
             device=self.config.neuron.device,
+            image_cache=self.image_cache,
             run_async=True)
 
         bt.logging.info("init_wandb()")

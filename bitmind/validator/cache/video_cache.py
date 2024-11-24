@@ -11,13 +11,11 @@ from PIL import Image
 
 from .base_cache import BaseCache
 from bitmind.validator.video_utils import (
-    search_and_download_youtube_videos,
     get_video_duration,
     is_zip_complete,
     clip_video,
     download_zips,
 )
-from bitmind.validator.config import VIDEO_DATASET_META
 
 
 class VideoCache(BaseCache):
@@ -32,7 +30,7 @@ class VideoCache(BaseCache):
     def __init__(
         self,
         cache_dir: Union[str, Path],
-        compressed_dir: Union[str, Path],
+        datasets: dict,
         video_update_interval: int = 2,
         zip_update_interval: int = 24,
         num_videos_per_source: int = 10,
@@ -43,7 +41,6 @@ class VideoCache(BaseCache):
         
         Args:
             cache_dir: Path to store extracted video files
-            compressed_dir: Path to store compressed source files
             video_update_interval: Hours between video cache updates
             zip_update_interval: Hours between zip cache updates
             num_videos_per_source: Number of videos to extract per source
@@ -51,18 +48,17 @@ class VideoCache(BaseCache):
         """
         super().__init__(
             cache_dir=cache_dir,
-            compressed_dir=compressed_dir,
+            datasets=datasets,
             extracted_update_interval=video_update_interval,
             compressed_update_interval=zip_update_interval,
             num_samples_per_source=num_videos_per_source,
             file_extensions=['.mp4', '.avi', '.mov', '.mkv']
         )
-        self.use_youtube = use_youtube
 
-    def _clear_incomplete_sources(self) -> None:
+    async def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted zip files from cache."""
         for path in self._get_compressed_files():
-            if path.suffix == '.zip' and not is_zip_complete(path):
+            if path.suffix == '.zip' and not await is_zip_complete(path):
                 try:
                     path.unlink()
                     bt.logging.warning(f"Removed incomplete zip file {path}")
@@ -80,23 +76,17 @@ class VideoCache(BaseCache):
             prior_files = list(self.compressed_dir.glob('*.zip'))
             
             new_files: List[Path] = []
-            for meta in VIDEO_DATASET_META['real']:
+            for meta in self.datasets:
+                remote_zip_paths = list_hf_files(
+                    repo_id=source['path'],
+                    file_types='zip',
+                    token=None)
+
                 new_files += download_zips(
-                    meta["base_zip_url"],
+                    np.random.choice(remote_parquet_paths, 5),
                     self.compressed_dir,
-                    meta["max_zip_id"],
-                    meta.get("min_zip_id", 0),
-                    num_zips=1,
-                    download_all=False,
                     err_handler_fn=meta.get("err_handler", None)
                 )
-                
-            if self.use_youtube:
-                youtube_files = search_and_download_youtube_videos(
-                    self.compressed_dir,
-                    num_videos=self.num_samples_per_source
-                )
-                new_files.extend(youtube_files)
 
             if new_files:
                 bt.logging.info(f"{len(new_files)} new files added to cache")
@@ -186,7 +176,7 @@ class VideoCache(BaseCache):
 
         return extracted_files
 
-    def sample_random_items(
+    def sample(
         self,
         num_seconds: int = 6
     ) -> Optional[Dict[str, Union[List[Image.Image], str, float]]]:

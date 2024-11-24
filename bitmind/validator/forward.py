@@ -83,68 +83,37 @@ async def forward(self):
     if np.random.rand() > self._fake_prob:
         label = 0
         if modality == 'video':
-            bt.logging.info('sampling real video frames')
             clip_length = random.randint(
                 self.config.neuron.clip_length_min, 
                 self.config.neuron.clip_length_max)
-            sample = self.video_cache.sample_random_video_frames(clip_length)
+            sample = self.video_cache.sample(clip_length)
             challenge_data['clip_length_s'] = clip_length
             challenge_data.update({k: v for k, v in sample.items() if k not in ('video')})
             bt.logging.info(f"sampled {clip_length}s of video from {challenge_data['path']}")
 
         elif modality == 'image':
-            bt.logging.info('sampling real image')
-            dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-            sample = dataset[local_index]
-
+            sample = self.image_cache.sample()
             challenge_data[modality] = sample[modality]
-            challenge_data['dataset'] = dataset.huggingface_dataset_name
-            challenge_data['image_index'] = local_index
+            challenge_data['dataset'] = sample['dataset']
+            challenge_data['image_index'] = sample['index']
 
     else:
         label = 1
+        if modality == 'image':
+            gen_output = sample['gen_output'].images[0]
+            sample['image'] = gen_output
+            challenge_data['image'] = wandb.Image(gen_output)
+        elif modality == 'video':
+            gen_output = sample['gen_output'].frames[0]
+            sample['video'] = gen_output
+            print(f'{len(sample["video"])} frames')
+            np_video = np.stack([np.array(img) for img in gen_output], axis=0)
+            challenge_data['video'] = wandb.Video(np_video)
 
-        if self.config.neuron.prompt_type == 'annotation':
-            bt.logging.info('generating fake image from annotation of real image')
-
-            retries = 10
-            while retries > 0:
-                retries -= 1
-
-                # sample real image to use for prompt generation
-                prompt_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-                prompt_image = prompt_dataset[local_index].get('image', None)
-                if prompt_image is None:
-                    bt.logging.warning(f"Missing image encountered at {prompt_dataset}:{local_index}, resampling...")
-                    continue
-
-                # run t2v/t2i generation pipeline
-                sample = self.synthetic_data_generator.generate(
-                    real_image=prompt_image, modality=modality)
-
-                if modality == 'image':
-                    gen_output = sample['gen_output'].images[0]
-                    sample['image'] = gen_output
-                    challenge_data['image'] = wandb.Image(gen_output)
-                elif modality == 'video':
-                    gen_output = sample['gen_output'].frames[0]
-                    sample['video'] = gen_output
-                    print(f'{len(sample["video"])} frames')
-                    np_video = np.stack([np.array(img) for img in gen_output], axis=0)
-                    challenge_data['video'] = wandb.Video(np_video)
-
-                challenge_data['model'] = self.synthetic_data_generator.t2vis_model_name
-                challenge_data['prompt_dataset'] = prompt_dataset.huggingface_dataset_name
-                challenge_data['prompt_image_index'] = local_index
-                challenge_data['prompt'] = sample['prompt']
-
-                if not np.any(np.isnan(gen_output)):
-                    break
-
-                bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
-        else:
-            bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
-            raise NotImplementedError
+        challenge_data['model'] = self.synthetic_data_generator.t2vis_model_name
+        challenge_data['prompt_dataset'] = prompt_dataset.huggingface_dataset_name
+        challenge_data['prompt_image_index'] = local_index
+        challenge_data['prompt'] = sample['prompt']
 
     input_data = sample[modality]  # extract video or image
     if np.random.rand() > 0.25:
