@@ -216,7 +216,7 @@ class VideoCache:
 
             new_cache_files: List[Path] = []
             for meta in VIDEO_DATASET_META['real']:
-                new_cache_files += download_zips(
+                new_cache_files += await download_zips(
                     meta["base_zip_url"],
                     self.compressed_dir,
                     meta["max_zip_id"],

@@ -1,18 +1,25 @@
-from zipfile import ZipFile, BadZipFile
-from pathlib import Path
-from typing import Optional, BinaryIO, List
-from pydantic import BaseModel
-from yt_dlp import YoutubeDL
-import bittensor as bt
-import numpy as np
-import tempfile
-import requests
-import ffmpeg
-import random
-import time
-import re
+import asyncio
 import json
 import os
+import random
+import re
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from zipfile import ZipFile, BadZipFile
+from typing import List, Optional, Callable, Union
+
+import aiohttp
+import aiofiles
+import numpy as np
+import requests
+from pydantic import BaseModel
+from yt_dlp import YoutubeDL
+
+import bittensor as bt
+import ffmpeg
+
 
 VIDEO_DOWNLOAD_LENGTH = 60
 
@@ -36,59 +43,88 @@ def is_zip_complete(zip_path: str | Path) -> bool:
     """
     try:
         with ZipFile(zip_path) as zf:
-            # Try to get zip info - will fail if file is corrupted
+            # try to get zip info - will fail if file is corrupted
             zf.testzip()
             return True
     except (BadZipFile, Exception) as e:
         bt.logging.error(f"Zip file {zip_path} is incomplete or corrupted: {e}")
         return False
 
-from pathlib import Path
-import bittensor as bt
-import numpy as np
-import subprocess
-import os
 
+async def download_zips(
+    base_zip_url: str,
+    output_directory: Union[str, Path],
+    max_zip_id: int,
+    min_zip_id: int = 0,
+    num_zips: int = 1,
+    download_all: bool = False,
+    err_handler_fn: Optional[Callable] = None,
+    chunk_size: int = 8192,
+    max_concurrent_downloads: int = 5
+) -> List[Path]:
+    """
+    Asynchronously downloads configurable number of video data zips from video dataset URLs.
 
-def download_zips(
-    base_zip_url, 
-    output_directory, 
-    max_zip_id, 
-    min_zip_id=0, 
-    num_zips=1, 
-    download_all=False,
-    err_handler_fn=None):
-    """ Downloads a configurable number of video data zips from video dataset urls """
+    Args:
+        base_zip_url: Base URL for zip files
+        output_directory: Directory to save downloaded files
+        max_zip_id: Maximum zip ID present
+        min_zip_id: Minimum zip ID present
+        num_zips: Number of zips to download if not downloading all (default: 1)
+        download_all: Whether to download all zips in range (default: False)
+        err_handler_fn: Optional error handler function
+        chunk_size: Size of chunks for downloading (default: 8192)
+        max_concurrent_downloads: Maximum number of concurrent downloads (default: 5)
 
+    Returns:
+        List of paths to successfully downloaded zip files
+    """
     zip_indices = range(min_zip_id, max_zip_id)
     if not download_all:
         zip_indices = np.random.choice(zip_indices, num_zips)
 
     output_path = Path(output_directory)
+    output_path.mkdir(parents=True, exist_ok=True)
+
     base_filename = base_zip_url.split('/')[-1]
     error_log_path = output_path / "download_log.txt"
+    downloaded_zips: List[Path] = []
+    semaphore = asyncio.Semaphore(max_concurrent_downloads)
 
-    downloaded_zips = []
-    for i in zip_indices:
+    async def download_single_zip(i: int) -> Optional[Path]:
         file_path = output_path / f"{base_filename}{i}.zip"
         url = base_zip_url + f'{i}.zip'
+
         if file_path.exists():
-            bt.logging.warning(f"file {file_path} exits.")
-            continue
-        command = ["wget", "-O", str(file_path), url]
-        try:
-            bt.logging.debug(f"Downloading {url}")
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
-            bt.logging.info(f"{url} saved to {file_path}")
-            downloaded_zips.append(file_path)
-        except subprocess.CalledProcessError as e:
-            error_message = f"file {url} download failed: {e.stderr}\n"
-            bt.logging.error(error_message)
-            with open(error_log_path, "a") as error_log_file:
-                error_log_file.write(error_message)
-            if err_handler_fn is not None:
-                file_path = err_handler_fn(base_zip_url, output_path, i)
-                downloaded_zips.append(file_path)
+            bt.logging.warning(f"file {file_path} exists.")
+            return file_path
+
+        async with semaphore:  # limit concurrent downloads
+            try:
+                bt.logging.debug(f"Downloading {url}")
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            async with aiofiles.open(file_path, 'wb') as f:
+                                async for chunk in response.content.iter_chunked(chunk_size):
+                                    await f.write(chunk)
+                            bt.logging.info(f"{url} saved to {file_path}")
+                            return file_path
+                        else:
+                            raise aiohttp.ClientError(f"HTTP {response.status}: {response.reason}")
+
+            except (aiohttp.ClientError, IOError) as e:
+                error_message = f"file {url} download failed: {str(e)}\n"
+                bt.logging.error(error_message)
+                async with aiofiles.open(error_log_path, "a") as error_log_file:
+                    await error_log_file.write(error_message)
+                if err_handler_fn is not None:
+                    return err_handler_fn(base_zip_url, output_path, i)
+                return None
+
+    tasks = [download_single_zip(i) for i in zip_indices]
+    results = await asyncio.gather(*tasks)
+    downloaded_zips = [path for path in results if path is not None]
 
     return downloaded_zips
 
