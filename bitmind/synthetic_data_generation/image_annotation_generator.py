@@ -61,11 +61,18 @@ class ImageAnnotationGenerator:
             'cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu'
         )
 
+    def is_model_loaded(self) -> bool:
+        return self.model != None
+
     def load_models(self) -> None:
         """
         Load the necessary models for image annotation and text moderation onto
         the specified device.
         """
+        if self.is_model_loaded():
+            bt.logging.warning(f"Image annotation model {self.model_name} is already loaded")
+            return
+
         bt.logging.info(f"Loading image annotation model {self.model_name}")
         self.model = Blip2ForConditionalGeneration.from_pretrained(
             self.model_name,
@@ -96,7 +103,7 @@ class ImageAnnotationGenerator:
         Clear GPU memory by moving models back to CPU and deleting them,
         followed by collecting garbage.
         """
-        bt.logging.debug("Clearing GPU memory after generating image annotation")
+        bt.logging.info("Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
         if self.text_moderation_pipeline:

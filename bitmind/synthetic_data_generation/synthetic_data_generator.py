@@ -261,10 +261,17 @@ class SyntheticDataGenerator:
             self.t2vis_model.enable_sequential_cpu_offload()
         if T2VIS_MODELS[self.t2vis_model_name].get('vae_enable_slicing', False):
             bt.logging.info(f"Enabling vae slicing {self.t2vis_model_name}")
-            self.t2vis_model.vae.enable_slicing()
+            try:
+                self.t2vis_model.vae.enable_slicing()
+            except Exception as e:
+                self.t2vis_model.enable_vae_slicing()
+
         if T2VIS_MODELS[self.t2vis_model_name].get('vae_enable_tiling', False):
             bt.logging.info(f"Enabling vae tiling {self.t2vis_model_name}")
-            self.t2vis_model.vae.enable_tiling()
+            try:
+                self.t2vis_model.vae.enable_tiling()
+            except Exception as e:
+                self.t2vis_model.enable_vae_tiling()
 
         if self.gpu_id is None:
             self.t2vis_model.to("cuda")
