@@ -12,7 +12,11 @@ sudo npm install pm2@latest -g
 pip install -e .
 pip install -r requirements-validator.txt
 
-echo "# Default options:
+# Check if validator.env exists
+if [ -f "validator.env" ]; then
+    echo "File 'validator.env' already exists. Skipping creation."
+else
+    echo "# Default options:
 
 # Subtensor Network Configuration:
 NETUID=34                                      # Network User ID options: 34, 168
@@ -35,3 +39,5 @@ DEVICE=cuda
 # API Keys:
 WANDB_API_KEY=your_wandb_api_key_here
 HUGGING_FACE_TOKEN=your_hugging_face_token_here" > validator.env
+    echo "File 'validator.env' created."
+fi
