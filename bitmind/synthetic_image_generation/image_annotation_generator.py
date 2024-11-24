@@ -99,9 +99,9 @@ class ImageAnnotationGenerator:
             self.text_moderation_pipeline = pipeline(
                 "text-generation",
                 model=self.text_moderation_model_name,
-                model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}, 
-                device_map=self.device
+                model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}
             )
+            self.text_moderation_pipeline.to(self.device)
         bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
@@ -111,7 +111,10 @@ class ImageAnnotationGenerator:
         bt.logging.debug(f"Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
+        self.model = None
         if self.text_moderation_pipeline:
+            self.text_moderation_pipeline.to('cpu')
+            del self.text_moderation_pipeline
             self.text_moderation_pipeline = None
         gc.collect()
         torch.cuda.empty_cache()
