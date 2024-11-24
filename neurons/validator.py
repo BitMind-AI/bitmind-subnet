@@ -53,21 +53,15 @@ class Validator(BaseValidatorNeuron):
         self.validator_proxy = None#ValidatorProxy(self)
 
         self.video_cache = VideoCache()
-        
+        self.image_cache = ImageCache()
+        self.synthetic_data_generator = SyntheticDataGenerator(
+            prompt_type='annotation', 
+            use_random_t2vis_model=True,
+            device=self.config.neuron.device,
+            run_async=True)
+
         bt.logging.info("init_wandb()")
         self.init_wandb()
-        
-        bt.logging.info("Loading real datasets")
-        self.real_image_datasets = [
-            ImageDataset(ds['path'], 'train', ds.get('name', None))
-            for ds in VALIDATOR_DATASET_META['real'][-1:]
-        ]
-        self.total_real_images = sum([
-            len(ds) for ds in self.real_image_datasets
-        ])
-
-        self.synthetic_data_generator = SyntheticDataGenerator(
-            prompt_type='annotation', use_random_t2vis_model=True)
 
         self._fake_prob = self.config.get('fake_prob', 0.5)
 

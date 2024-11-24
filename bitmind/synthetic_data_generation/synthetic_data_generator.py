@@ -26,6 +26,8 @@ from bitmind.validator.config import (
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.image_annotation_generator import ImageAnnotationGenerator
 from bitmind.constants import HUGGINGFACE_CACHE_DIR
+from bitmind.validator.cache import ImageCache
+
 
 future_warning_modules_to_ignore = [
     'diffusers',
@@ -63,7 +65,8 @@ class SyntheticDataGenerator:
         prompt_type: str = 'annotation',
         cache_dir: Optional[str] = None,
         device: str = 'cuda',
-        run_async: bool = False
+        run_async: bool = False,
+        image_cache: Optional[ImageCache] = None
     ) -> None:
         """
         Initialize the SyntheticDataGenerator.
