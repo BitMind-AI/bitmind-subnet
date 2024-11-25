@@ -87,15 +87,12 @@ class ImageAnnotationGenerator:
         """
         Loads the necessary models for image annotation and text moderation onto the specified device.
         """
-        bt.logging.info(f"Loading image annotation model {self.model_name}")
         self.model = Blip2ForConditionalGeneration.from_pretrained(
             self.model_name, 
             torch_dtype=torch.float16, 
             cache_dir=HUGGINGFACE_CACHE_DIR
         )
         self.model.to(self.device)
-        bt.logging.info(f"Loaded image annotation model {self.model_name}")
-        bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
         if self.apply_moderation:
             model = AutoModelForCausalLM.from_pretrained(
                 self.text_moderation_model_name,
@@ -113,13 +110,11 @@ class ImageAnnotationGenerator:
                 model=model,
                 tokenizer=tokenizer
             )
-        bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
         """
         Clears GPU memory by moving models back to CPU and deleting them, followed by collecting garbage.
         """
-        bt.logging.debug(f"Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
         self.model = None
