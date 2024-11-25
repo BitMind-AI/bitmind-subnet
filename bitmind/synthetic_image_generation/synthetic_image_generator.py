@@ -1,6 +1,6 @@
 from transformers import pipeline
 from transformers import set_seed
-from diffusers import StableDiffusionXLPipeline, FluxPipeline
+from diffusers import StableDiffusionXLPipeline, FluxPipeline, StableDiffusionPipeline
 import bittensor as bt
 import numpy as np
 import torch
@@ -12,8 +12,6 @@ import os
 import warnings
 
 from bitmind.constants import (
-    PROMPT_GENERATOR_NAMES,
-    PROMPT_GENERATOR_ARGS,
     TEXT_MODERATION_MODEL,
     DIFFUSER_NAMES,
     DIFFUSER_ARGS,
@@ -50,31 +48,28 @@ class SyntheticImageGenerator:
 
     Attributes:
         use_random_diffuser (bool): Whether to randomly select a diffuser for each generation task.
-        prompt_type (str): The type of prompt generation strategy ('random', 'annotation').
-        prompt_generator_name (str): Name of the prompt generation model.
+        prompt_type (str): The type of prompt generation strategy (currently only supports 'annotation')
         diffuser_name (str): Name of the image diffuser model.
         image_annotation_generator (ImageAnnotationGenerator): The generator object for annotating images if required.
         image_cache_dir (str): Directory to cache generated images.
+        device (str): Device to use for model inference. Defaults to "cuda".
     """
     def __init__(
         self,
-        prompt_type='random',
-        prompt_generator_name=PROMPT_GENERATOR_NAMES[0],
+        prompt_type='annotation',
         diffuser_name=DIFFUSER_NAMES[0],
         use_random_diffuser=False,
         image_cache_dir=None,
-        gpu_id=0
+        device="cuda"
     ):
         if prompt_type not in PROMPT_TYPES:
             raise ValueError(f"Invalid prompt type '{prompt_type}'. Options are {PROMPT_TYPES}")
-        if prompt_generator_name not in PROMPT_GENERATOR_NAMES:
-            raise ValueError(f"Invalid prompt generator name '{prompt_generator_name}'. Options are {PROMPT_GENERATOR_NAMES}")
         if not use_random_diffuser and diffuser_name not in DIFFUSER_NAMES:
             raise ValueError(f"Invalid diffuser name '{diffuser_name}'. Options are {DIFFUSER_NAMES}")
 
         self.use_random_diffuser = use_random_diffuser
         self.prompt_type = prompt_type
-        self.prompt_generator_name = prompt_generator_name
+        self.device = device
 
         self.diffuser = None
         if self.use_random_diffuser and diffuser_name is not None:
@@ -86,11 +81,10 @@ class SyntheticImageGenerator:
         self.image_annotation_generator = None
         if self.prompt_type == 'annotation':
             self.image_annotation_generator = ImageAnnotationGenerator(model_name=IMAGE_ANNOTATION_MODEL,
-                                                                      text_moderation_model_name=TEXT_MODERATION_MODEL)
-        elif self.prompt_type == 'random':
-            bt.logging.info(f"Loading prompt generation model ({prompt_generator_name})...")
-            self.prompt_generator = pipeline(
-                'text-generation', **PROMPT_GENERATOR_ARGS[prompt_generator_name])
+                                                                      text_moderation_model_name=TEXT_MODERATION_MODEL,
+                                                                      device = self.device)
+        else:
+            raise NotImplementedError(f"Unsupported prompt_type: {self.prompt_type}")
 
         self.image_cache_dir = image_cache_dir
         if image_cache_dir is not None:
@@ -108,18 +102,12 @@ class SyntheticImageGenerator:
         Returns:
             list: List of dictionaries containing 'prompt', 'image', and 'id'.
         """
-        bt.logging.info("Generating prompts...")
         if self.prompt_type == 'annotation':
             if real_images is None:
                 raise ValueError(f"real_images can't be None if self.prompt_type is 'annotation'")
             prompts = [
                 self.generate_image_caption(real_images[i])
                 for i in range(k)
-            ]
-        elif self.prompt_type == 'random':
-            prompts = [
-                self.generate_random_prompt(retry_attempts=10)
-                for _ in range(k)
             ]
         else:
             raise NotImplementedError
@@ -129,7 +117,6 @@ class SyntheticImageGenerator:
         else:
             self.load_diffuser(self.diffuser_name)
 
-        bt.logging.info("Generating images...")
         gen_data = []
         for prompt in prompts:
             image_data = self.generate_image(prompt)
@@ -146,24 +133,21 @@ class SyntheticImageGenerator:
         Clears GPU memory by deleting the loaded diffuser and performing garbage collection.
         """
         if self.diffuser is not None:
-            bt.logging.debug(f"Deleting previous diffuser, freeing memory")
             del self.diffuser
             gc.collect()
             torch.cuda.empty_cache()
             self.diffuser = None
 
-    def load_diffuser(self, diffuser_name, gpu_id=None) -> None:
+    def load_diffuser(self, diffuser_name) -> None:
         """
         Loads a Hugging Face diffuser model to a specific GPU.
         
         Parameters:
         diffuser_name (str): Name of the diffuser to load.
-        gpu_index (int): Index of the GPU to use. Defaults to 0.
         """
         if diffuser_name == 'random':
             diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
         
-        bt.logging.info(f"Loading image generation model ({diffuser_name})...")
         self.diffuser_name = diffuser_name
         pipeline_class = globals()[DIFFUSER_PIPELINE[diffuser_name]]
         self.diffuser = pipeline_class.from_pretrained(diffuser_name,
@@ -171,14 +155,9 @@ class SyntheticImageGenerator:
                                                        **DIFFUSER_ARGS[diffuser_name],
                                                        add_watermarker=False)
         self.diffuser.set_progress_bar_config(disable=True)
+        self.diffuser.to(self.device)
         if DIFFUSER_CPU_OFFLOAD_ENABLED[diffuser_name]:
             self.diffuser.enable_model_cpu_offload()
-        elif not gpu_id:
-            self.diffuser.to("cuda")
-        elif gpu_id:
-            self.diffuser.to(f"cuda:{gpu_id}")
-            
-        bt.logging.info(f"Loaded {diffuser_name} using {pipeline_class.__name__}.")
 
     def generate_image_caption(self, image_sample) -> str:
         """
@@ -207,48 +186,6 @@ class SyntheticImageGenerator:
         self.image_annotation_generator.clear_gpu()
         return annotation['description']
 
-    def generate_random_prompt(self, retry_attempts: int = 10) -> str:
-        """
-        Generates a prompt for image generation.
-
-        Args:
-            retry_attempts (int): Number of attempts to generate a valid prompt.
-
-        Returns:
-            str: Generated prompt.
-        """
-        seed = random.randint(100, 1000000)
-        set_seed(seed)
-
-        starters = [
-            'A photorealistic portrait',
-            'A photorealistic image of a person',
-            'A photorealistic landscape',
-            'A photorealistic scene'
-        ]
-        quality = [
-            'RAW photo', 'subject', '8k uhd',  'soft lighting', 'high quality', 'film grain'
-        ]
-        device = [
-            'Fujifilm XT3', 'iphone', 'canon EOS r8' , 'dslr',
-        ]
-
-        for _ in range(retry_attempts):
-            starting_text = np.random.choice(starters, 1)[0]
-            response = self.prompt_generator(
-                starting_text, max_length=(77 - len(starting_text)), num_return_sequences=1, truncation=True)
-
-            prompt = response[0]['generated_text'].strip()
-            prompt = re.sub('[^ ]+\.[^ ]+','', prompt)
-            prompt = prompt.replace("<", "").replace(">", "")
-
-            # temporary removal of extra context (like "featured on artstation") until we've trained our own prompt generator
-            prompt = re.split('[,;]', prompt)[0] + ', '
-            prompt += ', '.join(np.random.choice(quality, np.random.randint(len(quality)//2, len(quality))))
-            prompt += ', ' + np.random.choice(device, 1)[0]
-            if prompt != "":
-                return prompt
-
     def get_tokenizer_with_min_len(self):
         """
         Returns the tokenizer with the smallest maximum token length from the 'diffuser` object.
@@ -260,7 +197,7 @@ class SyntheticImageGenerator:
             tuple: A tuple containing the tokenizer and its maximum token length.
         """
         # Check if a second tokenizer is available in the diffuser
-        if self.diffuser.tokenizer_2:
+        if hasattr(self.diffuser, 'tokenizer_2'):
             if self.diffuser.tokenizer.model_max_length > self.diffuser.tokenizer_2.model_max_length:
                 return self.diffuser.tokenizer_2, self.diffuser.tokenizer_2.model_max_length
         return self.diffuser.tokenizer, self.diffuser.tokenizer.model_max_length

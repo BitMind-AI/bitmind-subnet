@@ -64,7 +64,10 @@ class Validator(BaseValidatorNeuron):
         ])
 
         self.synthetic_image_generator = SyntheticImageGenerator(
-            prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
+            prompt_type='annotation',
+            use_random_diffuser=True,
+            diffuser_name=None,
+            device=self.config.neuron.device)
 
         self._fake_prob = self.config.get('fake_prob', 0.5)
 

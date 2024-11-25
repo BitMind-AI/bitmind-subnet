@@ -1,5 +1,6 @@
 # Transformer models
-from transformers import Blip2Processor, Blip2ForConditionalGeneration, pipeline
+from transformers import Blip2Processor, Blip2ForConditionalGeneration, AutoModelForCausalLM, AutoTokenizer, pipeline
+import torch
 
 # Logging and progress handling
 from transformers import logging as transformers_logging
@@ -34,7 +35,7 @@ class ImageAnnotationGenerator:
         text_moderation_pipeline (pipeline): A Hugging Face pipeline for text moderation.
 
     Methods:
-        __init__(self, model_name: str, text_moderation_model_name: str, device: str = 'auto', apply_moderation: bool = True):
+        __init__(self, model_name: str, text_moderation_model_name: str, device: str = cuda, apply_moderation: bool = True):
             Initializes the ImageAnnotationGenerator with the specified model, device, and moderation settings.
 
         load_models(self):
@@ -59,7 +60,7 @@ class ImageAnnotationGenerator:
             Generates text annotations for a batch of images from the specified datasets and calculates the average processing latency.
     """
     def __init__(
-        self, model_name: str, text_moderation_model_name: str, device: str = 'auto',
+        self, model_name: str, text_moderation_model_name: str, device: str = "cuda",
         apply_moderation: bool = True
     ):
         """
@@ -68,13 +69,10 @@ class ImageAnnotationGenerator:
         Args:
             model_name (str): The name of the BLIP model for generating image captions.
             text_moderation_model_name (str): The name of the model used for moderating text descriptions.
-            device (str): The device to use ('auto' to choose automatically between 'cuda' and 'cpu').
+            device (str): Device to use for model inference. Defaults to "cuda".
             apply_moderation (bool): Flag to determine whether text moderation should be applied to captions.
         """
-        self.device = torch.device(
-            'cuda' if torch.cuda.is_available() and device == 'auto' else 'cpu'
-        )
-        
+        self.device = device
         self.model_name = model_name
         self.processor = Blip2Processor.from_pretrained(
             self.model_name, cache_dir=HUGGINGFACE_CACHE_DIR
@@ -89,32 +87,40 @@ class ImageAnnotationGenerator:
         """
         Loads the necessary models for image annotation and text moderation onto the specified device.
         """
-        bt.logging.info(f"Loading image annotation model {self.model_name}")
         self.model = Blip2ForConditionalGeneration.from_pretrained(
             self.model_name, 
             torch_dtype=torch.float16, 
             cache_dir=HUGGINGFACE_CACHE_DIR
         )
         self.model.to(self.device)
-        bt.logging.info(f"Loaded image annotation model {self.model_name}")
-        bt.logging.info(f"Loading annotation moderation model {self.text_moderation_model_name}...")
         if self.apply_moderation:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.text_moderation_model_name,
+                torch_dtype=torch.bfloat16,
+                cache_dir=HUGGINGFACE_CACHE_DIR
+            )
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.text_moderation_model_name,
+                cache_dir=HUGGINGFACE_CACHE_DIR
+            )
+            model = model.to(self.device)
             self.text_moderation_pipeline = pipeline(
                 "text-generation",
-                model=self.text_moderation_model_name,
-                model_kwargs={"torch_dtype": torch.bfloat16, "cache_dir": HUGGINGFACE_CACHE_DIR}, 
-                device_map="auto"
+                model=model,
+                tokenizer=tokenizer
             )
-        bt.logging.info(f"Loaded annotation moderation model {self.text_moderation_model_name}.")
 
     def clear_gpu(self):
         """
         Clears GPU memory by moving models back to CPU and deleting them, followed by collecting garbage.
         """
-        bt.logging.debug(f"Clearing GPU memory after generating image annotation")
         self.model.to('cpu')
         del self.model
+        self.model = None
         if self.text_moderation_pipeline:
+            self.text_moderation_pipeline.model.to('cpu')
+            del self.text_moderation_pipeline
             self.text_moderation_pipeline = None
         gc.collect()
         torch.cuda.empty_cache()

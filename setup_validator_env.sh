@@ -34,6 +34,7 @@ WALLET_HOTKEY=default
 # Validator Port Setting:
 VALIDATOR_AXON_PORT=8092
 VALIDATOR_PROXY_PORT=10913
+DEVICE=cuda
 
 # API Keys:
 WANDB_API_KEY=your_wandb_api_key_here

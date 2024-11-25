@@ -48,13 +48,6 @@ VALIDATOR_DATASET_META = {
 }
 
 VALIDATOR_MODEL_META = {
-    "prompt_generators": [
-        {
-            "model": "Gustavosta/MagicPrompt-Stable-Diffusion",
-            "tokenizer": "gpt2",
-            "device": -1
-        }
-    ],
     "diffusers": [
         {
             "path": "stabilityai/stable-diffusion-xl-base-1.0",
@@ -89,6 +82,18 @@ VALIDATOR_MODEL_META = {
             },
             "enable_cpu_offload": False,
             "pipeline": "FluxPipeline"
+        },
+        {
+            "path": "prompthero/openjourney-v4",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "pipeline": "StableDiffusionPipeline"
+        },
+        {
+            "path": "cagliostrolab/animagine-xl-3.1",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "pipeline": "StableDiffusionXLPipeline"
         }
     ]
 }
@@ -97,13 +102,7 @@ HUGGINGFACE_CACHE_DIR = os.path.expanduser('~/.cache/huggingface')
 
 TARGET_IMAGE_SIZE = (256, 256)
 
-PROMPT_TYPES = ('random', 'annotation', 'none')
-
-PROMPT_GENERATOR_ARGS = {
-    m['model']: m for m in VALIDATOR_MODEL_META['prompt_generators']
-}
-
-PROMPT_GENERATOR_NAMES = list(PROMPT_GENERATOR_ARGS.keys())
+PROMPT_TYPES = ('annotation', 'none')
 
 # args for .from_pretrained
 DIFFUSER_ARGS = {

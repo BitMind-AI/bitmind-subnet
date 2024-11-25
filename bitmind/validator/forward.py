@@ -74,9 +74,8 @@ async def forward(self):
     wandb_data = {}
 
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
+    bt.logging.info("Generating challenge")
     if np.random.rand() > self._fake_prob:
-        bt.logging.info('sampling real image')
-
         label = 0
         source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
         wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
@@ -85,19 +84,14 @@ async def forward(self):
 
     else:
         label = 1
-
         if self.config.neuron.prompt_type == 'annotation':
-            bt.logging.info('generating fake image from annotation of real image')
-
             retries = 10
             while retries > 0:
                 retries -= 1
-
                 source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
                 source_sample = source_dataset[local_index]
                 source_image = source_sample['image']
                 if source_image is None:
-                    bt.logging.warning(f"Missing image encountered at {source_image['id']}, resampling...")
                     continue
 
                 # generate captions for the real images, then synthetic images from these captions
@@ -111,23 +105,10 @@ async def forward(self):
                 wandb_data['prompt'] = sample['prompt']
                 if not np.any(np.isnan(sample['image'])):
                     break
-
-                bt.logging.warning("NaN encountered in prompt/image generation, retrying...")
-
-        elif self.config.neuron.prompt_type == 'random':
-            bt.logging.info('generating fake image using prompt_generator')
-            sample = self.synthetic_image_generator.generate(k=1)[0]
-
-            wandb_data['model'] = self.synthetic_image_generator.diffuser_name
-            wandb_data['image'] = wandb.Image(sample['image'])
-            wandb_data['prompt'] = sample['prompt']
-
         else:
-            bt.logging.error(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
-            raise NotImplementedError
+            raise NotImplementedError(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
 
     image = sample['image']
-    
     image, level, data_aug_params = apply_augmentation_by_level(image)
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
