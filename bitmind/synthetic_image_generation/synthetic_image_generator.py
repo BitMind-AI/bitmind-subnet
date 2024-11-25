@@ -12,8 +12,6 @@ import os
 import warnings
 
 from bitmind.constants import (
-    PROMPT_GENERATOR_NAMES,
-    PROMPT_GENERATOR_ARGS,
     TEXT_MODERATION_MODEL,
     DIFFUSER_NAMES,
     DIFFUSER_ARGS,
@@ -50,8 +48,7 @@ class SyntheticImageGenerator:
 
     Attributes:
         use_random_diffuser (bool): Whether to randomly select a diffuser for each generation task.
-        prompt_type (str): The type of prompt generation strategy ('random', 'annotation').
-        prompt_generator_name (str): Name of the prompt generation model.
+        prompt_type (str): The type of prompt generation strategy (currently only supports 'annotation')
         diffuser_name (str): Name of the image diffuser model.
         image_annotation_generator (ImageAnnotationGenerator): The generator object for annotating images if required.
         image_cache_dir (str): Directory to cache generated images.
@@ -59,8 +56,7 @@ class SyntheticImageGenerator:
     """
     def __init__(
         self,
-        prompt_type='random',
-        prompt_generator_name=PROMPT_GENERATOR_NAMES[0],
+        prompt_type='annotation',
         diffuser_name=DIFFUSER_NAMES[0],
         use_random_diffuser=False,
         image_cache_dir=None,
@@ -68,14 +64,11 @@ class SyntheticImageGenerator:
     ):
         if prompt_type not in PROMPT_TYPES:
             raise ValueError(f"Invalid prompt type '{prompt_type}'. Options are {PROMPT_TYPES}")
-        if prompt_generator_name not in PROMPT_GENERATOR_NAMES:
-            raise ValueError(f"Invalid prompt generator name '{prompt_generator_name}'. Options are {PROMPT_GENERATOR_NAMES}")
         if not use_random_diffuser and diffuser_name not in DIFFUSER_NAMES:
             raise ValueError(f"Invalid diffuser name '{diffuser_name}'. Options are {DIFFUSER_NAMES}")
 
         self.use_random_diffuser = use_random_diffuser
         self.prompt_type = prompt_type
-        self.prompt_generator_name = prompt_generator_name
         self.device = device
 
         self.diffuser = None
