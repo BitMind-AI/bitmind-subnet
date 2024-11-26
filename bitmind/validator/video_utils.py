@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 from zipfile import ZipFile, BadZipFile
-from typing import List, Optional, Callable, Union
+from typing import List, Optional, Callable, Union, BinaryIO
 
 import aiohttp
 import aiofiles
@@ -20,17 +20,6 @@ from yt_dlp import YoutubeDL
 import bittensor as bt
 import ffmpeg
 
-
-VIDEO_DOWNLOAD_LENGTH = 60
-
-
-
-def seconds_to_str(seconds):
-    seconds = int(float(seconds))
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    seconds = seconds % 60
-    return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
 def clip_video(video_path: str, start: int, num_seconds: int) -> Optional[BinaryIO]:

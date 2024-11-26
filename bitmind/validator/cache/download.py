@@ -1,141 +1,72 @@
-from enum import Enum, auto
+import requests
+import os
 from pathlib import Path
-from typing import Callable, List, Optional, Union
-import aiohttp
-import aiofiles
-import asyncio
+from requests.exceptions import RequestException
+from typing import List, Union, Dict, Optional
 
 import bittensor as bt
+import huggingface_hub as hf_hub
 
 
-class FileType(Enum):
-    PARQUET = auto()
-    ZIP = auto()
-
-
-def get_integrity_check(file_type: FileType) -> Callable[[Path], bool]:
-    """Returns the appropriate validation function for the file type."""
-    if file_type == FileType.PARQUET:
-        return is_parquet_complete
-    elif file_type == FileType.ZIP:
-        return is_zip_complete
-    raise ValueError(f"Unsupported file type: {file_type}")
-
-
-async def download_file(
-    url: str,
-    destination: Path,
-    file_type: FileType,
-    timeout: int = 300,
-    chunk_size: int = 8192,
-    error_handler: Optional[Callable] = None
-) -> Optional[Path]:
-    """
-    Asynchronously download a file from a URL.
-    
-    Args:
-        url: URL of the file
-        destination: Path to save the file
-        file_type: Type of file (PARQUET or ZIP)
-        timeout: Download timeout in seconds
-        chunk_size: Size of chunks to download at a time
-        error_handler: Optional function to handle download errors
-        
-    Returns:
-        Path to downloaded file if successful, None otherwise
-    """
-    file_path = destination / Path(url).name
-    if file_path.exists():
-        bt.logging.debug(f"File already exists: {file_path}")
-        return file_path
-
-    temp_path = file_path.with_suffix('.temp')
-    integrity_check = get_integrity_check(file_type)
-    
-    try:
-        timeout_client = aiohttp.ClientTimeout(total=timeout)
-        async with aiohttp.ClientSession(timeout=timeout_client) as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    bt.logging.error(
-                        f"Failed to download {url}: HTTP {response.status}"
-                    )
-                    return None
-                
-                try:
-                    async with aiofiles.open(temp_path, 'wb') as f:
-                        async for chunk in response.content.iter_chunked(chunk_size):
-                            await f.write(chunk)
-                            
-                    if not await integrity_check(temp_path):
-                        bt.logging.error(f"Downloaded file {url} is corrupted")
-                        temp_path.unlink()
-                        if error_handler:
-                            return error_handler(url, destination)
-                        return None
-                        
-                    # Rename temp file to final name
-                    temp_path.rename(file_path)
-                    bt.logging.info(f"Successfully downloaded {url} to {file_path}")
-                    return file_path
-                    
-                except Exception as e:
-                    bt.logging.error(f"Error downloading {url}: {e}")
-                    if temp_path.exists():
-                        temp_path.unlink()
-                    if error_handler:
-                        return error_handler(url, destination)
-                    return None
-                    
-    except Exception as e:
-        bt.logging.error(f"Connection error downloading {url}: {e}")
-        if error_handler:
-            return error_handler(url, destination)
-        return None
-
-
-async def download_files(
+def download_files(
     urls: List[str],
-    destination: Path,
-    file_type: FileType,
-    max_concurrent: int = 5,
-    timeout: int = 300,
-    error_handler: Optional[Callable] = None
+    output_dir: Union[str, Path],
+    chunk_size: int = 8192
 ) -> List[Path]:
     """
-    Asynchronously download multiple files.
+    Downloads multiple files synchronously.
     
     Args:
         urls: List of URLs to download
-        destination: Directory to save files
-        file_type: Type of files to download
-        max_concurrent: Maximum number of concurrent downloads
-        timeout: Download timeout per file in seconds
-        error_handler: Optional function to handle download errors
-        
+        output_dir: Directory to save the files
+        chunk_size: Size of chunks to download at a time
+    
     Returns:
         List of successfully downloaded file paths
     """
-    sem = asyncio.Semaphore(max_concurrent)
-    
-    async def download_with_semaphore(url: str) -> Optional[Path]:
-        async with sem:
-            return await download_file(
-                url, 
-                destination,
-                file_type,
-                timeout=timeout,
-                error_handler=error_handler
-            )
-            
-    tasks = [download_with_semaphore(url) for url in urls]
-    results = await asyncio.gather(*tasks)
-    
-    # Filter out failed downloads (None results)
-    return [r for r in results if r is not None]
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    downloaded_files = []
+
+    for url in urls:
+        try:
+            bt.logging.info(f'Downloading {url}')
+            response = requests.get(url, stream=True)
+            if response.status_code != 200:
+                bt.logging.error(f'Failed to download {url}: Status {response.status_code}')
+                continue
+
+            filename = os.path.basename(url)
+            filepath = output_dir / filename
+
+            bt.logging.info(f'Writing to {filepath}')
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:  # filter out keep-alive chunks
+                        f.write(chunk)
+
+            downloaded_files.append(filepath)
+            bt.logging.info(f'Successfully downloaded {filename}')
+
+        except Exception as e:
+            bt.logging.error(f'Error downloading {url}: {str(e)}')
+            continue
+
+    return downloaded_files
 
 
-async def openvid1m_err_handler(
+def list_hf_files(repo_id, repo_type='dataset', extension=None):
+    files = []
+    try:
+        files = list(hf_hub.list_repo_files(repo_id=repo_id, repo_type=repo_type))
+        if extension:
+            files = [f for f in files if f.endswith(extension)]
+    except Exception as e:
+        bt.logging.error(f"Failed to list files of type {extension} in {repo_id}: {e}")
+    return files
+
+
+def openvid1m_err_handler(
     base_zip_url: str,
     output_path: Path,
     part_index: int,
@@ -143,7 +74,7 @@ async def openvid1m_err_handler(
     timeout: int = 300
 ) -> Optional[Path]:
     """
-    Async error handler for OpenVid1M downloads that handles split files.
+    Synchronous error handler for OpenVid1M downloads that handles split files.
     
     Args:
         base_zip_url: Base URL for the zip parts
@@ -172,44 +103,38 @@ async def openvid1m_err_handler(
             continue
             
         try:
-            timeout_client = aiohttp.ClientTimeout(total=timeout)
-            async with aiohttp.ClientSession(timeout=timeout_client) as session:
-                async with session.get(part_url) as response:
-                    if response.status != 200:
-                        raise aiohttp.ClientError(
-                            f"HTTP {response.status}: {response.reason}"
-                        )
+            response = requests.get(part_url, stream=True, timeout=timeout)
+            if response.status_code != 200:
+                raise RequestException(
+                    f"HTTP {response.status_code}: {response.reason}"
+                )
+                
+            with open(part_file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:  # filter out keep-alive chunks
+                        f.write(chunk)
                         
-                    async with aiofiles.open(part_file_path, 'wb') as f:
-                        async for chunk in response.content.iter_chunked(chunk_size):
-                            await f.write(chunk)
-                            
-                    bt.logging.info(f"File {part_url} saved to {part_file_path}")
-                    downloaded_parts.append(part_file_path)
-                    
+            bt.logging.info(f"File {part_url} saved to {part_file_path}")
+            downloaded_parts.append(part_file_path)
+            
         except Exception as e:
             error_message = f"File {part_url} download failed: {str(e)}\n"
             bt.logging.error(error_message)
-            async with aiofiles.open(error_log_path, "a") as error_log_file:
-                await error_log_file.write(error_message)
+            with open(error_log_path, "a") as error_log_file:
+                error_log_file.write(error_message)
             return None
 
-    # If we got both parts, combine them
     if len(downloaded_parts) == len(part_urls):
         try:
             combined_file = output_path / f"OpenVid_part{part_index}.zip"
-            
-            # Read all parts and combine
             combined_data = bytearray()
             for part_path in downloaded_parts:
-                async with aiofiles.open(part_path, 'rb') as part_file:
-                    combined_data.extend(await part_file.read())
+                with open(part_path, 'rb') as part_file:
+                    combined_data.extend(part_file.read())
                     
-            # Write combined file
-            async with aiofiles.open(combined_file, 'wb') as out_file:
-                await out_file.write(combined_data)
+            with open(combined_file, 'wb') as out_file:
+                out_file.write(combined_data)
                 
-            # Clean up part files
             for part_path in downloaded_parts:
                 part_path.unlink()
                 
@@ -219,13 +144,13 @@ async def openvid1m_err_handler(
         except Exception as e:
             error_message = f"Failed to combine parts for index {part_index}: {str(e)}\n"
             bt.logging.error(error_message)
-            async with aiofiles.open(error_log_path, "a") as error_log_file:
-                await error_log_file.write(error_message)
+            with open(error_log_path, "a") as error_log_file:
+                error_log_file.write(error_message)
             return None
     
     return None
-
-"""
+    
+    """
 data_folder = output_path / "data" / "train"
 data_folder.mkdir(parents=True, exist_ok=True)
 data_urls = [

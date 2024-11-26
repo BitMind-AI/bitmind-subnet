@@ -6,16 +6,16 @@ from typing import Dict, List, Optional, Tuple, Union
 from zipfile import ZipFile
 
 import bittensor as bt
+import huggingface_hub as hf_hub
+import numpy as np
 import ffmpeg
 from PIL import Image
 
 from .base_cache import BaseCache
-from bitmind.validator.video_utils import (
-    get_video_duration,
-    is_zip_complete,
-    clip_video,
-    download_zips,
-)
+from .download import download_files, list_hf_files
+from .extract import extract_videos_from_zip
+from .util import FileType, is_zip_complete
+from bitmind.validator.video_utils import get_video_duration
 
 
 class VideoCache(BaseCache):
@@ -33,8 +33,7 @@ class VideoCache(BaseCache):
         datasets: dict,
         video_update_interval: int = 2,
         zip_update_interval: int = 24,
-        num_videos_per_source: int = 10,
-        use_youtube: bool = False
+        num_videos_per_source: int = 10
     ) -> None:
         """
         Initialize the VideoCache.
@@ -55,17 +54,17 @@ class VideoCache(BaseCache):
             file_extensions=['.mp4', '.avi', '.mov', '.mkv']
         )
 
-    async def _clear_incomplete_sources(self) -> None:
+    def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted zip files from cache."""
         for path in self._get_compressed_files():
-            if path.suffix == '.zip' and not await is_zip_complete(path):
+            if path.suffix == '.zip' and not is_zip_complete(path):
                 try:
                     path.unlink()
                     bt.logging.warning(f"Removed incomplete zip file {path}")
                 except Exception as e:
                     bt.logging.error(f"Error removing incomplete zip {path}: {e}")
 
-    def _refresh_compressed_cache(self) -> None:
+    def _refresh_compressed_cache(self, n_zips_per_source=5) -> None:
         """
         Refresh the compressed file cache with new downloads.
         
@@ -76,26 +75,19 @@ class VideoCache(BaseCache):
             prior_files = list(self.compressed_dir.glob('*.zip'))
             
             new_files: List[Path] = []
-            for meta in self.datasets:
-                remote_zip_paths = list_hf_files(
-                    repo_id=source['path'],
-                    file_types='zip',
-                    token=None)
-
-                new_files += download_zips(
-                    np.random.choice(remote_parquet_paths, 5),
-                    self.compressed_dir,
-                    err_handler_fn=meta.get("err_handler", None)
-                )
+            for source in self.datasets:
+                zip_files = list_hf_files(repo_id=source['path'], extension='zip')
+                remote_zip_paths = [
+                    f"https://huggingface.co/datasets/{source['path']}/resolve/main/{f}"
+                    for f in zip_files
+                ]
+                bt.logging.info(f"Downloading {n_zips_per_source} from {source['path']}")
+                new_files += download_files(
+                    urls=np.random.choice(remote_zip_paths, n_zips_per_source),
+                    output_dir=self.compressed_dir)
 
             if new_files:
                 bt.logging.info(f"{len(new_files)} new files added to cache")
-                bt.logging.info(f"Removing {len(prior_files)} previous files")
-                for file in prior_files:
-                    try:
-                        file.unlink()
-                    except Exception as e:
-                        bt.logging.error(f"Error removing file {file}: {e}")
             else:
                 bt.logging.error("No new files were added to cache")
 
@@ -113,7 +105,6 @@ class VideoCache(BaseCache):
         try:
             prior_cache_files = self._get_cached_files()
             new_cache_files = self._extract_random_videos()
-
             if new_cache_files:
                 bt.logging.info(f"{len(new_cache_files)} new videos added to cache")
                 bt.logging.info(f"Removing {len(prior_cache_files)} previous videos")
@@ -136,44 +127,17 @@ class VideoCache(BaseCache):
         Returns:
             List of paths to extracted video files.
         """
-        extracted_files: List[Path] = []
         zip_files = list(self.compressed_dir.glob('*.zip'))
+        extracted_files = []
         if not zip_files:
             bt.logging.warning(f"No zip files found in {self.compressed_dir}")
             return extracted_files
 
-        zip_path = random.choice(zip_files)
-        try:
-            with ZipFile(zip_path) as zip_file:
-                video_files = [
-                    f for f in zip_file.namelist()
-                    if any(f.lower().endswith(ext) for ext in self.file_extensions)
-                ]
-
-                if not video_files:
-                    bt.logging.warning(f"No video files found in {zip_path}")
-                    return extracted_files
-
-                selected_videos = random.sample(
-                    video_files,
-                    min(self.num_samples_per_source, len(video_files))
-                )
-
-                for video in selected_videos:
-                    try:
-                        filename = Path(video).name
-                        temp_path = zip_file.extract(video, path=self.cache_dir)
-                        target_path = Path(self.cache_dir) / '_'.join(
-                            [zip_path.name.split('.zip')[0], filename]
-                        )
-                        Path(temp_path).rename(target_path)
-                        extracted_files.append(target_path)
-                        bt.logging.info(f"Extracted {filename} from {zip_path}")
-                    except Exception as e:
-                        bt.logging.error(f"Error extracting {video}: {e}")
-        except Exception as e:
-            bt.logging.error(f"Error processing zip file {zip_path}: {e}")
-
+        for zip_file in zip_files:
+            extracted_files += extract_videos_from_zip(
+                str(zip_file),
+                self.cache_dir, 
+                self.num_samples_per_source)
         return extracted_files
 
     def sample(

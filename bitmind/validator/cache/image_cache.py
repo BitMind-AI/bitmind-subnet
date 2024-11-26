@@ -1,16 +1,15 @@
 import random
-from typing import Dict, List, Optional, Union
+from pathlib import Path
+from typing import Dict, List, Optional, Union, Any
 
 import bittensor as bt
 from PIL import Image
 
-from bitmind.utils.hf_utils import list_hf_files_recursive
+from bitmind.utils.hf_utils import list_hf_files
 from .base_cache import BaseCache
-from .utils import (
-    is_parquet_complete,
-    extract_images_from_parquet,
-    download_parquet_files
-)
+from .util import is_parquet_complete
+from .extract import extract_images_from_parquet
+from .download import download_files
 
 
 class ImageCache(BaseCache):
@@ -42,7 +41,6 @@ class ImageCache(BaseCache):
         super().__init__(
             cache_dir=cache_dir,
             datasets=datasets,
-            compressed_dir=cache_dir / 'sources',
             extracted_update_interval=image_update_interval,
             compressed_update_interval=parquet_update_interval,
             num_samples_per_source=num_images_per_source,
@@ -50,41 +48,35 @@ class ImageCache(BaseCache):
         )  
         self.metadata_columns = metadata_columns or []
                 
-    async def _clear_incomplete_sources(self) -> None:
+    def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted parquet files."""
         for path in self._get_compressed_files():
-            if path.suffix == '.parquet' and not await is_parquet_complete(path):
+            if path.suffix == '.parquet' and not is_parquet_complete(path):
                 try:
                     path.unlink()
                     bt.logging.warning(f"Removed incomplete parquet file {path}")
                 except Exception as e:
                     bt.logging.error(f"Error removing incomplete parquet {path}: {e}")
 
-    def _refresh_compressed_cache(self) -> None:
+    async def _refresh_compressed_cache(self, n_zips_per_source=5) -> None:
         """Download new parquet files from configured sources."""
         try:
             prior_files = list(self.compressed_dir.glob('*.parquet'))
 
             new_files = []
             for source in self.datasets:
-                remote_parquet_paths = list_hf_files(
-                    repo_id=source['path'],
-                    file_types='parquet',
-                    token=None)
-
-                new_files += download_parquet_files(
-                    np.random.choice(remote_parquet_paths, 5),
-                    self.compressed_dir
-                )
+                parquet_files = list_hf_files(repo_id=source['path'], extension='zip')
+                remote_parquet_paths = [
+                    f"https://huggingface.co/datasets/{source['path']}/resolve/main/{f}"
+                    for f in parquet_files
+                ]
+                bt.logging.info(f"Downloading {n_zips_per_source} from {source['path']}")
+                new_files += download_files(
+                    urls=np.random.choice(remote_parquet_paths, n_zips_per_source),
+                    destination=self.compressed_dir)
 
             if new_files:
                 bt.logging.info(f"{len(new_files)} new parquet files added")
-                bt.logging.info(f"Removing {len(prior_files)} previous files")
-                for file in prior_files:
-                    try:
-                        file.unlink()
-                    except Exception as e:
-                        bt.logging.error(f"Error removing file {file}: {e}")
             else:
                 bt.logging.error("No new parquet files were added")
 
@@ -130,38 +122,19 @@ class ImageCache(BaseCache):
         Returns:
             List of paths to extracted image files.
         """
-        extracted_files: List[Path] = []
         parquet_files = list(self.compressed_dir.glob('*.parquet'))
-
+        extracted_files = []
         if not parquet_files:
             bt.logging.warning(f"No parquet files found in {self.compressed_dir}")
             return extracted_files
 
         for parquet_file in parquet_files:
             try:
-                images_and_metadata = extract_images_from_parquet(
+                extracted_files += extract_images_from_parquet(
                     parquet_file,
                     self.num_samples_per_source,
                     self.metadata_columns
                 )
-
-                for idx, (image, metadata) in enumerate(images_and_metadata):
-                    try:
-                        image_filename = f"{parquet_file.stem}_{idx}.png"
-                        image_path = self.cache_dir / image_filename
-                        image.save(image_path)
-
-                        if metadata:
-                            self.metadata[str(image_path)] = metadata
-
-                        extracted_files.append(image_path)
-                        bt.logging.debug(f"Extracted image {idx} from {parquet_file.name}")
-
-                    except Exception as e:
-                        bt.logging.error(
-                            f"Error saving image {idx} from {parquet_file}: {e}"
-                        )
-
             except Exception as e:
                 bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
 
@@ -203,7 +176,7 @@ class ImageCache(BaseCache):
                 data = {
                     'image': image,
                     'path': str(image_path),
-                    'dataset': metadata.get('dataset', None)
+                    'dataset': metadata.get('dataset', None),
                     'index': metadata.get('index', None)
                 }
                 valid_samples.append(data)

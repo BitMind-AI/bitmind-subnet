@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import bittensor as bt
 
-from bitmind.validator.video_utils import get_most_recent_update_time
+from .util import get_most_recent_update_time, seconds_to_str
 
 
 class BaseCache(ABC):
@@ -41,7 +41,7 @@ class BaseCache(ABC):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True, parents=True)
         
-        self.compressed_dir = Path(compressed_dir) / 'sources'
+        self.compressed_dir = self.cache_dir / 'sources'
         self.compressed_dir.mkdir(exist_ok=True, parents=True)
 
         self.datasets = datasets
@@ -51,12 +51,6 @@ class BaseCache(ABC):
         self.num_samples_per_source = num_samples_per_source
         self.file_extensions = file_extensions
 
-        self.metadata_file = self.cache_dir / 'metadata.json'
-        self.metadata = {}
-        if self.metadata_file.exists():
-            with open(self.metadata_file, 'r') as f:
-                self.metadata = json.load(f)
-
         try:
             self.loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -64,20 +58,24 @@ class BaseCache(ABC):
             
         # Initialize caches, blocking to ensure data are available for validator
         bt.logging.info(f"Setting up cache at {cache_dir}")
-        await self._clear_incomplete_sources()
-        
+        self._clear_incomplete_sources()
+
         if self._compressed_cache_empty():
-            self._refresh_compressed_cache()
-            
+            bt.logging.info(f"Compressed cache empty; populating")
+            # grab 1 zip per source to get started, download more later
+            self._refresh_compressed_cache(n_zips_per_source=1)
+
         if self._extracted_cache_empty():
+            bt.logging.info(f"Extracted cache empty; populating")
             self._refresh_extracted_cache()
             
         # Start background tasks
-        self._extracted_updater_task = self.loop.create_task(
-            self._run_extracted_updater()
-        )
+        bt.logging.info(f"Starting background tasks")
         self._compressed_updater_task = self.loop.create_task(
             self._run_compressed_updater()
+        )
+        self._extracted_updater_task = self.loop.create_task(
+            self._run_extracted_updater()
         )
 
     def _get_cached_files(self) -> List[Path]:
@@ -112,7 +110,7 @@ class BaseCache(ABC):
                     bt.logging.info("Extracted cache refresh complete.")
 
                 sleep_time = max(0, self.extracted_update_interval - time_elapsed)
-                bt.logging.info(f"Sleeping for {self._seconds_to_str(sleep_time)}")
+                bt.logging.info(f"Sleeping for {seconds_to_str(sleep_time)}")
                 await asyncio.sleep(sleep_time)
             except Exception as e:
                 bt.logging.error(f"Error in extracted cache update: {e}")
@@ -122,24 +120,24 @@ class BaseCache(ABC):
         """Asynchronously refresh compressed files according to update interval."""
         while True:
             try:
-                await self._clear_incomplete_sources()
-                last_update = self._get_most_recent_update_time(self.compressed_dir)
+                self._clear_incomplete_sources()
+                last_update = get_most_recent_update_time(self.compressed_dir)
                 time_elapsed = time.time() - last_update
 
                 if time_elapsed >= self.compressed_update_interval:
                     bt.logging.info("Running compressed cache refresh...")
-                    self._refresh_compressed_cache()
+                    self._refresh_compressed_cache(n_zips_per_source=1)
                     bt.logging.info("Compressed cache refresh complete.")
 
                 sleep_time = max(0, self.compressed_update_interval - time_elapsed)
-                bt.logging.info(f"Sleeping for {self._seconds_to_str(sleep_time)}")
+                bt.logging.info(f"Sleeping for {seconds_to_str(sleep_time)}")
                 await asyncio.sleep(sleep_time)
             except Exception as e:
                 bt.logging.error(f"Error in compressed cache update: {e}")
                 await asyncio.sleep(60)
 
     @abstractmethod
-    async def _clear_incomplete_sources(self) -> None:
+    def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted source files from cache."""
         pass
 
