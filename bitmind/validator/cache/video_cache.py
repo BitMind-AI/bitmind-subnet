@@ -14,7 +14,7 @@ from PIL import Image
 from .base_cache import BaseCache
 from .download import download_files, list_hf_files
 from .extract import extract_videos_from_zip
-from .util import FileType, is_zip_complete
+from .util import is_zip_complete
 from bitmind.validator.video_utils import get_video_duration
 
 
@@ -67,13 +67,10 @@ class VideoCache(BaseCache):
     def _refresh_compressed_cache(self, n_zips_per_source=5) -> None:
         """
         Refresh the compressed file cache with new downloads.
-        
-        Downloads new zip files from configured sources and removes old ones.
-        Optionally includes YouTube videos if enabled.
         """
         try:
             prior_files = list(self.compressed_dir.glob('*.zip'))
-            
+
             new_files: List[Path] = []
             for source in self.datasets:
                 zip_files = list_hf_files(repo_id=source['path'], extension='zip')
@@ -102,23 +99,12 @@ class VideoCache(BaseCache):
         Clears existing cached videos and extracts new ones from the compressed
         sources.
         """
-        try:
-            prior_cache_files = self._get_cached_files()
-            new_cache_files = self._extract_random_videos()
-            if new_cache_files:
-                bt.logging.info(f"{len(new_cache_files)} new videos added to cache")
-                bt.logging.info(f"Removing {len(prior_cache_files)} previous videos")
-                for file in prior_cache_files:
-                    try:
-                        file.unlink()
-                    except Exception as e:
-                        bt.logging.error(f"Error removing file {file}: {e}")
-            else:
-                bt.logging.error("No videos were added to cache")
-
-        except Exception as e:
-            bt.logging.error(f"Error during video refresh: {e}")
-            raise
+        prior_cache_files = self._get_cached_files()
+        new_cache_files = self._extract_random_videos()
+        if new_cache_files:
+            bt.logging.info(f"{len(new_cache_files)} new videos added to cache")
+        else:
+            bt.logging.error("No videos were added to cache")
 
     def _extract_random_videos(self) -> List[Path]:
         """
@@ -134,10 +120,14 @@ class VideoCache(BaseCache):
             return extracted_files
 
         for zip_file in zip_files:
-            extracted_files += extract_videos_from_zip(
-                str(zip_file),
-                self.cache_dir, 
-                self.num_samples_per_source)
+            try:
+                extracted_files += extract_videos_from_zip(
+                    zip_file,
+                    self.cache_dir, 
+                    self.num_samples_per_source)
+            except Exception as e:
+                bt.logging.error(f"Error processing zip file {zip_file}: {e}")
+
         return extracted_files
 
     def sample(
@@ -146,10 +136,10 @@ class VideoCache(BaseCache):
     ) -> Optional[Dict[str, Union[List[Image.Image], str, float]]]:
         """
         Sample random frames from a random video in the cache.
-        
+
         Args:
             num_seconds: Number of consecutive frames to sample
-            
+
         Returns:
             Dictionary containing:
                 - video: List of sampled video frames as PIL Images
@@ -172,29 +162,45 @@ class VideoCache(BaseCache):
         duration = get_video_duration(str(video_path))
         start_time = random.uniform(0, max(0, duration - num_seconds))
         frames: List[Image.Image] = []
-        
-        try:
-            for second in range(num_seconds):
-                out_bytes, _ = (
+
+        start_time = random.uniform(0, max(0, duration - num_seconds))
+        bt.logging.info(f'Extracting frames starting at {start_time:.2f}s')
+
+        for second in range(num_seconds):
+            timestamp = start_time + second
+            
+            try:
+                # extract frames
+                out_bytes, err = (
                     ffmpeg
-                    .input(str(video_path), ss=str(start_time + second))
+                    .input(str(video_path), ss=str(timestamp))
                     .filter('select', 'eq(n,0)')
-                    .output('pipe:', vframes=1, format='image2', vcodec='mjpeg')
+                    .output('pipe:', 
+                           vframes=1,
+                           format='image2',
+                           vcodec='mjpeg',
+                           loglevel='error',  # silence ffmpeg output
+                           **{'qscale:v': 2}  # Better quality JPEG
+                    )
                     .run(capture_stdout=True, capture_stderr=True)
                 )
 
+                if not out_bytes:
+                    bt.logging.error(f'No data received for frame at {timestamp}s')
+                    continue
+
                 try:
                     frame = Image.open(BytesIO(out_bytes))
+                    frame.load()  # Verify image can be loaded
                     frames.append(frame)
+                    bt.logging.debug(f'Successfully extracted frame at {timestamp}s')
                 except Exception as e:
-                    bt.logging.warning(
-                        f"Failed to decode frame at second {second}, stopping extraction"
-                    )
-                    break
+                    bt.logging.error(f'Failed to process frame at {timestamp}s: {e}')
+                    continue
 
-        except ffmpeg.Error as e:
-            bt.logging.warning(f"FFmpeg error at second {second}, stopping extraction")
-            bt.logging.warning(e.stderr.decode())
+            except ffmpeg.Error as e:
+                bt.logging.error(f'FFmpeg error at {timestamp}s: {e.stderr.decode()}')
+                continue
 
         return {
             'video': frames,

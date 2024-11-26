@@ -39,29 +39,28 @@ def get_integrity_check(file_type: FileType) -> Callable[[Path], bool]:
     raise ValueError(f"Unsupported file type: {file_type}")
 
 
-def is_zip_complete(zip_path: Union[str, Path]) -> bool:
+def is_zip_complete(zip_path: Union[str, Path], testzip=False) -> bool:
     """
-    Check if a zip file is complete and valid.
-    
     Args:
         zip_path: Path to zip file
-        
+        testzip: More thorough, less efficient
     Returns:
-        bool: True if zip is complete and valid, False otherwise
+        bool: True if zip is valid, False otherwise
     """
     try:
         with ZipFile(zip_path) as zf:
-            zf.testzip()
+            if testzip:
+                zf.testzip()
+            else:
+                zf.namelist()
             return True
     except (BadZipFile, Exception) as e:
-        bt.logging.error(f"Zip file {zip_path} is incomplete or corrupted: {e}")
+        bt.logging.error(f"Zip file {zip_path} is invalid: {e}")
         return False
         
 
 def is_parquet_complete(path: Path) -> bool:
-    """
-    Verify if a parquet file is complete and not corrupted.
-    
+    """    
     Args:
         path: Path to the parquet file
         

@@ -26,7 +26,7 @@ def extract_videos_from_zip(
 ) -> List[Tuple[str, str]]:
     """
     Extract random videos and their metadata from a zip file and save them to disk.
-
+q
     Args:
         zip_path: Path to the zip file
         dest_dir: Directory to save videos and metadata
@@ -41,7 +41,6 @@ def extract_videos_from_zip(
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     extracted_files = []
-
     try:
         with ZipFile(zip_path) as zip_file:
             video_files = [
@@ -52,10 +51,13 @@ def extract_videos_from_zip(
                 bt.logging.warning(f"No video files found in {zip_path}")
                 return extracted_files
 
+            bt.logging.info(f"{len(video_files)} video files found in {zip_path}")
             selected_videos = random.sample(
                 video_files,
                 min(num_videos, len(video_files))
             )
+
+            bt.logging.info(f"Extracting {len(selected_videos)} randomly sampled video files from {zip_path}")
             for idx, video in enumerate(selected_videos):
                 try:
                     zip_basename = zip_path.name.split('.zip')[0]
@@ -104,7 +106,7 @@ def extract_videos_from_zip(
                     logging.info(f"Extracted {original_filename} from {zip_path}")
 
                 except Exception as e:
-                    warnings.warn(f"Error extracting {video}: {e}")
+                    bt.logging.warning(f"Error extracting {video}: {e}")
                     if 'temp_path' in locals() and temp_path.exists():
                         temp_path.unlink()
                     continue
@@ -124,14 +126,14 @@ def extract_images_from_parquet(
 ) -> List[Tuple[str, str]]:
     """
     Extract random images and their metadata from a parquet file and save them to disk.
-    
+
     Args:
         parquet_path: Path to the parquet file
         dest_dir: Directory to save images and metadata
         num_images: Number of images to extract
         columns: Specific columns to include in metadata
         seed: Random seed for sampling
-        
+
     Returns:
         List of tuples containing (image_path, metadata_path)
     """
@@ -142,18 +144,23 @@ def extract_images_from_parquet(
     table = pq.read_table(parquet_path)
     df = table.to_pandas()
     sample_df = df.sample(n=min(num_images, len(df)), random_state=seed)
+    image_col = next((col for col in sample_df.columns if 'image' in col.lower()), None)
+    metadata_cols = [c for c in sample_df.columns if c != image_col]
 
     saved_files = []
     for idx, row in sample_df.iterrows():
         try:
-            if 'image_bytes' in row:
-                img_data = row['image_bytes']
-            elif 'image_base64' in row:
-                img_data = base64.b64decode(row['image_base64'])
-            else:
-                raise ValueError("No image data column found")
+            img_data = row[image_col]
+            if isinstance(img_data, dict):
+                key = next((k for k in img_data if 'bytes' in k.lower() or 'image' in k.lower()), None)
+                img_data = img_data[key]
 
-            img = Image.open(BytesIO(img_data))
+            try:
+                img = Image.open(BytesIO(img_data))
+            except Exception as e:
+                img_data = base64.b64decode(img_data)
+                img = Image.open(BytesIO(img_data))
+
             base_filename = f"image_{idx}"
             image_format = img.format.lower() if img.format else 'png'
             img_filename = f"{base_filename}.{image_format}"
@@ -168,23 +175,20 @@ def extract_images_from_parquet(
                 'image_mode': img.mode
             }
 
-            if columns:
-                for col in columns:
-                    if col in row and col not in ['image_bytes', 'image_base64']:
-                        # Convert any non-serializable types to strings
-                        try:
-                            json.dumps({col: row[col]})
-                            metadata[col] = row[col]
-                        except (TypeError, OverflowError):
-                            metadata[col] = str(row[col])
-
+            for col in metadata_cols:
+                # Convert any non-serializable types to strings
+                try:
+                    json.dumps({col: row[col]})
+                    metadata[col] = row[col]
+                except (TypeError, OverflowError):
+                    metadata[col] = str(row[col])
+    
             metadata_filename = f"{base_filename}.json"
             metadata_path = dest_dir / metadata_filename
-
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
-
-            saved_files.append((str(img_path), str(metadata_path)))
+    
+            saved_files.append(str(img_path))
 
         except Exception as e:
             warnings.warn(f"Failed to extract/save image {idx}: {e}")
