@@ -24,6 +24,7 @@ WANDB_ENTITY: str = 'bitmindai'
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
 VIDEO_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'video'
 IMAGE_CACHE_DIR:  Path = Path.home() / '.cache' / 'sn34' / 'image'
+SYNTH_CACHE_DIR:  Path = Path.home() / '.cache' / 'sn34' / 'synth'
 
 # Image datasets configuration
 IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {

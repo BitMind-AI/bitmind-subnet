@@ -23,16 +23,17 @@ import time
 
 from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
-from bitmind.validator.video_cache import VideoCache
+from bitmind.validator.cache import VideoCache, ImageCache
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.synthetic_data_generation import SyntheticDataGenerator
-from bitmind.dataset.image_dataset import ImageDataset
-from bitmind.validator import config import (
-    DATASETS,
+from bitmind.validator.config import (
+    IMAGE_DATASETS,
+    VIDEO_DATASETS,
     WANDB_PROJECT,
     WANDB_ENTITY,
     VIDEO_CACHE_DIR,
-    IMAGE_CACHE_DIR
+    IMAGE_CACHE_DIR,
+    SYNTH_CACHE_DIR
 )
 
 import bitmind
@@ -66,6 +67,7 @@ class Validator(BaseValidatorNeuron):
             use_random_t2vis_model=True,
             device=self.config.neuron.device,
             image_cache=self.image_cache,
+            output_dir=SYNTH_CACHE_DIR,
             run_async=True)
 
         bt.logging.info("init_wandb()")
