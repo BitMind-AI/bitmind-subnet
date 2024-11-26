@@ -22,9 +22,12 @@ WANDB_ENTITY: str = 'bitmindai'
 
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
-VIDEO_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'video'
-IMAGE_CACHE_DIR:  Path = Path.home() / '.cache' / 'sn34' / 'image'
-SYNTH_CACHE_DIR:  Path = Path.home() / '.cache' / 'sn34' / 'synth'
+REAL_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'real'
+REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
+REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
+SYNTH_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'synthetic'
+SYNTH_VIDEO_CACHE_DIR:  Path = SYNTH_CACHE_DIR / 'video'
+SYNTH_IMAGE_CACHE_DIR:  Path = SYNTH_CACHE_DIR / 'image'
 
 # Image datasets configuration
 IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
@@ -133,6 +136,13 @@ T2V_MODEL_NAMES: List[str] = list(T2V_MODELS.keys())
 # Combined model configurations
 T2VIS_MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **T2V_MODELS}
 T2VIS_MODEL_NAMES: List[str] = list(T2VIS_MODELS.keys())
+
+
+def get_modality(model_name):
+    if model_name in T2V_MODEL_NAMES:
+        return 'video'
+    elif model_name in T2I_MODEL_NAMES:
+        return 'image'
 
 
 def select_random_t2vis_model(modality: Optional[str] = None) -> str:

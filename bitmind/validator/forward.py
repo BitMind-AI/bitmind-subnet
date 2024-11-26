@@ -31,7 +31,7 @@ import time
 import os
 import cv2
 
-from bitmind.validator.config import VIDEO_CACHE_DIR, SYNTH_CACHE_DIR
+from bitmind.validator.config import SYNTH_IMAGE_CACHE_DIR, SYNTH_VIDEO_CACHE_DIR
 from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_synapse
@@ -124,7 +124,7 @@ async def forward(self):
             label = 1
             if modality == 'image':
                 file = sample_random_files(
-                    SYNTH_CACHE_DIR, extensions=['.png', '.jpg', '.jpeg'])
+                    SYNTH_IMAGE_CACHE_DIR, extensions=['.png', '.jpg', '.jpeg'])
                 image = Image.open(file)
                 if file is None:
                     bt.logging.warning("No synthetic images available")
@@ -133,7 +133,7 @@ async def forward(self):
 
             elif modality == 'video':
                 file = sample_random_files(
-                    SYNTH_CACHE_DIR, extensions=['.mp4'])
+                    SYNTH_VIDEO_CACHE_DIR, extensions=['.mp4'])
                 if file is None:
                     bt.logging.warning("No synthetic videos available")
                     continue

@@ -1,6 +1,6 @@
 httpx==0.27.0
 diffusers==0.30.0
-transformers==4.44.0
+transformers==4.46.3
 sentencepiece==0.2.0
 bitsandbytes==0.43.3
 imageio==2.35.1
@@ -9,3 +9,4 @@ moviepy==1.0.3
 av==13.1.0
 yt-dlp==2024.11.4
 ffmpeg-python==0.2.0
+moviepy==1.0.3

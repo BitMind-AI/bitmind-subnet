@@ -26,7 +26,8 @@ class BaseCache(ABC):
         extracted_update_interval: int,
         compressed_update_interval: int,
         num_samples_per_source: int,
-        file_extensions: List[str]
+        file_extensions: List[str],
+        run_updater: bool
     ) -> None:
         """
         Initialize the base cache infrastructure.
@@ -51,33 +52,34 @@ class BaseCache(ABC):
         self.num_samples_per_source = num_samples_per_source
         self.file_extensions = file_extensions
 
-        try:
-            self.loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self.loop = asyncio.get_event_loop()
-            
-        # Initialize caches, blocking to ensure data are available for validator
-        bt.logging.info(f"Setting up cache at {self.cache_dir}")
-        bt.logging.info(f"Clearing incomplete sources in {self.compressed_dir}")
-        self._clear_incomplete_sources()
+        if run_updater:
+            try:
+                self.loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self.loop = asyncio.get_event_loop()
 
-        if self._compressed_cache_empty():
-            bt.logging.info(f"Compressed cache {self.compressed_dir} empty; populating")
-            # grab 1 zip per source to get started, download more later
-            self._refresh_compressed_cache(n_zips_per_source=1)
+            # Initialize caches, blocking to ensure data are available for validator
+            bt.logging.info(f"Setting up cache at {self.cache_dir}")
+            bt.logging.info(f"Clearing incomplete sources in {self.compressed_dir}")
+            self._clear_incomplete_sources()
 
-        if self._extracted_cache_empty():
-            bt.logging.info(f"Extracted cache {self.cache_dir} empty; populating")
-            self._refresh_extracted_cache()
-            
-        # Start background tasks
-        bt.logging.info(f"Starting background tasks")
-        self._compressed_updater_task = self.loop.create_task(
-            self._run_compressed_updater()
-        )
-        self._extracted_updater_task = self.loop.create_task(
-            self._run_extracted_updater()
-        )
+            if self._compressed_cache_empty():
+                bt.logging.info(f"Compressed cache {self.compressed_dir} empty; populating")
+                # grab 1 zip per source to get started, download more later
+                self._refresh_compressed_cache(n_zips_per_source=1)
+
+            if self._extracted_cache_empty():
+                bt.logging.info(f"Extracted cache {self.cache_dir} empty; populating")
+                self._refresh_extracted_cache()
+
+            # Start background tasks
+            bt.logging.info(f"Starting background tasks")
+            self._compressed_updater_task = self.loop.create_task(
+                self._run_compressed_updater()
+            )
+            self._extracted_updater_task = self.loop.create_task(
+                self._run_extracted_updater()
+            )
 
     def _get_cached_files(self) -> List[Path]:
         """Get list of all extracted files in cache directory."""

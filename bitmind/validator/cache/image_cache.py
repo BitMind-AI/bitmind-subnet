@@ -28,7 +28,8 @@ class ImageCache(BaseCache):
         datasets: dict,
         parquet_update_interval: int = 24,
         image_update_interval: int = 2,
-        num_images_per_source: int = 100
+        num_images_per_source: int = 100,
+        run_updater: bool = True
     ) -> None:
         """        
         Args:
@@ -43,7 +44,8 @@ class ImageCache(BaseCache):
             extracted_update_interval=image_update_interval,
             compressed_update_interval=parquet_update_interval,
             num_samples_per_source=num_images_per_source,
-            file_extensions=['.jpg', '.jpeg', '.png']
+            file_extensions=['.jpg', '.jpeg', '.png'],
+            run_updater=run_updater
         )  
                 
     def _clear_incomplete_sources(self) -> None:

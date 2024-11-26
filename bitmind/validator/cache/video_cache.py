@@ -33,7 +33,8 @@ class VideoCache(BaseCache):
         datasets: dict,
         video_update_interval: int = 2,
         zip_update_interval: int = 24,
-        num_videos_per_source: int = 10
+        num_videos_per_source: int = 10,
+        run_updater: bool = True
     ) -> None:
         """
         Initialize the VideoCache.
@@ -51,7 +52,8 @@ class VideoCache(BaseCache):
             extracted_update_interval=video_update_interval,
             compressed_update_interval=zip_update_interval,
             num_samples_per_source=num_videos_per_source,
-            file_extensions=['.mp4', '.avi', '.mov', '.mkv']
+            file_extensions=['.mp4', '.avi', '.mov', '.mkv'],
+            run_updater=run_updater
         )
 
     def _clear_incomplete_sources(self) -> None:
@@ -164,7 +166,7 @@ class VideoCache(BaseCache):
         frames: List[Image.Image] = []
 
         start_time = random.uniform(0, max(0, duration - num_seconds))
-        bt.logging.info(f'Extracting frames starting at {start_time:.2f}s')
+        bt.logging.info(f'Extracting frames starting atq {start_time:.2f}s')
 
         for second in range(num_seconds):
             timestamp = start_time + second

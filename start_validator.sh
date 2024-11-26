@@ -20,17 +20,27 @@ if ! huggingface-cli login --token $HUGGING_FACE_TOKEN; then
   exit 1
 fi
 
-# Check if the process is already running
+# Check if processes already running
 if pm2 list | grep -q "bitmind_validator"; then
   echo "Process 'bitmind_validator' is already running. Deleting it..."
   pm2 delete bitmind_validator
 fi
 
-echo "Verifying access to synthetic image generation models. This may take a few minutes."
-if ! python3 bitmind/validator/verify_models.py; then
-  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
-  exit 1
+if pm2 list | grep -q "bitmind_data_generator"; then
+  echo "Process 'bitmind_data_generator' is already running. Deleting it..."
+  pm2 delete bitmind_data_generator
 fi
+
+
+
+#echo "Verifying access to synthetic image generation models. This may take a few minutes."
+#if ! python3 bitmind/validator/verify_models.py; then
+#  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
+#  exit 1
+#fi
+echo "Starting SyntheticDataGenerator process"
+pm2 start bitmind/synthetic_data_generation/synthetic_data_generator.py --name bitmind_data_generator
+sleep 3
 
 # Start the process with arguments from environment variables
 pm2 start neurons/validator.py --name bitmind_validator -- \

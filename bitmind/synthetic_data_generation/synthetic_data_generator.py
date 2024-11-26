@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import logging
 import os
 import re
 import sys
@@ -16,18 +17,21 @@ from diffusers.utils import export_to_video
 from PIL import Image
 
 from bitmind.validator.config import (
+    HUGGINGFACE_CACHE_DIR,
+    REAL_IMAGE_CACHE_DIR,
+    SYNTH_CACHE_DIR,
     TEXT_MODERATION_MODEL,
     IMAGE_ANNOTATION_MODEL,
     T2I_MODELS,
     T2V_MODELS,
     T2VIS_MODELS,
     T2VIS_MODEL_NAMES,
+    TARGET_IMAGE_SIZE,
     select_random_t2vis_model,
-    TARGET_IMAGE_SIZE
+    get_modality
 )
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.image_annotation_generator import ImageAnnotationGenerator
-from bitmind.constants import HUGGINGFACE_CACHE_DIR
 from bitmind.validator.cache import ImageCache
 
 
@@ -70,9 +74,8 @@ class SyntheticDataGenerator:
         use_random_t2vis_model: bool = True,
         prompt_type: str = 'annotation',
         output_dir: Optional[Union[str, Path]] = None,
-        device: str = 'cuda',
-        run_async: bool = False,
-        image_cache: Optional[ImageCache] = None
+        image_cache: Optional[ImageCache] = None,
+        device: str = 'cuda'
     ) -> None:
         """
         Initialize the SyntheticDataGenerator.
@@ -83,7 +86,7 @@ class SyntheticDataGenerator:
             prompt_type: The type of prompt generation strategy.
             output_dir: Directory to write generated data.
             device: Device identifier.
-            run_async: Whether to run generation asynchronously.
+            run_as_daemon: Whether to run generation in the background.
             image_cache: Optional image cache instance.
 
         Raises:
@@ -121,51 +124,38 @@ class SyntheticDataGenerator:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.image_cache = image_cache
-        if run_async:
-            if not self.output_dir:
-                bt.logging.error("output_dir must be set (run_async==True)")
-                sys.exit(1)
-            if not self.image_cache:
-                bt.logging.error("output_dir must be set (run_async==True)")
-                sys.exit(1)
-            try:
-                self.loop = asyncio.get_running_loop()
-            except RuntimeError:
-                self.loop = asyncio.get_event_loop()
 
-            self._generator_task = self.loop.create_task(
-                self._generate_async()
-            )
-
-    async def _generate_async(self, batch_size: int = 5) -> None:
+    def batch_generate(self, batch_size: int = 5) -> None:
         """
         Asynchronously generate synthetic data in batches.
         
         Args:
             batch_size: Number of prompts to generate in each batch.
         """
-        while True:
-            prompts = []
-            for i in range(batch_size):
-                image = self.image_cache.sample()
-                prompts.append(self.generate_prompt(image=None, clear_gpu=i==batch_size-1))
+        prompts = []
+        bt.logging.info(f"Generating {batch_size} prompts")
+        for i in range(batch_size):
+            image_sample = self.image_cache.sample()[0]
+            bt.logging.info(f"Sampled {image_sample['path']} for captioning ({type(image_sample['image'])})")
+            prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
+            bt.logging.info(f"Caption generated: {prompts[-1]}")
 
-            for model_name in T2VIS_MODEL_NAMES:
-                for prompt in prompts:
-                    # Generate image/video from current model and prompt
-                    output = self.run_t2vis(prompt, t2vis_model_name=model_name)
-                    #self.clear_gpu()
+        for model_name in T2VIS_MODEL_NAMES:
+            modality = get_modality(model_name)
+            for i, prompt in enumerate(prompts):
+                bt.logging.info(f"Started generation {i}/{batch_size}| Model: {model_name} | Prompt: {prompt}")
 
-                    # Save data and metadata
-                    base_path = self.output_dir / str(output['time'])
-                    metadata = {k: v for k, v in output.items() if k != 'gen_output'}
-                    
-                    base_path.with_suffix('.json').write_text(json.dumps(metadata))
-                    
-                    if isinstance(output['gen_output'], Image.Image):
-                        output['gen_output'].save(base_path.with_suffix('.png'))
-                    else:
-                        export_to_video(output['gen_output'], str(base_path.with_suffix('.mp4')), fps=30)
+                # Generate image/video from current model and prompt
+                output = self.run_t2vis(prompt, t2vis_model_name=model_name)
+
+                base_path = self.output_dir / modality / str(output['time'])
+                metadata = {k: v for k, v in output.items() if k != 'gen_output'}
+                base_path.with_suffix('.json').write_text(json.dumps(metadata))
+
+                if isinstance(output['gen_output'], Image.Image):
+                    output['gen_output'].save(base_path.with_suffix('.png'))
+                else:
+                    export_to_video(output['gen_output'], str(base_path.with_suffix('.mp4')), fps=30)
 
     def generate(
         self,
@@ -191,7 +181,6 @@ class SyntheticDataGenerator:
         bt.logging.info("Generating synthetic data...")
         gen_data = self.run_t2vis(prompt, modality, t2vis_model_name)
         self.clear_gpu()
-
         return gen_data
 
     def generate_prompt(
@@ -363,3 +352,22 @@ class SyntheticDataGenerator:
             self.t2vis_model = None
             gc.collect()
             torch.cuda.empty_cache()
+
+
+if __name__ == '__main__':
+    image_cache = ImageCache(REAL_IMAGE_CACHE_DIR, datasets=None, run_updater=False)
+    sgd = SyntheticDataGenerator(
+        prompt_type='annotation',
+        use_random_t2vis_model=True,
+        device='cuda',
+        image_cache=image_cache,
+        output_dir=SYNTH_CACHE_DIR)
+    bt.logging.info("Starting standalone data generator service")
+    while True:
+        try:
+            sgd.batch_generate()
+            time.sleep(1)
+        except Exception as e:
+            bt.logging.error(f"Error in batch generation: {str(e)}")
+            time.sleep(5)
+
