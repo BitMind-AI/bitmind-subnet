@@ -1,3 +1,4 @@
+import asyncio
 import gc
 import os
 import re
@@ -119,8 +120,12 @@ class SyntheticDataGenerator:
         if self.output_dir:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        self.image_cache = image_cache
         if run_async:
             if not self.output_dir:
+                bt.logging.error("output_dir must be set (run_async==True)")
+                sys.exit(1)
+            if not self.image_cache:
                 bt.logging.error("output_dir must be set (run_async==True)")
                 sys.exit(1)
             try:
@@ -142,13 +147,14 @@ class SyntheticDataGenerator:
         while True:
             prompts = []
             for i in range(batch_size):
+                image = self.image_cache.sample()
                 prompts.append(self.generate_prompt(image=None, clear_gpu=i==batch_size-1))
 
             for model_name in T2VIS_MODEL_NAMES:
                 for prompt in prompts:
                     # Generate image/video from current model and prompt
                     output = self.run_t2vis(prompt, t2vis_model_name=model_name)
-                    self.clear_gpu()
+                    #self.clear_gpu()
 
                     # Save data and metadata
                     base_path = self.output_dir / str(output['time'])
@@ -164,7 +170,8 @@ class SyntheticDataGenerator:
     def generate(
         self,
         image: Optional[Image.Image] = None,
-        modality: str = 'image'
+        modality: str = 'image',
+        t2vis_model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on input parameters.
@@ -181,15 +188,8 @@ class SyntheticDataGenerator:
             NotImplementedError: If prompt type is not supported.
         """
         prompt = self.generate_prompt(image, clear_gpu=True)
-
-        if self.use_random_t2vis_model:
-            self.t2vis_model_name = select_random_t2vis_model(modality)
-
-        bt.logging.info(f"Loading {self.t2vis_model_name}")
-        self.load_t2vis_model()
-
         bt.logging.info("Generating synthetic data...")
-        gen_data = self.run_t2vis(prompt)
+        gen_data = self.run_t2vis(prompt, modality, t2vis_model_name)
         self.clear_gpu()
 
         return gen_data
@@ -217,8 +217,10 @@ class SyntheticDataGenerator:
     def run_t2vis(
         self,
         prompt: str,
+        modality: str,
+        t2vis_model_name: Optional[str] = None,        
         generate_at_target_size: bool = False,
-        t2vis_model_name: Optional[str] = None
+
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on a text prompt.
@@ -234,8 +236,8 @@ class SyntheticDataGenerator:
         Raises:
             RuntimeError: If generation fails.
         """
-        if t2vis_model_name is not None:
-            self.t2vis_model_name = t2vis_model_name
+        bt.logging.info(f"Loading {self.t2vis_model_name}")
+        self.load_t2vis_model()
 
         gen_args = T2VIS_MODELS[self.t2vis_model_name].get(
             'generate_args', {}).copy()
@@ -297,12 +299,19 @@ class SyntheticDataGenerator:
             'gen_time': gen_time
         }
 
-    def load_t2vis_model(self) -> None:
+    def load_t2vis_model(self, model_name: Optional[str] = None, modality: Optional[str] = None) -> None:
         """Load a Hugging Face text-to-image or text-to-video model to a specific GPU."""
-        pipeline_cls = T2VIS_MODELS[self.t2vis_model_name]['pipeline_cls']
-        pipeline_args = T2VIS_MODELS[self.t2vis_model_name]['from_pretrained_args']
+        if model_name is not None:
+            self.t2vis_model_name = model_name
+        elif self.use_random_t2vis_model or model_name == 'random':
+            model_name = select_random_t2vis_model(modality)
+            self.t2vis_model_name = model_name
+        
+        pipeline_cls = T2VIS_MODELS[model_name]['pipeline_cls']
+        pipeline_args = T2VIS_MODELS[model_name]['from_pretrained_args']
+
         self.t2vis_model = pipeline_cls.from_pretrained(
-            pipeline_args.get('base', self.t2vis_model_name),
+            pipeline_args.get('base', model_name),
             cache_dir=HUGGINGFACE_CACHE_DIR,
             **pipeline_args,
             add_watermarker=False
@@ -311,37 +320,37 @@ class SyntheticDataGenerator:
         self.t2vis_model.set_progress_bar_config(disable=True)
 
         # Load scheduler if specified
-        if 'scheduler' in T2VIS_MODELS[self.t2vis_model_name]:
-            sched_cls = T2VIS_MODELS[self.t2vis_model_name]['scheduler']['cls']
-            sched_args = T2VIS_MODELS[self.t2vis_model_name]['scheduler']['from_config_args']
+        if 'scheduler' in T2VIS_MODELS[model_name]:
+            sched_cls = T2VIS_MODELS[model_name]['scheduler']['cls']
+            sched_args = T2VIS_MODELS[model_name]['scheduler']['from_config_args']
             self.t2vis_model.scheduler = sched_cls.from_config(
                 self.t2vis_model.scheduler.config,
                 **sched_args
             )
 
         # Configure model optimizations
-        model_config = T2VIS_MODELS[self.t2vis_model_name]
+        model_config = T2VIS_MODELS[model_name]
         if model_config.get('enable_model_cpu_offload', False):
-            bt.logging.info(f"Enabling cpu offload for {self.t2vis_model_name}")
+            bt.logging.info(f"Enabling cpu offload for {model_name}")
             self.t2vis_model.enable_model_cpu_offload()
         if model_config.get('enable_sequential_cpu_offload', False):
-            bt.logging.info(f"Enabling sequential cpu offload for {self.t2vis_model_name}")
+            bt.logging.info(f"Enabling sequential cpu offload for {model_name}")
             self.t2vis_model.enable_sequential_cpu_offload()
         if model_config.get('vae_enable_slicing', False):
-            bt.logging.info(f"Enabling vae slicing for {self.t2vis_model_name}")
+            bt.logging.info(f"Enabling vae slicing for {model_name}")
             try:
                 self.t2vis_model.vae.enable_slicing()
             except Exception:
                 self.t2vis_model.enable_vae_slicing()
         if model_config.get('vae_enable_tiling', False):
-            bt.logging.info(f"Enabling vae tiling for {self.t2vis_model_name}")
+            bt.logging.info(f"Enabling vae tiling for {model_name}")
             try:
                 self.t2vis_model.vae.enable_tiling()
             except Exception:
                 self.t2vis_model.enable_vae_tiling()
 
         self.t2vis_model.to(self.device)
-        bt.logging.info(f"Loaded {self.t2vis_model_name} using {pipeline_cls.__name__}.")
+        bt.logging.info(f"Loaded {model_name} using {pipeline_cls.__name__}.")
 
     def clear_gpu(self) -> None:
         """Clear GPU memory by deleting models and running garbage collection."""

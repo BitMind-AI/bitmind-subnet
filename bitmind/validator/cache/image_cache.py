@@ -1,15 +1,16 @@
+import json
 import random
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 
 import bittensor as bt
+import numpy as np
 from PIL import Image
 
-from bitmind.utils.hf_utils import list_hf_files
 from .base_cache import BaseCache
-from .util import is_parquet_complete
+from .download import download_files, list_hf_files
 from .extract import extract_images_from_parquet
-from .download import download_files
+from .util import is_parquet_complete
 
 
 class ImageCache(BaseCache):
@@ -27,8 +28,7 @@ class ImageCache(BaseCache):
         datasets: dict,
         parquet_update_interval: int = 24,
         image_update_interval: int = 2,
-        num_images_per_source: int = 100,
-        metadata_columns: Optional[List[str]] = None,
+        num_images_per_source: int = 100
     ) -> None:
         """        
         Args:
@@ -36,7 +36,6 @@ class ImageCache(BaseCache):
             parquet_update_interval: Hours between parquet cache updates
             image_update_interval: Hours between image cache updates
             num_images_per_source: Number of images to extract per parquet
-            metadata_columns: Columns to preserve from parquet metadata
         """
         super().__init__(
             cache_dir=cache_dir,
@@ -46,7 +45,6 @@ class ImageCache(BaseCache):
             num_samples_per_source=num_images_per_source,
             file_extensions=['.jpg', '.jpeg', '.png']
         )  
-        self.metadata_columns = metadata_columns or []
                 
     def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted parquet files."""
@@ -58,14 +56,16 @@ class ImageCache(BaseCache):
                 except Exception as e:
                     bt.logging.error(f"Error removing incomplete parquet {path}: {e}")
 
-    async def _refresh_compressed_cache(self, n_zips_per_source=5) -> None:
-        """Download new parquet files from configured sources."""
+    def _refresh_compressed_cache(self, n_zips_per_source=5) -> None:
+        """
+        Download new parquet files from configured sources.
+        """
         try:
             prior_files = list(self.compressed_dir.glob('*.parquet'))
 
             new_files = []
             for source in self.datasets:
-                parquet_files = list_hf_files(repo_id=source['path'], extension='zip')
+                parquet_files = list_hf_files(repo_id=source['path'], extension='parquet')
                 remote_parquet_paths = [
                     f"https://huggingface.co/datasets/{source['path']}/resolve/main/{f}"
                     for f in parquet_files
@@ -73,7 +73,7 @@ class ImageCache(BaseCache):
                 bt.logging.info(f"Downloading {n_zips_per_source} from {source['path']}")
                 new_files += download_files(
                     urls=np.random.choice(remote_parquet_paths, n_zips_per_source),
-                    destination=self.compressed_dir)
+                    output_dir=self.compressed_dir)
 
             if new_files:
                 bt.logging.info(f"{len(new_files)} new parquet files added")
@@ -91,29 +91,12 @@ class ImageCache(BaseCache):
         Clears existing cached images and extracts new ones from the compressed
         sources.
         """
-        try:
-            prior_cache_files = self._get_cached_files()
-            new_cache_files = self._extract_random_images()
-
-            if new_cache_files:
-                bt.logging.info(f"{len(new_cache_files)} new images added to cache")
-                bt.logging.info(f"Removing {len(prior_cache_files)} previous images")
-                for file in prior_cache_files:
-                    try:
-                        file.unlink()
-                        if str(file) in self.metadata:
-                            del self.metadata[str(file)]
-                    except Exception as e:
-                        bt.logging.error(f"Error removing file {file}: {e}")
-
-                with open(self.metadata_file, 'w') as f:
-                    json.dump(self.metadata, f)
-            else:
-                bt.logging.error("No images were added to cache")
-
-        except Exception as e:
-            bt.logging.error(f"Error during image refresh: {e}")
-            raise
+        prior_cache_files = self._get_cached_files()
+        new_cache_files = self._extract_random_images()
+        if new_cache_files:
+            bt.logging.info(f"{len(new_cache_files)} new images added to cache")
+        else:
+            bt.logging.error("No images were added to cache")
 
     def _extract_random_images(self) -> List[Path]:
         """
@@ -123,20 +106,21 @@ class ImageCache(BaseCache):
             List of paths to extracted image files.
         """
         parquet_files = list(self.compressed_dir.glob('*.parquet'))
+        bt.logging.info('parquet files', parquet_files)
         extracted_files = []
         if not parquet_files:
             bt.logging.warning(f"No parquet files found in {self.compressed_dir}")
             return extracted_files
 
         for parquet_file in parquet_files:
-            try:
-                extracted_files += extract_images_from_parquet(
-                    parquet_file,
-                    self.num_samples_per_source,
-                    self.metadata_columns
-                )
-            except Exception as e:
-                bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
+            #try:
+            extracted_files += extract_images_from_parquet(
+                parquet_file,
+                self.cache_dir,
+                self.num_samples_per_source
+            )
+            #except Exception as e:
+            #    bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
 
         return extracted_files
 
@@ -172,7 +156,7 @@ class ImageCache(BaseCache):
 
             try:
                 image = Image.open(image_path)
-                metadata = self.metadata.get(str(image_path), {})
+                metadata = data = json.loads(image_path.with_suffix('.json').read_text())
                 data = {
                     'image': image,
                     'path': str(image_path),

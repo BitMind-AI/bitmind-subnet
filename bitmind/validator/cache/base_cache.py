@@ -57,16 +57,17 @@ class BaseCache(ABC):
             self.loop = asyncio.get_event_loop()
             
         # Initialize caches, blocking to ensure data are available for validator
-        bt.logging.info(f"Setting up cache at {cache_dir}")
+        bt.logging.info(f"Setting up cache at {self.cache_dir}")
+        bt.logging.info(f"Clearing incomplete sources in {self.compressed_dir}")
         self._clear_incomplete_sources()
 
         if self._compressed_cache_empty():
-            bt.logging.info(f"Compressed cache empty; populating")
+            bt.logging.info(f"Compressed cache {self.compressed_dir} empty; populating")
             # grab 1 zip per source to get started, download more later
             self._refresh_compressed_cache(n_zips_per_source=1)
 
         if self._extracted_cache_empty():
-            bt.logging.info(f"Extracted cache empty; populating")
+            bt.logging.info(f"Extracted cache {self.cache_dir} empty; populating")
             self._refresh_extracted_cache()
             
         # Start background tasks
