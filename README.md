@@ -1,20 +1,11 @@
 <p align="center">
   <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="150"/>
 </p>
-<h1 align="center">BitMind Subnet (Bittensor Subnet 34)</h1>
+<h1 align="center">BitMind Subnet (Bittensor Subnet 34) Deep Fake Detection</h1>
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 Welcome to the BitMind Subnet! This repository contains all the necessary information to get started, understand our subnet architecture, and contribute.
-
-## The BitMind Platform
-
-The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class developer experience for Bittensor miners. 
-
-⚡ **Access Compute**: We offer a wide variety of CPU and GPU options<br>
-⚡ **Develop in VSCode**: Develop in a feature-rich IDE (we support Jupyter too if you hate rich features)<br>
-⚡ **Fully Managed Devops:** No more tinkering with networking configuration - register and deploy your miner in just a few clicks <br>
-⚡ **Monitor Emissions:** View the emissions for all of your miners in our Miner Dashboard
 
 
 ## Quick Links
@@ -53,6 +44,15 @@ The proliferation of generative AI models has significantly increased the produc
 
 **Subnet Architecture Diagram**
 ![Subnet Architecture](static/Subnet-Arch.png)
+
+## The BitMind Platform
+
+The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class developer experience for Bittensor miners. 
+
+⚡ **Access Compute**: We offer a wide variety of CPU and GPU options<br>
+⚡ **Develop in VSCode**: Develop in a feature-rich IDE (we support Jupyter too if you hate rich features)<br>
+⚡ **Fully Managed Devops:** No more tinkering with networking configuration - register and deploy your miner in just a few clicks <br>
+⚡ **Monitor Emissions:** View the emissions for all of your miners in our Miner Dashboard
 
 ## Community
 
