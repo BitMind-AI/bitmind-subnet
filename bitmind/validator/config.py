@@ -4,6 +4,7 @@ from typing import Dict, List, Union, Optional, Any
 import numpy as np
 import torch
 from diffusers import (
+    StableDiffusionPipeline,    
     StableDiffusionXLPipeline,
     FluxPipeline,
     CogVideoXPipeline,
@@ -59,8 +60,6 @@ VIDEO_DATASETS = {
     ]
 }
 
-
-
 # Prompt generation model configurations
 IMAGE_ANNOTATION_MODEL: str = "Salesforce/blip2-opt-6.7b-coco"
 TEXT_MODERATION_MODEL: str = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
@@ -88,6 +87,35 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
         "from_pretrained_args": {
             "use_safetensors": True,
             "torch_dtype": torch.float16
+        }
+    },
+    "black-forest-labs/FLUX.1-dev": {
+        "pipeline_cls": FluxPipeline,
+        "from_pretrained_args": {
+            "use_safetensors": True,
+            "torch_dtype": torch.bfloat16,
+        },
+        "generate_args": {
+            "guidance_scale": 2,
+            "num_inference_steps": {"min": 50, "max": 125},
+            "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
+            "height": [512, 768],
+            "width": [512, 768]
+        },
+        "enable_model_cpu_offload": False
+    },
+    "prompthero/openjourney-v4" : {
+        "pipeline_cls": StableDiffusionPipeline,
+        "from_pretrained_args": {
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+        }
+    },
+    "cagliostrolab/animagine-xl-3.1": {
+        "pipeline_cls": StableDiffusionXLPipeline,
+        "from_pretrained_args": {
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
         }
     }
 }
