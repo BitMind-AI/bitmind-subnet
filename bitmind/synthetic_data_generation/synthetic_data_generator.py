@@ -373,12 +373,21 @@ class SyntheticDataGenerator:
 
 if __name__ == '__main__':
     image_cache = ImageCache(REAL_IMAGE_CACHE_DIR, datasets=None, run_updater=False)
+    while True:
+        if image_cache._extracted_cache_empty():
+            bt.logging.info("SyntheticDataGenerator waiting for real image cache to populate")
+            time.sleep(5)
+            continue
+        bt.logging.info("Image cache populated!")
+        break
+
     sgd = SyntheticDataGenerator(
         prompt_type='annotation',
         use_random_t2vis_model=True,
         device='cuda',
         image_cache=image_cache,
         output_dir=SYNTH_CACHE_DIR)
+
     bt.logging.info("Starting standalone data generator service")
     while True:
         #try:

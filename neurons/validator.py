@@ -58,10 +58,11 @@ class Validator(BaseValidatorNeuron):
         self.load_state()
 
         self.last_responding_miner_uids = []
-        self.validator_proxy = None#ValidatorProxy(self)
+        self.validator_proxy = ValidatorProxy(self)
 
-        self.video_cache = VideoCache(REAL_VIDEO_CACHE_DIR, VIDEO_DATASETS['real'])
         self.image_cache = ImageCache(REAL_IMAGE_CACHE_DIR, IMAGE_DATASETS['real'])
+        self.video_cache = VideoCache(REAL_VIDEO_CACHE_DIR, VIDEO_DATASETS['real'])
+
         bt.logging.info("init_wandb()")
         self.init_wandb()
 
