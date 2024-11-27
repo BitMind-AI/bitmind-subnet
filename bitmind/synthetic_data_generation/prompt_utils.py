@@ -36,5 +36,4 @@ def truncate_prompt_if_too_long(prompt: str, model):
     truncated_prompt = tokenizer.decode(token_ids=tokens['input_ids'][:max_token_len-1],
                                         skip_special_tokens=True)
     tokens = tokenizer(truncated_prompt)
-    bt.logging.info("Truncated prompt to abide by token limit.")
     return truncated_prompt
