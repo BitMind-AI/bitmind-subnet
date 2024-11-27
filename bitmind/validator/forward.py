@@ -117,7 +117,7 @@ async def forward(self):
                 bt.logging.info(f"sampled {clip_length}s of video from {challenge_data['path']}")
 
             elif modality == 'image':
-                sample = self.image_cache.sample()
+                sample = self.image_cache.sample()[0]
                 challenge_data.update({k: v for k, v in sample.items() if k not in ('image')})
         else:
             label = 1

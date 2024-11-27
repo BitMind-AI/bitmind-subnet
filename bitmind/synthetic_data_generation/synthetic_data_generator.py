@@ -258,13 +258,17 @@ class SyntheticDataGenerator:
                 prompt,
                 self.t2vis_model
             )
-            start_time = time.time()
+
+            torch_dtype =  T2VIS_MODELS[self.t2vis_model_name].get(
+                'from_pretrained_args', {}).get('torch_dtype', torch.bfloat16)
 
             bt.logging.info("Generating media from prompt")
-            gen_output = self.t2vis_model(
-                prompt=truncated_prompt,
-                **gen_args
-            )
+            start_time = time.time()
+            with torch.autocast(self.device, torch_dtype, cache_enabled=False):
+                gen_output = self.t2vis_model(
+                    prompt=truncated_prompt,
+                    **gen_args
+                )
             gen_time = time.time() - start_time
 
         except Exception as e:
