@@ -18,15 +18,16 @@
 # DEALINGS IN THE SOFTWARE.
 
 from typing import List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from torchvision import transforms
 from io import BytesIO
 from PIL import Image
 import bittensor as bt
-import pydantic
 import base64
 import torch
 import zlib
+
+from bitmind.utils.image_transforms import base_transforms
 
 # ---- miner ----
 # Example usage:
@@ -161,3 +162,62 @@ class VideoSynapse(bt.Synapse):
         prediction probabilities
         """
         return self.prediction
+
+
+def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
+    """
+    V1 of a function for decoding a VideoSynapse object back into a list of torch tensors.
+
+    Args:
+        synapse: VideoSynapse object containing the encoded video data
+
+    Returns:
+        List of torch tensors, each representing a frame from the video
+    """
+    compressed_data = base64.b85decode(synapse.video.encode('utf-8'))
+    combined_bytes = zlib.decompress(compressed_data)
+
+    # Split the combined bytes into individual JPEG files
+    # Look for JPEG markers: FF D8 (start) and FF D9 (end)
+    frames = []
+    current_pos = 0
+    data_length = len(combined_bytes)
+
+    while current_pos < data_length:
+        # Find start of JPEG (FF D8)
+        while current_pos < data_length - 1:
+            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD8:
+                break
+            current_pos += 1
+
+        if current_pos >= data_length - 1:
+            break
+
+        start_pos = current_pos
+
+        # Find end of JPEG (FF D9)
+        while current_pos < data_length - 1:
+            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD9:
+                current_pos += 2
+                break
+            current_pos += 1
+
+        if current_pos > start_pos:
+            # Extract the JPEG data
+            jpeg_data = combined_bytes[start_pos:current_pos]
+            try:
+                # Convert to PIL Image
+                img = Image.open(BytesIO(jpeg_data))
+                # Convert to numpy array
+                frames.append(img)
+            except Exception as e:
+                print(f"Error processing frame: {e}")
+                continue
+
+    frames = frames[:32]  # temp
+    bt.logging.info('transforming inputs')
+    frames = base_transforms(frames)
+
+    frames = torch.stack(frames, dim=0)
+    frames = frames.unsqueeze(0)
+    return frames
