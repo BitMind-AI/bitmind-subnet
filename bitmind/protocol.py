@@ -24,6 +24,7 @@ from io import BytesIO
 from PIL import Image
 import bittensor as bt
 import base64
+import pydantic
 import torch
 import zlib
 
