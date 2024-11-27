@@ -143,7 +143,7 @@ class SyntheticDataGenerator:
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
 
-        for model_name in T2I_MODEL_NAMES:
+        for model_name in T2VIS_MODEL_NAMES:
             modality = get_modality(model_name)
             for i, prompt in enumerate(prompts):
                 bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
