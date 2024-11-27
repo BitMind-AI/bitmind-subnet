@@ -304,13 +304,17 @@ class TensorCLAHE:
 
 
 class ComposeWithParams:
-    """Compose multiple transforms with parameter tracking."""
-    
     def __init__(self, transforms):
         self.transforms = transforms
         self.params = {}
 
-    def __call__(self, img):
+    def __call__(self, input_data):
+        transform_params = {
+            RandomResizedCropWithParams: 'RandomResizedCrop',
+            RandomHorizontalFlipWithParams: 'RandomHorizontalFlip',
+            RandomVerticalFlipWithParams: 'RandomVerticalFlip',
+            RandomRotationWithParams: 'RandomRotation'
+        }
         output_data = []
         list_input = True
         if not isinstance(input_data, list):
