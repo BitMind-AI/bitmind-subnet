@@ -159,7 +159,7 @@ class SyntheticDataGenerator:
                     output['gen_output'].save(base_path.with_suffix('.png'))
                 else:
                     export_to_video(
-                        np.array(output['gen_output']), 
+                        np.array(output['gen_output'].frames[0]), 
                         str(base_path.with_suffix('.mp4')), 
                         fps=30
                     )
@@ -232,7 +232,7 @@ class SyntheticDataGenerator:
         Raises:
             RuntimeError: If generation fails.
         """
-        self.load_t2vis_model()
+        self.load_t2vis_model(t2vis_model_name)
 
         bt.logging.info("Preparing generation arguments")
         gen_args = T2VIS_MODELS[self.t2vis_model_name].get(
