@@ -118,9 +118,7 @@ async def forward(self):
 
             elif modality == 'image':
                 sample = self.image_cache.sample()
-                challenge_data['dataset'] = sample['dataset']
-                challenge_data['image_index'] = sample['index']
-
+                challenge_data.update({k: v for k, v in sample.items() if k not in ('image')})
         else:
             label = 1
             if modality == 'image':
