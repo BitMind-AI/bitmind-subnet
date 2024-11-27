@@ -30,7 +30,7 @@ import numpy as np
 
 from base_miner import DETECTOR_REGISTRY
 from bitmind.base.miner import BaseMinerNeuron
-from bitmind.protocol import ImageSynapse, VideoSynapse
+from bitmind.protocol import ImageSynapse, VideoSynapse, decode_video_synapse
 from bitmind.utils.config import get_device
 from bitmind.utils.image_transforms import base_transforms
 
@@ -41,64 +41,6 @@ from io import BytesIO
 from PIL import Image
 import numpy as np
 from typing import List
-
-def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
-    """
-    Decodes a VideoSynapse object back into a list of torch tensors.
-
-    Args:
-        synapse: VideoSynapse object containing the encoded video data
-
-    Returns:
-        List of torch tensors, each representing a frame from the video
-    """
-    compressed_data = base64.b85decode(synapse.video.encode('utf-8'))
-    combined_bytes = zlib.decompress(compressed_data)
-
-    # Split the combined bytes into individual JPEG files
-    # Look for JPEG markers: FF D8 (start) and FF D9 (end)
-    frames = []
-    current_pos = 0
-    data_length = len(combined_bytes)
-
-    while current_pos < data_length:
-        # Find start of JPEG (FF D8)
-        while current_pos < data_length - 1:
-            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD8:
-                break
-            current_pos += 1
-
-        if current_pos >= data_length - 1:
-            break
-
-        start_pos = current_pos
-
-        # Find end of JPEG (FF D9)
-        while current_pos < data_length - 1:
-            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD9:
-                current_pos += 2
-                break
-            current_pos += 1
-
-        if current_pos > start_pos:
-            # Extract the JPEG data
-            jpeg_data = combined_bytes[start_pos:current_pos]
-            try:
-                # Convert to PIL Image
-                img = Image.open(BytesIO(jpeg_data))
-                # Convert to numpy array
-                frames.append(img)
-            except Exception as e:
-                print(f"Error processing frame: {e}")
-                continue
-
-    frames = frames[:32]  # temp
-    bt.logging.info('transforming inputs')
-    frames = base_transforms(frames)
-
-    frames = torch.stack(frames, dim=0)
-    frames = frames.unsqueeze(0)
-    return frames
 
 
 class Miner(BaseMinerNeuron):
