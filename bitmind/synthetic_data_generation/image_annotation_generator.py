@@ -16,7 +16,7 @@ from transformers.utils.logging import disable_progress_bar
 
 from bitmind.dataset.image_dataset import ImageDataset
 from bitmind.synthetic_data_generation import image_utils
-from bitmind.constants import HUGGINGFACE_CACHE_DIR
+from bitmind.validator.config import HUGGINGFACE_CACHE_DIR
 
 disable_progress_bar()
 

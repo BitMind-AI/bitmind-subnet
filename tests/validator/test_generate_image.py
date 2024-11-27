@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticImageGenerator
-from bitmind.constants import DIFFUSER_NAMES
+from bitmind.synthetic_data_generation.synthetic_data_generator import SyntheticDataGenerator
+from bitmind.validator.config import T2I_MODEL_NAMES
 from PIL import Image
 
 
@@ -38,7 +38,7 @@ def mock_image_annotation_generator():
         yield instance
 
 
-@pytest.mark.parametrize("diffuser_name", DIFFUSER_NAMES)
+@pytest.mark.parametrize("diffuser_name", T2I_MODEL_NAMES)
 def test_generate_image_with_diffusers(mock_diffuser, mock_image_annotation_generator, diffuser_name):
     """
     Test the image generation process using different diffusion models.
@@ -64,7 +64,7 @@ def test_generate_image_with_diffusers(mock_diffuser, mock_image_annotation_gene
     - Validating the image generation process
     - Integration testing with different diffuser models
     """
-    generator = SyntheticImageGenerator(
+    generator = SyntheticDataGenerator(
         prompt_type='annotation',
         use_random_diffuser=False,
         diffuser_name=diffuser_name
