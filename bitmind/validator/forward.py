@@ -98,7 +98,9 @@ async def forward(self):
 
     """
     while True:
-        challenge_data = {}
+        challenge_data = {}  # for bookkeeping
+        sample = {}          # for querying miners
+
         modality = 'video' if np.random.rand() > 0.5 else 'image'
         challenge_data['modality'] = modality
 
@@ -116,7 +118,6 @@ async def forward(self):
 
             elif modality == 'image':
                 sample = self.image_cache.sample()
-                challenge_data[modality] = sample[modality]
                 challenge_data['dataset'] = sample['dataset']
                 challenge_data['image_index'] = sample['index']
 
@@ -124,20 +125,24 @@ async def forward(self):
             label = 1
             if modality == 'image':
                 file = sample_random_files(
-                    SYNTH_IMAGE_CACHE_DIR, extensions=['.png', '.jpg', '.jpeg'])
-                image = Image.open(file)
+                    SYNTH_IMAGE_CACHE_DIR,
+                   extensions=['.png', '.jpg', '.jpeg'])
                 if file is None:
                     bt.logging.warning("No synthetic images available")
                     continue
+                image = Image.open(file)
+                sample['image'] = image
                 challenge_data['image'] = wandb.Image(image)
 
             elif modality == 'video':
                 file = sample_random_files(
-                    SYNTH_VIDEO_CACHE_DIR, extensions=['.mp4'])
+                    SYNTH_VIDEO_CACHE_DIR,
+                   extensions=['.mp4'])
                 if file is None:
                     bt.logging.warning("No synthetic videos available")
                     continue
                 video = video_to_pil(file)
+                sample['video'] = video
                 print(f'{len(video)} frames')
 
                 #np_video = np.stack([np.array(img) for img in gen_output], axis=0)
