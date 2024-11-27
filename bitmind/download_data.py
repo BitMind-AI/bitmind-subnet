@@ -11,7 +11,7 @@ import subprocess
 import glob
 import requests
 
-from bitmind.constants import IMAGE_DATASET_META, VIDEO_DATASET_META, HUGGINGFACE_CACHE_DIR
+from base_miner.constants import IMAGE_DATASET_META, VIDEO_DATASET_META, HUGGINGFACE_CACHE_DIR
 
 datasets.logging.set_verbosity_warning()
 datasets.disable_progress_bar()
@@ -113,9 +113,9 @@ def download_dataset(
                                        download_mode=download_mode,
                                        trust_remote_code=True)
 
-            if local_data_path is not None:
-                print(f"Downloading media for {dataset_path} to {local_data_path}")
-                download_media(dataset_path, local_data_path)
+            #if local_data_path is not None:
+            #   print(f"Downloading media for {dataset_path} to {local_data_path}")
+            #   download_media(dataset_path, local_data_path)
 
             break
         except Exception as e:
@@ -166,13 +166,6 @@ def fix_permissions(path):
         print(f"Fixed permissions for {path}")
     except subprocess.CalledProcessError as e:
         print(f"Failed to fix permissions for {path}: {e}")
-
-
-def download_media(dataset_path, local_data_path):
-    if dataset_path == 'nkp37/OpenVid-1M':
-        download_openvid1m_files(local_data_path)
-    else:
-        raise NotImplementedError
 
 
 if __name__ == '__main__':

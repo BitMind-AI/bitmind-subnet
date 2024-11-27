@@ -1,6 +1,6 @@
 import os
 from bitmind.synthetic_data_generation import SyntheticDataGenerator
-from bitmind.constants import MODEL_NAMES, IMAGE_ANNOTATION_MODEL, TEXT_MODERATION_MODEL
+from bitmind.validator.config import T2VIS_MODEL_NAMES as MODEL_NAMES, IMAGE_ANNOTATION_MODEL, TEXT_MODERATION_MODEL
 import bittensor as bt
 
 

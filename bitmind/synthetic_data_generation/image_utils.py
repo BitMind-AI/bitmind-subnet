@@ -1,7 +1,8 @@
 import PIL
 import os
 import json
-from bitmind.constants import TARGET_IMAGE_SIZE
+from bitmind.validator.config import TARGET_IMAGE_SIZE
+
 
 def resize_image(image: PIL.Image.Image, max_width: int, max_height: int) -> PIL.Image.Image:
     """Resize the image to fit within specified dimensions while maintaining aspect ratio."""
@@ -19,6 +20,7 @@ def resize_image(image: PIL.Image.Image, max_width: int, max_height: int) -> PIL
     # Resize the image using the high-quality LANCZOS filter
     resized_image = image.resize((new_width, new_height), PIL.Image.LANCZOS)
     return resized_image
+
 
 def resize_images_in_directory(directory, target_width=TARGET_IMAGE_SIZE[0], target_height=TARGET_IMAGE_SIZE[1]):
     """

@@ -36,7 +36,7 @@ from bitmind.utils.uids import get_random_uids
 from bitmind.utils.data import sample_dataset_index_name
 from bitmind.protocol import prepare_synapse
 from bitmind.validator.reward import get_rewards
-from bitmind.utils.image_transforms import random_aug_transforms, base_transforms
+from bitmind.utils.image_transforms import apply_augmentation_by_level
 
 
 def video_to_pil(video_path: str | Path) -> list[Image.Image]:
@@ -147,12 +147,10 @@ async def forward(self):
         break
 
     input_data = sample[modality]  # extract video or image
-    if np.random.rand() > 0.25:
-        input_data = random_aug_transforms(input_data)
-        data_aug_params = random_aug_transforms.params
-    else:
-        input_data = base_transforms(input_data)
-        data_aug_params = {}
+    try:
+        image, level, data_aug_params = apply_augmentation_by_level(input_data)
+    except Exception as e:
+        bt.logging.error(f"Unable to applay augmentations: {e}")
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
@@ -185,6 +183,7 @@ async def forward(self):
 
     # update logging data
     challenge_data['data_aug_params'] = data_aug_params
+    challenge_data['data_aug_level'] = level
     challenge_data['label'] = label
     challenge_data['miner_uids'] = list(miner_uids)
     challenge_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])

@@ -34,21 +34,21 @@ from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
-from optimizor.SAM import SAM
-from optimizor.LinearLR import LinearDecayLR
+from .optimizor.SAM import SAM
+from .optimizor.LinearLR import LinearDecayLR
 
-from trainer.trainer import Trainer
-from detectors import DETECTOR
-from metrics.utils import parse_metric_for_print
-from logger import create_logger, RankFilter
+from .trainer.trainer import Trainer
+from .detectors import DETECTOR
+from .metrics.utils import parse_metric_for_print
+from .logger import create_logger, RankFilter
 
 from huggingface_hub import hf_hub_download
 
 # BitMind imports (not from original Deepfake Bench repo)
 from bitmind.utils.data import load_and_split_datasets, create_real_fake_datasets
-from bitmind.image_transforms import base_transforms, random_aug_transforms, ucf_transforms
-from bitmind.constants import DATASET_META, FACE_TRAINING_DATASET_META
-from config.constants import (
+from bitmind.utils.image_transforms import base_transforms, random_aug_transforms, ucf_transforms
+from base_miner.constants import DATASET_META, FACE_DATASET_META
+from .config.constants import (
     CONFIG_PATH,
     WEIGHTS_DIR,
     HF_REPO,
@@ -395,7 +395,7 @@ def main():
         'test': ucf_transforms
     }
 
-    config['dataset_meta'] = FACE_TRAINING_DATASET_META if args.faces_only else DATASET_META
+    config['dataset_meta'] = FACE_DATASET_META if args.faces_only else DATASET_META
     dataset_names = [item["path"] for datasets in config['dataset_meta'].values() for item in datasets]
     config['train_dataset'] = dataset_names
     config['save_ckpt'] = args.save_ckpt

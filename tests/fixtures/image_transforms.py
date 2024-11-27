@@ -1,9 +1,9 @@
 from functools import partial
 import torchvision.transforms as transforms
 
-from bitmind.constants import TARGET_IMAGE_SIZE
-from bitmind.image_transforms import (
-    CenterCrop,
+from bitmind.validator.config import TARGET_IMAGE_SIZE
+from bitmind.utils.image_transforms import (
+    center_crop,
     RandomResizedCropWithParams,
     RandomHorizontalFlipWithParams,
     RandomVerticalFlipWithParams,
@@ -16,7 +16,7 @@ from bitmind.image_transforms import (
 
 
 TRANSFORMS = [
-    CenterCrop,
+    center_crop,
     RandomHorizontalFlipWithParams,
     RandomVerticalFlipWithParams,
     partial(RandomRotationWithParams, degrees=20, interpolation=transforms.InterpolationMode.BILINEAR),

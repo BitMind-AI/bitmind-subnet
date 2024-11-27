@@ -1,6 +1,6 @@
 from tensorboardX import SummaryWriter
-from validate import validate
-from networks.trainer import Trainer
+from .validate import validate
+from .networks.trainer import Trainer
 from torch.utils.data import DataLoader
 import numpy as np
 import os
@@ -8,10 +8,10 @@ import time
 import random
 import torch
 
-from bitmind.constants import DATASET_META
-from bitmind.image_transforms import base_transforms, random_aug_transforms
+from base_miner.constants import DATASET_META
+from bitmind.utils.image_transforms import base_transforms, random_aug_transforms
 from bitmind.utils.data import load_and_split_datasets, create_real_fake_datasets
-from options import TrainOptions
+from .options import TrainOptions
 
 
 def seed_torch(seed=1029):

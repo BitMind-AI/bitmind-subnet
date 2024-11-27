@@ -13,7 +13,11 @@ sudo apt install -y unzip
 pip install -e .
 pip install -r requirements-validator.txt
 
-echo "# Default options:
+# Check if validator.env exists
+if [ -f "validator.env" ]; then
+    echo "File 'validator.env' already exists. Skipping creation."
+else
+    echo "# Default options:
 
 # Subtensor Network Configuration:
 NETUID=34                                      # Network User ID options: 34, 168
@@ -31,7 +35,10 @@ WALLET_HOTKEY=default
 # Validator Port Setting:
 VALIDATOR_AXON_PORT=8092
 VALIDATOR_PROXY_PORT=10913
+DEVICE=cuda
 
 # API Keys:
 WANDB_API_KEY=your_wandb_api_key_here
 HUGGING_FACE_TOKEN=your_hugging_face_token_here" > validator.env
+    echo "File 'validator.env' created."
+fi
