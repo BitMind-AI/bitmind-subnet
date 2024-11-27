@@ -92,8 +92,21 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())
 
+
 # Text-to-video model configurations
 T2V_MODELS: Dict[str, Dict[str, Any]] = {
+    "genmo/mochi-1-preview": {
+        "pipeline_cls": MochiPipeline,
+        "from_pretrained_args": {
+            "variant": "bf16", 
+            "torch_dtype": torch.bfloat16
+        }
+        "generate_args": {
+            "num_frames": 21  #84
+        },
+        "enable_model_cpu_offload": True,
+        "vae_enable_tiling": True
+    },
     'THUDM/CogVideoX-5b': {
         "pipeline_cls": CogVideoXPipeline,
         "from_pretrained_args": {
