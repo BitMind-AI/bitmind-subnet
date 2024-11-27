@@ -40,9 +40,9 @@ class UCFDetector(DeepfakeDetector):
     def load_train_config(self):
         destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
         if not destination_path.exists():
-            local_config_path = hf_hub_download(self.hf_repo, self.train_config, cache_dir=CONFIGS_DIR)
+            local_config_path = hf_hub_download(self.hf_repo, self.train_config, local_dir=CONFIGS_DIR)
             print(f"Downloaded {self.hf_repo}/{self.train_config} to {local_config_path}")
-            with local_config_path.open('r') as f:
+            with Path(local_config_path).open('r') as f:
                 return yaml.safe_load(f)
         else:
             print(f"Loaded local config from {destination_path}")

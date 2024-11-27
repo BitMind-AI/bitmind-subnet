@@ -155,9 +155,9 @@ class SyntheticDataGenerator:
                 metadata = {k: v for k, v in output.items() if k != 'gen_output'}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
-                if isinstance(output['gen_output'], Image.Image):
-                    output['gen_output'].save(base_path.with_suffix('.png'))
-                else:
+                if modality == 'image':
+                    output['gen_output'].images[0].save(base_path.with_suffix('.png'))
+                elif modality == 'video':
                     export_to_video(
                         np.array(output['gen_output'].frames[0]), 
                         str(base_path.with_suffix('.mp4')), 
