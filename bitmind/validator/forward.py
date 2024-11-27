@@ -148,9 +148,11 @@ async def forward(self):
 
     input_data = sample[modality]  # extract video or image
     try:
-        image, level, data_aug_params = apply_augmentation_by_level(input_data)
+       input_data, level, data_aug_params = apply_augmentation_by_level(input_data)
     except Exception as e:
-        bt.logging.error(f"Unable to applay augmentations: {e}")
+       level = -1
+       data_aug_params = {}
+       bt.logging.error(f"Unable to applay augmentations: {e}")
 
     bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
