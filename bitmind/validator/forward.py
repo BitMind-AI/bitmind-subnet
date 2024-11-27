@@ -99,7 +99,7 @@ async def forward(self):
     """
     while True:
         challenge_data = {}
-        modality = 'video' if np.random.rand() > 0.0 else 'image'
+        modality = 'video' if np.random.rand() > 0.5 else 'image'
         challenge_data['modality'] = modality
 
         miner_uids = get_random_uids(self, k=self.metagraph.n) # self.config.neuron.sample_size)
@@ -174,7 +174,7 @@ async def forward(self):
 
     # Logging image source (model for synthetic, dataset for real) and verification details
     source_name = challenge_data['model'] if 'model' in challenge_data else challenge_data['dataset']
-    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}')
+    bt.logging.info(f'{"real" if label == 0 else "fake"} {modality} | source: {source_name}')
 
     # Logging responses and rewards
     bt.logging.info(f"Received responses: {responses}")
