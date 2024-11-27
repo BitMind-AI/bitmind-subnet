@@ -61,7 +61,7 @@ class MockSyntheticDataGenerator:
             'id': i
         } for i in range(k)]
 
-    def load_diffuser(self, diffuser_name) -> None:
+    def load_diffuser(self, t2v_model_name) -> None:
         """
         loads a huggingface diffuser model.
         """
