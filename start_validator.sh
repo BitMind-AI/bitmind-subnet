@@ -5,8 +5,9 @@ set -a
 source validator.env
 set +a
 
-# Set VALIDATOR_PROXY_PORT with a default of 10913 if not already set
+# Set default values for environment variables
 : ${VALIDATOR_PROXY_PORT:=10913}
+: ${DEVICE:=cuda}
 
 # Login to Weights & Biases
 if ! wandb login $WANDB_API_KEY; then
