@@ -7,6 +7,7 @@ from diffusers import (
     StableDiffusionXLPipeline,
     FluxPipeline,
     CogVideoXPipeline,
+    MochiPipeline,
     AnimateDiffPipeline,
     EulerDiscreteScheduler
 )
@@ -100,7 +101,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
         "from_pretrained_args": {
             "variant": "bf16", 
             "torch_dtype": torch.bfloat16
-        }
+        },
         "generate_args": {
             "num_frames": 21  #84
         },
