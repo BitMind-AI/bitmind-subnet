@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import cv2
 
-from bitmind.validator.config import TARGET_IMAGE_SIZE
+TARGET_IMAGE_SIZE = (256, 256)
 
 
 def center_crop():

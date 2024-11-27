@@ -11,7 +11,7 @@ import subprocess
 import glob
 import requests
 
-from base_miner.constants import IMAGE_DATASET_META, VIDEO_DATASET_META, HUGGINGFACE_CACHE_DIR
+from base_miner.constants import DATASET_META,  HUGGINGFACE_CACHE_DIR
 
 datasets.logging.set_verbosity_warning()
 datasets.disable_progress_bar()
@@ -184,8 +184,8 @@ if __name__ == '__main__':
 
     if args.modality == 'image':
         dataset_meta = IMAGE_DATASET_META
-    elif args.modality == 'video':
-        dataset_meta = VIDEO_DATASET_META
+    #elif args.modality == 'video':
+    #    dataset_meta = VIDEO_DATASET_META
     
     for dataset_type in dataset_meta:
         for dataset in dataset_meta[dataset_type]:

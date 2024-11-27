@@ -1,3 +1,6 @@
+from pathlib import Path
+
+HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
 TARGET_IMAGE_SIZE = (256, 256)
 
 
