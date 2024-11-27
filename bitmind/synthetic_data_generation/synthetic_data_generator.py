@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import json
 import logging
 import os
 import re
@@ -25,6 +26,7 @@ from bitmind.validator.config import (
     T2I_MODELS,
     T2V_MODELS,
     T2VIS_MODELS,
+    T2I_MODEL_NAMES,
     T2VIS_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_t2vis_model,
@@ -121,7 +123,8 @@ class SyntheticDataGenerator:
 
         self.output_dir = Path(output_dir) if output_dir else None
         if self.output_dir:
-            self.output_dir.mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "video").mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "image").mkdir(parents=True, exist_ok=True)
 
         self.image_cache = image_cache
 
@@ -136,17 +139,17 @@ class SyntheticDataGenerator:
         bt.logging.info(f"Generating {batch_size} prompts")
         for i in range(batch_size):
             image_sample = self.image_cache.sample()[0]
-            bt.logging.info(f"Sampled {image_sample['path']} for captioning ({type(image_sample['image'])})")
+            bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
-            bt.logging.info(f"Caption generated: {prompts[-1]}")
+            bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
 
-        for model_name in T2VIS_MODEL_NAMES:
+        for model_name in T2I_MODEL_NAMES:
             modality = get_modality(model_name)
             for i, prompt in enumerate(prompts):
-                bt.logging.info(f"Started generation {i}/{batch_size}| Model: {model_name} | Prompt: {prompt}")
+                bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
 
                 # Generate image/video from current model and prompt
-                output = self.run_t2vis(prompt, t2vis_model_name=model_name)
+                output = self.run_t2vis(prompt, modality, t2vis_model_name=model_name)
 
                 base_path = self.output_dir / modality / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output'}
@@ -155,7 +158,11 @@ class SyntheticDataGenerator:
                 if isinstance(output['gen_output'], Image.Image):
                     output['gen_output'].save(base_path.with_suffix('.png'))
                 else:
-                    export_to_video(output['gen_output'], str(base_path.with_suffix('.mp4')), fps=30)
+                    export_to_video(
+                        np.array(output['gen_output']), 
+                        str(base_path.with_suffix('.mp4')), 
+                        fps=30
+                    )
 
     def generate(
         self,
@@ -225,9 +232,9 @@ class SyntheticDataGenerator:
         Raises:
             RuntimeError: If generation fails.
         """
-        bt.logging.info(f"Loading {self.t2vis_model_name}")
         self.load_t2vis_model()
 
+        bt.logging.info("Preparing generation arguments")
         gen_args = T2VIS_MODELS[self.t2vis_model_name].get(
             'generate_args', {}).copy()
         
@@ -252,6 +259,8 @@ class SyntheticDataGenerator:
                 self.t2vis_model
             )
             start_time = time.time()
+
+            bt.logging.info("Generating media from prompt")
             gen_output = self.t2vis_model(
                 prompt=truncated_prompt,
                 **gen_args
@@ -295,6 +304,8 @@ class SyntheticDataGenerator:
         elif self.use_random_t2vis_model or model_name == 'random':
             model_name = select_random_t2vis_model(modality)
             self.t2vis_model_name = model_name
+
+        bt.logging.info(f"Loading {self.t2vis_model_name}")
         
         pipeline_cls = T2VIS_MODELS[model_name]['pipeline_cls']
         pipeline_args = T2VIS_MODELS[model_name]['from_pretrained_args']
@@ -330,13 +341,19 @@ class SyntheticDataGenerator:
             try:
                 self.t2vis_model.vae.enable_slicing()
             except Exception:
-                self.t2vis_model.enable_vae_slicing()
+                try:
+                    self.t2vis_model.enable_vae_slicing()
+                except Exception:
+                    bt.logging.warning(f"Could not enable vae slicing for {self.t2vis_model}")
         if model_config.get('vae_enable_tiling', False):
             bt.logging.info(f"Enabling vae tiling for {model_name}")
             try:
                 self.t2vis_model.vae.enable_tiling()
             except Exception:
-                self.t2vis_model.enable_vae_tiling()
+                try:
+                    self.t2vis_model.enable_vae_tiling()
+                except Exception:
+                    bt.logging.warning(f"Could not enable vae tiling for {self.t2vis_model}")
 
         self.t2vis_model.to(self.device)
         bt.logging.info(f"Loaded {model_name} using {pipeline_cls.__name__}.")
@@ -364,10 +381,10 @@ if __name__ == '__main__':
         output_dir=SYNTH_CACHE_DIR)
     bt.logging.info("Starting standalone data generator service")
     while True:
-        try:
-            sgd.batch_generate()
-            time.sleep(1)
-        except Exception as e:
-            bt.logging.error(f"Error in batch generation: {str(e)}")
-            time.sleep(5)
+        #try:
+        sgd.batch_generate(batch_size=1)
+        time.sleep(1)
+        #except Exception as e:
+        #    bt.logging.error(f"Error in batch generation: {str(e)}")
+        #    time.sleep(5)
 

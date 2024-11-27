@@ -5,10 +5,12 @@ import bittensor as bt
 from PIL import Image
 import torch
 from transformers import (
+    AutoModelForCausalLM, 
+    AutoTokenizer, 
     Blip2Processor,
     Blip2ForConditionalGeneration,
     pipeline,
-    logging as transformers_logging
+    logging as transformers_logging,
 )
 from transformers.utils.logging import disable_progress_bar
 
@@ -82,15 +84,22 @@ class ImageAnnotationGenerator:
             f"Loading annotation moderation model {self.text_moderation_model_name}..."
         )
         if self.apply_moderation:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.text_moderation_model_name,
+                torch_dtype=torch.bfloat16,
+                cache_dir=HUGGINGFACE_CACHE_DIR
+            )
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.text_moderation_model_name,
+                cache_dir=HUGGINGFACE_CACHE_DIR
+            )
+            model = model.to(self.device)
             self.text_moderation_pipeline = pipeline(
                 "text-generation",
-                model=self.text_moderation_model_name,
-                model_kwargs={
-                    "torch_dtype": torch.bfloat16,
-                    "cache_dir": HUGGINGFACE_CACHE_DIR
-                },
+                model=model,
+                tokenizer=tokenizer
             )
-            self.text_moderation_pipeline.to(self.device)
         bt.logging.info(
             f"Loaded annotation moderation model {self.text_moderation_model_name}."
         )
@@ -105,7 +114,7 @@ class ImageAnnotationGenerator:
         del self.model
         self.model = None
         if self.text_moderation_pipeline:
-            self.text_moderation_pipeline.to('cpu')
+            self.text_moderation_pipeline.model.to('cpu')
             del self.text_moderation_pipeline
             self.text_moderation_pipeline = None
         gc.collect()
