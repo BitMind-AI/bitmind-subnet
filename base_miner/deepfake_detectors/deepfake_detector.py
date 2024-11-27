@@ -6,7 +6,7 @@ import typing
 import torch
 import yaml
 
-from base_miner.UCF.config.constants import CONFIGS_DIR, WEIGHTS_DIR
+from base_miner.DFB.config.constants import CONFIGS_DIR, WEIGHTS_DIR
 
 
 class DeepfakeDetector(ABC):

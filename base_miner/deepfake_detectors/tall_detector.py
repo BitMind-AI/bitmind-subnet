@@ -39,8 +39,8 @@ import math
 import yaml
 import bittensor as bt
 
-from base_miner.UCF.config.constants import CONFIGS_DIR, WEIGHTS_DIR
-from base_miner.UCF.detectors import DETECTOR
+from base_miner.DFB.config.constants import CONFIGS_DIR, WEIGHTS_DIR
+from base_miner.DFB.detectors import DETECTOR
 from base_miner.deepfake_detectors import DeepfakeDetector
 from base_miner import DETECTOR_REGISTRY
 
