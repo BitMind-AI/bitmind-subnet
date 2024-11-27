@@ -142,7 +142,6 @@ async def forward(self):
                 video = video_to_pil(file)
                 sample['video'] = video
                 print(f'{len(video)} frames')
-
                 #np_video = np.stack([np.array(img) for img in gen_output], axis=0)
                 #challenge_data['video'] = wandb.Video(np_video) # TODO format video for w&b
 
@@ -176,8 +175,9 @@ async def forward(self):
         performance_tracker=self.performance_tracker)
 
     # Logging image source (model for synthetic, dataset for real) and verification details
-    source_name = challenge_data['model'] if 'model' in challenge_data else challenge_data['dataset']
-    bt.logging.info(f'{"real" if label == 0 else "fake"} {modality} | source: {source_name}')
+    bt.logging.info(f'{"real" if label == 0 else "fake"} {modality}')
+    meta = {k: v for k, v in sample.items() if k != modality}
+    bt.logging.info(f'source: {meta}')
 
     # Logging responses and rewards
     bt.logging.info(f"Received responses: {responses}")
