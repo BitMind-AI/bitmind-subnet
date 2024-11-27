@@ -38,10 +38,9 @@ from metrics.base_metrics_class import calculate_metrics_for_train
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from torch.hub import load_state_dict_from_url
-
 from .base_detector import AbstractDetector
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 @DETECTOR.register_module(module_name='tall')
@@ -773,9 +772,11 @@ def load_pretrained(model, cfg=None, num_classes=1000, in_chans=3, filter_fn=Non
         state_dict = load_state_dict_from_url(cfg['url'], map_location='cpu')
     else:
         try:
-            state_dict = load_state_dict(pretrained_model)['model']
+            #state_dict = load_state_dict(pretrained_model)['model']
+            state_dict = torch.load(pretrained_model)['model']
         except:
-            state_dict = load_state_dict(pretrained_model)
+            #state_dict = load_state_dict(pretrained_model)
+            state_dict = torch.load(pretrained_model)
 
     if filter_fn is not None:
         state_dict = filter_fn(state_dict)
