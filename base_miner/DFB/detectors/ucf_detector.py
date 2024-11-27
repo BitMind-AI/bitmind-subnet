@@ -44,7 +44,7 @@ from torch.utils.tensorboard import SummaryWriter
 from metrics.base_metrics_class import calculate_metrics_for_train
 
 from .base_detector import AbstractDetector
-from UCF.detectors import DETECTOR
+from DFB.detectors import DETECTOR
 from networks import BACKBONE
 from loss import LOSSFUNC
 
