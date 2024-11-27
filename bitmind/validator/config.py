@@ -149,7 +149,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "num_frames": 48,
         },
         "enable_model_cpu_offload": True,
-        "enable_sequential_cpu_offload": True,
+        #"enable_sequential_cpu_offload": True,
         "vae_enable_slicing": True,
         "vae_enable_tiling": True
     },
