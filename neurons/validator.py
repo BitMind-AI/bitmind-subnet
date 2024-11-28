@@ -18,6 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import bittensor as bt
+import json
 import wandb
 import time
 
@@ -32,10 +33,12 @@ from bitmind.validator.config import (
     IMAGE_DATASETS,
     VIDEO_DATASETS,
     WANDB_ENTITY,
+    SN34_CACHE_DIR,
     REAL_VIDEO_CACHE_DIR,
     REAL_IMAGE_CACHE_DIR,
     SYNTH_IMAGE_CACHE_DIR,
-    SYNTH_VIDEO_CACHE_DIR
+    SYNTH_VIDEO_CACHE_DIR,
+    VALIDATOR_INFO_PATH
 )
 
 import bitmind
@@ -80,7 +83,7 @@ class Validator(BaseValidatorNeuron):
         }
 
         self.init_wandb()
-
+        self.store_vali_info()
         self._fake_prob = self.config.get('fake_prob', 0.5)
 
     async def forward(self):
@@ -110,7 +113,7 @@ class Validator(BaseValidatorNeuron):
             wandb_project = MAINNET_WANDB_PROJECT
 
         # Initialize the wandb run for the single project
-        print(f"Initializing W&B run for '{WANDB_ENTITY}/{wandb_project}'")
+        bt.logging.info(f"Initializing W&B run for '{WANDB_ENTITY}/{wandb_project}'")
         try:
             run = wandb.init(
                 name=run_name,
@@ -131,6 +134,22 @@ class Validator(BaseValidatorNeuron):
         wandb.config.update(self.config, allow_val_change=True)
 
         bt.logging.success(f"Started wandb run {run_name}")
+
+    def store_vali_info(self):
+        """
+        Stores the uid, hotkey and netuid of the currently running vali instance.
+        The SyntheticDataGenerator process reads this to name its w&b run
+        """
+        validator_info = {
+            'uid': self.uid,
+            'hotkey': self.wallet.hotkey.ss58_address,
+            'netuid': self.config.netuid,
+            'full_path': self.config.neuron.full_path
+        }
+        with open(VALIDATOR_INFO_PATH, 'w') as f:
+            json.dump(validator_info, f, indent=4)
+
+        bt.logging.info(f"Wrote validator info to {VALIDATOR_INFO_PATH}")
 
 
 # The main function parses the configuration and runs the validator.

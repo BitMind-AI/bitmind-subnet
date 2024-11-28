@@ -53,4 +53,4 @@ if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
 fi
 
 echo "Starting SyntheticDataGenerator process"
-pm2 start bitmind/synthetic_data_generation/synthetic_data_generator.py --name $DATA_GEN_PROCESS_NAME
+pm2 start bitmind/validator/run_data_generator.py --name $DATA_GEN_PROCESS_NAME

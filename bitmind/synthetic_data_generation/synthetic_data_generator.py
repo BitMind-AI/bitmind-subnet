@@ -1,32 +1,22 @@
-import asyncio
 import gc
 import json
-import logging
 import os
-import re
-import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, Optional, Any, Union
 
 import bittensor as bt
 import numpy as np
 import torch
-from transformers import pipeline, set_seed
 from diffusers.utils import export_to_video
 from PIL import Image
 
 from bitmind.validator.config import (
     HUGGINGFACE_CACHE_DIR,
-    REAL_IMAGE_CACHE_DIR,
-    SYNTH_CACHE_DIR,
     TEXT_MODERATION_MODEL,
     IMAGE_ANNOTATION_MODEL,
-    T2I_MODELS,
-    T2V_MODELS,
     T2VIS_MODELS,
-    T2I_MODEL_NAMES,
     T2VIS_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_t2vis_model,
@@ -373,31 +363,4 @@ class SyntheticDataGenerator:
             self.t2vis_model = None
             gc.collect()
             torch.cuda.empty_cache()
-
-
-if __name__ == '__main__':
-    image_cache = ImageCache(REAL_IMAGE_CACHE_DIR, datasets=None, run_updater=False)
-    while True:
-        if image_cache._extracted_cache_empty():
-            bt.logging.info("SyntheticDataGenerator waiting for real image cache to populate")
-            time.sleep(5)
-            continue
-        bt.logging.info("Image cache populated!")
-        break
-
-    sgd = SyntheticDataGenerator(
-        prompt_type='annotation',
-        use_random_t2vis_model=True,
-        device='cuda',
-        image_cache=image_cache,
-        output_dir=SYNTH_CACHE_DIR)
-
-    bt.logging.info("Starting standalone data generator service")
-    while True:
-        #try:
-        sgd.batch_generate(batch_size=1)
-        time.sleep(1)
-        #except Exception as e:
-        #    bt.logging.error(f"Error in batch generation: {str(e)}")
-        #    time.sleep(5)
 

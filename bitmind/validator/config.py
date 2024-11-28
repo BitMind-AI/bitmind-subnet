@@ -28,12 +28,16 @@ WANDB_ENTITY: str = 'bitmindai'
 
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
-REAL_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'real'
+SN34_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34'
+REAL_CACHE_DIR: Path = SN34_CACHE_DIR / 'real'
+SYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'synthetic'
 REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
 REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
-SYNTH_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'synthetic'
-SYNTH_VIDEO_CACHE_DIR:  Path = SYNTH_CACHE_DIR / 'video'
-SYNTH_IMAGE_CACHE_DIR:  Path = SYNTH_CACHE_DIR / 'image'
+SYNTH_VIDEO_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'video'
+SYNTH_IMAGE_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image'
+VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.json'
+SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 
 CHALLENGE_TYPE = {
     0: 'real',
