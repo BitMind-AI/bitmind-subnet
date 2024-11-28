@@ -18,7 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import bittensor as bt
-import json
+import yaml
 import wandb
 import time
 
@@ -33,7 +33,6 @@ from bitmind.validator.config import (
     IMAGE_DATASETS,
     VIDEO_DATASETS,
     WANDB_ENTITY,
-    SN34_CACHE_DIR,
     REAL_VIDEO_CACHE_DIR,
     REAL_IMAGE_CACHE_DIR,
     SYNTH_IMAGE_CACHE_DIR,
@@ -147,7 +146,7 @@ class Validator(BaseValidatorNeuron):
             'full_path': self.config.neuron.full_path
         }
         with open(VALIDATOR_INFO_PATH, 'w') as f:
-            json.dump(validator_info, f, indent=4)
+            yaml.safe_dump(validator_info, f, indent=4)
 
         bt.logging.info(f"Wrote validator info to {VALIDATOR_INFO_PATH}")
 

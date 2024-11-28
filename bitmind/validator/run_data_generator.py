@@ -1,5 +1,5 @@
-import json
 import time
+import yaml
 
 import wandb
 import bittensor as bt
@@ -20,7 +20,7 @@ from bitmind.validator.config import (
 def load_validator_info():
     try:
         with open(VALIDATOR_INFO_PATH, 'r') as f:
-            validator_info = json.load(f)
+            validator_info = yaml.safe_load(f)
         bt.logging.info(f"Loaded validator info from {VALIDATOR_INFO_PATH}")
     except FileNotFoundError:
         bt.logging.error(f"Could not find validator info at {VALIDATOR_INFO_PATH}")
@@ -30,7 +30,7 @@ def load_validator_info():
             'full_path': 'NotFound', 
             'netuid': TESTNET_WANDB_PROJECT
         }
-    except json.JSONDecodeError:
+    except yaml.YAMLError:
         bt.logging.error(f"Could not parse validator info at {VALIDATOR_INFO_PATH}")
         validator_info = {
             'uid': 'ParseError', 
@@ -39,7 +39,7 @@ def load_validator_info():
             'netuid': TESTNET_WANDB_PROJECT
         }
     return validator_info
- 
+
  
 def init_wandb_run(uid: str, hotkey: str, netuid: int, full_path: str) -> None:
     """
