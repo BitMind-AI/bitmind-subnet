@@ -25,13 +25,13 @@ class BaseCache(ABC):
     def __init__(
         self,
         cache_dir: Union[str, Path],
-        datasets: dict,
-        extracted_update_interval: int,
-        compressed_update_interval: int,
-        num_samples_per_source: int,
         file_extensions: List[str],
         compressed_file_extension: str,
-        run_updater: bool
+        run_updater: bool = False,
+        datasets: dict = None,
+        extracted_update_interval: int = 4,
+        compressed_update_interval: int = 24,
+        num_samples_per_source: int = 10,
     ) -> None:
         """
         Initialize the base cache infrastructure.
@@ -71,7 +71,7 @@ class BaseCache(ABC):
             if self._compressed_cache_empty():
                 bt.logging.info(f"Compressed cache {self.compressed_dir} empty; populating")
                 # grab 1 zip per source to get started, download more later
-                self._refresh_compressed_cache(n_zips_per_source=1)
+                self._refresh_compressed_cache(n_per_source=1)
 
             if self._extracted_cache_empty():
                 bt.logging.info(f"Extracted cache {self.cache_dir} empty; populating")
@@ -95,7 +95,7 @@ class BaseCache(ABC):
 
     def _get_compressed_files(self) -> List[Path]:
         """Get list of all compressed files in compressed directory."""
-        return list(self.compressed_dir.glob(self.compressed_file_extension))
+        return list(self.compressed_dir.glob(f'*{self.compressed_file_extension}'))
 
     def _extracted_cache_empty(self) -> bool:
         """Check if extracted cache directory is empty."""

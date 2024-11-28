@@ -25,11 +25,11 @@ class VideoCache(BaseCache):
     def __init__(
         self,
         cache_dir: Union[str, Path],
-        datasets: dict,
+        run_updater: bool = False,
+        datasets: Optional[dict] = None,
         video_update_interval: int = 2,
         zip_update_interval: int = 24,
-        num_videos_per_source: int = 10,
-        run_updater: bool = True
+        num_videos_per_source: int = 10
     ) -> None:
         """
         Initialize the VideoCache.

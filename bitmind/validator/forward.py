@@ -55,12 +55,13 @@ async def forward(self):
     challenge = {}           # for querying miners
 
     modality = 'video' if np.random.rand() > 0.5 else 'image'
-    label = 0 if np.random.rand() > self._fake_prob else label = 1
+    label = 0 if np.random.rand() > self._fake_prob else 1
     challenge_metadata['label'] = label
     challenge_metadata['modality'] = modality
 
     bt.logging.info(f"Sampling data from {modality} cache")
     cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
+
     if modality == 'video':
         clip_length = random.randint(
             self.config.neuron.clip_length_min,
@@ -70,6 +71,7 @@ async def forward(self):
         bt.logging.success(f"Sampled {clip_length}s of video")
         #np_video = np.stack([np.array(img) for img in gen_output], axis=0)
         #challenge_data['video'] = wandb.Video(np_video) # TODO format video for w&b
+
     elif modality == 'image':
         challenge = cache.sample()[0]
         #challenge_data['image'] = wandb.Image(challenge['image'])
@@ -103,28 +105,26 @@ async def forward(self):
     )
     bt.logging.info(f"Responses received in {time.time() - start}s")
     bt.logging.success(f"{CHALLENGE_TYPE[label]} {modality} challenge complete!")
-    bt.logging.info(challenge_metadata)
+    bt.logging.info({k: v for k, v in challenge_metadata.items() if k not in ('miner_uids', 'miner_hotkeys')})
 
-    bt.logging.info(f"Scoring responses: {responses}")
+    bt.logging.info(f"Scoring responses")
     rewards, metrics = get_rewards(
         label=label,
         responses=responses,
         uids=miner_uids,
         axons=axons,
         performance_tracker=self.performance_tracker)
-    self.update_scores(rewards, miner_uids)
-    bt.logging.succes(f"Rewards: {rewards}")
 
+    self.update_scores(rewards, miner_uids)
+
+    for metric_name in list(metrics[0].keys()):
+        challenge_metadata[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
     challenge_metadata['predictions'] = responses
     challenge_metadata['rewards'] = rewards
     challenge_metadata['scores'] = list(self.scores)
-    metric_names = list(metrics[0].keys())
-    for metric_name in metric_names:
-        challenge_metadata[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
-    challenge_metadata['correct'] = [
-        np.round(y_hat) == y
-        for y_hat, y in zip(responses, [label] * len(responses))
-    ]
+
+    for uid, pred, reward in zip(miner_uids, responses, rewards):
+        bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
 
     # W&B logging if enabled
     if not self.config.wandb.off:

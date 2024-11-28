@@ -23,11 +23,11 @@ class ImageCache(BaseCache):
     def __init__(
         self,
         cache_dir: Union[str, Path],
-        datasets: dict,
+        run_updater: bool = False,
+        datasets: Optional[dict] = None,
         parquet_update_interval: int = 24,
         image_update_interval: int = 2,
         num_images_per_source: int = 100,
-        run_updater: bool = True
     ) -> None:
         """        
         Args:

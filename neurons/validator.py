@@ -64,8 +64,8 @@ class Validator(BaseValidatorNeuron):
 
         # real media caches run async update tasks to download and unpack parts of subsets of datasets
         self.real_media_cache = {
-            'image': ImageCache(REAL_IMAGE_CACHE_DIR, IMAGE_DATASETS['real'], run_updater=True),
-            'video': VideoCache(REAL_VIDEO_CACHE_DIR, VIDEO_DATASETS['real'], run_updater=True)
+            'image': ImageCache(REAL_IMAGE_CACHE_DIR, run_updater=True, datasets=IMAGE_DATASETS['real']),
+            'video': VideoCache(REAL_VIDEO_CACHE_DIR, run_updater=True, datasets=VIDEO_DATASETS['real'])
         }
 
         # synthetic media caches are populated by the SyntheticDataGenerator process (started by start_validator.sh)
