@@ -105,7 +105,7 @@ class Validator(BaseValidatorNeuron):
             wandb_project = MAINNET_WANDB_PROJECT
 
         # Initialize the wandb run for the single project
-        print(f"Initializing W&B run {run_name}")
+        print(f"Initializing W&B run for '{WANDB_ENTITY}/{wandb_project}'")
         try:
             run = wandb.init(
                 name=run_name,
@@ -125,7 +125,7 @@ class Validator(BaseValidatorNeuron):
         self.config.signature = signature
         wandb.config.update(self.config, allow_val_change=True)
 
-        bt.logging.success(f"Started wandb run for project '{WANDB_PROJECT}'")
+        bt.logging.success(f"Started wandb run {run_name}")
 
 
 # The main function parses the configuration and runs the validator.
