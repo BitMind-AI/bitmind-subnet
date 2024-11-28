@@ -68,13 +68,16 @@ async def forward(self):
             self.config.neuron.clip_length_max)
         challenge = cache.sample(clip_length)
         challenge_metadata['clip_length_s'] = clip_length
-        bt.logging.success(f"Sampled {clip_length}s of video")
         #np_video = np.stack([np.array(img) for img in gen_output], axis=0)
         #challenge_data['video'] = wandb.Video(np_video) # TODO format video for w&b
 
     elif modality == 'image':
-        challenge = cache.sample()[0]
+        challenge = cache.sample()
         #challenge_data['image'] = wandb.Image(challenge['image'])
+
+    if challenge is None:
+        bt.logging.warning("Waiting for cache to populate. Challenge skipped.")
+        return
 
     # update logging dict with everything except image/video data
     challenge_metadata.update({k: v for k, v in challenge.items() if k != modality})

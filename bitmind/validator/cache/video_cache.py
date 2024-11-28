@@ -158,6 +158,7 @@ class VideoCache(BaseCache):
                 bt.logging.error(f'FFmpeg error at {timestamp}s: {e.stderr.decode()}')
                 continue
 
+        bt.logging.success(f"Sampled {num_seconds}s of video")
         return {
             'video': frames,
             'path': str(video_path),
