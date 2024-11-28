@@ -25,15 +25,17 @@ from neurons.validator_proxy import ValidatorProxy
 from bitmind.validator import forward
 from bitmind.validator.cache import VideoCache, ImageCache
 from bitmind.base.validator import BaseValidatorNeuron
-from bitmind.synthetic_data_generation import SyntheticDataGenerator
 from bitmind.validator.config import (
+    MAINNET_UID,
+    MAINNET_WANDB_PROJECT,
+    TESTNET_WANDB_PROJECT,
     IMAGE_DATASETS,
     VIDEO_DATASETS,
-    WANDB_PROJECT,
     WANDB_ENTITY,
     REAL_VIDEO_CACHE_DIR,
     REAL_IMAGE_CACHE_DIR,
-    SYNTH_CACHE_DIR
+    SYNTH_IMAGE_CACHE_DIR,
+    SYNTH_VIDEO_CACHE_DIR
 )
 
 import bitmind
@@ -60,10 +62,18 @@ class Validator(BaseValidatorNeuron):
         self.last_responding_miner_uids = []
         self.validator_proxy = ValidatorProxy(self)
 
-        self.image_cache = ImageCache(REAL_IMAGE_CACHE_DIR, IMAGE_DATASETS['real'])
-        self.video_cache = VideoCache(REAL_VIDEO_CACHE_DIR, VIDEO_DATASETS['real'])
+        # real media caches run async update tasks to download and unpack parts of subsets of datasets
+        self.real_media_cache = {
+            'image': ImageCache(REAL_IMAGE_CACHE_DIR, IMAGE_DATASETS['real'], run_updater=True),
+            'video': VideoCache(REAL_VIDEO_CACHE_DIR, VIDEO_DATASETS['real'], run_updater=True)
+        }
 
-        bt.logging.info("init_wandb()")
+        # synthetic media caches are populated by the SyntheticDataGenerator process (started by start_validator.sh)
+        self.synthetic_media_cache = {
+            'image': ImageCache(SYNTH_IMAGE_CACHE_DIR, run_updater=False),
+            'video': VideoCache(SYNTH_VIDEO_CACHE_DIR, run_updater=False)
+        }
+
         self.init_wandb()
 
         self._fake_prob = self.config.get('fake_prob', 0.5)
@@ -90,12 +100,16 @@ class Validator(BaseValidatorNeuron):
         self.config.version = bitmind.__version__
         self.config.type = self.neuron_type
 
+        wandb_project = TESTNET_WANDB_PROJECT
+        if self.config.netuid == MAINNET_UID:
+            wandb_project = MAINNET_WANDB_PROJECT
+
         # Initialize the wandb run for the single project
-        print("Initializing W&B")
+        print(f"Initializing W&B run {run_name}")
         try:
             run = wandb.init(
                 name=run_name,
-                project=WANDB_PROJECT,
+                project=wandb_project,
                 entity=WANDB_ENTITY,
                 config=self.config,
                 dir=self.config.full_path,

@@ -18,8 +18,12 @@ from .model_utils import load_annimatediff_motion_adapter
 
 TARGET_IMAGE_SIZE: tuple[int, int] = (224, 224)  # (256, 256)
 
+MAINNET_UID = 34
+TESTNET_UID = 168
+
 # Project constants
-WANDB_PROJECT: str = 'bitmind'
+MAINNET_WANDB_PROJECT: str = 'bitmind-subnet'
+TESTNET_WANDB_PROJECT: str = 'bitmind'
 WANDB_ENTITY: str = 'bitmindai'
 
 # Cache directories
