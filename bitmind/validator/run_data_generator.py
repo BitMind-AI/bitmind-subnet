@@ -41,7 +41,7 @@ def load_validator_info():
     return validator_info
  
  
-def init_wandb_run(uid: str, hotkey: str, netuid: int, vali_full_path: str) -> None:
+def init_wandb_run(uid: str, hotkey: str, netuid: int, full_path: str) -> None:
     """
     Initialize a Weights & Biases run for tracking the validator.
 
@@ -75,7 +75,7 @@ def init_wandb_run(uid: str, hotkey: str, netuid: int, vali_full_path: str) -> N
             project=wandb_project,
             entity=WANDB_ENTITY,
             config=config,
-            dir=vali_full_path,
+            dir=full_path,
             reinit=True
         )
     except wandb.UsageError as e:
