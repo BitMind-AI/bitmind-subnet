@@ -81,55 +81,43 @@ class ImageCache(BaseCache):
                 bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
         return extracted_files
 
-    def sample(
-        self,
-        k: int = 1
-    ) -> Optional[Dict[str, Any]]:
+    def sample(self) -> Optional[Dict[str, Any]]:
         """
-        Sample random images and their metadata from the cache.
-
-        Args:
-            k: Number of images to sample
+        Sample a random image and its metadata from the cache.
 
         Returns:
             Dictionary containing:
-                - images: List of sampled PIL Images
-                - paths: List of paths to source files
-                - datasets: List of source dataset names
-                - metadata: List of metadata dicts if return_metadata is True
-            Returns None if no valid images are available.
+                - image: PIL Image
+                - path: Path to source file
+                - dataset: Source dataset name
+                - metadata: Metadata dict
+            Returns None if no valid image is available.
         """
         cached_files = self._get_cached_files()
         if not cached_files:
             bt.logging.warning("No images available in cache")
             return None
 
-        valid_samples: List[Dict[str, Any]] = []
         attempts = 0
         max_attempts = len(cached_files) * 2
-        while len(valid_samples) < k and attempts < max_attempts:
+
+        while attempts < max_attempts:
             attempts += 1
             image_path = random.choice(cached_files)
 
             try:
                 image = Image.open(image_path)
-                metadata = data = json.loads(image_path.with_suffix('.json').read_text())
-                data = {
+                metadata = json.loads(image_path.with_suffix('.json').read_text())
+                return {
                     'image': image,
                     'path': str(image_path),
                     'dataset': metadata.get('dataset', None),
                     'index': metadata.get('index', None)
                 }
-                valid_samples.append(data)
 
             except Exception as e:
                 bt.logging.warning(f"Failed to load image {image_path}: {e}")
                 continue
 
-        if not valid_samples:
-            bt.logging.warning(
-                f"Failed to find {k} valid images after {attempts} attempts"
-            )
-            return None
-
-        return valid_samples
+        bt.logging.warning(f"Failed to find valid image after {attempts} attempts")
+        return None
