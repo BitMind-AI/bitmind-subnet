@@ -74,6 +74,11 @@ class Validator(BaseValidatorNeuron):
             'video': VideoCache(SYNTH_VIDEO_CACHE_DIR, run_updater=False)
         }
 
+        self.media_cache = {
+            'real': self.real_media_cache,
+            'synthetic': self.real_media_cache,
+        }
+
         self.init_wandb()
 
         self._fake_prob = self.config.get('fake_prob', 0.5)

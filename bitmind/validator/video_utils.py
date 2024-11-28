@@ -1,9 +1,28 @@
 import tempfile
+from pathlib import Path
 from typing import Optional, BinaryIO
-import ffmpeg
+
 import bittensor as bt
+import ffmpeg
+import numpy as np
+from moviepy.editor import VideoFileClip
+from PIL import Image
 
 from .cache.util import seconds_to_str
+
+
+def video_to_pil(video_path: str | Path) -> list[Image.Image]:
+   """
+   Load video as a list of PIL images.
+   Args:
+       video_path: Path to video file
+   Returns:
+       List of PIL Image objects
+   """
+   clip = VideoFileClip(str(video_path))
+   frames = [Image.fromarray(np.array(frame)) for frame in clip.iter_frames()]
+   clip.close()
+   return frames
 
 
 def clip_video(video_path: str, start: int, num_seconds: int) -> Optional[BinaryIO]:

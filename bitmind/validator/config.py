@@ -35,6 +35,11 @@ SYNTH_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34' / 'synthetic'
 SYNTH_VIDEO_CACHE_DIR:  Path = SYNTH_CACHE_DIR / 'video'
 SYNTH_IMAGE_CACHE_DIR:  Path = SYNTH_CACHE_DIR / 'image'
 
+CHALLENGE_TYPE = {
+    0: 'real',
+    1: 'synthetic'
+}
+
 # Image datasets configuration
 IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
     "real": [
