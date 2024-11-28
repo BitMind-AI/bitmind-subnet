@@ -4,11 +4,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 
 import bittensor as bt
-import numpy as np
 from PIL import Image
 
 from .base_cache import BaseCache
-from .download import download_files, list_hf_files
 from .extract import extract_images_from_parquet
 from .util import is_parquet_complete
 
@@ -45,6 +43,7 @@ class ImageCache(BaseCache):
             compressed_update_interval=parquet_update_interval,
             num_samples_per_source=num_images_per_source,
             file_extensions=['.jpg', '.jpeg', '.png'],
+            compressed_file_extension='.parquet',
             run_updater=run_updater
         )  
                 
@@ -57,73 +56,29 @@ class ImageCache(BaseCache):
                     bt.logging.warning(f"Removed incomplete parquet file {path}")
                 except Exception as e:
                     bt.logging.error(f"Error removing incomplete parquet {path}: {e}")
-
-    def _refresh_compressed_cache(self, n_zips_per_source=5) -> None:
+    
+    def _extract_random_items(self) -> List[Path]:
         """
-        Download new parquet files from configured sources.
-        """
-        try:
-            prior_files = list(self.compressed_dir.glob('*.parquet'))
-
-            new_files = []
-            for source in self.datasets:
-                parquet_files = list_hf_files(repo_id=source['path'], extension='parquet')
-                remote_parquet_paths = [
-                    f"https://huggingface.co/datasets/{source['path']}/resolve/main/{f}"
-                    for f in parquet_files
-                ]
-                bt.logging.info(f"Downloading {n_zips_per_source} from {source['path']}")
-                new_files += download_files(
-                    urls=np.random.choice(remote_parquet_paths, n_zips_per_source),
-                    output_dir=self.compressed_dir)
-
-            if new_files:
-                bt.logging.info(f"{len(new_files)} new parquet files added")
-            else:
-                bt.logging.error("No new parquet files were added")
-
-        except Exception as e:
-            bt.logging.error(f"Error during parquet refresh: {e}")
-            raise
-
-    def _refresh_extracted_cache(self) -> None:
-        """
-        Refresh the image cache with new random selections.
-        
-        Clears existing cached images and extracts new ones from the compressed
-        sources.
-        """
-        prior_cache_files = self._get_cached_files()
-        new_cache_files = self._extract_random_images()
-        if new_cache_files:
-            bt.logging.info(f"{len(new_cache_files)} new images added to cache")
-        else:
-            bt.logging.error("No images were added to cache")
-
-    def _extract_random_images(self) -> List[Path]:
-        """
-        Extract random images from parquet files in compressed directory.
+        Extract random videos from zip files in compressed directory.
         
         Returns:
-            List of paths to extracted image files.
+            List of paths to extracted video files.
         """
-        parquet_files = list(self.compressed_dir.glob('*.parquet'))
-        bt.logging.info('parquet files', parquet_files)
         extracted_files = []
+        parquet_files = self._get_compressed_files()
         if not parquet_files:
             bt.logging.warning(f"No parquet files found in {self.compressed_dir}")
             return extracted_files
 
         for parquet_file in parquet_files:
-            #try:
-            extracted_files += extract_images_from_parquet(
-                parquet_file,
-                self.cache_dir,
-                self.num_samples_per_source
-            )
-            #except Exception as e:
-            #    bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
-
+            try:
+                extracted_files += extract_images_from_parquet(
+                    parquet_file,
+                    self.cache_dir,
+                    self.num_samples_per_source
+                )
+            except Exception as e:
+                bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
         return extracted_files
 
     def sample(

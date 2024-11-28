@@ -1,18 +1,13 @@
-from datetime import datetime
-from io import BytesIO
 import random
+from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
-from zipfile import ZipFile
+from typing import Dict, List, Optional, Union
 
 import bittensor as bt
-import huggingface_hub as hf_hub
-import numpy as np
 import ffmpeg
 from PIL import Image
 
 from .base_cache import BaseCache
-from .download import download_files, list_hf_files
 from .extract import extract_videos_from_zip
 from .util import is_zip_complete
 from bitmind.validator.video_utils import get_video_duration
@@ -53,6 +48,7 @@ class VideoCache(BaseCache):
             compressed_update_interval=zip_update_interval,
             num_samples_per_source=num_videos_per_source,
             file_extensions=['.mp4', '.avi', '.mov', '.mkv'],
+            compressed_file_extension='.zip',
             run_updater=run_updater
         )
 
@@ -66,57 +62,15 @@ class VideoCache(BaseCache):
                 except Exception as e:
                     bt.logging.error(f"Error removing incomplete zip {path}: {e}")
 
-    def _refresh_compressed_cache(self, n_zips_per_source=5) -> None:
-        """
-        Refresh the compressed file cache with new downloads.
-        """
-        try:
-            prior_files = list(self.compressed_dir.glob('*.zip'))
-
-            new_files: List[Path] = []
-            for source in self.datasets:
-                zip_files = list_hf_files(repo_id=source['path'], extension='zip')
-                remote_zip_paths = [
-                    f"https://huggingface.co/datasets/{source['path']}/resolve/main/{f}"
-                    for f in zip_files
-                ]
-                bt.logging.info(f"Downloading {n_zips_per_source} from {source['path']}")
-                new_files += download_files(
-                    urls=np.random.choice(remote_zip_paths, n_zips_per_source),
-                    output_dir=self.compressed_dir)
-
-            if new_files:
-                bt.logging.info(f"{len(new_files)} new files added to cache")
-            else:
-                bt.logging.error("No new files were added to cache")
-
-        except Exception as e:
-            bt.logging.error(f"Error during compressed refresh: {e}")
-            raise
-
-    def _refresh_extracted_cache(self) -> None:
-        """
-        Refresh the video cache with new random selections.
-        
-        Clears existing cached videos and extracts new ones from the compressed
-        sources.
-        """
-        prior_cache_files = self._get_cached_files()
-        new_cache_files = self._extract_random_videos()
-        if new_cache_files:
-            bt.logging.info(f"{len(new_cache_files)} new videos added to cache")
-        else:
-            bt.logging.error("No videos were added to cache")
-
-    def _extract_random_videos(self) -> List[Path]:
+    def _extract_random_items(self) -> List[Path]:
         """
         Extract random videos from zip files in compressed directory.
         
         Returns:
             List of paths to extracted video files.
         """
-        zip_files = list(self.compressed_dir.glob('*.zip'))
         extracted_files = []
+        zip_files = self._get_compressed_files()
         if not zip_files:
             bt.logging.warning(f"No zip files found in {self.compressed_dir}")
             return extracted_files

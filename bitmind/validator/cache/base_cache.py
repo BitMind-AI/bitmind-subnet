@@ -6,8 +6,11 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 import bittensor as bt
+import huggingface_hub as hf_hub
+import numpy as np
 
 from .util import get_most_recent_update_time, seconds_to_str
+from .download import download_files, list_hf_files
 
 
 class BaseCache(ABC):
@@ -27,6 +30,7 @@ class BaseCache(ABC):
         compressed_update_interval: int,
         num_samples_per_source: int,
         file_extensions: List[str],
+        compressed_file_extension: str,
         run_updater: bool
     ) -> None:
         """
@@ -51,6 +55,7 @@ class BaseCache(ABC):
         self.compressed_update_interval = compressed_update_interval * 60 * 60
         self.num_samples_per_source = num_samples_per_source
         self.file_extensions = file_extensions
+        self.compressed_file_extension = compressed_file_extension
 
         if run_updater:
             try:
@@ -90,7 +95,7 @@ class BaseCache(ABC):
 
     def _get_compressed_files(self) -> List[Path]:
         """Get list of all compressed files in compressed directory."""
-        return list(self.compressed_dir.iterdir())
+        return list(self.compressed_dir.glob(self.compressed_file_extension))
 
     def _extracted_cache_empty(self) -> bool:
         """Check if extracted cache directory is empty."""
@@ -108,12 +113,12 @@ class BaseCache(ABC):
                 time_elapsed = time.time() - last_update
 
                 if time_elapsed >= self.extracted_update_interval:
-                    bt.logging.info("Running extracted cache refresh...")
+                    bt.logging.info(f"Refreshing cache [{self.cache_dir}]")
                     self._refresh_extracted_cache()
-                    bt.logging.info("Extracted cache refresh complete.")
+                    bt.logging.info(f"Cache refresh complete [{self.cache_dir}]")
 
                 sleep_time = max(0, self.extracted_update_interval - time_elapsed)
-                bt.logging.info(f"Sleeping for {seconds_to_str(sleep_time)}")
+                bt.logging.info(f"Next cache refresh in {seconds_to_str(sleep_time)} [{self.compressed_dir}]")
                 await asyncio.sleep(sleep_time)
             except Exception as e:
                 bt.logging.error(f"Error in extracted cache update: {e}")
@@ -128,30 +133,64 @@ class BaseCache(ABC):
                 time_elapsed = time.time() - last_update
 
                 if time_elapsed >= self.compressed_update_interval:
-                    bt.logging.info("Running compressed cache refresh...")
-                    self._refresh_compressed_cache(n_zips_per_source=1)
-                    bt.logging.info("Compressed cache refresh complete.")
+                    bt.logging.info(f"Refreshing cache [{self.compressed_dir}]")
+                    self._refresh_compressed_cache(n_per_source=1)
+                    bt.logging.info(f"Cache refresh complete [{self.cache_dir}]")
 
                 sleep_time = max(0, self.compressed_update_interval - time_elapsed)
-                bt.logging.info(f"Sleeping for {seconds_to_str(sleep_time)}")
+                bt.logging.info(f"Next cache refresh in {seconds_to_str(sleep_time)} [{self.compressed_dir}]")
                 await asyncio.sleep(sleep_time)
             except Exception as e:
                 bt.logging.error(f"Error in compressed cache update: {e}")
                 await asyncio.sleep(60)
 
+    def _refresh_compressed_cache(self, n_per_source) -> None:
+        """
+        Refresh the compressed file cache with new downloads.
+        """
+        try:
+            bt.logging.info(f"{len(self._get_compressed_files())} compressed sources currently cached")
+
+            new_files: List[Path] = []
+            for source in self.datasets:
+                filenames = list_hf_files(
+                    repo_id=source['path'], 
+                    extension=self.compressed_file_extension)
+                remote_paths = [
+                    f"https://huggingface.co/datasets/{source['path']}/resolve/main/{f}"
+                    for f in filenames
+                ]
+                bt.logging.info(f"Downloading {n_per_source} from {source['path']} to {self.compressed_dir}")
+                new_files += download_files(
+                    urls=np.random.choice(remote_paths, n_per_source),
+                    output_dir=self.compressed_dir)
+
+            if new_files:
+                bt.logging.info(f"{len(new_files)} new files added to {self.compressed_dir}")
+            else:
+                bt.logging.error(f"No new files were added to {self.compressed_dir}")
+
+        except Exception as e:
+            bt.logging.error(f"Error during compressed refresh for {self.compressed_dir}: {e}")
+            raise
+
+    def _refresh_extracted_cache(self) -> None:
+        """Refresh the extracted cache with new selections."""
+        bt.logging.info(f"{len(self._get_compressed_files())} files currently cached")
+        new_files = self._extract_random_items()
+        if new_files:
+            bt.logging.info(f"{len(new_files)} new files added to {self.cache_dir}")
+        else:
+            bt.logging.error(f"No new files were added to {self.cache_dir}")
+
     @abstractmethod
-    def _clear_incomplete_sources(self) -> None:
+    def _extract_random_items(self) -> List[Path]:
         """Remove any incomplete or corrupted source files from cache."""
         pass
 
     @abstractmethod
-    def _refresh_compressed_cache(self) -> None:
-        """Refresh the compressed file cache with new downloads."""
-        pass
-
-    @abstractmethod
-    def _refresh_extracted_cache(self) -> None:
-        """Refresh the extracted cache with new selections."""
+    def _clear_incomplete_sources(self) -> None:
+        """Remove any incomplete or corrupted source files from cache."""
         pass
 
     @abstractmethod
