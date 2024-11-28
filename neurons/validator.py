@@ -140,4 +140,4 @@ if __name__ == "__main__":
     with Validator() as validator:
         while True:
             bt.logging.info(f"Validator running | uid {validator.uid} | {time.time()}")
-            time.sleep(5)
+            time.sleep(30)
