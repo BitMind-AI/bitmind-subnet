@@ -11,7 +11,7 @@ import subprocess
 import glob
 import requests
 
-from base_miner.constants import IMAGE_DATASET_META,  HUGGINGFACE_CACHE_DIR
+from base_miner.constants import DATASET_META, HUGGINGFACE_CACHE_DIR
 
 datasets.logging.set_verbosity_warning()
 datasets.disable_progress_bar()
