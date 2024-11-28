@@ -54,7 +54,7 @@ def init_wandb_run(uid: str, hotkey: str, netuid: int, full_path: str) -> None:
     Returns:
         None
     """
-    run_name = f'validator-{uid}-{bitmind.__version__}'
+    run_name = f'data-generator-{uid}-{bitmind.__version__}'
     
     config = {
         'run_name': run_name,
