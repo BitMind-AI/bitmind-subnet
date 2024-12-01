@@ -47,18 +47,42 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        if self.config.neuron.device == 'auto':
-            self.config.neuron.device = get_device()
-        self.load_detector()
+        self.load_image_detector()
+        self.load_video_detector()
 
-    def load_detector(self):
-        self.deepfake_detector = DETECTOR_REGISTRY[self.config.neuron.detector](
-            config=self.config.neuron.detector_config,
-            device=self.config.neuron.device
+    def load_image_detector(self):
+        if str(self.config.neuron.image_detector).lower() == 'none' or \
+            str(self.config.neuron.image_detector_config).lower() == 'none':
+            bt.logging.warning("No image detector configuration provided, skipping.")
+            return
+
+        if self.config.neuron.image_detector_device == 'auto':
+            bt.logging.warning("Automatic device configuration enabled for image detector")
+            self.config.neuron.image_detector_device = get_device()
+
+        self.image_detector = DETECTOR_REGISTRY[self.config.neuron.image_detector](
+            config=self.config.neuron.image_detector_config,
+            device=self.config.neuron.image_detector_device
         )
-        self.deepfake_detector.model.eval()
+        self.image_detector.model.eval()
+        bt.logging.info(f"Loaded image detection model: {self.config.neuron.image_detector}")
 
-        bt.logging.info(f"Loaded detection model: {self.config.neuron.detector}")
+    def load_video_detector(self):
+        if str(self.config.neuron.video_detector).lower() == 'none' or \
+            str(self.config.neuron.video_detector_config).lower() == 'none':
+            bt.logging.warning("No video detector configuration provided, skipping.")
+            return
+
+        if self.config.neuron.video_detector_device == 'auto':
+            bt.logging.warning("Automatic device configuration enabled for video detector")
+            self.config.neuron.video_detector_device = get_device()
+
+        self.video_detector = DETECTOR_REGISTRY[self.config.neuron.video_detector](
+            config=self.config.neuron.video_detector_config,
+            device=self.config.neuron.video_detector_device
+        )
+        self.video_detector.model.eval()
+        bt.logging.info(f"Loaded video detection model: {self.config.neuron.video_detector}")
 
     async def forward_image(
         self, synapse: ImageSynapse

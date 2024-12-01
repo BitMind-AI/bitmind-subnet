@@ -88,13 +88,6 @@ def add_args(cls, parser):
     parser.add_argument("--netuid", type=int, help="Subnet netuid", default=1)
 
     parser.add_argument(
-        "--neuron.device",
-        type=str,
-        help="Device to run on.",
-        default=get_device(),
-    )
-
-    parser.add_argument(
         "--neuron.epoch_length",
         type=int,
         help="The default epoch length (how often we set weights, measured in 12 second blocks).",
@@ -148,19 +141,47 @@ def add_miner_args(cls, parser):
     """Add miner specific arguments to the parser."""
 
     parser.add_argument(
-        "--neuron.detector_config",
+        "--neuron.image_detector_config",
         type=str,
         help=".yaml file name in base_miner/deepfake_detectors/configs/ to load for trained model.",
         default="camo.yaml",
     )
 
     parser.add_argument(
-        "--neuron.detector",
+        "--neuron.image_detector",
         type=str,
         help="The DETECTOR_REGISTRY module name of the DeepfakeDetector subclass to use for inference.",
         default="CAMO",
     )
-    
+
+    parser.add_argument(
+        "--neuron.image_detector_device",
+        type=str,
+        help="Device to run image detection model on.",
+        default=get_device(),
+    )
+
+    parser.add_argument(
+        "--neuron.video_detector_config",
+        type=str,
+        help=".yaml file name in base_miner/deepfake_detectors/configs/ to load for trained model.",
+        default="tall.yaml",
+    )
+
+    parser.add_argument(
+        "--neuron.video_detector",
+        type=str,
+        help="The DETECTOR_REGISTRY module name of the DeepfakeDetector subclass to use for inference.",
+        default="TALL",
+    )
+
+    parser.add_argument(
+        "--neuron.video_detector_device",
+        type=str,
+        help="Device to run image detection model on.",
+        default=get_device(),
+    )
+
     parser.add_argument(
         "--neuron.name",
         type=str,
@@ -199,6 +220,13 @@ def add_miner_args(cls, parser):
 
 def add_validator_args(cls, parser):
     """Add validator specific arguments to the parser."""
+
+    parser.add_argument(
+        "--neuron.device",
+        type=str,
+        help="Device to run on.",
+        default=get_device(),
+    )
 
     parser.add_argument(
         "--neuron.prompt_type",
