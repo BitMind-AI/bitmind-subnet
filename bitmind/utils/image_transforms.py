@@ -338,7 +338,7 @@ class ComposeWithParams:
 
 
 # Transform configurations
-base_transforms = transforms.Compose([
+base_transforms = ComposeWithParams([
     ConvertToRGB(),
     center_crop(),
     transforms.Resize(TARGET_IMAGE_SIZE),
