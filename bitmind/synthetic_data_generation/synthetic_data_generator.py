@@ -18,6 +18,7 @@ from bitmind.validator.config import (
     IMAGE_ANNOTATION_MODEL,
     T2VIS_MODELS,
     T2VIS_MODEL_NAMES,
+    T2V_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_t2vis_model,
     get_modality
@@ -128,7 +129,7 @@ class SyntheticDataGenerator:
         prompts = []
         bt.logging.info(f"Generating {batch_size} prompts")
         for i in range(batch_size):
-            image_sample = self.image_cache.sample()[0]
+            image_sample = self.image_cache.sample()
             bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
@@ -149,7 +150,7 @@ class SyntheticDataGenerator:
                     output['gen_output'].images[0].save(base_path.with_suffix('.png'))
                 elif modality == 'video':
                     export_to_video(
-                        np.array(output['gen_output'].frames[0]), 
+                        output['gen_output'].frames[0],
                         str(base_path.with_suffix('.mp4')), 
                         fps=30
                     )
