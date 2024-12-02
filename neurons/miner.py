@@ -57,8 +57,8 @@ class Miner(BaseMinerNeuron):
         self.load_video_detector()
 
     def load_image_detector(self):
-        if str(self.config.neuron.image_detector).lower() == 'none' or \
-            str(self.config.neuron.image_detector_config).lower() == 'none':
+        if (str(self.config.neuron.image_detector).lower() == 'none' or
+            str(self.config.neuron.image_detector_config).lower() == 'none'):
             bt.logging.warning("No image detector configuration provided, skipping.")
             self.image_detector = None
             return
@@ -74,8 +74,8 @@ class Miner(BaseMinerNeuron):
         bt.logging.info(f"Loaded image detection model: {self.config.neuron.image_detector}")
 
     def load_video_detector(self):
-        if str(self.config.neuron.video_detector).lower() == 'none' or \
-            str(self.config.neuron.video_detector_config).lower() == 'none':
+        if (str(self.config.neuron.video_detector).lower() == 'none' or
+            str(self.config.neuron.video_detector_config).lower() == 'none'):
             bt.logging.warning("No video detector configuration provided, skipping.")
             self.video_detector = None
             return
