@@ -32,7 +32,6 @@ from base_miner import DETECTOR_REGISTRY
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse, VideoSynapse, decode_video_synapse
 from bitmind.utils.config import get_device
-from bitmind.utils.video_utils import pad_frames
 from bitmind.utils.image_transforms import base_transforms
 
 
@@ -112,8 +111,7 @@ class Miner(BaseMinerNeuron):
             try:
                 image_bytes = base64.b64decode(synapse.image)
                 image = Image.open(io.BytesIO(image_bytes))
-                pred = self.image_detector(image)
-                synapse.prediction = pred
+                synapse.prediction = self.image_detector(image)
             except Exception as e:
                 bt.logging.error("Error performing inference")
                 bt.logging.error(e)
@@ -139,9 +137,7 @@ class Miner(BaseMinerNeuron):
             bt.logging.info("Received video challenge!")
             try:
                 frames_tensor = decode_video_synapse(synapse)
-                frames_tensor = pad_frames(frames_tensor, 4).to(self.config.neuron.video_detector_device)
-                pred = self.video_detector(frames_tensor)
-                synapse.prediction = torch.max(pred)
+                synapse.prediction = self.video_detector(frames_tensor)
             except Exception as e:
                 bt.logging.error("Error performing inference")
                 bt.logging.error(e)
