@@ -17,12 +17,12 @@ import gc
 
 from base_miner.DFB.config.constants import CONFIGS_DIR, WEIGHTS_DIR
 from base_miner.deepfake_detectors import DeepfakeDetector
-from base_miner.DFB.detectors import DETECTOR
+from base_miner.DFB.detectors import UCFDetector
 from base_miner import DETECTOR_REGISTRY
 
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
-class UCFDetector(DeepfakeDetector):
+class UCFImageDetector(DeepfakeDetector):
     """
     DeepfakeDetector subclass that initializes a pretrained UCF model
     for binary classification of fake and real images.
@@ -66,9 +66,9 @@ class UCFDetector(DeepfakeDetector):
         self.init_seed()
         self.ensure_weights_are_available(WEIGHTS_DIR, self.weights)
         #self.ensure_weights_are_available(WEIGHTS_DIR, self.train_config['pretrained'].split('/')[-1])
-        model_class = DETECTOR[self.train_config['model_name']]
+        #model_class = DETECTOR[self.train_config['model_name']]
         bt.logging.info(f"Loaded config from training run: {self.train_config}")
-        self.model = model_class(self.train_config).to(self.device)
+        self.model = UCFDetector(self.train_config).to(self.device)
         self.model.eval()
         weights_path = Path(WEIGHTS_DIR) / self.weights
         checkpoint = torch.load(weights_path, map_location=self.device)

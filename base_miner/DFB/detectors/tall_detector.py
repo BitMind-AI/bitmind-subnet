@@ -45,9 +45,10 @@ _logger = logging.getLogger(__name__)
 
 @DETECTOR.register_module(module_name='tall')
 class TALLDetector(AbstractDetector):
-    def __init__(self, config):
+    def __init__(self, config, device='cuda'):
         super().__init__()
-        self.model = self.build_backbone(config)
+        self.device = device
+        self.model = self.build_backbone(config).to(self.device)
         self.loss_func = self.build_loss(config)
 
     def build_backbone(self, config):
@@ -57,7 +58,7 @@ class TALLDetector(AbstractDetector):
                             num_heads=config['num_heads'], ape=config['ape'],
                             thumbnail_rows=config['thumbnail_rows'], drop_rate=config['drop_rate'],
                             drop_path_rate=config['drop_path_rate'], use_checkpoint=False, bottleneck=False,
-                            duration=config['clip_size'])
+                            duration=config['clip_size'], device=self.device)
         default_cfg = {
             'url': config['pretrained'],
             'num_classes': 1000, 'input_size': (3, 224, 224), 'pool_size': None,
@@ -604,7 +605,7 @@ class SwinTransformer(nn.Module):
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
-                 use_checkpoint=False, thumbnail_rows=1, bottleneck=False, **kwargs):
+                 use_checkpoint=False, thumbnail_rows=1, bottleneck=False, device='cuda', **kwargs):
         super().__init__()
 
         self.duration = duration  # 4
@@ -616,6 +617,7 @@ class SwinTransformer(nn.Module):
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
         self.mlp_ratio = mlp_ratio  # 4 = default
         self.thumbnail_rows = thumbnail_rows  # 2
+        self.device = device
 
         self.img_size = img_size  # 224
         self.window_size = [window_size for _ in depths] if not isinstance(window_size, list) else window_size
@@ -700,7 +702,7 @@ class SwinTransformer(nn.Module):
     def pad_frames(self, x):
         frame_num = self.duration - self.frame_padding
         x = x.view((-1, 3 * frame_num) + x.size()[2:])
-        x_padding = torch.zeros((x.shape[0], 3 * self.frame_padding) + x.size()[2:]).cuda()
+        x_padding = torch.zeros((x.shape[0], 3 * self.frame_padding) + x.size()[2:]).to(self.device)
         x = torch.cat((x, x_padding), dim=1)
         assert x.shape[1] == 3 * self.duration, 'frame number %d not the same as adjusted input size %d' % (
             x.shape[1], 3 * self.duration)
@@ -713,7 +715,7 @@ class SwinTransformer(nn.Module):
         _, _, T = self.frame_pos_embed.shape  # (1, 4, embed)
         rows = img_rows // self.thumbnail_rows  # 28
         cols = img_cols // (self.duration // self.thumbnail_rows)  # 28
-        img_pos_embed = torch.zeros(img_rows, img_cols, T).cuda()  # [56, 56, embed]
+        img_pos_embed = torch.zeros(img_rows, img_cols, T).to(self.device)  # [56, 56, embed]
         for i in range(self.duration):
             r_indx = (i // self.thumbnail_rows) * rows
             c_indx = (i % self.thumbnail_rows) * cols
