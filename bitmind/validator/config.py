@@ -144,9 +144,9 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "torch_dtype": torch.bfloat16
         },
         "generate_args": {
-            "num_frames": 21  #84
+            "num_frames": 84
         },
-        "enable_model_cpu_offload": True,
+        #"enable_model_cpu_offload": True,
         "vae_enable_tiling": True
     },
     'THUDM/CogVideoX-5b': {

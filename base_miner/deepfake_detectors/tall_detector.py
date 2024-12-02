@@ -55,9 +55,8 @@ class TALLDetector(DeepfakeDetector):
         super().__init__(model_name, config, device)
         self.model = self.build_backbone()
         self.loss_func = self.build_loss()
-        print(self.model)
-        print(sum(p.numel() for p in self.model.parameters()))
-        print(sum(p.numel() for p in self.model.parameters() if p.requires_grad))
+        print(sum(p.numel() for p in self.model.parameters()), 'parameters')
+        print(sum(p.numel() for p in self.model.parameters() if p.requires_grad), 'trainable parameters')
 
 
     def build_backbone(self):
