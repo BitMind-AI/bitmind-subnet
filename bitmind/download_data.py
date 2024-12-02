@@ -183,7 +183,7 @@ if __name__ == '__main__':
     clean_cache(args.cache_dir)  # Clear the cache of lock and incomplete files.
 
     if args.modality == 'image':
-        dataset_meta = IMAGE_DATASET_META
+        dataset_meta = DATASET_META
     #elif args.modality == 'video':
     #    dataset_meta = VIDEO_DATASET_META
     
