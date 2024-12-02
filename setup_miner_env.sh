@@ -17,10 +17,16 @@ pip install -e .
 pip install -r requirements-miner.txt
 
 echo "# Default options:
-DETECTOR=CAMO                                  # Options: CAMO, UCF, NPR
-DETECTOR_CONFIG=camo.yaml                      # Configs live in base_miner/deepfake_detectors/configs
+IMAGE_DETECTOR=CAMO                            # Options: CAMO, UCF, NPR, None
+IMAGE_DETECTOR_CONFIG=camo.yaml                # Configs live in base_miner/deepfake_detectors/configs
                                                # Supply a filename or relative path
-DEVICE=cpu                                     # Options: cpu, cuda
+
+VIDEO_DETECTOR=TALL                            # Options: TALL, None
+VIDEO_DETECTOR_CONFIG=tall.yaml                # Configs live in base_miner/deepfake_detectors/configs
+                                               # Supply a filename or relative path
+
+IMAGE_MINER_DEVICE=cpu                         # Options: cpu, cuda
+VIDEO_MINER_DEVICE=cpu
 
 # Subtensor Network Configuration:
 NETUID=34                                      # Network User ID options: 34, 168
