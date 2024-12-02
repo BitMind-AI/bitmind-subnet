@@ -72,7 +72,6 @@ class Miner(BaseMinerNeuron):
             config=self.config.neuron.image_detector_config,
             device=self.config.neuron.image_detector_device
         )
-        self.image_detector.model.eval()
         bt.logging.info(f"Loaded image detection model: {self.config.neuron.image_detector}")
 
     def load_video_detector(self):
@@ -90,7 +89,6 @@ class Miner(BaseMinerNeuron):
             config=self.config.neuron.video_detector_config,
             device=self.config.neuron.video_detector_device
         )
-        self.video_detector.model.eval()
         bt.logging.info(f"Loaded video detection model: {self.config.neuron.video_detector}")
 
     async def forward_image(
@@ -141,8 +139,8 @@ class Miner(BaseMinerNeuron):
             bt.logging.info("Received video challenge!")
             try:
                 frames_tensor = decode_video_synapse(synapse)
-                frames_tensor = pad_frames(frames_tensor, 4)
-                pred = self.video_detector({'image': frames_tensor})
+                frames_tensor = pad_frames(frames_tensor, 4).to(self.config.neuron.video_detector_device)
+                pred = self.video_detector(frames_tensor)
                 synapse.prediction = torch.max(pred)
             except Exception as e:
                 bt.logging.error("Error performing inference")

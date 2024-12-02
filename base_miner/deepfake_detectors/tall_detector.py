@@ -35,6 +35,7 @@ class TALLVideoDetector(DeepfakeDetector):
         self.tall.load_state_dict(checkpoint, strict=True)
         self.tall.model.eval()
 
-    def __call__(self, data_dict):
+    def __call__(self, frames_tensor):
+        tall_input = {'image': frames_tensor}
         with torch.no_grad():
-            return self.tall.forward(data_dict, inference=True)["prob"]
+            return self.tall.forward(tall_input, inference=True)["prob"]
