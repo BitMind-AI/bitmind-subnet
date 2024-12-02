@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 
 import torch
 import yaml
+import bittensor as bt
 from PIL import Image
 from huggingface_hub import hf_hub_download
 
@@ -45,8 +46,8 @@ class DeepfakeDetector(ABC):
         )
 
         if config:
-            self.load_and_apply_config(config)
-            self.load_train_config()
+            self.set_class_attrs(config)
+            self.load_model_config()
 
         self.load_model()
 
@@ -83,7 +84,7 @@ class DeepfakeDetector(ABC):
         """
         pass
 
-    def load_and_apply_config(self, detector_config: str) -> None:
+    def set_class_attrs(self, detector_config: str) -> None:
         """Load detector configuration from YAML file and set attributes.
 
         Args:
@@ -134,31 +135,18 @@ class DeepfakeDetector(ABC):
                   f"to {weights_dir}")
             hf_hub_download(self.hf_repo, weights_filename, local_dir=weights_dir)
 
-    def load_train_config(self) -> Dict[str, Any]:
-        """Load training configuration from local file or Hugging Face Hub.
-
-        Returns:
-            The loaded configuration dictionary.
-
-        Raises:
-            Exception: If there is an error loading or parsing the config file.
-        """
-        destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
-
-        if destination_path.exists():
-            print(f"Loaded local config from {destination_path}")
-            with destination_path.open('r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-        else:
-            local_config_path = hf_hub_download(
-                self.hf_repo,
-                self.train_config,
-                local_dir=CONFIGS_DIR
-            )
-            print(f"Downloaded {self.hf_repo}/{self.train_config} "
-                  f"to {local_config_path}")
-            with local_config_path.open('r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-
-        self.config = config
-        return config
+    def load_model_config(self):
+        try:
+            destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
+            if not destination_path.exists():
+                local_config_path = hf_hub_download(self.hf_repo, self.train_config, local_dir=CONFIGS_DIR)
+                print(f"Downloaded {self.hf_repo}/{self.train_config} to {local_config_path}")
+                with Path(local_config_path).open('r') as f:
+                    self.config = yaml.safe_load(f)
+            else:
+                print(f"Loaded local config from {destination_path}")
+                with destination_path.open('r') as f:
+                    self.config = yaml.safe_load(f)
+        except Exception as e:
+            # some models such as NPR don't have an additional config file
+            bt.logging.warning("No additional train config loaded.")

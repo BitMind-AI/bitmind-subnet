@@ -30,7 +30,7 @@ class NPRDetector(DeepfakeDetector):
         """
         Load the ResNet50 model with the specified weights for deepfake detection.
         """
-        self.ensure_weights_are_available(self.weights)
+        self.ensure_weights_are_available(WEIGHTS_DIR, self.weights)
         self.model = resnet50(num_classes=1)
         self.model.load_state_dict(torch.load(Path(WEIGHTS_DIR) / self.weights, map_location=self.device))
         self.model.eval()
