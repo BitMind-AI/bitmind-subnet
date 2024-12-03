@@ -1,21 +1,20 @@
 import gc
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import bittensor as bt
-from PIL import Image
 import torch
+from PIL import Image
 from transformers import (
-    AutoModelForCausalLM, 
-    AutoTokenizer, 
-    Blip2Processor,
+    AutoModelForCausalLM,
+    AutoTokenizer,
     Blip2ForConditionalGeneration,
+    Blip2Processor,
     pipeline,
     logging as transformers_logging,
 )
 from transformers.utils.logging import disable_progress_bar
 
-from bitmind.dataset.image_dataset import ImageDataset
-from bitmind.synthetic_data_generation import image_utils
+import bittensor as bt
 from bitmind.validator.config import HUGGINGFACE_CACHE_DIR
 
 disable_progress_bar()
@@ -44,7 +43,7 @@ class ImageAnnotationGenerator:
             model_name: The name of the BLIP model for generating image captions.
             text_moderation_model_name: The name of the model used for moderating
                 text descriptions.
-            device: The device to use
+            device: The device to use.
             apply_moderation: Flag to determine whether text moderation should be
                 applied to captions.
         """
@@ -61,7 +60,7 @@ class ImageAnnotationGenerator:
         self.device = device
 
     def is_model_loaded(self) -> bool:
-        return self.model != None
+        return self.model is not None
 
     def load_models(self) -> None:
         """
@@ -69,7 +68,9 @@ class ImageAnnotationGenerator:
         the specified device.
         """
         if self.is_model_loaded():
-            bt.logging.warning(f"Image annotation model {self.model_name} is already loaded")
+            bt.logging.warning(
+                f"Image annotation model {self.model_name} is already loaded"
+            )
             return
 
         bt.logging.info(f"Loading image annotation model {self.model_name}")
@@ -156,7 +157,7 @@ class ImageAnnotationGenerator:
                 pad_token_id=self.text_moderation_pipeline.tokenizer.eos_token_id,
                 return_full_text=False
             )
-            
+
             if isinstance(moderated_text, list):
                 return moderated_text[0]['generated_text']
 
