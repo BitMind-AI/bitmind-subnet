@@ -33,7 +33,6 @@ class BaseDataset(ABC):
         self.huggingface_dataset_name = None
         self.dataset = None
         self.transforms = transforms
-
         
         if huggingface_dataset_path is None and huggingface_dataset is None:
             raise ValueError("Either huggingface_dataset_path or huggingface_dataset must be provided.")
@@ -41,7 +40,6 @@ class BaseDataset(ABC):
         # If a dataset is directly provided, use it
         if huggingface_dataset is not None:
             self.dataset = huggingface_dataset
-            print(self.dataset.info)
             self.huggingface_dataset_path = self.dataset.info.dataset_name
             self.huggingface_dataset_name = self.dataset.info.config_name
             try:

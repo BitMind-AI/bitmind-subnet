@@ -43,10 +43,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 from metrics.base_metrics_class import calculate_metrics_for_train
 
-from .base_detector import AbstractDetector
+from DFB.detectors.base_detector import AbstractDetector
 from DFB.detectors import DETECTOR
-from networks import BACKBONE
-from loss import LOSSFUNC
+from DFB.networks import BACKBONE
+from DFB.loss import LOSSFUNC
 
 logger = logging.getLogger(__name__)
 

@@ -6,8 +6,7 @@ import requests
 import datasets
 
 from bitmind.download_data import load_huggingface_dataset
-from bitmind.dataset.real_fake_dataset import RealFakeDataset
-from bitmind.dataset import ImageDataset, VideoDataset
+from base_miner.datasets import ImageDataset, VideoDataset, RealFakeDataset
 
 datasets.logging.set_verbosity_error()
 datasets.disable_progress_bar()
@@ -117,9 +116,6 @@ def create_source_label_mapping(
 def create_real_fake_datasets(
     real_datasets: Dict[str, List[ImageDataset]],
     fake_datasets: Dict[str, List[ImageDataset]],
-    train_transforms: transforms.Compose = None,
-    val_transforms: transforms.Compose = None,
-    test_transforms: transforms.Compose = None,
     source_labels: bool = False,
     group_sources_by_name: bool = False) -> Tuple[RealFakeDataset, ...]:
     """
@@ -143,19 +139,16 @@ def create_real_fake_datasets(
     train_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['train'],
         fake_image_datasets=fake_datasets['train'],
-        transforms=train_transforms,
         source_label_mapping=source_label_mapping)
 
     val_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['validation'],
         fake_image_datasets=fake_datasets['validation'],
-        transforms=val_transforms,
         source_label_mapping=source_label_mapping)
 
     test_dataset = RealFakeDataset(
         real_image_datasets=real_datasets['test'],
         fake_image_datasets=fake_datasets['test'],
-        transforms=test_transforms,
         source_label_mapping=source_label_mapping)
 
     if source_labels:

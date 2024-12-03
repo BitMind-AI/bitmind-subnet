@@ -8,7 +8,6 @@ class RealFakeDataset:
         self,
         real_image_datasets: list,
         fake_image_datasets: list,
-        transforms=None,
         fake_prob=0.5,
         source_label_mapping=None
     ):
@@ -24,7 +23,6 @@ class RealFakeDataset:
         """
         self.real_image_datasets = real_image_datasets
         self.fake_image_datasets = fake_image_datasets
-        self.transforms = transforms
         self.fake_prob = fake_prob
         self.source_label_mapping = source_label_mapping
 
