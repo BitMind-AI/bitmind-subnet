@@ -33,7 +33,7 @@ def get_rewards(
         responses: List[float],
         uids: List[int],
         axons: List[bt.axon],
-        performance_tracker,
+        performance_trackers,
     ) -> np.array:
     """
     Returns an array of rewards for the given label and miner responses.
@@ -51,24 +51,34 @@ def get_rewards(
     miner_rewards = []
     miner_metrics = []
     for axon, uid, pred_prob in zip(axons, uids, responses):
-        try:
-            miner_hotkey = axon.hotkey
-            if uid in performance_tracker.miner_hotkeys and performance_tracker.miner_hotkeys[uid] != miner_hotkey:
-                bt.logging.info(f"Miner hotkey changed for UID {uid}. Resetting performance metrics.")
-                performance_tracker.reset_miner_history(uid, miner_hotkey)
+        miner_modality_rewards = {}
+        miner_modality_metrics = {}
+        for modality in ['image', 'video']:
+            tracker = performance_trackers[modality]
+            try:
+                miner_hotkey = axon.hotkey
 
-            performance_tracker.update(uid, pred_prob, label, miner_hotkey)
-            metrics_100 = performance_tracker.get_metrics(uid, window=100)
-            metrics_10 = performance_tracker.get_metrics(uid, window=10)
-            reward = 0.5 * metrics_100['mcc'] + 0.5 * metrics_10['accuracy']
-            reward *= compute_penalty(pred_prob)
+                tracked_hotkeys = tracker.miner_hotkeys
+                if uid in tracked_hotkeys and tracked_hotkeys != miner_hotkey:
+                    bt.logging.info(f"Miner hotkey changed for UID {uid}. Resetting performance metrics.")
+                    tracker.reset_miner_history(uid, miner_hotkey)
 
-            miner_rewards.append(reward)
-            miner_metrics.append(metrics_100)
+                performance_trackers[modality].update(uid, pred_prob, label, miner_hotkey)
+                metrics_100 = tracker.get_metrics(uid, window=100)
+                metrics_10 = tracker.get_metrics(uid, window=10)
+                reward = 0.5 * metrics_100['mcc'] + 0.5 * metrics_10['accuracy']
+                reward *= compute_penalty(pred_prob)
 
-        except Exception as e:
-            bt.logging.error(f"Couldn't calculate reward for miner {uid}, prediction: {pred_prob}, label: {label}")
-            bt.logging.exception(e)
-            miner_rewards.append(0.0)
+                miner_modality_rewards[modality] = reward
+                miner_modality_metrics[modality] = metrics_100
+
+            except Exception as e:
+                bt.logging.error(f"Couldn't calculate reward for miner {uid}, prediction: {pred_prob}, label: {label}")
+                bt.logging.exception(e)
+                miner_rewards.append(0.0)
+
+        total_reward = 0.05 * miner_modality_rewards['video'] + 0.95 * miner_modality_rewards['image']
+        miner_rewards.append(total_reward)
+        miner_metrics.append(metrics_100)
 
     return np.array(miner_rewards), miner_metrics

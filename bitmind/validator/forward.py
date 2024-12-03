@@ -118,7 +118,7 @@ async def forward(self):
         responses=responses,
         uids=miner_uids,
         axons=axons,
-        performance_tracker=self.performance_tracker)
+        performance_trackers=self.performance_trackers)
 
     self.update_scores(rewards, miner_uids)
 
