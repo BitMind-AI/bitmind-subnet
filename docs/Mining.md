@@ -51,10 +51,9 @@ If you intend on training a miner, you can download the our open source datasets
 python bitmind/download_data.py
 ```
 
-This step is optional. If you choose not to run it, the dataset will be downloaded automatically when you run our training scripts.
+This step is optional. If you choose not to run it, the dataset will be downloaded automatically when you run the training scripts.
 
-The download location of this script is `~/.cache/huggingface`
-
+The default download location for data is `~/.cache/huggingface`
 
 
 ## Registration
