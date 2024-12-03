@@ -56,15 +56,24 @@ compute_spec:
       architecture: "x86_64"  # Architecture type (e.g., x86_64, arm64)
 
     gpu:
-      required: True                         # Does the application require a GPU?
-      min_vram: 33                           # Minimum GPU VRAM (GB)
-      recommended_vram: 48                   # Recommended GPU VRAM (GB)
-      min_compute_capability: 8.6            # Minimum CUDA compute capability
-      recommended_compute_capability: 8.6    # Recommended CUDA compute capability
-      recommended_gpu: "NVIDIA A40"          # Recommended GPU to purchase/rent
-      peak_fp16_tensor_tflops:               # Peak FP16 tensor TFLOPS (with FP16 accumulate)
-        min: 149.7
-        max: 299.4
+      required: True                            # Does the application require a GPU?
+      min_vram: 80                              # Minimum GPU VRAM (GB)
+      recommended_vram: 80                      # Recommended GPU VRAM (GB)
+      min_compute_capability: 8.0               # Minimum CUDA compute capability
+      recommended_compute_capability: 8.0       # Recommended CUDA compute capability
+      recommended_gpu: "NVIDIA A100 80GB PCIE"  # Recommended GPU to purchase/rent
+      fp64: 9.7                  # TFLOPS
+      fp64_tensor_core: 19.5     # TFLOPS
+      fp32: 19.5                 # TFLOPS
+      tf32: 156                  # TFLOPS*
+      bfloat16_tensor_core: 312  # TFLOPS*
+      int8_tensor_core: 624      # TOPS*
+
+      # See NVIDIA A100 datasheet for details:
+      # https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/
+      # nvidia-a100-datasheet-nvidia-us-2188504-web.pdf
+
+      # *double with sparsity
 
     memory:
       min_ram: 32          # Minimum RAM (GB)
