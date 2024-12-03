@@ -17,33 +17,20 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from pydantic import root_validator, validator
+from typing import List
+from pydantic import BaseModel, Field
 from torchvision import transforms
 from io import BytesIO
 from PIL import Image
 import bittensor as bt
-import pydantic
 import base64
+import pydantic
 import torch
+import zlib
 
-
-def prepare_image_synapse(image: Image):
-    """
-    Prepares an image for use with ImageSynapse object.
-
-    Args:
-        image (Image): The input image to be prepared.
-
-    Returns:
-        ImageSynapse: An instance of ImageSynapse containing the encoded image and a default prediction value.
-    """
-    if isinstance(image, torch.Tensor):
-        image = transforms.ToPILImage()(image.cpu().detach())
-
-    image_bytes = BytesIO()
-    image.save(image_bytes, format="JPEG")
-    b64_encoded_image = base64.b64encode(image_bytes.getvalue())
-    return ImageSynapse(image=b64_encoded_image)
+from bitmind.validator.config import TARGET_IMAGE_SIZE
+from bitmind.utils.image_transforms import get_base_transforms
+base_transforms = get_base_transforms(TARGET_IMAGE_SIZE)
 
 
 # ---- miner ----
@@ -61,6 +48,36 @@ def prepare_image_synapse(image: Image):
 #   predictions = dendrite.query( ImageSynapse( images = b64_images ) )
 #   assert len(predictions) == len(b64_images)
 
+def prepare_synapse(input_data, modality):
+    if isinstance(input_data, torch.Tensor):
+        input_data = transforms.ToPILImage()(input_data.cpu().detach())
+    if isinstance(input_data, list) and isinstance(input_data[0], torch.Tensor):
+        for i, img in enumerate(input_data):
+            input_data[i] = transforms.ToPILImage()(img.cpu().detach())
+
+    if modality == 'image':
+        return prepare_image_synapse(input_data)
+    elif modality == 'video':
+        return prepare_video_synapse(input_data)
+    else:
+        raise NotImplementedError(f"Unsupported modality: {modality}")
+
+
+def prepare_image_synapse(image: Image):
+    """
+    Prepares an image for use with ImageSynapse object.
+
+    Args:
+        image (Image): The input image to be prepared.
+
+    Returns:
+        ImageSynapse: An instance of ImageSynapse containing the encoded image and a default prediction value.
+    """
+    image_bytes = BytesIO()
+    image.save(image_bytes, format="JPEG")
+    b64_encoded_image = base64.b64encode(image_bytes.getvalue())
+    return ImageSynapse(image=b64_encoded_image)
+
 
 class ImageSynapse(bt.Synapse):
     """
@@ -72,6 +89,8 @@ class ImageSynapse(bt.Synapse):
     - prediction: a float  indicating the probabilty that the image is AI generated/modified.
         >.5 is considered generated/modified, <= 0.5 is considered real.
     """
+
+    testnet_label: int = -1  # for easier miner eval on testnet
 
     # Required request input, filled by sending dendrite caller.
     image: str = pydantic.Field(
@@ -99,3 +118,115 @@ class ImageSynapse(bt.Synapse):
         prediction probabilities
         """
         return self.prediction
+
+
+def prepare_video_synapse(frames: List[Image.Image]):
+    """
+    """
+    frame_bytes = []
+    for frame in frames:
+        buffer = BytesIO()
+        frame.save(buffer, format="JPEG")
+        frame_bytes.append(buffer.getvalue())
+
+    combined_bytes = b''.join(frame_bytes)
+    compressed_data = zlib.compress(combined_bytes)
+    encoded_data = base64.b85encode(compressed_data).decode('utf-8')
+    return VideoSynapse(video=encoded_data)
+
+class VideoSynapse(bt.Synapse):
+    """
+    Naive initial VideoSynapse 
+    Better option would be to modify the Dendrite interface to allow multipart/form-data here:
+    https://github.com/opentensor/bittensor/blob/master/bittensor/core/dendrite.py#L533
+    Another higher lift option would be to look into Epistula or Fiber
+    """
+
+    testnet_label: int = -1  # for easier miner eval on testnet
+
+    # Required request input, filled by sending dendrite caller.
+    video: str = pydantic.Field(
+        title="Video",
+        description="A wildly inefficient means of sending video data",
+        default="",
+        frozen=False
+    )
+
+    # Optional request output, filled by receiving axon.
+    prediction: float = pydantic.Field(
+        title="Prediction",
+        description="Probability that the image is AI generated/modified",
+        default=-1.,
+        frozen=False
+    )
+
+    def deserialize(self) -> float:
+        """
+        Deserialize the output. This method retrieves the response from
+        the miner, deserializes it and returns it as the output of the dendrite.query() call.
+
+        Returns:
+        - float: The deserialized miner prediction
+        prediction probabilities
+        """
+        return self.prediction
+
+
+def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
+    """
+    V1 of a function for decoding a VideoSynapse object back into a list of torch tensors.
+
+    Args:
+        synapse: VideoSynapse object containing the encoded video data
+
+    Returns:
+        List of torch tensors, each representing a frame from the video
+    """
+    compressed_data = base64.b85decode(synapse.video.encode('utf-8'))
+    combined_bytes = zlib.decompress(compressed_data)
+
+    # Split the combined bytes into individual JPEG files
+    # Look for JPEG markers: FF D8 (start) and FF D9 (end)
+    frames = []
+    current_pos = 0
+    data_length = len(combined_bytes)
+
+    while current_pos < data_length:
+        # Find start of JPEG (FF D8)
+        while current_pos < data_length - 1:
+            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD8:
+                break
+            current_pos += 1
+
+        if current_pos >= data_length - 1:
+            break
+
+        start_pos = current_pos
+
+        # Find end of JPEG (FF D9)
+        while current_pos < data_length - 1:
+            if combined_bytes[current_pos] == 0xFF and combined_bytes[current_pos + 1] == 0xD9:
+                current_pos += 2
+                break
+            current_pos += 1
+
+        if current_pos > start_pos:
+            # Extract the JPEG data
+            jpeg_data = combined_bytes[start_pos:current_pos]
+            try:
+                # Convert to PIL Image
+                img = Image.open(BytesIO(jpeg_data))
+                # Convert to numpy array
+                frames.append(img)
+            except Exception as e:
+                print(f"Error processing frame: {e}")
+                continue
+
+    frames = frames[:32]  # temp
+    bt.logging.info('transforming video inputs')
+    frames = base_transforms(frames)
+
+    frames = torch.stack(frames, dim=0)
+    frames = frames.unsqueeze(0)
+    print(f'decoded video into tensor with shape {frames.shape}')
+    return frames

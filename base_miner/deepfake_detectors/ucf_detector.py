@@ -4,28 +4,25 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Ignore INFO and WARN messages
 import random
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+from huggingface_hub import hf_hub_download
 from pathlib import Path
-
+from PIL import Image
+import torchvision.transforms as transforms
+import torch.backends.cudnn as cudnn
+import bittensor as bt
 import numpy as np
 import torch
-import torch.backends.cudnn as cudnn
-import torchvision.transforms as transforms
 import yaml
-from PIL import Image
-from huggingface_hub import hf_hub_download
 import gc
 
-from base_miner.UCF.config.constants import CONFIGS_DIR, WEIGHTS_DIR
-from base_miner.gating_mechanisms import FaceGate
-
-from base_miner.UCF.detectors import DETECTOR
+from base_miner.DFB.config.constants import CONFIGS_DIR, WEIGHTS_DIR
 from base_miner.deepfake_detectors import DeepfakeDetector
-from base_miner import DETECTOR_REGISTRY, GATE_REGISTRY
+from base_miner.DFB.detectors import UCFDetector
+from base_miner import DETECTOR_REGISTRY
 
-import bittensor as bt
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')
-class UCFDetector(DeepfakeDetector):
+class UCFImageDetector(DeepfakeDetector):
     """
     DeepfakeDetector subclass that initializes a pretrained UCF model
     for binary classification of fake and real images.
@@ -39,33 +36,6 @@ class UCFDetector(DeepfakeDetector):
     
     def __init__(self, model_name: str = 'UCF', config: str = 'ucf.yaml', device: str = 'cpu'):
         super().__init__(model_name, config, device)
-    
-    def ensure_weights_are_available(self, weight_filename):
-        destination_path = Path(WEIGHTS_DIR) / Path(weight_filename)
-        if not destination_path.parent.exists():
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-        if not destination_path.exists():
-            model_path = hf_hub_download(self.hf_repo, weight_filename)
-            model = torch.load(model_path, map_location=self.device)
-            torch.save(model, destination_path)
-
-    def load_train_config(self):
-        destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
-    
-        if not destination_path.exists():
-            local_config_path = hf_hub_download(self.hf_repo, self.train_config)
-            print(f"Downloaded {self.hf_repo}/{self.train_config} to {local_config_path}")
-            config_dict = {}
-            with open(local_config_path, 'r') as f:
-                config_dict = yaml.safe_load(f)
-            with open(destination_path, 'w') as f:
-                yaml.dump(config_dict, f, default_flow_style=False)
-            with destination_path.open('r') as f:
-                return yaml.safe_load(f)
-        else:
-            print(f"Loaded local config from {destination_path}")
-            with destination_path.open('r') as f:
-                return yaml.safe_load(f)
 
     def init_cudnn(self):
         if self.train_config.get('cudnn'):
@@ -79,14 +49,13 @@ class UCFDetector(DeepfakeDetector):
             torch.cuda.manual_seed_all(seed_value)
 
     def load_model(self):
-        self.train_config = self.load_train_config()
         self.init_cudnn()
         self.init_seed()
-        self.ensure_weights_are_available(self.weights)
-        self.ensure_weights_are_available(self.train_config['pretrained'].split('/')[-1])
-        model_class = DETECTOR[self.train_config['model_name']]
+        self.ensure_weights_are_available(WEIGHTS_DIR, self.weights)
+        #self.ensure_weights_are_available(WEIGHTS_DIR, self.train_config['pretrained'].split('/')[-1])
+        #model_class = DETECTOR[self.train_config['model_name']]
         bt.logging.info(f"Loaded config from training run: {self.train_config}")
-        self.model = model_class(self.train_config).to(self.device)
+        self.model = UCFDetector(self.train_config).to(self.device)
         self.model.eval()
         weights_path = Path(WEIGHTS_DIR) / self.weights
         checkpoint = torch.load(weights_path, map_location=self.device)

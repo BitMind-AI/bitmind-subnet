@@ -164,7 +164,10 @@ data/
 checkpoints/
 .requirements_installed
 base_miner/NPR/weights/*
-base_miner/UCF/weights/*
-base_miner/UCF/logs/*
+base_miner/NPR/logs/*
+base_miner/DFB/weights/*
+base_miner/DFB/logs/*
 miner_eval.py
 *.env
+*~
+wandb/

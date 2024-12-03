@@ -18,15 +18,28 @@
 # DEALINGS IN THE SOFTWARE.
 
 import bittensor as bt
+import yaml
 import wandb
 import time
 
 from neurons.validator_proxy import ValidatorProxy
-from bitmind.validator import forward
+from bitmind.validator.forward import forward
+from bitmind.validator.cache import VideoCache, ImageCache
 from bitmind.base.validator import BaseValidatorNeuron
-from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticImageGenerator
-from bitmind.image_dataset import ImageDataset
-from bitmind.constants import VALIDATOR_DATASET_META, WANDB_PROJECT, WANDB_ENTITY
+from bitmind.validator.config import (
+    MAINNET_UID,
+    MAINNET_WANDB_PROJECT,
+    TESTNET_WANDB_PROJECT,
+    IMAGE_DATASETS,
+    VIDEO_DATASETS,
+    WANDB_ENTITY,
+    REAL_VIDEO_CACHE_DIR,
+    REAL_IMAGE_CACHE_DIR,
+    SYNTH_IMAGE_CACHE_DIR,
+    SYNTH_VIDEO_CACHE_DIR,
+    VALIDATOR_INFO_PATH
+)
+
 import bitmind
 
 
@@ -50,25 +63,26 @@ class Validator(BaseValidatorNeuron):
 
         self.last_responding_miner_uids = []
         self.validator_proxy = ValidatorProxy(self)
-        
-        bt.logging.info("init_wandb()")
+
+        # real media caches run async update tasks to download and unpack parts of subsets of datasets
+        self.real_media_cache = {
+            'image': ImageCache(REAL_IMAGE_CACHE_DIR, run_updater=True, datasets=IMAGE_DATASETS['real']),
+            'video': VideoCache(REAL_VIDEO_CACHE_DIR, run_updater=True, datasets=VIDEO_DATASETS['real'])
+        }
+
+        # synthetic media caches are populated by the SyntheticDataGenerator process (started by start_validator.sh)
+        self.synthetic_media_cache = {
+            'image': ImageCache(SYNTH_IMAGE_CACHE_DIR, run_updater=False),
+            'video': VideoCache(SYNTH_VIDEO_CACHE_DIR, run_updater=False)
+        }
+
+        self.media_cache = {
+            'real': self.real_media_cache,
+            'synthetic': self.real_media_cache,
+        }
+
         self.init_wandb()
-        
-        bt.logging.info("Loading real datasets")
-        self.real_image_datasets = [
-            ImageDataset(ds['path'], 'train', ds.get('name', None))
-            for ds in VALIDATOR_DATASET_META['real']
-        ]
-        self.total_real_images = sum([
-            len(ds) for ds in self.real_image_datasets
-        ])
-
-        self.synthetic_image_generator = SyntheticImageGenerator(
-            prompt_type='annotation',
-            use_random_diffuser=True,
-            diffuser_name=None,
-            device=self.config.neuron.device)
-
+        self.store_vali_info()
         self._fake_prob = self.config.get('fake_prob', 0.5)
 
     async def forward(self):
@@ -93,12 +107,16 @@ class Validator(BaseValidatorNeuron):
         self.config.version = bitmind.__version__
         self.config.type = self.neuron_type
 
+        wandb_project = TESTNET_WANDB_PROJECT
+        if self.config.netuid == MAINNET_UID:
+            wandb_project = MAINNET_WANDB_PROJECT
+
         # Initialize the wandb run for the single project
-        print("Initializing W&B")
+        bt.logging.info(f"Initializing W&B run for '{WANDB_ENTITY}/{wandb_project}'")
         try:
             run = wandb.init(
                 name=run_name,
-                project=WANDB_PROJECT,
+                project=wandb_project,
                 entity=WANDB_ENTITY,
                 config=self.config,
                 dir=self.config.full_path,
@@ -114,7 +132,23 @@ class Validator(BaseValidatorNeuron):
         self.config.signature = signature
         wandb.config.update(self.config, allow_val_change=True)
 
-        bt.logging.success(f"Started wandb run for project '{WANDB_PROJECT}'")
+        bt.logging.success(f"Started wandb run {run_name}")
+
+    def store_vali_info(self):
+        """
+        Stores the uid, hotkey and netuid of the currently running vali instance.
+        The SyntheticDataGenerator process reads this to name its w&b run
+        """
+        validator_info = {
+            'uid': self.uid,
+            'hotkey': self.wallet.hotkey.ss58_address,
+            'netuid': self.config.netuid,
+            'full_path': self.config.neuron.full_path
+        }
+        with open(VALIDATOR_INFO_PATH, 'w') as f:
+            yaml.safe_dump(validator_info, f, indent=4)
+
+        bt.logging.info(f"Wrote validator info to {VALIDATOR_INFO_PATH}")
 
 
 # The main function parses the configuration and runs the validator.
@@ -124,4 +158,4 @@ if __name__ == "__main__":
     with Validator() as validator:
         while True:
             bt.logging.info(f"Validator running | uid {validator.uid} | {time.time()}")
-            time.sleep(5)
+            time.sleep(45)

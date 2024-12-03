@@ -1,6 +1,4 @@
 from tensorboardX import SummaryWriter
-from validate import validate
-from networks.trainer import Trainer
 from torch.utils.data import DataLoader
 import numpy as np
 import os
@@ -8,10 +6,12 @@ import time
 import random
 import torch
 
-from bitmind.constants import DATASET_META
-from bitmind.image_transforms import base_transforms, random_aug_transforms
-from bitmind.utils.data import load_and_split_datasets, create_real_fake_datasets
-from options import TrainOptions
+from base_miner.NPR.validate import validate
+from base_miner.NPR.networks.trainer import Trainer
+from base_miner.constants import IMAGE_DATASETS as DATASET_META
+from base_miner.NPR.options import TrainOptions
+from bitmind.utils.image_transforms import get_base_transforms, get_random_augmentations
+from base_miner.datasets.util import load_and_split_datasets, create_real_fake_datasets
 
 
 def seed_torch(seed=1029):
@@ -34,14 +34,19 @@ def main():
     val_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "val"))
 
     # RealFakeDataseta will limit the number of images sampled per dataset to the length of the smallest dataset
-    real_datasets = load_and_split_datasets(DATASET_META['real'])
-    fake_datasets = load_and_split_datasets(DATASET_META['fake'])
+    base_transforms = get_base_transforms()
+    random_augs = get_random_augmentations()
+    split_transforms = {
+        'train': random_augs,
+        'val': base_transforms,
+        'test': base_transforms
+    }
+    real_datasets = load_and_split_datasets(
+        DATASET_META['real'], modality='image', split_transforms=split_transforms)
+    fake_datasets = load_and_split_datasets(
+        DATASET_META['fake'], modality='image', split_transforms=split_transforms)
     train_dataset, val_dataset, test_dataset = create_real_fake_datasets(
-        real_datasets,
-        fake_datasets,
-        train_transforms=random_aug_transforms,
-        val_transforms=base_transforms,
-        test_transforms=base_transforms)
+        real_datasets, fake_datasets)
 
     train_loader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=lambda d: tuple(d))

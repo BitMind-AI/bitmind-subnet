@@ -1,13 +1,15 @@
 #!/bin/bash
 
-# Load environment variables from .env file
+# Load environment variables from .env file & set defaults
 set -a
 source validator.env
 set +a
 
-# Set default values for environment variables
 : ${VALIDATOR_PROXY_PORT:=10913}
 : ${DEVICE:=cuda}
+
+VALIDATOR_PROCESS_NAME="bitmind_validator"
+DATA_GEN_PROCESS_NAME="bitmind_data_generator"
 
 # Login to Weights & Biases
 if ! wandb login $WANDB_API_KEY; then
@@ -21,20 +23,20 @@ if ! huggingface-cli login --token $HUGGING_FACE_TOKEN; then
   exit 1
 fi
 
-# Check if the process is already running
-if pm2 list | grep -q "bitmind_validator"; then
-  echo "Process 'bitmind_validator' is already running. Deleting it..."
-  pm2 delete bitmind_validator
+# VALIDATOR PROCESS
+if pm2 list | grep -q "$VALIDATOR_PROCESS_NAME"; then
+  echo "Process '$VALIDATOR_PROCESS_NAME' is already running. Deleting it..."
+  pm2 delete $VALIDATOR_PROCESS_NAME
 fi
 
-echo "Verifying access to synthetic image generation models. This may take a few minutes."
-if ! python3 bitmind/validator/verify_models.py; then
-  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
-  exit 1
-fi
+#echo "Verifying access to synthetic image generation models. This may take a few minutes."
+#if ! python3 bitmind/validator/verify_models.py; then
+#  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
+#  exit 1
+#fi
 
-# Start the process with arguments from environment variables
-pm2 start neurons/validator.py --name bitmind_validator -- \
+echo "Starting validator process"
+pm2 start neurons/validator.py --name $VALIDATOR_PROCESS_NAME -- \
   --netuid $NETUID \
   --subtensor.network $SUBTENSOR_NETWORK \
   --subtensor.chain_endpoint $SUBTENSOR_CHAIN_ENDPOINT \
@@ -43,3 +45,12 @@ pm2 start neurons/validator.py --name bitmind_validator -- \
   --axon.port $VALIDATOR_AXON_PORT \
   --proxy.port $VALIDATOR_PROXY_PORT \
   --neuron.device $DEVICE
+
+# SYNTHETIC DATA GENERATOR PROCESS
+if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
+  echo "Process '$DATA_GEN_PROCESS_NAME' is already running. Deleting it..."
+  pm2 delete $DATA_GEN_PROCESS_NAME
+fi
+
+echo "Starting SyntheticDataGenerator process"
+pm2 start bitmind/validator/run_data_generator.py --name $DATA_GEN_PROCESS_NAME
