@@ -10,8 +10,8 @@ from bitmind.utils.image_transforms import (
     RandomRotationWithParams,
     ConvertToRGB,
     ComposeWithParams,
-    base_transforms,
-    random_aug_transforms
+    get_base_transforms,
+    get_random_augmentations
 )
 
 
@@ -25,6 +25,6 @@ TRANSFORMS = [
 ]
 
 TRANSFORM_PIPELINES = [
-    base_transforms,
-    random_aug_transforms
+    get_base_transforms(TARGET_IMAGE_SIZE),
+    get_random_augmentations(TARGET_IMAGE_SIZE)
 ]
