@@ -378,7 +378,7 @@ def get_tall_base_transforms(target_image_size=TARGET_IMAGE_SIZE):
     ])
 
 # Medium difficulty transforms with mild distortions
-def get_augmentations_medium(target_image_size=TARGET_IMAGE_SIZE):
+def get_random_augmentations_medium(target_image_size=TARGET_IMAGE_SIZE):
     return ComposeWithParams([
         ConvertToRGB(),
         transforms.ToTensor(),
@@ -392,7 +392,7 @@ def get_augmentations_medium(target_image_size=TARGET_IMAGE_SIZE):
     ])
 
 # Hard difficulty transforms with more severe distortions
-def get_augmentations_hard(target_image_size=TARGET_IMAGE_SIZE):
+def get_random_augmentations_hard(target_image_size=TARGET_IMAGE_SIZE):
     return ComposeWithParams([
         ConvertToRGB(),
         transforms.ToTensor(), 
