@@ -81,7 +81,7 @@ class VideoDataset(BaseDataset):
                 images.append(img)
             except Exception as e:
                 print(f"Error loading image at index {index}: {e}")
-                return process_sample(dataset, 0, max_frames, mask_grid_size, huggingface_dataset_path)
+                return self.__getitem__(0)
 
         if self.transforms is not None:
             images = self.transforms(images)

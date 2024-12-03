@@ -452,13 +452,13 @@ def apply_augmentation_by_level(image, target_image_size, level_probs={
     
     # Apply appropriate transform
     if level == 0:
-        tforms = get_base_transforms(target_iamge_size)
+        tforms = get_base_transforms(target_image_size)
     elif level == 1:
-        tforms = get_random_augmentations(target_iamge_size)
+        tforms = get_random_augmentations(target_image_size)
     elif level == 2:
-        tforms = get_random_augmentations_medium(target_iamge_size)
+        tforms = get_random_augmentations_medium(target_image_size)
     else:  # level == 3
-        tforms = get_random_augmentations_hard(target_iamge_size)
+        tforms = get_random_augmentations_hard(target_image_size)
 
     transformed = tforms(image)
         
