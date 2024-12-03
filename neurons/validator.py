@@ -23,7 +23,7 @@ import wandb
 import time
 
 from neurons.validator_proxy import ValidatorProxy
-from bitmind.validator import forward
+from bitmind.validator.forward import forward
 from bitmind.validator.cache import VideoCache, ImageCache
 from bitmind.base.validator import BaseValidatorNeuron
 from bitmind.validator.config import (
@@ -158,4 +158,4 @@ if __name__ == "__main__":
     with Validator() as validator:
         while True:
             bt.logging.info(f"Validator running | uid {validator.uid} | {time.time()}")
-            time.sleep(5)
+            time.sleep(45)
