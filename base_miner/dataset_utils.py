@@ -7,7 +7,7 @@ import datasets
 
 from bitmind.download_data import load_huggingface_dataset
 from bitmind.dataset.real_fake_dataset import RealFakeDataset
-from bitmind.dataset.image_dataset import ImageDataset
+from bitmind.dataset import ImageDataset, VideoDataset
 
 datasets.logging.set_verbosity_error()
 datasets.disable_progress_bar()
@@ -17,8 +17,11 @@ def split_dataset(dataset):
     # Split data into train, validation, test and return the three splits
     dataset = dataset.shuffle(seed=42)
 
+    if 'train' in dataset:
+        dataset = dataset['train']
+
     split_dataset = {}
-    train_test_split = dataset['train'].train_test_split(test_size=0.2, seed=42)
+    train_test_split = dataset.train_test_split(test_size=0.2, seed=42)
     split_dataset['train'] = train_test_split['train']
     temp_dataset = train_test_split['test']
 
@@ -30,7 +33,11 @@ def split_dataset(dataset):
     return split_dataset['train'], split_dataset['validation'], split_dataset['test']
 
 
-def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]:
+def load_and_split_datasets(
+    dataset_meta: list,
+    modality: str,
+    split_transforms: Dict[str, transforms.Compose] = {},
+) -> Dict[str, List[ImageDataset]]:
     """
     Helper function to load and split dataset into train, validation, and test sets.
 
@@ -56,7 +63,12 @@ def load_and_split_datasets(dataset_meta: list) -> Dict[str, List[ImageDataset]]
         train_ds, val_ds, test_ds = split_dataset(dataset)
 
         for split, data in zip(splits, [train_ds, val_ds, test_ds]):
-            image_dataset = ImageDataset(huggingface_dataset=data)
+            if modality == 'image':
+                image_dataset = ImageDataset(huggingface_dataset=data, transforms=split_transforms.get(split, None))
+            elif modality == 'video':
+                image_dataset = VideoDataset(huggingface_dataset=data, transforms=split_transforms.get(split, None))
+            else:
+                raise NotImplementedError(f'Unsupported modality: {modality}')
             datasets[split].append(image_dataset)
 
         split_lengths = ', '.join([f"{split} len={len(datasets[split][0])}" for split in splits])

@@ -4,7 +4,7 @@ HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
 TARGET_IMAGE_SIZE = (256, 256)
 
 
-DATASET_META = {
+IMAGE_DATASETS = {
     "real": [
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-images-v7"},
@@ -19,7 +19,16 @@ DATASET_META = {
     ]
 }
 
-FACE_DATASET_META = {
+VIDEO_DATASETS = {
+    "real": [
+        {"path": "/home/user/.cache/huggingface/video_datasets/training"}
+    ],
+    "fake": [
+        {"path": "/home/user/.cache/huggingface/video_datasets/training"}
+    ]
+}
+
+FACE_IMAGE_DATASETS = {
     "real": [
         {"path": "bitmind/ffhq-256_training_faces", "name": "base_transforms"},
         {"path": "bitmind/celeb-a-hq_training_faces", "name": "base_transforms"}

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from datasets import Dataset
 from typing import Optional
+from torchvision.transforms import Compose
 
 from bitmind.download_data import load_huggingface_dataset
 
@@ -12,7 +13,8 @@ class BaseDataset(ABC):
         huggingface_dataset_split: str = 'train',
         huggingface_dataset_name: Optional[str] = None,
         huggingface_dataset: Optional[Dataset] = None,
-        download_mode: Optional[str] = None
+        download_mode: Optional[str] = None,        
+        transforms: Optional[Compose] = None
     ):
         """Base class for dataset implementations.
         
@@ -30,6 +32,8 @@ class BaseDataset(ABC):
         self.huggingface_dataset_split = huggingface_dataset_split
         self.huggingface_dataset_name = None
         self.dataset = None
+        self.transforms = transforms
+
         
         if huggingface_dataset_path is None and huggingface_dataset is None:
             raise ValueError("Either huggingface_dataset_path or huggingface_dataset must be provided.")
@@ -37,9 +41,14 @@ class BaseDataset(ABC):
         # If a dataset is directly provided, use it
         if huggingface_dataset is not None:
             self.dataset = huggingface_dataset
+            print(self.dataset.info)
             self.huggingface_dataset_path = self.dataset.info.dataset_name
-            self.huggingface_dataset_split = list(self.dataset.info.splits.keys())[0]
             self.huggingface_dataset_name = self.dataset.info.config_name
+            try:
+                self.huggingface_dataset_split = list(self.dataset.info.splits.keys())[0]
+            except AttributeError as e:
+                self.huggingface_data_split = None
+
         else:
             # Store the initialization parameters
             self.huggingface_dataset_path = huggingface_dataset_path

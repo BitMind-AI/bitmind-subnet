@@ -55,21 +55,15 @@ class RealFakeDataset:
             label = 1.0
         else:
             source = self.real_image_datasets[np.random.randint(0, len(self.real_image_datasets))]
-            imgs, idx = source.sample(1)
-            image = imgs[0]['image']
-            index = idx[0]
+            #imgs, idx = source.sample(1)
+            image = source[index]['image']
+            #image = imgs[0]['image']
+            #index = idx[0]
             label = 0.0
 
         self._history['source'].append(source.huggingface_dataset_path)
         self._history['label'].append(label)
         self._history['index'].append(index)
-        
-        try:
-            if self.transforms is not None:
-                image = self.transforms(image)
-        except Exception as e:
-            print(e)
-            print(source.huggingface_dataset_path, index)
 
         if self.source_label_mapping:
             source_label = self.source_label_mapping[source.huggingface_dataset_path]
@@ -95,3 +89,20 @@ class RealFakeDataset:
             'index': [],
             'label': [],
         }
+
+    @staticmethod
+    def collate_fn(batch):
+        images, labels, source_labels = zip(*batch)
+
+        images = torch.stack(images, dim=0)  # Stack image tensors into a single tensor
+        labels = torch.LongTensor(labels)
+        source_labels = torch.LongTensor(source_labels)
+
+        data_dict = {
+            'image': images,
+            'label': labels,
+            'label_spe': source_labels,
+            'landmark': None,
+            'mask': None
+        }
+        return data_dict

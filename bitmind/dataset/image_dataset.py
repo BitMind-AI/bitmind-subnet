@@ -4,6 +4,7 @@ from PIL import Image
 from io import BytesIO
 import bittensor as bt
 import numpy as np
+from torchvision.transforms import Compose
 
 from bitmind.download_data import load_huggingface_dataset, download_image
 from .base_dataset import BaseDataset
@@ -16,7 +17,8 @@ class ImageDataset(BaseDataset):
         huggingface_dataset_split: str = 'train',
         huggingface_dataset_name: Optional[str] = None,
         huggingface_dataset: Optional[Dataset] = None,
-        download_mode: Optional[str] = None
+        download_mode: Optional[str] = None,
+        transforms: Optional[Compose] = None,
     ):
         """Initialize the ImageDataset.
         
@@ -30,13 +32,13 @@ class ImageDataset(BaseDataset):
             download_mode (str, optional): Download mode for the dataset.
                 Can be None or "force_redownload"
         """
-        # Call parent class initialization
         super().__init__(
             huggingface_dataset_path=huggingface_dataset_path,
             huggingface_dataset_split=huggingface_dataset_split,
             huggingface_dataset_name=huggingface_dataset_name,
             huggingface_dataset=huggingface_dataset,
-            download_mode=download_mode
+            download_mode=download_mode,
+            transforms=transforms
         )
 
     def __getitem__(self, index: int) -> dict:
@@ -92,6 +94,9 @@ class ImageDataset(BaseDataset):
         # remove alpha channel if download didnt 404
         if image is not None:
             image = image.convert('RGB')
+
+        if self.transforms is not None:
+            images = self.transforms(images)
 
         return {
             'image': image,

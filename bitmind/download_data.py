@@ -11,10 +11,15 @@ import subprocess
 import glob
 import requests
 
-from base_miner.constants import DATASET_META, HUGGINGFACE_CACHE_DIR
+from base_miner.constants import IMAGE_DATASETS, HUGGINGFACE_CACHE_DIR
 
 datasets.logging.set_verbosity_warning()
 datasets.disable_progress_bar()
+
+from datasets import load_dataset, load_from_disk
+from pathlib import Path
+from typing import Optional, Union
+import os
 
 
 def load_huggingface_dataset(
@@ -26,23 +31,32 @@ def load_huggingface_dataset(
 ) -> datasets.Dataset:
     """
     Load a dataset from Hugging Face or a local directory.
-
     Args:
-        path (str): Path to the dataset or 'imagefolder:<directory>' for image folder. Can either be to a publicly
-            hosted huggingface datset with the format <organizatoin>/<datset-name> or a local directory with the format
-            imagefolder:<path/to/directory>
-        split (str, optional): Name of the dataset split to load (default: None).
-            Make sure to check what splits are available for the datasets you're working with.
-        name (str, optional): Name of the dataset (if loading from Hugging Face, default: None).
-            Some huggingface datasets provide various subets of different sizes, which can be accessed via thi
-            parameter.
-        download_mode (str, optional): Download mode for the dataset (if loading from Hugging Face, default: None).
-            can be None or "force_redownload"
-        local_data_path (str, optional): Some datasets on Hugging Face only contain metadata and require a manual
-            download step to acquire the actual media. This path specifies where said media will be stored. 
+        path (str): Path to dataset. Can be:
+            - A Hugging Face dataset path (<organization>/<dataset-name>)
+            - An image folder path (imagefolder:<path/to/directory>)
+            - A local path to a saved dataset (for load_from_disk)
+        split (str, optional): Dataset split to load (default: 'train')
+        name (str, optional): Dataset configuration name (default: None)
+        download_mode (str, optional): Download mode for Hugging Face datasets
+        local_data_path (str, optional): Path for storing downloaded media files
     Returns:
-        Union[dict, load_dataset.Dataset]: The loaded dataset or a specific split of the dataset as requested.
+        Dataset: The loaded dataset or requested split
     """
+    # Check if it's a local path suitable for load_from_disk
+    if not path.startswith('imagefolder:') and os.path.exists(path):
+        try:
+            # Look for dataset artifacts that indicate this is a saved dataset
+            dataset_files = {'dataset_info.json', 'state.json', 'data'}
+            path_contents = set(os.listdir(path))
+            if dataset_files.intersection(path_contents):
+                dataset = load_from_disk(path)
+                if split is None:
+                    return dataset
+                return dataset[split]
+        except Exception as e:
+            print(f"Attempted load_from_disk but failed: {e}")
+    
     if 'imagefolder' in path:
         _, directory = path.split(':')
         if name:
@@ -56,12 +70,10 @@ def load_huggingface_dataset(
             download_mode=download_mode,
             cache_dir=HUGGINGFACE_CACHE_DIR,
             local_data_path=local_data_path)
-
+    
     if split is None:
         return dataset
-
     return dataset[split]
-
 
 def download_image(url: str) -> Image.Image:
     """
@@ -183,7 +195,7 @@ if __name__ == '__main__':
     clean_cache(args.cache_dir)  # Clear the cache of lock and incomplete files.
 
     if args.modality == 'image':
-        dataset_meta = DATASET_META
+        dataset_meta = IMAGE_DATASETS
     #elif args.modality == 'video':
     #    dataset_meta = VIDEO_DATASET_META
     

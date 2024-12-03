@@ -25,8 +25,8 @@ VIDEO_DETECTOR=TALL                            # Options: TALL, None
 VIDEO_DETECTOR_CONFIG=tall.yaml                # Configs live in base_miner/deepfake_detectors/configs
                                                # Supply a filename or relative path
 
-IMAGE_MINER_DEVICE=cpu                         # Options: cpu, cuda
-VIDEO_MINER_DEVICE=cpu
+IMAGE_DETECTOR_DEVICE=cpu                         # Options: cpu, cuda
+VIDEO_DETECTOR_DEVICE=cpu
 
 # Subtensor Network Configuration:
 NETUID=34                                      # Network User ID options: 34, 168

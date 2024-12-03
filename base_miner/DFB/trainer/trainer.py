@@ -227,7 +227,7 @@ class Trainer(object):
             losses, predictions=self.train_step(data_dict)
             # update learning rate
 
-            if 'SWA' in self.config and self.config['SWA'] and epoch>self.config['swa_start']:
+            if self.config.get('SWA', False) and epoch>self.config['swa_start']:
                 self.swa_model.update_parameters(self.model)
 
             # compute training metric for each batch data
@@ -246,7 +246,7 @@ class Trainer(object):
 
             # run tensorboard to visualize the training process
             if iteration % 300 == 0 and self.config['gpu_id']==0:
-                if self.config['SWA'] and (epoch>self.config['swa_start'] or self.config['dry_run']):
+                if self.config.get('SWA', False) and (epoch>self.config['swa_start'] or self.config['dry_run']):
                     self.scheduler.step()
                 # info for loss
                 loss_str = f"Iter: {step_cnt}    "
@@ -331,7 +331,6 @@ class Trainer(object):
                         data_dict[key] = data_dict[key].cuda()
             # model forward without considering gradient computation
             predictions = self.inference(data_dict) #dict with keys cls, feat
-            
             label_lists += list(data_dict['label'].cpu().detach().numpy())
             # Get the predicted class for each sample in the batch
             _, predicted_classes = torch.max(predictions['cls'], dim=1)
