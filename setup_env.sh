@@ -60,6 +60,9 @@ VIDEO_DETECTOR_DEVICE=cpu
 NETUID=34                            # Network User ID options: 34, 168
 SUBTENSOR_NETWORK=finney             # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
+                                     # Endpoints:
+                                     # - wss://entrypoint-finney.opentensor.ai:443
+                                     # - wss://test.finney.opentensor.ai:443/
 
 # Wallet Configuration
 WALLET_NAME=default
@@ -84,13 +87,16 @@ else
 NETUID=34                            # Network User ID options: 34, 168
 SUBTENSOR_NETWORK=finney             # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
+                                     # Endpoints:
+                                     # - wss://entrypoint-finney.opentensor.ai:443
+                                     # - wss://test.finney.opentensor.ai:443/
 
 # Wallet Configuration
 WALLET_NAME=default
 WALLET_HOTKEY=default
 
 # Validator Settings
-VALIDATOR_AXON_PORT=8092             # If using RunPod, must be >= 70000
+VALIDATOR_AXON_PORT=8092             # If using RunPod, must be >= 70000 for symmetric mapping
 VALIDATOR_PROXY_PORT=10913
 DEVICE=cuda
 
