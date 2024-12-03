@@ -96,7 +96,7 @@ class ImageDataset(BaseDataset):
             image = image.convert('RGB')
 
         if self.transforms is not None:
-            images = self.transforms(images)
+            image = self.transforms(image)
 
         return {
             'image': image,

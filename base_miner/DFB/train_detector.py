@@ -71,29 +71,6 @@ parser.add_argument('--epochs', type=int, default=None, help='number of training
 args = parser.parse_args()
 
 
-"""
-def ensure_backbone_is_available(logger,
-                                 device,
-                                 weights_dir=WEIGHTS_DIR,
-                                 model_filename=BACKBONE_CKPT,
-                                 hugging_face_repo_name=HF_REPO):
-    
-    destination_path = Path(weights_dir) / Path(model_filename)
-    if not destination_path.parent.exists():
-        destination_path.parent.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created directory {destination_path.parent}.")
-    if not destination_path.exists():
-        model_path = hf_hub_download(hugging_face_repo_name, model_filename)
-        model = torch.load(model_path, map_location=device)
-        torch.save(model, destination_path)
-        del model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        logger.info(f"Downloaded backbone {model_filename} to {destination_path}.")
-    else:
-        logger.info(f"{model_filename} backbone already present at {destination_path}.")
-"""
-
 def init_seed(config):
     if config['manualSeed'] is None:
         config['manualSeed'] = random.randint(1, 10000)
@@ -308,11 +285,27 @@ def main():
         )
         logger.addFilter(RankFilter(0))
 
-    #ensure_backbone_is_available(
-    #    logger=logger,
-    #    model_filename=config['pretrained'].split('/')[-1],
-    #    hugging_face_repo_name='bitmind/bm-ucf'
-    #)
+    # download weights if huggingface repo provided.
+    # Note: TALL currently skips this and downloads from github
+    pretrained_config = config.get('pretrained', {})
+    if not isinstance(pretrained_config, str):
+        hf_repo = pretrained_config.get('hf_repo')
+        weights_filename = pretrained_config.get('filename')
+        if hf_repo and weights_filename:
+            local_path = Path(WEIGHTS_DIR) / weights_filename
+            if not local_path.exists():
+                model_path = hf_hub_download(
+                    repo_id=hf_repo,
+                    filename=weights_filename,
+                    local_dir=WEIGHTS_DIR
+                )
+                logger.info(f"Downloaded {hf_repo}/{weights_filename} to {model_path}")
+            else:
+                model_path = local_path
+                logger.info(f"{model_path} exists, skipping download")
+            config['pretrained']['local_path'] = str(model_path)
+    else:
+        logger.info("Pretrain config is a url, falling back to detector-specific download")
 
     # prepare model and trainer
     model_class = DETECTOR[config['model_name']]

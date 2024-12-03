@@ -2,7 +2,9 @@
 log_dir: ../debug_logs/ucf
 
 # model setting
-pretrained: ../weights/xception-best.pth   # path to a pre-trained model, if using one
+pretrained: 
+  hf_repo: bm_ucf
+  filename: xception-best.pth
 model_name: ucf   # model name
 backbone_name: xception  # backbone name
 encoder_feat_dim: 512  # feature dimension of the backbone

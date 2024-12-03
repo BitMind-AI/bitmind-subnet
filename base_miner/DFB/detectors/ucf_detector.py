@@ -99,20 +99,23 @@ class UCFDetector(AbstractDetector):
         )
         
     def build_backbone(self, config):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        pretrained_path = os.path.join(current_dir, config['pretrained'])
         # prepare the backbone
         backbone_class = BACKBONE[config['backbone_name']]
         model_config = config['backbone_config']
         backbone = backbone_class(model_config)
-        # if donot load the pretrained weights, fail to get good results
-        state_dict = torch.load(pretrained_path)
-        for name, weights in state_dict.items():
-            if 'pointwise' in name:
-                state_dict[name] = weights.unsqueeze(-1).unsqueeze(-1)
-        state_dict = {k:v for k, v in state_dict.items() if 'fc' not in k}
-        backbone.load_state_dict(state_dict, False)
-        logger.info('Load pretrained model successfully!')
+
+        if 'pretrained' in config:
+            pretrained_path = config['pretrained']
+            if isinstance(pretrained_path, dict) and 'local_path' in pretrained_path:
+                pretrained_path = pretrained_path['local_path']
+
+            state_dict = torch.load(pretrained_path)
+            for name, weights in state_dict.items():
+                if 'pointwise' in name:
+                    state_dict[name] = weights.unsqueeze(-1).unsqueeze(-1)
+            state_dict = {k:v for k, v in state_dict.items() if 'fc' not in k}
+            backbone.load_state_dict(state_dict, False)
+            logger.info('Load pretrained model successfully!')
         return backbone
     
     def build_loss(self, config):
