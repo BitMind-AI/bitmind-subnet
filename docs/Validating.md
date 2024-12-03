@@ -38,17 +38,6 @@ chmod +x setup_validator_env.sh
 ./setup_validator_env.sh
 ```
 
-### Data
-
-You can download the necessary datasets by running:
-
-```bash
-python bitmind/download_data.py
-```
-
-We recommend you do this prior to registering and running your validator. Please note the minimum storage requirements specified in `min_compute.yml`.
-
-
 ## Registration
 
 To validate on our subnet, you must have a registered hotkey.
@@ -73,7 +62,6 @@ You can launch your validator with `run_neuron.py`.
 First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **validator port**. This file was created for you during setup, and is not tracked by git.
 
 ```bash
-# Subtensor Network Configuration:
 NETUID=34                                      # Network User ID options: 34, 168
 SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
 SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
@@ -85,21 +73,18 @@ SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
 WALLET_NAME=default
 WALLET_HOTKEY=default
 
+# Note: If you're using RunPod, you must select a port >= 70000 for symmetric mapping
 # Validator Port Setting:
 VALIDATOR_AXON_PORT=8092
+VALIDATOR_PROXY_PORT=10913
+DEVICE=cuda
 
 # API Keys:
 WANDB_API_KEY=your_wandb_api_key_here
 HUGGING_FACE_TOKEN=your_hugging_face_token_here
 ```
 
-Then, log into weights and biases by running
-
-```bash
-wandb login
-```
-
-and entering your API key. If you don't have an API key, please reach out to the BitMind team via Discord and we can provide one. 
+If you don't have a W&B API key, please reach out to the BitMind team via Discord and we can provide one. 
 
 Now you're ready to run your validator!
 
@@ -107,7 +92,21 @@ Now you're ready to run your validator!
 conda activate bitmind
 pm2 start run_neuron.py -- --validator 
 ```
-
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
+
+The above command will kick off 3 `pm2` processes
+```
+┌────┬───────────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name                      │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼───────────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 2  │ bitmind_data_generator    │ default     │ N/A     │ fork    │ 2759998  │ 4s     │ 0    │ online    │ 0%       │ 464.9mb  │ user     │ disabled │
+│ 1  │ bitmind_validator         │ default     │ N/A     │ fork    │ 2759978  │ 5s     │ 0    │ online    │ 100%     │ 518.5mb  │ user     │ disabled │
+│ 0  │ run_neuron                │ default     │ N/A     │ fork    │ 2759928  │ 9s     │ 0    │ online    │ 0%       │ 10.3mb   │ user     │ disabled │
+└────┴───────────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+```
+- `run_neuron` manages self heals and auto updates
+- `bitmind_validator` is the validator process, whose hotkey, port, etc. are configured in `validator.env`
+- `bitmind_data_generator` runs our synthetic data generation pipeline to produce synthetic images and videos. 
+  - These data are stored in `~/.cache/sn34` and are sampled by the `bitmind_validator` process
