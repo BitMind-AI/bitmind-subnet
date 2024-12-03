@@ -45,14 +45,24 @@ from base_miner.DFB.logger import create_logger, RankFilter
 from huggingface_hub import hf_hub_download
 
 # BitMind imports (not from original Deepfake Bench repo)
-from base_miner.datasets.utils import load_and_split_datasets, create_real_fake_datasets
-from bitmind.utils.image_transforms import base_transforms, random_aug_transforms, ucf_transforms, tall_transforms
+from base_miner.datasets.util import load_and_split_datasets, create_real_fake_datasets
 from base_miner.constants import VIDEO_DATASETS, IMAGE_DATASETS, FACE_IMAGE_DATASETS
+from bitmind.utils.image_transforms import (
+    get_base_transforms, 
+    get_random_augmentations, 
+    get_ucf_base_transforms, 
+    get_tall_base_transforms
+)
 from base_miner.DFB.config.constants import (
     CONFIG_PATHS,
     WEIGHTS_DIR,
     HF_REPOS
 )
+
+TRANSFORM_FNS = {
+    'UCF': get_ucf_base_transforms,
+    'TALL': get_tall_base_transforms
+}
 
 
 parser = argparse.ArgumentParser(description='Process some paths.')
@@ -94,9 +104,6 @@ def prepare_datasets(config, logger):
     train_dataset, val_dataset, test_dataset, source_label_mapping = create_real_fake_datasets(
         real_datasets,
         fake_datasets,
-        config['split_transforms']['train'],
-        config['split_transforms']['validation'],
-        config['split_transforms']['test'],
         source_labels=True,  # TODO UCF Only
         group_sources_by_name=True)
 
@@ -237,10 +244,11 @@ def main():
     if args.epochs:
         config['nEpochs'] = args.epochs
 
+    tforms = TRANSFORM_FNS.get(args.detector, None)((256, 256))
     config['split_transforms'] = {
-        'train': tall_transforms,
-        'validation': tall_transforms,
-        'test': tall_transforms
+        'train': tforms,
+        'validation': tforms,
+        'test': tforms
     }
 
     if config['modality'] == 'video':

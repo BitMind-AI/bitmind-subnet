@@ -4,7 +4,7 @@ from PIL import Image
 from pathlib import Path
 from huggingface_hub import hf_hub_download
 from base_miner.NPR.networks.resnet import resnet50
-from bitmind.utils.image_transforms import base_transforms
+from bitmind.utils.image_transforms import get_base_transforms
 from base_miner.deepfake_detectors import DeepfakeDetector
 from base_miner import DETECTOR_REGISTRY
 from base_miner.NPR.config.constants import WEIGHTS_DIR
@@ -25,6 +25,7 @@ class NPRDetector(DeepfakeDetector):
     
     def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml', device: str = 'cpu'):
         super().__init__(model_name, config, device)
+        self.transforms = get_base_transforms()
 
     def load_model(self):
         """
@@ -45,7 +46,7 @@ class NPRDetector(DeepfakeDetector):
         Returns:
             torch.Tensor: The preprocessed image tensor.
         """
-        image_tensor = base_transforms(image).unsqueeze(0).float()
+        image_tensor = self.transforms(image).unsqueeze(0).float()
         return image_tensor
 
     def __call__(self, image: Image) -> float:

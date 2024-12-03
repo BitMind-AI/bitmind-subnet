@@ -24,7 +24,7 @@ import wandb
 import time
 
 
-from bitmind.validator.config import CHALLENGE_TYPE
+from bitmind.validator.config import CHALLENGE_TYPE, MAINNET_UID
 from bitmind.utils.uids import get_random_uids
 from bitmind.protocol import prepare_synapse
 from bitmind.validator.reward import get_rewards
@@ -92,17 +92,22 @@ async def forward(self):
     challenge_metadata['data_aug_params'] = data_aug_params
     challenge_metadata['data_aug_level'] = level
 
-    # send challenge to miners
+    # sample miner uids for challenge
     miner_uids = get_random_uids(self, k=self.metagraph.n) # self.config.neuron.sample_size)
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
     challenge_metadata['miner_uids'] = list(miner_uids)
     challenge_metadata['miner_hotkeys'] = list([axon.hotkey for axon in axons])
 
+    # prepare synapse
+    synapse = prepare_synapse(input_data, modality=modality)
+    if self.metagraph.netuid != MAINNET_UID:
+        synapse.testnet_label = label
+
     bt.logging.info(f"Sending {modality} challenge to {len(miner_uids)} miners")
     start = time.time()
     responses = await self.dendrite(
         axons=axons,
-        synapse=prepare_synapse(input_data, modality=modality),
+        synapse=synapse,
         deserialize=True,
         timeout=9
     )

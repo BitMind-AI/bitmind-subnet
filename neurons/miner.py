@@ -32,7 +32,6 @@ from base_miner import DETECTOR_REGISTRY
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse, VideoSynapse, decode_video_synapse
 from bitmind.utils.config import get_device
-from bitmind.utils.image_transforms import base_transforms
 
 
 class Miner(BaseMinerNeuron):

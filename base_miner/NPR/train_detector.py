@@ -10,7 +10,7 @@ from base_miner.NPR.validate import validate
 from base_miner.NPR.networks.trainer import Trainer
 from base_miner.constants import IMAGE_DATASETS as DATASET_META
 from base_miner.NPR.options import TrainOptions
-from bitmind.utils.image_transforms import base_transforms, random_aug_transforms
+from bitmind.utils.image_transforms import get_base_transforms, get_random_augmentations
 from base_miner.datasets.util import load_and_split_datasets, create_real_fake_datasets
 
 
@@ -34,8 +34,10 @@ def main():
     val_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "val"))
 
     # RealFakeDataseta will limit the number of images sampled per dataset to the length of the smallest dataset
+    base_transforms = get_base_transforms()
+    random_augs = get_random_augmentations()
     split_transforms = {
-        'train': random_aug_transforms,
+        'train': random_augs,
         'val': base_transforms,
         'test': base_transforms
     }

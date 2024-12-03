@@ -28,7 +28,10 @@ import pydantic
 import torch
 import zlib
 
-from bitmind.utils.image_transforms import base_transforms
+from bitmind.validator.config import TARGET_IMAGE_SIZE
+from bitmind.utils.image_transforms import get_base_transforms
+base_transforms = get_base_transforms(TARGET_IMAGE_SIZE)
+
 
 # ---- miner ----
 # Example usage:
@@ -87,6 +90,8 @@ class ImageSynapse(bt.Synapse):
         >.5 is considered generated/modified, <= 0.5 is considered real.
     """
 
+    testnet_label: int = -1  # for easier miner eval on testnet
+
     # Required request input, filled by sending dendrite caller.
     image: str = pydantic.Field(
         title="Image",
@@ -136,6 +141,8 @@ class VideoSynapse(bt.Synapse):
     https://github.com/opentensor/bittensor/blob/master/bittensor/core/dendrite.py#L533
     Another higher lift option would be to look into Epistula or Fiber
     """
+
+    testnet_label: int = -1  # for easier miner eval on testnet
 
     # Required request input, filled by sending dendrite caller.
     video: str = pydantic.Field(
@@ -216,9 +223,10 @@ def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
                 continue
 
     frames = frames[:32]  # temp
-    bt.logging.info('transforming inputs')
+    bt.logging.info('transforming video inputs')
     frames = base_transforms(frames)
 
     frames = torch.stack(frames, dim=0)
     frames = frames.unsqueeze(0)
+    print(f'decoded video into tensor with shape {frames.shape}')
     return frames

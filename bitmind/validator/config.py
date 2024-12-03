@@ -16,7 +16,7 @@ from diffusers import (
 from .model_utils import load_annimatediff_motion_adapter
 
 
-TARGET_IMAGE_SIZE: tuple[int, int] = (224, 224)  # (256, 256)
+TARGET_IMAGE_SIZE: tuple[int, int] = (256, 256)
 
 MAINNET_UID = 34
 TESTNET_UID = 168
