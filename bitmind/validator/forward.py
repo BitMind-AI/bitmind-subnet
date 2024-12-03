@@ -23,8 +23,7 @@ import random
 import wandb
 import time
 
-
-from bitmind.validator.config import CHALLENGE_TYPE, MAINNET_UID
+from bitmind.validator.config import CHALLENGE_TYPE, MAINNET_UID, TARGET_IMAGE_SIZE
 from bitmind.utils.uids import get_random_uids
 from bitmind.protocol import prepare_synapse
 from bitmind.validator.reward import get_rewards
@@ -82,10 +81,11 @@ async def forward(self):
 
     # apply data augmentation pipeline
     try:
-       input_data, level, data_aug_params = apply_augmentation_by_level(input_data)
+       input_data, level, data_aug_params = apply_augmentation_by_level(input_data, TARGET_IMAGE_SIZE)
     except Exception as e:
        level, data_aug_params = -1, {}
        bt.logging.error(f"Unable to applay augmentations: {e}")
+
     challenge_metadata['data_aug_params'] = data_aug_params
     challenge_metadata['data_aug_level'] = level
 
