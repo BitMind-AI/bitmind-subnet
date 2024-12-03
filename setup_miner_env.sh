@@ -14,7 +14,6 @@ sudo apt install unzip
 
 # Install Python dependencies
 pip install -e .
-pip install -r requirements-miner.txt
 
 echo "# Default options:
 IMAGE_DETECTOR=CAMO                            # Options: CAMO, UCF, NPR, None

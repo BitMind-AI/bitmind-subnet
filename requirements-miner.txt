@@ -1,7 +1,0 @@
-tensorboardx==2.6.2.2
-#dlib==19.24.6
-imutils==0.5.4
-scikit-image==0.24.0
-ultralytics==8.2.86
-timm==1.0.11
-einops==0.8.0

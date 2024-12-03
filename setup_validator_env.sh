@@ -8,7 +8,6 @@ sudo apt install -y unzip
 
 # Install Python dependencies
 pip install -e .
-pip install -r requirements-validator.txt
 
 # Check if validator.env exists
 if [ -f "validator.env" ]; then
