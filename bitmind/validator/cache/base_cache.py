@@ -74,8 +74,8 @@ class BaseCache(ABC):
 
         if self._compressed_cache_empty():
             bt.logging.info(f"Compressed cache {self.compressed_dir} empty; populating")
-            # grab 1 zip per source to get started, download more later
-            self._refresh_compressed_cache(n_per_source=1)
+            # grab 1 zip to ensure validator has available data
+            self._refresh_compressed_cache(n_per_source=1, n_sources=1)
 
         if self._extracted_cache_empty():
             bt.logging.info(f"Extracted cache {self.cache_dir} empty; populating")
@@ -148,7 +148,7 @@ class BaseCache(ABC):
                 bt.logging.error(f"Error in compressed cache update: {e}")
                 await asyncio.sleep(60)
 
-    def _refresh_compressed_cache(self, n_per_source) -> None:
+    def _refresh_compressed_cache(self, n_per_source, n_sources=None) -> None:
         """
         Refresh the compressed file cache with new downloads.
         """
@@ -156,7 +156,7 @@ class BaseCache(ABC):
             bt.logging.info(f"{len(self._get_compressed_files())} compressed sources currently cached")
 
             new_files: List[Path] = []
-            for source in self.datasets:
+            for source in self.datasets[:n_sources]:
                 filenames = list_hf_files(
                     repo_id=source['path'], 
                     extension=self.compressed_file_extension)
