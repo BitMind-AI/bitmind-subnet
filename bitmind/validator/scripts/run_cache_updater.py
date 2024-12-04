@@ -18,8 +18,6 @@ from bitmind.validator.config import (
 
 async def main(args):
 
-    init_wandb_run(run_base_name='cache-updater', **load_validator_info())
-
     image_cache = ImageCache(
         cache_dir=args.image_cache_dir,
         datasets=IMAGE_DATASETS,
@@ -58,7 +56,9 @@ if __name__ == "__main__":
     parser.add_argument('--video-zip-interval', type=int, default=VIDEO_ZIP_CACHE_UPDATE_INTERVAL,
                         help='Update interval for video zip files in hours')
     args = parser.parse_args()
-    
+
+    init_wandb_run(run_base_name='cache-updater', **load_validator_info())
+
     try:
         asyncio.run(main(args))
     except KeyboardInterrupt:

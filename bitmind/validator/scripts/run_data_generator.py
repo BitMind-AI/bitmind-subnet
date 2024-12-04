@@ -1,3 +1,4 @@
+import argparse
 import time
 
 import bittensor as bt
@@ -12,10 +13,20 @@ from bitmind.validator.config import (
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--image-cache-dir', type=str, default=REAL_IMAGE_CACHE_DIR,
+                      help='Directory containing real images to use as reference')
+    parser.add_argument('--output-dir', type=str, default=SYNTH_CACHE_DIR,
+                      help='Directory to save generated synthetic data')
+    parser.add_argument('--device', type=str, default='cuda',
+                      help='Device to run generation on (cuda/cpu)')
+    parser.add_argument('--batch-size', type=int, default=3,
+                      help='Number of images to generate per batch')
+    args = parser.parse_args()
 
     init_wandb_run(run_base_name='data-generator', **load_validator_info())
 
-    image_cache = ImageCache(REAL_IMAGE_CACHE_DIR)
+    image_cache = ImageCache(args.image_cache_dir)
     while True:
         if image_cache._extracted_cache_empty():
             bt.logging.info("SyntheticDataGenerator waiting for real image cache to populate")
@@ -27,14 +38,14 @@ if __name__ == '__main__':
     sgd = SyntheticDataGenerator(
         prompt_type='annotation',
         use_random_t2vis_model=True,
-        device='cuda',
+        device=args.device,
         image_cache=image_cache,
-        output_dir=SYNTH_CACHE_DIR)
+        output_dir=args.output_dir)
 
     bt.logging.info("Starting standalone data generator service")
     while True:
         try:
-            sgd.batch_generate(batch_size=1)
+            sgd.batch_generate(batch_size=args.batch_size)
             time.sleep(1)
         except Exception as e:
             bt.logging.error(f"Error in batch generation: {str(e)}")
