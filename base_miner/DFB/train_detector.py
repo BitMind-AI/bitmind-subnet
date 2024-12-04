@@ -46,7 +46,7 @@ from huggingface_hub import hf_hub_download
 
 # BitMind imports (not from original Deepfake Bench repo)
 from base_miner.datasets.util import load_and_split_datasets, create_real_fake_datasets
-from base_miner.constants import VIDEO_DATASETS, IMAGE_DATASETS, FACE_IMAGE_DATASETS
+from base_miner.config import VIDEO_DATASETS, IMAGE_DATASETS, FACE_IMAGE_DATASETS
 from bitmind.utils.image_transforms import (
     get_base_transforms, 
     get_random_augmentations, 

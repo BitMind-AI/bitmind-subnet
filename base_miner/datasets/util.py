@@ -1,11 +1,10 @@
-from typing import Optional, Union, List, Tuple, Dict
+from typing import List, Tuple, Dict
 import torchvision.transforms as transforms
 import numpy as np
 import datasets
-import requests
 import datasets
 
-from bitmind.download_data import load_huggingface_dataset
+from base_miner.datasets.download_data import load_huggingface_dataset
 from base_miner.datasets import ImageDataset, VideoDataset, RealFakeDataset
 
 datasets.logging.set_verbosity_error()

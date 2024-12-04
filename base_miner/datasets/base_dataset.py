@@ -3,7 +3,7 @@ from datasets import Dataset
 from typing import Optional
 from torchvision.transforms import Compose
 
-from bitmind.download_data import load_huggingface_dataset
+from base_miner.datasets.download_data import load_huggingface_dataset
 
 
 class BaseDataset(ABC):
