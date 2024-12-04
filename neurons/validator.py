@@ -64,16 +64,16 @@ class Validator(BaseValidatorNeuron):
         self.last_responding_miner_uids = []
         self.validator_proxy = ValidatorProxy(self)
 
-        # real media caches run async update tasks to download and unpack parts of subsets of datasets
+        # real media caches are updated by the bitmind_cache_updater process (started by start_validator.sh)
         self.real_media_cache = {
-            'image': ImageCache(REAL_IMAGE_CACHE_DIR, run_updater=True, datasets=IMAGE_DATASETS['real']),
-            'video': VideoCache(REAL_VIDEO_CACHE_DIR, run_updater=True, datasets=VIDEO_DATASETS['real'])
+            'image': ImageCache(REAL_IMAGE_CACHE_DIR),
+            'video': VideoCache(REAL_VIDEO_CACHE_DIR)
         }
 
         # synthetic media caches are populated by the SyntheticDataGenerator process (started by start_validator.sh)
         self.synthetic_media_cache = {
-            'image': ImageCache(SYNTH_IMAGE_CACHE_DIR, run_updater=False),
-            'video': VideoCache(SYNTH_VIDEO_CACHE_DIR, run_updater=False)
+            'image': ImageCache(SYNTH_IMAGE_CACHE_DIR),
+            'video': VideoCache(SYNTH_VIDEO_CACHE_DIR)
         }
 
         self.media_cache = {

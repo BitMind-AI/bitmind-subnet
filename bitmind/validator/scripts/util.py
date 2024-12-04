@@ -1,21 +1,17 @@
-import time
 import yaml
 
 import wandb
 import bittensor as bt
 
 import bitmind
-from bitmind.synthetic_data_generation import SyntheticDataGenerator
-from bitmind.validator.cache import ImageCache
-from bitmind.validator.config import (
-    REAL_IMAGE_CACHE_DIR,
-    SYNTH_CACHE_DIR,
+from bitmind.validator.config import (    
     WANDB_ENTITY,
     TESTNET_WANDB_PROJECT,
     MAINNET_WANDB_PROJECT,
     MAINNET_UID,
     VALIDATOR_INFO_PATH
 )
+
 
 def load_validator_info():
     try:
@@ -41,7 +37,7 @@ def load_validator_info():
     return validator_info
 
  
-def init_wandb_run(uid: str, hotkey: str, netuid: int, full_path: str) -> None:
+def init_wandb_run(run_base_name: str, uid: str, hotkey: str, netuid: int, full_path: str) -> None:
     """
     Initialize a Weights & Biases run for tracking the validator.
 
@@ -54,7 +50,7 @@ def init_wandb_run(uid: str, hotkey: str, netuid: int, full_path: str) -> None:
     Returns:
         None
     """
-    run_name = f'data-generator-{uid}-{bitmind.__version__}'
+    run_name = f'{run_base_name}-{uid}-{bitmind.__version__}'
     
     config = {
         'run_name': run_name,
@@ -70,7 +66,7 @@ def init_wandb_run(uid: str, hotkey: str, netuid: int, full_path: str) -> None:
     # Initialize the wandb run for the single project
     bt.logging.info(f"Initializing W&B run for '{WANDB_ENTITY}/{wandb_project}'")
     try:
-        run = wandb.init(
+        return wandb.init(
             name=run_name,
             project=wandb_project,
             entity=WANDB_ENTITY,
@@ -82,32 +78,3 @@ def init_wandb_run(uid: str, hotkey: str, netuid: int, full_path: str) -> None:
         bt.logging.warning(e)
         bt.logging.warning("Did you run wandb login?")
         return
-
-if __name__ == '__main__':
-
-    init_wandb_run(**load_validator_info())
-
-    image_cache = ImageCache(REAL_IMAGE_CACHE_DIR, datasets=None, run_updater=False)
-    while True:
-        if image_cache._extracted_cache_empty():
-            bt.logging.info("SyntheticDataGenerator waiting for real image cache to populate")
-            time.sleep(5)
-            continue
-        bt.logging.info("Image cache was populated! Proceeding to data generation")
-        break
-
-    sgd = SyntheticDataGenerator(
-        prompt_type='annotation',
-        use_random_t2vis_model=True,
-        device='cuda',
-        image_cache=image_cache,
-        output_dir=SYNTH_CACHE_DIR)
-
-    bt.logging.info("Starting standalone data generator service")
-    while True:
-        try:
-            sgd.batch_generate(batch_size=1)
-            time.sleep(1)
-        except Exception as e:
-            bt.logging.error(f"Error in batch generation: {str(e)}")
-            time.sleep(5)
