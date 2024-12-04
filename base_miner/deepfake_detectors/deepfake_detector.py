@@ -20,17 +20,16 @@ class DeepfakeDetector(ABC):
 
     Attributes:
         model_name (str): Name of the detector instance.
-        config (Optional[str]): Name of the YAML file in deepfake_detectors/config/
+        config_name (Optional[str]): Name of the YAML file in deepfake_detectors/config/
             to load instance attributes from.
         device (str): The type of device ('cpu' or 'cuda').
         hf_repo (str): Hugging Face repository name for model weights.
-        train_config (str): Name of training configuration file.
     """
 
     def __init__(
         self,
         model_name: str,
-        config: Optional[str] = None,
+        config_name: Optional[str] = None,
         device: str = 'cpu'
     ) -> None:
         """Initialize the DeepfakeDetector.
@@ -45,9 +44,9 @@ class DeepfakeDetector(ABC):
             device if device == 'cuda' and torch.cuda.is_available() else 'cpu'
         )
 
-        if config:
-            self.set_class_attrs(config)
-            self.load_model_config()
+        if config_name:
+            self.set_class_attrs(config_name)
+            self.load_model_config(config_name)
 
         self.load_model()
 
@@ -135,12 +134,12 @@ class DeepfakeDetector(ABC):
                   f"to {weights_dir}")
             hf_hub_download(self.hf_repo, weights_filename, local_dir=weights_dir)
 
-    def load_model_config(self):
+    def load_model_config(self, config_name):
         try:
-            destination_path = Path(CONFIGS_DIR) / Path(self.train_config)
+            destination_path = Path(CONFIGS_DIR) / Path(config_name)
             if not destination_path.exists():
-                local_config_path = hf_hub_download(self.hf_repo, self.train_config, local_dir=CONFIGS_DIR)
-                print(f"Downloaded {self.hf_repo}/{self.train_config} to {local_config_path}")
+                local_config_path = hf_hub_download(self.hf_repo, config_name, local_dir=CONFIGS_DIR)
+                print(f"Downloaded {self.hf_repo}/{config_name} to {local_config_path}")
                 with Path(local_config_path).open('r') as f:
                     self.config = yaml.safe_load(f)
             else:

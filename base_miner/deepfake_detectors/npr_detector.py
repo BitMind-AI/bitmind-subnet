@@ -18,13 +18,13 @@ class NPRDetector(DeepfakeDetector):
     
     Attributes:
         model_name (str): Name of the detector instance.
-        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+        config_name (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
         device (str): The type of device ('cpu' or 'cuda').
     """
     
-    def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml', device: str = 'cpu'):
-        super().__init__(model_name, config, device)
+    def __init__(self, model_name: str = 'NPR', config_name: str = 'npr.yaml', device: str = 'cpu'):
+        super().__init__(model_name, config_name, device)
         self.transforms = get_base_transforms()
 
     def load_model(self):

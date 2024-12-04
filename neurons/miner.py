@@ -68,7 +68,7 @@ class Miner(BaseMinerNeuron):
             self.config.neuron.image_detector_device = get_device()
             
         self.image_detector = DETECTOR_REGISTRY[self.config.neuron.image_detector](
-            config=self.config.neuron.image_detector_config,
+            config_name=self.config.neuron.image_detector_config,
             device=self.config.neuron.image_detector_device
         )
         bt.logging.info(f"Loaded image detection model: {self.config.neuron.image_detector}")
@@ -85,7 +85,7 @@ class Miner(BaseMinerNeuron):
             self.config.neuron.video_detector_device = get_device()
 
         self.video_detector = DETECTOR_REGISTRY[self.config.neuron.video_detector](
-            config=self.config.neuron.video_detector_config,
+            config_name=self.config.neuron.video_detector_config,
             device=self.config.neuron.video_detector_device
         )
         bt.logging.info(f"Loaded video detection model: {self.config.neuron.video_detector}")
