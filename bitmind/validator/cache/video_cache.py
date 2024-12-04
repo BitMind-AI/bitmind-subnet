@@ -86,13 +86,15 @@ class VideoCache(BaseCache):
 
     def sample(
         self,
-        num_seconds: int = 6
+        num_frames: int = 6,
+        frame_rate: float = 1.0
     ) -> Optional[Dict[str, Union[List[Image.Image], str, float]]]:
         """
         Sample random frames from a random video in the cache.
 
         Args:
-            num_seconds: Number of consecutive frames to sample
+            num_frames: Number of consecutive frames to sample
+            frame_rate: Number of frames per second to sample
 
         Returns:
             Dictionary containing:
@@ -114,14 +116,14 @@ class VideoCache(BaseCache):
             return None
 
         duration = get_video_duration(str(video_path))
-        start_time = random.uniform(0, max(0, duration - num_seconds))
+        sample_duration = (num_frames - 1) / frame_rate  # Duration needed for sampling
+        start_time = random.uniform(0, max(0, duration - sample_duration))
         frames: List[Image.Image] = []
 
-        start_time = random.uniform(0, max(0, duration - num_seconds))
-        bt.logging.info(f'Extracting frames starting atq {start_time:.2f}s')
+        bt.logging.info(f'Extracting {num_frames} frames at {frame_rate}fps starting at {start_time:.2f}s')
 
-        for second in range(num_seconds):
-            timestamp = start_time + second
+        for i in range(num_frames):
+            timestamp = start_time + (i / frame_rate)
             
             try:
                 # extract frames
@@ -129,18 +131,18 @@ class VideoCache(BaseCache):
                     ffmpeg
                     .input(str(video_path), ss=str(timestamp))
                     .filter('select', 'eq(n,0)')
-                    .output('pipe:', 
-                           vframes=1,
-                           format='image2',
-                           vcodec='mjpeg',
-                           loglevel='error',  # silence ffmpeg output
-                           **{'qscale:v': 2}  # Better quality JPEG
+                    .output(
+                        'pipe:',
+                        vframes=1,
+                        format='image2',
+                        vcodec='png',
+                        loglevel='error'  # silence ffmpeg output
                     )
                     .run(capture_stdout=True, capture_stderr=True)
                 )
 
                 if not out_bytes:
-                    bt.logging.error(f'No data received for frame at {timestamp}s')
+                    bt.logging.error(f'No data received for frame at {timestamp}s; Error: {err}')
                     continue
 
                 try:
@@ -155,12 +157,12 @@ class VideoCache(BaseCache):
             except ffmpeg.Error as e:
                 bt.logging.error(f'FFmpeg error at {timestamp}s: {e.stderr.decode()}')
                 continue
-
-        bt.logging.success(f"Sampled {num_seconds}s of video")
+ 
+        bt.logging.success(f"Sampled {len(frames)} frames at {frame_rate}fps")
         return {
             'video': frames,
             'path': str(video_path),
             'dataset': str(Path(video_path).name.split('_')[0]),
             'total_duration': duration,
-            'sampled_length': num_seconds
+            'sampled_length': sample_duration
         }
