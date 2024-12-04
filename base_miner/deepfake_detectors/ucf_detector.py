@@ -18,7 +18,7 @@ import gc
 from base_miner.DFB.config.constants import CONFIGS_DIR, WEIGHTS_DIR
 from base_miner.deepfake_detectors import DeepfakeDetector
 from base_miner.DFB.detectors import UCFDetector
-from base_miner import DETECTOR_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
 
 
 @DETECTOR_REGISTRY.register_module(module_name='UCF')

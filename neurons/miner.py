@@ -28,7 +28,8 @@ import os
 import sys
 import numpy as np
 
-from base_miner import DETECTOR_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
+from base_miner.deepfake_detectors import CAMODetector, TALLDetector # NPRDetector, UCFDetector
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse, VideoSynapse, decode_video_synapse
 from bitmind.utils.config import get_device
@@ -65,7 +66,7 @@ class Miner(BaseMinerNeuron):
         if self.config.neuron.image_detector_device == 'auto':
             bt.logging.warning("Automatic device configuration enabled for image detector")
             self.config.neuron.image_detector_device = get_device()
-
+            
         self.image_detector = DETECTOR_REGISTRY[self.config.neuron.image_detector](
             config=self.config.neuron.image_detector_config,
             device=self.config.neuron.image_detector_device

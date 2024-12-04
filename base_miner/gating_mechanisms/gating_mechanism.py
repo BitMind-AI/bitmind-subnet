@@ -1,5 +1,5 @@
 from PIL import Image
-from base_miner import GATE_REGISTRY
+from base_miner.registry import GATE_REGISTRY
 
 
 class GatingMechanism:

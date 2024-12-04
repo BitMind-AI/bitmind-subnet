@@ -6,7 +6,7 @@ from huggingface_hub import hf_hub_download
 from base_miner.NPR.networks.resnet import resnet50
 from bitmind.utils.image_transforms import get_base_transforms
 from base_miner.deepfake_detectors import DeepfakeDetector
-from base_miner import DETECTOR_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
 from base_miner.NPR.config.constants import WEIGHTS_DIR
 
 
