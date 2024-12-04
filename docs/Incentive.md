@@ -9,7 +9,11 @@ This document covers the current state of SN34's incentive mechanism.
 
 ## Overview
 
-Miners are rewarded based on the accuracy of their predictions, which is a weighted combination of the MCC of their last 100 predictions and the accuracy of their last 10. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
+Miner rewards are a weighted combination of their performance on both video and image challenges.
+
+Video and image rewards are computed separately, where each is its own weighted combination of the MCC of their last 100 predictions and the accuracy of their last 10. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
+
+Reward implementation can be found in `bitmind/validator/rewards.py`
 
 <p align="center">
   <img src="../static/incentive.gif" alt="Incentive Mechanism">
@@ -21,7 +25,7 @@ Miners are rewarded based on the accuracy of their predictions, which is a weigh
 
 ## Rewards
 
-> Miners rewards are computed based on the Matthews Correlation Coefficient (MCC) (https://en.wikipedia.org/wiki/Phi_coefficient) of (up to) their last 100 predictions, combined with the accuracy of their last 10 predictions. 
+> Miners rewards are computed based on the [Matthews Correlation Coefficient (MCC)](https://en.wikipedia.org/wiki/Phi_coefficient) of (up to) their last 100 predictions, combined with the accuracy of their last 10 predictions. 
 
 $$ 
 0.5 \times MCC_{100} + 0.5 \times Accuracy_{10} 
@@ -47,7 +51,7 @@ A low *&alpha;* value places emphasis on a miner's historical performance, addin
 
 Weight normalization by L1 norm:
 
-$$w = \frac{\text{Score}}{\lVert\text{Score}\rVert_1}$$
+$$w = \frac{\text{V}}{\lVert\text{V}\rVert_1}$$
 
 
 ## Incentives
