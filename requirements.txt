@@ -15,8 +15,7 @@ matplotlib==3.9.2
 
 # Deep learning tools
 transformers==4.46.3
-#diffusers==0.30.0  # Using git version instead
-git+https://github.com/huggingface/diffusers.git
+#git+https://github.com/huggingface/diffusers.git@6a51427b6a226591ccc40249721c486855f53e1c#egg=diffusers
 accelerate==0.33.0
 bitsandbytes==0.43.3
 sentencepiece==0.2.0

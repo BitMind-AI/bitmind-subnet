@@ -54,6 +54,11 @@ class BaseValidatorNeuron(BaseNeuron):
     def __init__(self, config=None):
         super().__init__(config=config)
 
+        self.performance_trackers = {
+            'image': None,
+            'video': None
+        }
+            
         self.image_history_cache_path = os.path.join(
             self.config.neuron.full_path, "image_miner_performance_tracker.pkl")
         self.video_history_cache_path = os.path.join(
