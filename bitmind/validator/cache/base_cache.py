@@ -115,7 +115,7 @@ class BaseCache(ABC):
     def _check_compressed_cache_size(self) -> None:
         """Check compressed cache size and remove oldest files if over limit."""
         total_size = sum(f.stat().st_size for f in self._get_compressed_files())
-
+        bt.logging.info(f"Compressed cache size: {total_size / (1024*1024*1024):.2f} GB [{self.compressed_dir}]")
         while total_size > self.max_compressed_size_bytes:
             # Get oldest file by modification time
             compressed_files = self._get_compressed_files()
