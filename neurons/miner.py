@@ -55,7 +55,7 @@ class Miner(BaseMinerNeuron):
         self.load_image_detector()
         bt.logging.info("Loading video detection model if configured")
         self.load_video_detector()
-
+        
     def load_image_detector(self):
         if (str(self.config.neuron.image_detector).lower() == 'none' or
             str(self.config.neuron.image_detector_config).lower() == 'none'):
@@ -115,7 +115,11 @@ class Miner(BaseMinerNeuron):
             except Exception as e:
                 bt.logging.error("Error performing inference")
                 bt.logging.error(e)
-            bt.logging.info(f"PREDICTION: {synapse.prediction}")
+
+            bt.logging.info(f"PREDICTION = {synapse.prediction}")
+            label = synapse.testnet_label
+            if synapse.testnet_label != -1:
+                bt.logging.info(f"LABEL (testnet only) = {label}")
         return synapse
 
     async def forward_video(
@@ -141,7 +145,11 @@ class Miner(BaseMinerNeuron):
             except Exception as e:
                 bt.logging.error("Error performing inference")
                 bt.logging.error(e)
-            bt.logging.info(f"PREDICTION: {synapse.prediction}")
+
+            bt.logging.info(f"PREDICTION = {synapse.prediction}")
+            label = synapse.testnet_label
+            if synapse.testnet_label != -1:
+                bt.logging.info(f"LABEL (testnet only) = {label}")
         return synapse
 
     async def blacklist_image(self, synapse: ImageSynapse) -> typing.Tuple[bool, str]:
