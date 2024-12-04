@@ -31,6 +31,7 @@ class BaseCache(ABC):
         extracted_update_interval: int = 4,
         compressed_update_interval: int = 24,
         num_samples_per_source: int = 10,
+        max_compressed_size_gb: float = 100.0,
     ) -> None:
         """
         Initialize the base cache infrastructure.
@@ -41,20 +42,22 @@ class BaseCache(ABC):
             compressed_update_interval: Hours between compressed cache updates
             num_samples_per_source: Number of items to extract per source
             file_extensions: List of valid file extensions for this cache type
+            max_compressed_size_gb: Maximum size in GB for compressed cache directory
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True, parents=True)
-        
+
         self.compressed_dir = self.cache_dir / 'sources'
         self.compressed_dir.mkdir(exist_ok=True, parents=True)
 
         self.datasets = datasets
-        
+
         self.extracted_update_interval = extracted_update_interval * 60 * 60
         self.compressed_update_interval = compressed_update_interval * 60 * 60
         self.num_samples_per_source = num_samples_per_source
         self.file_extensions = file_extensions
         self.compressed_file_extension = compressed_file_extension
+        self.max_compressed_size_bytes = max_compressed_size_gb * 1024 * 1024 * 1024
 
     def start_updater(self):
         """Start the background updater tasks for compressed and extracted caches."""
@@ -109,6 +112,23 @@ class BaseCache(ABC):
         """Check if compressed cache directory is empty."""
         return len(self._get_compressed_files()) == 0
 
+    def _check_compressed_cache_size(self) -> None:
+        """Check compressed cache size and remove oldest files if over limit."""
+        total_size = sum(f.stat().st_size for f in self._get_compressed_files())
+
+        while total_size > self.max_compressed_size_bytes:
+            # Get oldest file by modification time
+            compressed_files = self._get_compressed_files()
+            if not compressed_files:
+                break
+
+            oldest_file = min(compressed_files, key=lambda f: f.stat().st_mtime)
+            file_size = oldest_file.stat().st_size
+
+            bt.logging.info(f"Removing {oldest_file.name} to stay under size limit")
+            oldest_file.unlink()
+            total_size -= file_size
+
     async def _run_extracted_updater(self) -> None:
         """Asynchronously refresh extracted files according to update interval."""
         while True:
@@ -132,6 +152,7 @@ class BaseCache(ABC):
         """Asynchronously refresh compressed files according to update interval."""
         while True:
             try:
+                self._check_compressed_cache_size()
                 self._clear_incomplete_sources()
                 last_update = get_most_recent_update_time(self.compressed_dir)
                 time_elapsed = time.time() - last_update
