@@ -86,13 +86,19 @@ class VideoCache(BaseCache):
 
     def sample(
         self,
-        num_seconds: int = 6
+        num_frames: int = 6,
+        fps: Optional[float] = None,
+        min_fps: Optional[float] = None,
+        max_fps: Optional[float] = None
     ) -> Optional[Dict[str, Union[List[Image.Image], str, float]]]:
         """
         Sample random frames from a random video in the cache.
 
         Args:
-            num_seconds: Number of consecutive frames to sample
+            num_frames: Number of consecutive frames to sample
+            fps: Fixed frames per second to sample. Mutually exclusive with min_fps/max_fps.
+            min_fps: Minimum frames per second when auto-calculating fps. Must be used with max_fps.
+            max_fps: Maximum frames per second when auto-calculating fps. Must be used with min_fps.
 
         Returns:
             Dictionary containing:
@@ -103,6 +109,11 @@ class VideoCache(BaseCache):
                 - sampled_length: Number of seconds sampled
             Returns None if no videos are available or extraction fails.
         """
+        if fps is not None and (min_fps is not None or max_fps is not None):
+            raise ValueError("Cannot specify both fps and min_fps/max_fps")
+        if (min_fps is None) != (max_fps is None):
+            raise ValueError("min_fps and max_fps must be specified together")
+
         video_files = self._get_cached_files()
         if not video_files:
             bt.logging.warning("No videos available in cache")
@@ -114,14 +125,29 @@ class VideoCache(BaseCache):
             return None
 
         duration = get_video_duration(str(video_path))
-        start_time = random.uniform(0, max(0, duration - num_seconds))
+
+        # Use fixed fps if provided, otherwise calculate from range
+        frame_rate = fps
+        if frame_rate is None:
+            # For very short videos (< 1 second), use max_fps to capture detail
+            if duration <= 1.0:
+                frame_rate = max_fps
+            else:
+                # For longer videos, scale fps inversely with duration
+                # This ensures we don't span too much of longer videos
+                # while still capturing enough detail in shorter ones
+                target_duration = min(2.0, duration * 0.2)  # Cap at 2 seconds or 20% of duration
+                frame_rate = (num_frames - 1) / target_duration
+                frame_rate = max(min_fps, min(frame_rate, max_fps))
+
+        sample_duration = (num_frames - 1) / frame_rate
+        start_time = random.uniform(0, max(0, duration - sample_duration))
         frames: List[Image.Image] = []
 
-        start_time = random.uniform(0, max(0, duration - num_seconds))
-        bt.logging.info(f'Extracting frames starting atq {start_time:.2f}s')
+        bt.logging.info(f'Extracting {num_frames} frames at {frame_rate}fps starting at {start_time:.2f}s')
 
-        for second in range(num_seconds):
-            timestamp = start_time + second
+        for i in range(num_frames):
+            timestamp = start_time + (i / frame_rate)
             
             try:
                 # extract frames
@@ -129,18 +155,18 @@ class VideoCache(BaseCache):
                     ffmpeg
                     .input(str(video_path), ss=str(timestamp))
                     .filter('select', 'eq(n,0)')
-                    .output('pipe:', 
-                           vframes=1,
-                           format='image2',
-                           vcodec='mjpeg',
-                           loglevel='error',  # silence ffmpeg output
-                           **{'qscale:v': 2}  # Better quality JPEG
+                    .output(
+                        'pipe:',
+                        vframes=1,
+                        format='image2',
+                        vcodec='png',
+                        loglevel='error'  # silence ffmpeg output
                     )
                     .run(capture_stdout=True, capture_stderr=True)
                 )
 
                 if not out_bytes:
-                    bt.logging.error(f'No data received for frame at {timestamp}s')
+                    bt.logging.error(f'No data received for frame at {timestamp}s; Error: {err}')
                     continue
 
                 try:
@@ -155,12 +181,14 @@ class VideoCache(BaseCache):
             except ffmpeg.Error as e:
                 bt.logging.error(f'FFmpeg error at {timestamp}s: {e.stderr.decode()}')
                 continue
-
-        bt.logging.success(f"Sampled {num_seconds}s of video")
+ 
+        bt.logging.success(f"Sampled {len(frames)} frames at {frame_rate}fps")
         return {
             'video': frames,
+            'fps': frame_rate,
+            'num_frames': num_frames,
             'path': str(video_path),
             'dataset': str(Path(video_path).name.split('_')[0]),
             'total_duration': duration,
-            'sampled_length': num_seconds
+            'sampled_length': sample_duration
         }
