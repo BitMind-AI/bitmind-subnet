@@ -25,7 +25,6 @@ class VideoCache(BaseCache):
     def __init__(
         self,
         cache_dir: Union[str, Path],
-        run_updater: bool = False,
         datasets: Optional[dict] = None,
         video_update_interval: int = 2,
         zip_update_interval: int = 24,
@@ -48,8 +47,7 @@ class VideoCache(BaseCache):
             compressed_update_interval=zip_update_interval,
             num_samples_per_source=num_videos_per_source,
             file_extensions=['.mp4', '.avi', '.mov', '.mkv'],
-            compressed_file_extension='.zip',
-            run_updater=run_updater
+            compressed_file_extension='.zip'
         )
 
     def _clear_incomplete_sources(self) -> None:

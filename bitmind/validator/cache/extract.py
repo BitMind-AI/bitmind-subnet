@@ -62,7 +62,7 @@ q
                 try:
                     zip_basename = zip_path.name.split('.zip')[0]
                     original_filename = Path(video).name
-                    base_filename = f"{zip_basename}_{idx}_{original_filename}"
+                    base_filename = f"{zip_basename}__{idx}_{original_filename}"
 
                     # extract video and get metadata
                     video_path = dest_dir / base_filename
@@ -121,7 +121,6 @@ def extract_images_from_parquet(
     parquet_path: Path,
     dest_dir: Path,
     num_images: int,
-    columns: Optional[List[str]] = None,
     seed: Optional[int] = None
 ) -> List[Tuple[str, str]]:
     """
@@ -148,6 +147,7 @@ def extract_images_from_parquet(
     metadata_cols = [c for c in sample_df.columns if c != image_col]
 
     saved_files = []
+    parquet_prefix = parquet_path.stem
     for idx, row in sample_df.iterrows():
         try:
             img_data = row[image_col]
@@ -161,7 +161,7 @@ def extract_images_from_parquet(
                 img_data = base64.b64decode(img_data)
                 img = Image.open(BytesIO(img_data))
 
-            base_filename = f"image_{idx}"
+            base_filename = f"{parquet_prefix}__image_{idx}"
             image_format = img.format.lower() if img.format else 'png'
             img_filename = f"{base_filename}.{image_format}"
             img_path = dest_dir / img_filename

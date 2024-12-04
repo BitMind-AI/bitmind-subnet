@@ -10,6 +10,7 @@ set +a
 
 VALIDATOR_PROCESS_NAME="bitmind_validator"
 DATA_GEN_PROCESS_NAME="bitmind_data_generator"
+CACHE_UPDATE_PROCESS_NAME="bitmind_cache_updater"
 
 # Login to Weights & Biases
 if ! wandb login $WANDB_API_KEY; then
@@ -43,8 +44,16 @@ pm2 start neurons/validator.py --name $VALIDATOR_PROCESS_NAME -- \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
   --axon.port $VALIDATOR_AXON_PORT \
-  --proxy.port $VALIDATOR_PROXY_PORT \
-  --neuron.device $DEVICE
+  --proxy.port $VALIDATOR_PROXY_PORT
+
+# REAL DATA CACHE UPDATER PROCESS
+if pm2 list | grep -q "$CACHE_UPDATE_PROCESS_NAME"; then
+  echo "Process '$CACHE_UPDATE_PROCESS_NAME' is already running. Deleting it..."
+  pm2 delete $CACHE_UPDATE_PROCESS_NAME
+fi
+
+echo "Starting real data cache updater process"
+pm2 start bitmind/validator/scripts/run_cache_updater.py --name $CACHE_UPDATE_PROCESS_NAME
 
 # SYNTHETIC DATA GENERATOR PROCESS
 if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
@@ -52,5 +61,6 @@ if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
   pm2 delete $DATA_GEN_PROCESS_NAME
 fi
 
-echo "Starting SyntheticDataGenerator process"
-pm2 start bitmind/validator/run_data_generator.py --name $DATA_GEN_PROCESS_NAME
+echo "Starting synthetic data generation process"
+pm2 start bitmind/validator/scripts/run_data_generator.py --name $DATA_GEN_PROCESS_NAME -- \
+  --device $DEVICE
