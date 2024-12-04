@@ -11,13 +11,13 @@ import subprocess
 import glob
 import requests
 
-from base_miner.constants import IMAGE_DATASETS, HUGGINGFACE_CACHE_DIR
+from base_miner.config import IMAGE_DATASETS, HUGGINGFACE_CACHE_DIR
 
 datasets.logging.set_verbosity_warning()
 datasets.disable_progress_bar()
 
 from datasets import load_dataset, load_from_disk
-from typing import Optional, Union
+from typing import Optional
 import os
 
 

@@ -8,7 +8,7 @@ import torch
 
 from base_miner.NPR.validate import validate
 from base_miner.NPR.networks.trainer import Trainer
-from base_miner.constants import IMAGE_DATASETS as DATASET_META
+from base_miner.config import IMAGE_DATASETS as DATASET_META
 from base_miner.NPR.options import TrainOptions
 from bitmind.utils.image_transforms import get_base_transforms, get_random_augmentations
 from base_miner.datasets.util import load_and_split_datasets, create_real_fake_datasets
