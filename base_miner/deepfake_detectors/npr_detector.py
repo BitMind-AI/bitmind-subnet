@@ -11,7 +11,7 @@ from base_miner.NPR.config.constants import WEIGHTS_DIR
 
 
 @DETECTOR_REGISTRY.register_module(module_name='NPR')
-class NPRDetector(DeepfakeDetector):
+class NPRImageDetector(DeepfakeDetector):
     """
     DeepfakeDetector subclass that initializes a pretrained NPR model
     for binary classification of fake and real images.

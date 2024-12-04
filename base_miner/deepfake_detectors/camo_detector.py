@@ -8,7 +8,7 @@ from base_miner.deepfake_detectors import DeepfakeDetector
 
 
 @DETECTOR_REGISTRY.register_module(module_name='CAMO')
-class CAMODetector(DeepfakeDetector):
+class CAMOImageDetector(DeepfakeDetector):
     """
     This DeepfakeDetector subclass implements Content-Aware Model Orchestration
     (CAMO), a mixture-of-experts approach to the binary classification of
