@@ -47,8 +47,10 @@ from DFB.detectors.base_detector import AbstractDetector
 from DFB.detectors import DETECTOR
 from DFB.networks import BACKBONE
 from DFB.loss import LOSSFUNC
+from DFB.config.constants import WEIGHTS_DIR
 
 logger = logging.getLogger(__name__)
+
 
 @DETECTOR.register_module(module_name='ucf')
 class UCFDetector(AbstractDetector):
@@ -106,9 +108,18 @@ class UCFDetector(AbstractDetector):
 
         if 'pretrained' in config:
             pretrained_path = config['pretrained']
-            if isinstance(pretrained_path, dict) and 'local_path' in pretrained_path:
-                pretrained_path = pretrained_path['local_path']
+            if isinstance(pretrained_path, dict):
+                if 'local_path' in pretrained_path:
+                    pretrained_path = pretrained_path['local_path']
+                elif 'filename' in pretrained_path:
+                    pretrained_path = pretrained_path['filename']
+            else:
+                pretrained_path = pretrained_path.split('/')[-1]
 
+            if not os.path.isabs(pretrained_path):
+                pretrained_path = os.path.join(WEIGHTS_DIR, pretrained_path)
+
+            logger.info(f"Loading {pretrained_path}")
             state_dict = torch.load(pretrained_path)
             for name, weights in state_dict.items():
                 if 'pointwise' in name:

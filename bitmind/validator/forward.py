@@ -65,9 +65,10 @@ async def forward(self):
             self.config.neuron.clip_frames_min,
             self.config.neuron.clip_frames_max)
         challenge = cache.sample(num_frames, min_fps=8, max_fps=30)
-        challenge_metadata['clip_length_s'] = clip_length
         video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
-        challenge_metadata['video'] = wandb.Video(np_video, fps=1)
+        challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
+        challenge_metadata['fps'] = challenge['fps']
+        challenge_metadata['num_frames'] = challenge['num_frames']
 
     elif modality == 'image':
         challenge = cache.sample()

@@ -52,12 +52,17 @@ class UCFImageDetector(DeepfakeDetector):
         self.init_cudnn()
         self.init_seed()
         self.ensure_weights_are_available(WEIGHTS_DIR, self.weights)
-        #self.ensure_weights_are_available(WEIGHTS_DIR, self.train_config['pretrained'].split('/')[-1])
-        #model_class = DETECTOR[self.train_config['model_name']]
-        bt.logging.info(f"Loaded config from training run: {self.config}")
+        pretrained = self.config['pretrained']
+        if isinstance(pretrained, dict) and 'filename' in pretrained:
+            pretrained = pretrained['filename']
+        else:
+            pretrained = pretrained.split('/')[-1]
+
+        self.ensure_weights_are_available(WEIGHTS_DIR, pretrained)
         self.model = UCFDetector(self.config).to(self.device)
         self.model.eval()
         weights_path = Path(WEIGHTS_DIR) / self.weights
+        bt.logging.info(f"Loading checkpoint {weights_path}")
         checkpoint = torch.load(weights_path, map_location=self.device)
         try:
             self.model.load_state_dict(checkpoint, strict=True)

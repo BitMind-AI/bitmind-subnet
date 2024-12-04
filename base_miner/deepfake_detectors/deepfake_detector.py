@@ -45,8 +45,9 @@ class DeepfakeDetector(ABC):
         )
 
         if config_name:
+            print(f"Configuring with {config_name}")
             self.set_class_attrs(config_name)
-            self.load_model_config(config_name)
+            self.load_model_config()
 
         self.load_model()
 
@@ -106,6 +107,7 @@ class DeepfakeDetector(ABC):
 
             # Set class attributes dynamically from the config dictionary
             for key, value in config_dict.items():
+                print('k:v', key, value)
                 setattr(self, key, value)
 
         except Exception as e:
@@ -134,18 +136,19 @@ class DeepfakeDetector(ABC):
                   f"to {weights_dir}")
             hf_hub_download(self.hf_repo, weights_filename, local_dir=weights_dir)
 
-    def load_model_config(self, config_name):
+    def load_model_config(self):
         try:
-            destination_path = Path(CONFIGS_DIR) / Path(config_name)
+            destination_path = Path(CONFIGS_DIR) / Path(self.config_name)
             if not destination_path.exists():
-                local_config_path = hf_hub_download(self.hf_repo, config_name, local_dir=CONFIGS_DIR)
+                local_config_path = hf_hub_download(self.hf_repo, self.config_name, local_dir=CONFIGS_DIR)
                 print(f"Downloaded {self.hf_repo}/{config_name} to {local_config_path}")
                 with Path(local_config_path).open('r') as f:
                     self.config = yaml.safe_load(f)
             else:
-                print(f"Loaded local config from {destination_path}")
+                print(f"Loading local config from {destination_path}")
                 with destination_path.open('r') as f:
                     self.config = yaml.safe_load(f)
+                print(f"Loaded: {self.config}")
         except Exception as e:
             # some models such as NPR don't have an additional config file
             bt.logging.warning("No additional train config loaded.")
