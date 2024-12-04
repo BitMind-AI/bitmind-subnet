@@ -44,8 +44,7 @@ pm2 start neurons/validator.py --name $VALIDATOR_PROCESS_NAME -- \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
   --axon.port $VALIDATOR_AXON_PORT \
-  --proxy.port $VALIDATOR_PROXY_PORT \
-  --neuron.device $DEVICE
+  --proxy.port $VALIDATOR_PROXY_PORT
 
 # REAL DATA CACHE UPDATER PROCESS
 if pm2 list | grep -q "$CACHE_UPDATE_PROCESS_NAME"; then
@@ -63,4 +62,5 @@ if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
 fi
 
 echo "Starting synthetic data generation process"
-pm2 start bitmind/validator/scripts/run_data_generator.py --name $DATA_GEN_PROCESS_NAME
+pm2 start bitmind/validator/scripts/run_data_generator.py --name $DATA_GEN_PROCESS_NAME-- \
+  --device $DEVICE
