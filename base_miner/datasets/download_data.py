@@ -37,7 +37,6 @@ def load_huggingface_dataset(
         split (str, optional): Dataset split to load (default: 'train')
         name (str, optional): Dataset configuration name (default: None)
         download_mode (str, optional): Download mode for Hugging Face datasets
-        local_data_path (str, optional): Path for storing downloaded media files
 
     Returns:
         Dataset: The loaded dataset or requested split
@@ -107,7 +106,6 @@ def download_dataset(
         dataset_name (str): Name/config of the dataset subset
         download_mode (str): Either 'force_redownload' or 'use_cache_if_exists'
         cache_dir (str): Huggingface cache directory. ~/.cache/huggingface by default
-        local_data_path (str, optional): Path to store downloaded files locally
         max_wait (int, optional): Maximum wait time between retries in seconds. Defaults to 300.
 
     Returns:
@@ -207,5 +205,4 @@ if __name__ == '__main__':
                 dataset_path=dataset['path'],
                 dataset_name=dataset.get('name', None),
                 download_mode=download_mode,
-                local_data_path=dataset.get('local_data_path', None),
                 cache_dir=args.cache_dir)
