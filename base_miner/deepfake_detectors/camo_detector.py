@@ -21,17 +21,17 @@ class CAMOImageDetector(DeepfakeDetector):
     
     Attributes:
         model_name (str): Name of the detector instance.
-        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+        config_name (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
         device (str): The type of device ('cpu' or 'cuda').
     """
 
-    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', device: str = 'cpu'):
+    def __init__(self, model_name: str = 'CAMO', config_name: str = 'camo.yaml', device: str = 'cpu'):
         """
         Initialize the CAMODetector with dynamic model selection based on config.
         """
         self.detectors = {}
-        super().__init__(model_name, config, device)
+        super().__init__(model_name, config_name, device)
 
         gate_names = [
             content_type for content_type in self.content_type
