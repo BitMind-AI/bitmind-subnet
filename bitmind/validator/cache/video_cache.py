@@ -138,10 +138,9 @@ class VideoCache(BaseCache):
                 # while still capturing enough detail in shorter ones
                 target_duration = min(2.0, duration * 0.2)  # Cap at 2 seconds or 20% of duration
                 frame_rate = (num_frames - 1) / target_duration
-                # Clamp to provided range
                 frame_rate = max(min_fps, min(frame_rate, max_fps))
 
-        sample_duration = (num_frames - 1) / frame_rate  # Duration needed for sampling
+        sample_duration = (num_frames - 1) / frame_rate
         start_time = random.uniform(0, max(0, duration - sample_duration))
         frames: List[Image.Image] = []
 
@@ -186,6 +185,8 @@ class VideoCache(BaseCache):
         bt.logging.success(f"Sampled {len(frames)} frames at {frame_rate}fps")
         return {
             'video': frames,
+            'fps': frame_rate,
+            'num_frames': num_frames,
             'path': str(video_path),
             'dataset': str(Path(video_path).name.split('_')[0]),
             'total_duration': duration,
