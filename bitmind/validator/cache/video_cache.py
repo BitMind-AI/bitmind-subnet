@@ -87,14 +87,18 @@ class VideoCache(BaseCache):
     def sample(
         self,
         num_frames: int = 6,
-        frame_rate: float = 1.0
+        fps: Optional[float] = None,
+        min_fps: Optional[float] = None,
+        max_fps: Optional[float] = None
     ) -> Optional[Dict[str, Union[List[Image.Image], str, float]]]:
         """
         Sample random frames from a random video in the cache.
 
         Args:
             num_frames: Number of consecutive frames to sample
-            frame_rate: Number of frames per second to sample
+            fps: Fixed frames per second to sample. Mutually exclusive with min_fps/max_fps.
+            min_fps: Minimum frames per second when auto-calculating fps. Must be used with max_fps.
+            max_fps: Maximum frames per second when auto-calculating fps. Must be used with min_fps.
 
         Returns:
             Dictionary containing:
@@ -105,6 +109,11 @@ class VideoCache(BaseCache):
                 - sampled_length: Number of seconds sampled
             Returns None if no videos are available or extraction fails.
         """
+        if fps is not None and (min_fps is not None or max_fps is not None):
+            raise ValueError("Cannot specify both fps and min_fps/max_fps")
+        if (min_fps is None) != (max_fps is None):
+            raise ValueError("min_fps and max_fps must be specified together")
+
         video_files = self._get_cached_files()
         if not video_files:
             bt.logging.warning("No videos available in cache")
@@ -116,6 +125,22 @@ class VideoCache(BaseCache):
             return None
 
         duration = get_video_duration(str(video_path))
+
+        # Use fixed fps if provided, otherwise calculate from range
+        frame_rate = fps
+        if frame_rate is None:
+            # For very short videos (< 1 second), use max_fps to capture detail
+            if duration <= 1.0:
+                frame_rate = max_fps
+            else:
+                # For longer videos, scale fps inversely with duration
+                # This ensures we don't span too much of longer videos
+                # while still capturing enough detail in shorter ones
+                target_duration = min(2.0, duration * 0.2)  # Cap at 2 seconds or 20% of duration
+                frame_rate = (num_frames - 1) / target_duration
+                # Clamp to provided range
+                frame_rate = max(min_fps, min(frame_rate, max_fps))
+
         sample_duration = (num_frames - 1) / frame_rate  # Duration needed for sampling
         start_time = random.uniform(0, max(0, duration - sample_duration))
         frames: List[Image.Image] = []
