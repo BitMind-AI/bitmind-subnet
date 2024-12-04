@@ -45,15 +45,15 @@ chmod +x setup_miner_env.sh
 
 *Only for training -- deployed miner instances do not require access to these datasets.*
 
-If you intend on training a miner, you can download the our open source datasets by running:
+You can optionally pre-download the training datasets by running:
 
 ```bash
-python bitmind/download_data.py
+python base_miner/datasets/download_data.py
 ```
 
-This step is optional. If you choose not to run it, the dataset will be downloaded automatically when you run the training scripts.
+Feel free to skip this step - datasets will be downloaded automatically when you run the training scripts.
 
-The default download location for data is `~/.cache/huggingface`
+The default list of datasets and default download location are defined in `base_miner/config.py` 
 
 
 ## Registration
