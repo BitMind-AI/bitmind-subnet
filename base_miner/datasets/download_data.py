@@ -25,8 +25,7 @@ def load_huggingface_dataset(
     path: str,
     split: str = 'train',
     name: Optional[str] = None,
-    download_mode: str = 'reuse_cache_if_exists',
-    local_data_path: Optional[str] = None
+    download_mode: str = 'reuse_cache_if_exists'
 ) -> datasets.Dataset:
     """Load a dataset from Hugging Face or a local directory.
 
@@ -68,8 +67,7 @@ def load_huggingface_dataset(
             dataset_path=path,
             dataset_name=name,
             download_mode=download_mode,
-            cache_dir=HUGGINGFACE_CACHE_DIR,
-            local_data_path=local_data_path)
+            cache_dir=HUGGINGFACE_CACHE_DIR)
 
     if split is None:
         return dataset
