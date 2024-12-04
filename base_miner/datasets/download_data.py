@@ -17,7 +17,6 @@ datasets.logging.set_verbosity_warning()
 datasets.disable_progress_bar()
 
 from datasets import load_dataset, load_from_disk
-from pathlib import Path
 from typing import Optional, Union
 import os
 
@@ -29,8 +28,8 @@ def load_huggingface_dataset(
     download_mode: str = 'reuse_cache_if_exists',
     local_data_path: Optional[str] = None
 ) -> datasets.Dataset:
-    """
-    Load a dataset from Hugging Face or a local directory.
+    """Load a dataset from Hugging Face or a local directory.
+
     Args:
         path (str): Path to dataset. Can be:
             - A Hugging Face dataset path (<organization>/<dataset-name>)
@@ -40,6 +39,7 @@ def load_huggingface_dataset(
         name (str, optional): Dataset configuration name (default: None)
         download_mode (str, optional): Download mode for Hugging Face datasets
         local_data_path (str, optional): Path for storing downloaded media files
+
     Returns:
         Dataset: The loaded dataset or requested split
     """
@@ -56,7 +56,7 @@ def load_huggingface_dataset(
                 return dataset[split]
         except Exception as e:
             print(f"Attempted load_from_disk but failed: {e}")
-    
+
     if 'imagefolder' in path:
         _, directory = path.split(':')
         if name:
@@ -70,14 +70,14 @@ def load_huggingface_dataset(
             download_mode=download_mode,
             cache_dir=HUGGINGFACE_CACHE_DIR,
             local_data_path=local_data_path)
-    
+
     if split is None:
         return dataset
     return dataset[split]
 
+
 def download_image(url: str) -> Image.Image:
-    """
-    Download an image from a URL.
+    """Download an image from a URL.
 
     Args:
         url (str): The URL of the image to download.
@@ -90,7 +90,6 @@ def download_image(url: str) -> Image.Image:
     if response.status_code == 200:
         image_data = BytesIO(response.content)
         return Image.open(image_data)
-
     else:
         #print(f"Failed to download image: {response.status_code}")
         return None
@@ -101,34 +100,32 @@ def download_dataset(
     dataset_name: str,
     download_mode: str,
     cache_dir: str,
-    local_data_path: str = None,
     max_wait: int = 300
 ):
-    """ Downloads the datasets present in datasets.json with exponential backoff
-        download_mode: either 'force_redownload' or 'use_cache_if_exists'
-        cache_dir: huggingface cache directory. ~/.cache/huggingface by default 
+    """Downloads the datasets present in datasets.json with exponential backoff.
+
+    Args:
+        dataset_path (str): Path to the dataset on Hugging Face
+        dataset_name (str): Name/config of the dataset subset
+        download_mode (str): Either 'force_redownload' or 'use_cache_if_exists'
+        cache_dir (str): Huggingface cache directory. ~/.cache/huggingface by default
+        local_data_path (str, optional): Path to store downloaded files locally
+        max_wait (int, optional): Maximum wait time between retries in seconds. Defaults to 300.
+
+    Returns:
+        Dataset: The downloaded Hugging Face dataset
     """
-    retry_wait = 10   # initial wait time in seconds
-    attempts = 0     # initialize attempts counter
+    retry_wait = 10  # initial wait time in seconds
+    attempts = 0
     print(f"Downloading {dataset_path} (subset={dataset_name}) dataset...")
     while True:
         try:
-            if dataset_name is not None:
-                dataset = load_dataset(dataset_path,
-                                       name=dataset_name, #config/subset name
-                                       cache_dir=cache_dir,
-                                       download_mode=download_mode,
-                                       trust_remote_code=True)
-            else:
-                dataset = load_dataset(dataset_path,
-                                       cache_dir=cache_dir,
-                                       download_mode=download_mode,
-                                       trust_remote_code=True)
-
-            #if local_data_path is not None:
-            #   print(f"Downloading media for {dataset_path} to {local_data_path}")
-            #   download_media(dataset_path, local_data_path)
-
+            dataset = load_dataset(
+                dataset_path,
+                name=dataset_name,  # config/subset name
+                cache_dir=cache_dir,
+                download_mode=download_mode,
+                trust_remote_code=True)
             break
         except Exception as e:
             print(e)
@@ -156,10 +153,13 @@ def download_dataset(
 
 
 def clean_cache(cache_dir):
-    """Clears lock files and incomplete downloads from the cache directory."""
-    # Find lock and incomplete files
-    lock_files = glob.glob(cache_dir + "/*lock")
-    incomplete_files = glob.glob(cache_dir + "/downloads/**/*.incomplete", recursive=True)
+    """Clears lock files and incomplete downloads from the cache directory.
+
+    Args:
+        cache_dir (str): Path to the Hugging Face cache directory
+    """
+    lock_files = glob.glob(os.path.join(cache_dir, "*lock"))
+    incomplete_files = glob.glob(os.path.join(cache_dir, "downloads", "**", "*.incomplete"), recursive=True)
     try:
         if lock_files:
             subprocess.run(["rm", *lock_files], check=True)
@@ -172,7 +172,11 @@ def clean_cache(cache_dir):
 
 
 def fix_permissions(path):
-    """Attempts to fix permission issues on a given path."""
+    """Attempts to fix permission issues on a given path.
+
+    Args:
+        path (str): Path to fix permissions for
+    """
     try:
         subprocess.run(["chmod", "-R", "775", path], check=True)
         print(f"Fixed permissions for {path}")
@@ -198,12 +202,12 @@ if __name__ == '__main__':
         dataset_meta = IMAGE_DATASETS
     #elif args.modality == 'video':
     #    dataset_meta = VIDEO_DATASET_META
-    
+
     for dataset_type in dataset_meta:
         for dataset in dataset_meta[dataset_type]:
             download_dataset(
-                dataset_path=dataset['path'], 
-                dataset_name=dataset.get('name', None), 
-                download_mode=download_mode, 
-                local_data_path=dataset.get('local_data_path', None), 
+                dataset_path=dataset['path'],
+                dataset_name=dataset.get('name', None),
+                download_mode=download_mode,
+                local_data_path=dataset.get('local_data_path', None),
                 cache_dir=args.cache_dir)

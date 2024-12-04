@@ -1,12 +1,10 @@
-from typing import List, Tuple, Optional
+from typing import Optional
 from datasets import Dataset
 from PIL import Image
 from io import BytesIO
-import bittensor as bt
-import numpy as np
 from torchvision.transforms import Compose
 
-from bitmind.download_data import load_huggingface_dataset, download_image
+from .download_data import download_image
 from .base_dataset import BaseDataset
 
 
