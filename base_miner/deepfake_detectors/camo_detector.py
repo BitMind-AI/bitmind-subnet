@@ -50,7 +50,7 @@ class CAMOImageDetector(DeepfakeDetector):
             if model_name in DETECTOR_REGISTRY:
                 self.detectors[content_type] = DETECTOR_REGISTRY[model_name](
                     model_name=f'{model_name}_{content_type.capitalize()}',
-                    config=detector_config,
+                    config_name=detector_config,
                     device=self.device
                 )
             else:
