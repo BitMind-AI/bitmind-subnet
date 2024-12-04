@@ -30,11 +30,11 @@ if pm2 list | grep -q "$VALIDATOR_PROCESS_NAME"; then
   pm2 delete $VALIDATOR_PROCESS_NAME
 fi
 
-#echo "Verifying access to synthetic image generation models. This may take a few minutes."
-#if ! python3 bitmind/validator/verify_models.py; then
-#  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
-#  exit 1
-#fi
+echo "Verifying access to synthetic image generation models. This may take a few minutes."
+if ! python3 bitmind/validator/verify_models.py; then
+  echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
+  exit 1
+fi
 
 echo "Starting validator process"
 pm2 start neurons/validator.py --name $VALIDATOR_PROCESS_NAME -- \
