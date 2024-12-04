@@ -61,17 +61,17 @@ async def forward(self):
     cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
 
     if modality == 'video':
-        clip_length = random.randint(
-            self.config.neuron.clip_length_min,
-            self.config.neuron.clip_length_max)
-        challenge = cache.sample(clip_length)
+        num_frames = random.randint(
+            self.config.neuron.clip_frames_min,
+            self.config.neuron.clip_frames_max)
+        challenge = cache.sample(num_frames, min_fps=8, max_fps=30)
         challenge_metadata['clip_length_s'] = clip_length
-        #np_video = np.stack([np.array(img) for img in gen_output], axis=0)
-        #challenge_data['video'] = wandb.Video(np_video) # TODO format video for w&b
+        video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
+        challenge_metadata['video'] = wandb.Video(np_video, fps=1)
 
     elif modality == 'image':
         challenge = cache.sample()
-        #challenge_data['image'] = wandb.Image(challenge['image'])
+        challenge_metadata['image'] = wandb.Image(challenge['image'])
 
     if challenge is None:
         bt.logging.warning("Waiting for cache to populate. Challenge skipped.")
