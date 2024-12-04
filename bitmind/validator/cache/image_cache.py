@@ -23,7 +23,6 @@ class ImageCache(BaseCache):
     def __init__(
         self,
         cache_dir: Union[str, Path],
-        run_updater: bool = False,
         datasets: Optional[dict] = None,
         parquet_update_interval: int = 24,
         image_update_interval: int = 2,
@@ -43,8 +42,7 @@ class ImageCache(BaseCache):
             compressed_update_interval=parquet_update_interval,
             num_samples_per_source=num_images_per_source,
             file_extensions=['.jpg', '.jpeg', '.png'],
-            compressed_file_extension='.parquet',
-            run_updater=run_updater
+            compressed_file_extension='.parquet'
         )  
                 
     def _clear_incomplete_sources(self) -> None:

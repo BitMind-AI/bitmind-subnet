@@ -20,7 +20,7 @@ async def main(args):
 
     image_cache = ImageCache(
         cache_dir=args.image_cache_dir,
-        datasets=IMAGE_DATASETS,
+        datasets=IMAGE_DATASETS['real'],
         parquet_update_interval=args.image_parquet_interval,
         image_update_interval=args.image_interval,
         num_images_per_source=100
@@ -29,7 +29,7 @@ async def main(args):
     
     video_cache = VideoCache(
         cache_dir=args.video_cache_dir,
-        datasets=VIDEO_DATASETS,
+        datasets=VIDEO_DATASETS['real'],
         video_update_interval=args.video_interval,
         zip_update_interval=args.video_zip_interval,
         num_videos_per_source=10
