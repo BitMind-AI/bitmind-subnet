@@ -175,7 +175,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
                 # Sync metagraph and potentially set weights.
                 self.sync()
-
+                time.sleep(60)
                 self.step += 1
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
