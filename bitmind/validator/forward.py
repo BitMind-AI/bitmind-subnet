@@ -97,7 +97,7 @@ async def forward(self):
     challenge_metadata['data_aug_level'] = level
 
     # sample miner uids for challenge
-    miner_uids = get_random_uids(self, k=self.metagraph.n) # self.config.neuron.sample_size)
+    miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
     challenge_metadata['miner_uids'] = list(miner_uids)
     challenge_metadata['miner_hotkeys'] = list([axon.hotkey for axon in axons])
