@@ -30,7 +30,9 @@ class VideoCache(BaseCache):
         video_update_interval: int = 1,
         zip_update_interval: int = 6,
         num_zips_per_dataset: int = 1,
-        num_videos_per_zip: int = 10
+        num_videos_per_zip: int = 10,
+        max_compressed_size_gb: int = 100,
+        max_extracted_size_gb: int = 10
     ) -> None:
         """
         Initialize the VideoCache.
@@ -49,7 +51,9 @@ class VideoCache(BaseCache):
             compressed_update_interval=zip_update_interval,
             num_sources_per_dataset=num_zips_per_dataset,
             file_extensions=['.mp4', '.avi', '.mov', '.mkv'],
-            compressed_file_extension='.zip'
+            compressed_file_extension='.zip',
+            max_compressed_size_gb=max_compressed_size_gb,
+            max_extracted_size_gb=max_extracted_size_gb
         )
         self.num_videos_per_zip = num_videos_per_zip
 
