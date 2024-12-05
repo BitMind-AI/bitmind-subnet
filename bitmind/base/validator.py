@@ -405,7 +405,14 @@ class BaseValidatorNeuron(BaseNeuron):
                 tracker = MinerPerformanceTracker()
             return tracker
 
-        self.performance_trackers['image'] = load(self.image_history_cache_path)
+        try:
+            self.performance_trackers['image'] = load(self.image_history_cache_path)
+        except Excpetion as e:
+            # just for 2.0.0 upgrade for miner performance to carry over
+            v1_history_cache_path = os.path.join(
+                self.config.neuron.full_path, "miner_performance_tracker.pkl")
+            self.performance_trackers['image'] = load(v1_history_cache_path)
+
         self.performance_trackers['video'] = load(self.video_history_cache_path)
 
     def save_state(self):

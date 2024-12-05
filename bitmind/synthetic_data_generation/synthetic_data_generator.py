@@ -6,6 +6,7 @@ import time
 import warnings
 from pathlib import Path
 from typing import Dict, Optional, Any, Union
+from contextlib import nullcontext
 
 import bittensor as bt
 import numpy as np
@@ -231,10 +232,10 @@ class SyntheticDataGenerator:
             RuntimeError: If generation fails.
         """
         self.load_t2vis_model(t2vis_model_name)
+        model_config = T2VIS_MODELS[self.t2vis_model_name]
 
         bt.logging.info("Preparing generation arguments")
-        gen_args = T2VIS_MODELS[self.t2vis_model_name].get(
-            'generate_args', {}).copy()
+        gen_args = model_config.get('generate_args', {}).copy()
         
         # Process generation arguments
         for k, v in gen_args.items():
@@ -257,12 +258,18 @@ class SyntheticDataGenerator:
                 self.t2vis_model
             )
 
-            torch_dtype =  T2VIS_MODELS[self.t2vis_model_name].get(
-                'from_pretrained_args', {}).get('torch_dtype', torch.bfloat16)
-
-            bt.logging.info("Generating media from prompt")
+            bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
+            bt.logging.info(f"Generation args: {gen_args}")
             start_time = time.time()
-            with torch.autocast(self.device, torch_dtype, cache_enabled=False):
+            if model_config.get('use_autocast', False):
+                pretrained_args = model_config.get('from_pretrained_args', {})
+                torch_dtype = pretrained_args.get('torch_dtype', torch.bfloat16)
+                with torch.autocast(self.device, torch_dtype, cache_enabled=False): 
+                    gen_output = self.t2vis_model(
+                        prompt=truncated_prompt,
+                        **gen_args
+                    )
+            else:
                 gen_output = self.t2vis_model(
                     prompt=truncated_prompt,
                     **gen_args

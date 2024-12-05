@@ -78,6 +78,7 @@ VIDEO_DATASETS = {
     ]
 }
 
+
 # Prompt generation model configurations
 IMAGE_ANNOTATION_MODEL: str = "Salesforce/blip2-opt-6.7b-coco"
 TEXT_MODERATION_MODEL: str = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
@@ -90,7 +91,8 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "use_safetensors": True,
             "torch_dtype": torch.float16,
             "variant": "fp16"
-        }
+        },
+        "use_autocast": False
     },
     "SG161222/RealVisXL_V4.0": {
         "pipeline_cls": StableDiffusionXLPipeline,
