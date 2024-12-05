@@ -59,6 +59,7 @@ async def forward(self):
 
     bt.logging.info(f"Sampling data from {modality} cache")
     cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
+    cache._prune_extracted_cache()
 
     if modality == 'video':
         num_frames = random.randint(
