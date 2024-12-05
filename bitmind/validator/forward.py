@@ -59,7 +59,6 @@ async def forward(self):
 
     bt.logging.info(f"Sampling data from {modality} cache")
     cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
-    cache._prune_extracted_cache()
 
     if modality == 'video':
         num_frames = random.randint(
@@ -126,6 +125,7 @@ async def forward(self):
         responses=responses,
         uids=miner_uids,
         axons=axons,
+        challenge_modality=modality,
         performance_trackers=self.performance_trackers)
 
     self.update_scores(rewards, miner_uids)
@@ -137,7 +137,8 @@ async def forward(self):
     challenge_metadata['scores'] = list(self.scores)
 
     for uid, pred, reward in zip(miner_uids, responses, rewards):
-        bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
+        if pred != -1:
+            bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
 
     # W&B logging if enabled
     if not self.config.wandb.off:
@@ -145,3 +146,5 @@ async def forward(self):
 
     # ensure state is saved after each challenge
     self.save_miner_history()
+    if label == 1:
+        cache._prune_extracted_cache()

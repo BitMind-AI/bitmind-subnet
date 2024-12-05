@@ -149,18 +149,24 @@ class SyntheticDataGenerator:
                 # Generate image/video from current model and prompt
                 start = time.time()
                 output = self.run_t2vis(prompt, modality, t2vis_model_name=model_name)
+
+                bt.logging.info(f'Writing to cache {self.output_dir}')
                 base_path = self.output_dir / modality / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output'}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
                 if modality == 'image':
-                    output['gen_output'].images[0].save(base_path.with_suffix('.png'))
+                    out_path = base_path.with_suffix('.png')
+                    output['gen_output'].images[0].save(out_path)
                 elif modality == 'video':
+                    bt.logging.info("Writing to cache")
+                    out_path = str(base_path.with_suffix('.mp4'))
                     export_to_video(
                         output['gen_output'].frames[0],
-                        str(base_path.with_suffix('.mp4')), 
+                        out_path,
                         fps=30
                     )
+                bt.logging.info(f"Wrote to {out_path}")
 
     def generate(
         self,

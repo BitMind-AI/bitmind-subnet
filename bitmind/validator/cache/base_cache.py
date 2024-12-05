@@ -118,7 +118,7 @@ class BaseCache(ABC):
         """Check compressed cache size and remove oldest files if over limit."""
         files = self._get_compressed_files()
         total_size = sum(f.stat().st_size for f in files)
-        bt.logging.info(f"Compressed cache size: {len(files)} files | {total_size / (1024*1024*1024):.2f} GB [{self.compressed_dir}]")
+        bt.logging.info(f"Compressed cache size: {len(files)} files | {total_size / (1024*1024*1024):.4f} GB [{self.compressed_dir}]")
         while total_size > self.max_compressed_size_bytes:
             compressed_files = self._get_compressed_files()
             if not compressed_files:
@@ -129,7 +129,7 @@ class BaseCache(ABC):
 
             oldest_file.unlink()
             total_size -= file_size
-            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is {total_size} GB")
+            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is  {total_size / (1024*1024*1024):.4f} GB")
 
     def _prune_extracted_cache(self) -> None:
         """Check extracted cache size and remove oldest files if over limit."""
@@ -149,7 +149,7 @@ class BaseCache(ABC):
             if json_file.exists():
                 json_file.unlink()
             total_size -= file_size
-            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is {total_size} GB")
+            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is  {total_size / (1024*1024*1024):.4f} GB")
 
     async def _run_extracted_updater(self) -> None:
         """Asynchronously refresh extracted files according to update interval."""

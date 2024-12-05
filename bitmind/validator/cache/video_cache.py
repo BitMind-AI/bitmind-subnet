@@ -100,7 +100,7 @@ class VideoCache(BaseCache):
         fps: Optional[float] = None,
         min_fps: Optional[float] = None,
         max_fps: Optional[float] = None,
-        remove_from_cache: bool = True
+        remove_from_cache: bool = False
     ) -> Optional[Dict[str, Union[List[Image.Image], str, float]]]:
         """
         Sample random frames from a random video in the cache.
