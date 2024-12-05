@@ -6,5 +6,4 @@
 
 echo $CONDA_PREFIX
 ./setup_env.sh
-$CONDA_PREFIX/bin/python bitmind/validator/verify_models.py
 echo "Autoupdate steps complete :)"
