@@ -23,7 +23,7 @@ async def main(args):
         datasets=IMAGE_DATASETS['real'],
         parquet_update_interval=args.image_parquet_interval,
         image_update_interval=args.image_interval,
-        sources_per_dataset=5,
+        num_parquets_per_dataset=5,
         num_images_per_source=100
     )
     image_cache.start_updater()

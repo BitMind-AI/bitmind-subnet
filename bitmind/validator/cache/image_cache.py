@@ -27,7 +27,7 @@ class ImageCache(BaseCache):
         datasets: Optional[dict] = None,
         parquet_update_interval: int = 6,
         image_update_interval: int = 1,
-        num_sources_per_dataset: int = 5,
+        num_parquets_per_dataset: int = 5,
         num_images_per_source: int = 100,
     ) -> None:
         """        
@@ -42,7 +42,7 @@ class ImageCache(BaseCache):
             datasets=datasets,
             extracted_update_interval=image_update_interval,
             compressed_update_interval=parquet_update_interval,
-            num_sources_per_dataset=num_sources_per_dataset,
+            num_sources_per_dataset=num_parquets_per_dataset,
             file_extensions=['.jpg', '.jpeg', '.png'],
             compressed_file_extension='.parquet'
         )
