@@ -155,7 +155,7 @@ class VideoCache(BaseCache):
         start_time = random.uniform(0, max(0, duration - sample_duration))
         frames: List[Image.Image] = []
 
-        bt.logging.info(f'Extracting {num_frames} frames at {frame_rate}fps starting at {start_time:.2f}s')
+        #bt.logging.info(f'Extracting {num_frames} frames at {frame_rate}fps starting at {start_time:.2f}s')
 
         for i in range(num_frames):
             timestamp = start_time + (i / frame_rate)
