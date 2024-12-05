@@ -23,6 +23,7 @@ async def main(args):
         datasets=IMAGE_DATASETS['real'],
         parquet_update_interval=args.image_parquet_interval,
         image_update_interval=args.image_interval,
+        sources_per_dataset=5,
         num_images_per_source=100
     )
     image_cache.start_updater()
@@ -32,7 +33,8 @@ async def main(args):
         datasets=VIDEO_DATASETS['real'],
         video_update_interval=args.video_interval,
         zip_update_interval=args.video_zip_interval,
-        num_videos_per_source=10
+        num_zips_per_dataset=2,
+        num_videos_per_zip=50
     )
     video_cache.start_updater()
     

@@ -27,9 +27,10 @@ class VideoCache(BaseCache):
         self,
         cache_dir: Union[str, Path],
         datasets: Optional[dict] = None,
-        video_update_interval: int = 2,
-        zip_update_interval: int = 24,
-        num_videos_per_source: int = 10
+        video_update_interval: int = 1,
+        zip_update_interval: int = 6,
+        num_zips_per_dataset: int = 1,
+        num_videos_per_zip: int = 10
     ) -> None:
         """
         Initialize the VideoCache.
@@ -46,10 +47,11 @@ class VideoCache(BaseCache):
             datasets=datasets,
             extracted_update_interval=video_update_interval,
             compressed_update_interval=zip_update_interval,
-            num_samples_per_source=num_videos_per_source,
+            num_sources_per_dataset=num_zips_per_dataset,
             file_extensions=['.mp4', '.avi', '.mov', '.mkv'],
             compressed_file_extension='.zip'
         )
+        self.num_videos_per_zip = num_videos_per_zip
 
     def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted zip files from cache."""
@@ -61,13 +63,16 @@ class VideoCache(BaseCache):
                 except Exception as e:
                     bt.logging.error(f"Error removing incomplete zip {path}: {e}")
 
-    def _extract_random_items(self) -> List[Path]:
+    def _extract_random_items(self, n_items_per_source: Optional[int] = None) -> List[Path]:
         """
         Extract random videos from zip files in compressed directory.
         
         Returns:
             List of paths to extracted video files.
         """
+        if n_items_per_source is None:
+            n_items_per_source = self.num_videos_per_zip
+
         extracted_files = []
         zip_files = self._get_compressed_files()
         if not zip_files:
@@ -79,7 +84,7 @@ class VideoCache(BaseCache):
                 extracted_files += extract_videos_from_zip(
                     zip_file,
                     self.cache_dir, 
-                    self.num_samples_per_source)
+                    n_items_per_source)
             except Exception as e:
                 bt.logging.error(f"Error processing zip file {zip_file}: {e}")
 
