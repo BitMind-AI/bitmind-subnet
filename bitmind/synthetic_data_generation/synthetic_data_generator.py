@@ -6,7 +6,6 @@ import time
 import warnings
 from pathlib import Path
 from typing import Dict, Optional, Any, Union
-from contextlib import nullcontext
 
 import bittensor as bt
 import numpy as np
@@ -261,7 +260,7 @@ class SyntheticDataGenerator:
             bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
             bt.logging.info(f"Generation args: {gen_args}")
             start_time = time.time()
-            if model_config.get('use_autocast', False):
+            if model_config.get('use_autocast', True):
                 pretrained_args = model_config.get('from_pretrained_args', {})
                 torch_dtype = pretrained_args.get('torch_dtype', torch.bfloat16)
                 with torch.autocast(self.device, torch_dtype, cache_enabled=False): 
