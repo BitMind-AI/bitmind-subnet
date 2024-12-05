@@ -141,7 +141,7 @@ class DeepfakeDetector(ABC):
             destination_path = Path(CONFIGS_DIR) / Path(self.config_name)
             if not destination_path.exists():
                 local_config_path = hf_hub_download(self.hf_repo, self.config_name, local_dir=CONFIGS_DIR)
-                print(f"Downloaded {self.hf_repo}/{config_name} to {local_config_path}")
+                print(f"Downloaded {self.hf_repo}/{self.config_name} to {local_config_path}")
                 with Path(local_config_path).open('r') as f:
                     self.config = yaml.safe_load(f)
             else:
