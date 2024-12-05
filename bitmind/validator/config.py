@@ -56,7 +56,7 @@ CHALLENGE_TYPE = {
 IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
     "real": [
         {"path": "bitmind/bm-real"},
-        {"path": "open-image-v7-256"},
+        {"path": "bitmind/open-image-v7-256"},
         {"path": "bitmind/celeb-a-hq"},
         {"path": "bitmind/ffhq-256"},
         {"path": "bitmind/MS-COCO-unique-256"},
