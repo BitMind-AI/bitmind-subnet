@@ -17,12 +17,12 @@ Welcome to the BitMind Subnet! This repository contains all the necessary inform
 - [Project Structure and Terminology 📖](docs/Glossary.md)
 - [Contributor Guide 🤝](docs/Contributor_Guide.md)
 
-**IMPORTANT**: If you are new to Bittensor, we recommend familiarizing yourself with the basics on the [Bittensor Website](https://bittensor.com/) before proceeding to the [Setup Guide](docs/Setup.md) page.
+**IMPORTANT**: If you are new to Bittensor, we recommend familiarizing yourself with the basics on the [Bittensor Website](https://bittensor.com/) before proceeding.
 
 ## Identifying AI-Generated Media with a Decentralized Framework
 
 **Overview:**
-The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images. This platform is engineered on a decentralized, incentive-driven framework to enhance trustworthiness and stimulate continuous technological advancement.
+The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. This platform is engineered on a decentralized, incentive-driven framework to enhance trustworthiness and stimulate continuous technological advancement.
 
 **Purpose:**
 The proliferation of generative AI models has significantly increased the production of high-quality synthetic media, presenting challenges in distinguishing these from authentic content. The BitMind Subnet addresses this challenge by providing robust detection mechanisms to maintain the integrity of digital media.
@@ -39,9 +39,9 @@ The proliferation of generative AI models has significantly increased the produc
 **Core Components:**
 
 - **Miners:** Tasked with running binary classifiers that discern between genuine and AI-generated content.
-  - **Research Integration:** We systematically update our detection models and methodologies in response to emerging academic research, offering resources like training codes and model weights to our community.
+  - **Research Integration:** We systematically update our detection models and methodologies in response to emerging academic research, offering resources like training code, model weights and datasets to our community.
 - **Validators:** Responsible for challenging miners with a balanced mix of real and synthetic images, drawn from a diverse pool of sources.
-  - **Resource Expansion:** We are committed to enhancing the validators' capabilities by increasing the diversity and volume of the image pool, which supports rigorous testing and validation processes.
+  - **Resource Expansion:** We continuously add new datasets and generative models to our validators in order to maximize the coverage of the types of media our miners are incentivized to detect. 
 
 **Subnet Architecture Diagram**
 ![Subnet Architecture](static/Subnet-Arch.png)
