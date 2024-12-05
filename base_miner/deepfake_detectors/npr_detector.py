@@ -6,25 +6,25 @@ from huggingface_hub import hf_hub_download
 from base_miner.NPR.networks.resnet import resnet50
 from bitmind.utils.image_transforms import get_base_transforms
 from base_miner.deepfake_detectors import DeepfakeDetector
-from base_miner import DETECTOR_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
 from base_miner.NPR.config.constants import WEIGHTS_DIR
 
 
 @DETECTOR_REGISTRY.register_module(module_name='NPR')
-class NPRDetector(DeepfakeDetector):
+class NPRImageDetector(DeepfakeDetector):
     """
     DeepfakeDetector subclass that initializes a pretrained NPR model
     for binary classification of fake and real images.
     
     Attributes:
         model_name (str): Name of the detector instance.
-        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+        config_name (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
         device (str): The type of device ('cpu' or 'cuda').
     """
     
-    def __init__(self, model_name: str = 'NPR', config: str = 'npr.yaml', device: str = 'cpu'):
-        super().__init__(model_name, config, device)
+    def __init__(self, model_name: str = 'NPR', config_name: str = 'npr.yaml', device: str = 'cpu'):
+        super().__init__(model_name, config_name, device)
         self.transforms = get_base_transforms()
 
     def load_model(self):

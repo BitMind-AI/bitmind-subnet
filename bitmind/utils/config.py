@@ -236,17 +236,17 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
-        "--neuron.clip_length_min",
+        "--neuron.clip_frames_min",
         type=int,
-        help="Min length in seconds for video challenge",
-        default=2,
+        help="Min number of frames for video challenge",
+        default=8,
     )
 
     parser.add_argument(
-        "--neuron.clip_length_max",
+        "--neuron.clip_frames_max",
         type=int,
-        help="Max length in seconds for video challenge",
-        default=8,
+        help="Max number of frames for video challenge",
+        default=24,
     )
 
     parser.add_argument(

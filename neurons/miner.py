@@ -28,7 +28,8 @@ import os
 import sys
 import numpy as np
 
-from base_miner import DETECTOR_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
+from base_miner.deepfake_detectors import NPRImageDetector, UCFImageDetector, CAMOImageDetector, TALLVideoDetector
 from bitmind.base.miner import BaseMinerNeuron
 from bitmind.protocol import ImageSynapse, VideoSynapse, decode_video_synapse
 from bitmind.utils.config import get_device
@@ -54,7 +55,7 @@ class Miner(BaseMinerNeuron):
         self.load_image_detector()
         bt.logging.info("Loading video detection model if configured")
         self.load_video_detector()
-
+        
     def load_image_detector(self):
         if (str(self.config.neuron.image_detector).lower() == 'none' or
             str(self.config.neuron.image_detector_config).lower() == 'none'):
@@ -65,9 +66,9 @@ class Miner(BaseMinerNeuron):
         if self.config.neuron.image_detector_device == 'auto':
             bt.logging.warning("Automatic device configuration enabled for image detector")
             self.config.neuron.image_detector_device = get_device()
-
+            
         self.image_detector = DETECTOR_REGISTRY[self.config.neuron.image_detector](
-            config=self.config.neuron.image_detector_config,
+            config_name=self.config.neuron.image_detector_config,
             device=self.config.neuron.image_detector_device
         )
         bt.logging.info(f"Loaded image detection model: {self.config.neuron.image_detector}")
@@ -84,7 +85,7 @@ class Miner(BaseMinerNeuron):
             self.config.neuron.video_detector_device = get_device()
 
         self.video_detector = DETECTOR_REGISTRY[self.config.neuron.video_detector](
-            config=self.config.neuron.video_detector_config,
+            config_name=self.config.neuron.video_detector_config,
             device=self.config.neuron.video_detector_device
         )
         bt.logging.info(f"Loaded video detection model: {self.config.neuron.video_detector}")
@@ -114,7 +115,11 @@ class Miner(BaseMinerNeuron):
             except Exception as e:
                 bt.logging.error("Error performing inference")
                 bt.logging.error(e)
-            bt.logging.info(f"PREDICTION: {synapse.prediction}")
+
+            bt.logging.info(f"PREDICTION = {synapse.prediction}")
+            label = synapse.testnet_label
+            if synapse.testnet_label != -1:
+                bt.logging.info(f"LABEL (testnet only) = {label}")
         return synapse
 
     async def forward_video(
@@ -140,7 +145,11 @@ class Miner(BaseMinerNeuron):
             except Exception as e:
                 bt.logging.error("Error performing inference")
                 bt.logging.error(e)
-            bt.logging.info(f"PREDICTION: {synapse.prediction}")
+
+            bt.logging.info(f"PREDICTION = {synapse.prediction}")
+            label = synapse.testnet_label
+            if synapse.testnet_label != -1:
+                bt.logging.info(f"LABEL (testnet only) = {label}")
         return synapse
 
     async def blacklist_image(self, synapse: ImageSynapse) -> typing.Tuple[bool, str]:

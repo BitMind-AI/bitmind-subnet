@@ -246,7 +246,7 @@ def main() -> None:
     parser.add_argument(
         "--frame_rate",
         type=int,
-        default=1,
+        default=5,
         help="Extract one frame every 'frame_rate' frames."
     )
     parser.add_argument(

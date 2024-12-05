@@ -2,7 +2,7 @@ import torch
 from pathlib import Path
 
 import bittensor as bt
-from base_miner import DETECTOR_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
 from base_miner.DFB.config.constants import CONFIGS_DIR, WEIGHTS_DIR
 from base_miner.DFB.detectors import DETECTOR, TALLDetector
 from base_miner.deepfake_detectors import DeepfakeDetector
@@ -14,10 +14,10 @@ class TALLVideoDetector(DeepfakeDetector):
     def __init__(
         self,
         model_name: str = "TALL",
-        config: str = "tall.yaml",
+        config_name: str = "tall.yaml",
         device: str = "cpu",
     ):
-        super().__init__(model_name, config, device)
+        super().__init__(model_name, config_name, device)
 
         total_params = sum(p.numel() for p in self.tall.model.parameters())
         trainable_params = sum(
@@ -30,7 +30,7 @@ class TALLVideoDetector(DeepfakeDetector):
     def load_model(self):
         # download weights from hf if not available locally
         self.ensure_weights_are_available(WEIGHTS_DIR, self.weights)
-        bt.logging.info(f"Loaded config from training run: {self.config}")
+        bt.logging.info(f"Loaded config: {self.config}")
         self.tall = TALLDetector(self.config, self.device)
 
         # load weights
