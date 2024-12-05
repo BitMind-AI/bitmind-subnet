@@ -66,7 +66,7 @@ TRANSFORM_FNS = {
 
 
 parser = argparse.ArgumentParser(description='Process some paths.')
-parser.add_argument('--detector', type=str, choices=['UCF', 'TALL'], help='Detector name')
+parser.add_argument('--detector', type=str, choices=['UCF', 'TALL'], required=True, help='Detector name')
 parser.add_argument('--modality', type=str, default='image', choices=['image', 'video'])
 parser.add_argument('--faces_only', dest='faces_only', action='store_true', default=False)
 parser.add_argument('--no-save_ckpt', dest='save_ckpt', action='store_false', default=True)
