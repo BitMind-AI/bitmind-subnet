@@ -407,7 +407,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
         try:
             self.performance_trackers['image'] = load(self.image_history_cache_path)
-        except Excpetion as e:
+        except Exception as e:
             # just for 2.0.0 upgrade for miner performance to carry over
             v1_history_cache_path = os.path.join(
                 self.config.neuron.full_path, "miner_performance_tracker.pkl")
