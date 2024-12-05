@@ -1,6 +1,7 @@
 import gc
 import json
 import os
+import random
 import time
 import warnings
 from pathlib import Path
@@ -19,6 +20,7 @@ from bitmind.validator.config import (
     T2VIS_MODELS,
     T2VIS_MODEL_NAMES,
     T2V_MODEL_NAMES,
+    T2I_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_t2vis_model,
     get_modality
@@ -134,14 +136,19 @@ class SyntheticDataGenerator:
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
 
-        for model_name in T2VIS_MODEL_NAMES:
+
+        # shuffle and interleave models
+        t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
+        t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
+        model_names = [m for pair in zip(t2v_model_names, t2i_model_names) for m in pair]
+        for model_name in model_names:
             modality = get_modality(model_name)
             for i, prompt in enumerate(prompts):
                 bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
 
                 # Generate image/video from current model and prompt
+                start = time.time()
                 output = self.run_t2vis(prompt, modality, t2vis_model_name=model_name)
-
                 base_path = self.output_dir / modality / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output'}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
@@ -283,6 +290,7 @@ class SyntheticDataGenerator:
                 bt.logging.error(f"Image generation error: {e}")
                 raise RuntimeError(f"Failed to generate image: {e}")
 
+        print(f"Finished generation in {gen_time/60} minutes")
         return {
             'prompt': truncated_prompt,
             'prompt_long': prompt,
