@@ -38,7 +38,7 @@ def main():
     random_augs = get_random_augmentations()
     split_transforms = {
         'train': random_augs,
-        'val': base_transforms,
+        'validation': base_transforms,
         'test': base_transforms
     }
     real_datasets = load_and_split_datasets(
