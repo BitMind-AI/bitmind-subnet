@@ -99,7 +99,7 @@ class BaseCache(ABC):
         """Get list of all extracted files in cache directory."""
         return [
             f for f in self.cache_dir.iterdir() 
-            if f.suffix.lower() in self.file_extensions
+            if f.is_file() and f.suffix.lower() in self.file_extensions
         ]
 
     def _get_compressed_files(self) -> List[Path]:
@@ -127,14 +127,15 @@ class BaseCache(ABC):
             oldest_file = min(compressed_files, key=lambda f: f.stat().st_mtime)
             file_size = oldest_file.stat().st_size
 
-            bt.logging.info(f"Removing {oldest_file.name} to stay under size limit")
             oldest_file.unlink()
             total_size -= file_size
+            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is {total_size} GB")
 
     def _prune_extracted_cache(self) -> None:
         """Check extracted cache size and remove oldest files if over limit."""
-        total_size = sum(f.stat().st_size for f in self._get_cached_files())
-        bt.logging.info(f"Extracted cache size: {total_size / (1024*1024*1024):.2f} GB [{self.cache_dir}]")
+        files = self._get_cached_files()
+        total_size = sum(f.stat().st_size for f in files)
+        bt.logging.info(f"Extracted cache size: {len(files)} files | {total_size / (1024*1024*1024):.2f} GB [{self.cache_dir}]")
         while total_size > self.max_extracted_size_bytes:
             extracted_files = self._get_cached_files()
             if not extracted_files:
@@ -143,9 +144,12 @@ class BaseCache(ABC):
             oldest_file = min(extracted_files, key=lambda f: f.stat().st_mtime)
             file_size = oldest_file.stat().st_size
 
-            bt.logging.info(f"Removing {oldest_file.name} to stay under size limit")
             oldest_file.unlink()
+            json_file = oldest_file.with_suffix('.json')
+            if json_file.exists():
+                json_file.unlink()
             total_size -= file_size
+            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is {total_size} GB")
 
     async def _run_extracted_updater(self) -> None:
         """Asynchronously refresh extracted files according to update interval."""
