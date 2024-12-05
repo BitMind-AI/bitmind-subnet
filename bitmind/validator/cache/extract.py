@@ -96,7 +96,7 @@ q
                                 'sha256': hashlib.sha256(file_data).hexdigest()
                             }
 
-                    metadata_filename = f"{video_path.stem}_metadata.json"
+                    metadata_filename = f"{video_path.stem}.json"
                     metadata_path = dest_dir / metadata_filename
 
                     with open(metadata_path, 'w', encoding='utf-8') as f:
