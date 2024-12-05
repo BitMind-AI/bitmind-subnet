@@ -116,8 +116,9 @@ class BaseCache(ABC):
 
     def _prune_compressed_cache(self) -> None:
         """Check compressed cache size and remove oldest files if over limit."""
-        total_size = sum(f.stat().st_size for f in self._get_compressed_files())
-        bt.logging.info(f"Compressed cache size: {total_size / (1024*1024*1024):.2f} GB [{self.compressed_dir}]")
+        files = self._get_compressed_files()
+        total_size = sum(f.stat().st_size for f in files)
+        bt.logging.info(f"Compressed cache size: {len(files)} files | {total_size / (1024*1024*1024):.2f} GB [{self.compressed_dir}]")
         while total_size > self.max_compressed_size_bytes:
             compressed_files = self._get_compressed_files()
             if not compressed_files:
