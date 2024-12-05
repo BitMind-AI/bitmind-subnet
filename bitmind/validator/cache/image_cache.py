@@ -107,6 +107,12 @@ class ImageCache(BaseCache):
             try:
                 image = Image.open(image_path)
                 metadata = json.loads(image_path.with_suffix('.json').read_text())
+                if remove_from_cache:
+                    try:
+                        os.remove(image_path)
+                        os.remove(image_path.with_suffix('.json'))
+                    except Exception as e:
+                        bt.logging.warning(f"Failed to remove files for {image_path}: {e}")
                 return {
                     'image': image,
                     'path': str(image_path),
@@ -117,13 +123,6 @@ class ImageCache(BaseCache):
             except Exception as e:
                 bt.logging.warning(f"Failed to load image {image_path}: {e}")
                 continue
-
-        if remove_from_cache:
-            try:
-                os.remove(image_path)
-                os.remove(image_path.with_suffix('.json'))
-            except Exception as e:
-                bt.logging.warning(f"Failed to remove files for {image_path}: {e}")
 
         bt.logging.warning(f"Failed to find valid image after {attempts} attempts")
         return None
