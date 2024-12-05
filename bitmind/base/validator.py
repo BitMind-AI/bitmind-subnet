@@ -175,7 +175,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
                 # Sync metagraph and potentially set weights.
                 self.sync()
-
+                time.sleep(60)
                 self.step += 1
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
@@ -392,10 +392,9 @@ class BaseValidatorNeuron(BaseNeuron):
                 bt.logging.info(f"Loading miner performance history from {path}")
                 try:
                     tracker = joblib.load(path)
-                    pred_history = self.performance_tracker.prediction_history
                     num_miners_history = len([
-                        uid for uid in pred_history
-                        if len([p for p in pred_history[uid] if p != -1]) > 0
+                        uid for uid in tracker.prediction_history
+                        if len([p for p in tracker.prediction_history[uid] if p != -1]) > 0
                     ])
                     bt.logging.info(f"Loaded history for {num_miners_history} miners")
                 except Exception as e:
@@ -406,7 +405,14 @@ class BaseValidatorNeuron(BaseNeuron):
                 tracker = MinerPerformanceTracker()
             return tracker
 
-        self.performance_trackers['image'] = load(self.image_history_cache_path)
+        try:
+            self.performance_trackers['image'] = load(self.image_history_cache_path)
+        except Exception as e:
+            # just for 2.0.0 upgrade for miner performance to carry over
+            v1_history_cache_path = os.path.join(
+                self.config.neuron.full_path, "miner_performance_tracker.pkl")
+            self.performance_trackers['image'] = load(v1_history_cache_path)
+
         self.performance_trackers['video'] = load(self.video_history_cache_path)
 
     def save_state(self):

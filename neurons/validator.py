@@ -78,7 +78,7 @@ class Validator(BaseValidatorNeuron):
 
         self.media_cache = {
             'real': self.real_media_cache,
-            'synthetic': self.real_media_cache,
+            'synthetic': self.synthetic_media_cache,
         }
 
         self.init_wandb()
@@ -158,4 +158,4 @@ if __name__ == "__main__":
     with Validator() as validator:
         while True:
             bt.logging.info(f"Validator running | uid {validator.uid} | {time.time()}")
-            time.sleep(45)
+            time.sleep(30)

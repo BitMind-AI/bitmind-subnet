@@ -25,9 +25,12 @@ class ImageCache(BaseCache):
         self,
         cache_dir: Union[str, Path],
         datasets: Optional[dict] = None,
-        parquet_update_interval: int = 24,
-        image_update_interval: int = 2,
+        parquet_update_interval: int = 6,
+        image_update_interval: int = 1,
+        num_parquets_per_dataset: int = 5,
         num_images_per_source: int = 100,
+        max_compressed_size_gb: int = 100,
+        max_extracted_size_gb: int = 10
     ) -> None:
         """        
         Args:
@@ -41,10 +44,13 @@ class ImageCache(BaseCache):
             datasets=datasets,
             extracted_update_interval=image_update_interval,
             compressed_update_interval=parquet_update_interval,
-            num_samples_per_source=num_images_per_source,
+            num_sources_per_dataset=num_parquets_per_dataset,
             file_extensions=['.jpg', '.jpeg', '.png'],
-            compressed_file_extension='.parquet'
-        )  
+            compressed_file_extension='.parquet',
+            max_compressed_size_gb=max_compressed_size_gb,
+            max_extracted_size_gb=max_extracted_size_gb
+        )
+        self.num_images_per_source = num_images_per_source
                 
     def _clear_incomplete_sources(self) -> None:
         """Remove any incomplete or corrupted parquet files."""
@@ -56,13 +62,16 @@ class ImageCache(BaseCache):
                 except Exception as e:
                     bt.logging.error(f"Error removing incomplete parquet {path}: {e}")
     
-    def _extract_random_items(self) -> List[Path]:
+    def _extract_random_items(self, n_items_per_source: Optional[int] = None) -> List[Path]:
         """
         Extract random videos from zip files in compressed directory.
         
         Returns:
             List of paths to extracted video files.
         """
+        if n_items_per_source is None:
+            n_items_per_source = self.num_images_per_source
+
         extracted_files = []
         parquet_files = self._get_compressed_files()
         if not parquet_files:
@@ -74,13 +83,13 @@ class ImageCache(BaseCache):
                 extracted_files += extract_images_from_parquet(
                     parquet_file,
                     self.cache_dir,
-                    self.num_samples_per_source
+                    n_items_per_source
                 )
             except Exception as e:
                 bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
         return extracted_files
 
-    def sample(self, remove_from_cache=True) -> Optional[Dict[str, Any]]:
+    def sample(self, remove_from_cache=False) -> Optional[Dict[str, Any]]:
         """
         Sample a random image and its metadata from the cache.
 

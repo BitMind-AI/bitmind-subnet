@@ -35,7 +35,7 @@ if __name__ == '__main__':
         bt.logging.info("Image cache was populated! Proceeding to data generation")
         break
 
-    sgd = SyntheticDataGenerator(
+    sdg = SyntheticDataGenerator(
         prompt_type='annotation',
         use_random_t2vis_model=True,
         device=args.device,
@@ -43,10 +43,10 @@ if __name__ == '__main__':
         output_dir=args.output_dir)
 
     bt.logging.info("Starting standalone data generator service")
+    sdg.batch_generate(batch_size=1)
     while True:
         try:
-            sgd.batch_generate(batch_size=args.batch_size)
-            time.sleep(1)
+            sdg.batch_generate(batch_size=args.batch_size)
         except Exception as e:
             bt.logging.error(f"Error in batch generation: {str(e)}")
             time.sleep(5)

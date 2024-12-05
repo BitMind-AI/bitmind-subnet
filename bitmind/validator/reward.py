@@ -33,6 +33,7 @@ def get_rewards(
         responses: List[float],
         uids: List[int],
         axons: List[bt.axon],
+        challenge_modality: str,
         performance_trackers,
     ) -> np.array:
     """
@@ -43,6 +44,7 @@ def get_rewards(
     - responses (List[float]): A list of responses from the miners.
     - uids (List[int]): List of miner UIDs.
     - axons (List[bt.axon]): List of miner axons.
+    - challenge_modality (str): video or image
     - performance_tracker (MinerPerformanceTracker): Tracks historical performance metrics per miner.
 
     Returns:
@@ -59,16 +61,17 @@ def get_rewards(
                 miner_hotkey = axon.hotkey
 
                 tracked_hotkeys = tracker.miner_hotkeys
-                if uid in tracked_hotkeys and tracked_hotkeys != miner_hotkey:
+                if uid in tracked_hotkeys and tracked_hotkeys[uid] != miner_hotkey:
                     bt.logging.info(f"Miner hotkey changed for UID {uid}. Resetting performance metrics.")
                     tracker.reset_miner_history(uid, miner_hotkey)
 
-                performance_trackers[modality].update(uid, pred_prob, label, miner_hotkey)
+                if modality == challenge_modality:
+                    performance_trackers[modality].update(uid, pred_prob, label, miner_hotkey)
+
                 metrics_100 = tracker.get_metrics(uid, window=100)
                 metrics_10 = tracker.get_metrics(uid, window=10)
                 reward = 0.5 * metrics_100['mcc'] + 0.5 * metrics_10['accuracy']
                 reward *= compute_penalty(pred_prob)
-
                 miner_modality_rewards[modality] = reward
                 miner_modality_metrics[modality] = metrics_100
 

@@ -65,18 +65,22 @@ async def forward(self):
             self.config.neuron.clip_frames_min,
             self.config.neuron.clip_frames_max)
         challenge = cache.sample(num_frames, min_fps=8, max_fps=30)
-        video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
-        challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
-        challenge_metadata['fps'] = challenge['fps']
-        challenge_metadata['num_frames'] = challenge['num_frames']
 
     elif modality == 'image':
         challenge = cache.sample()
-        challenge_metadata['image'] = wandb.Image(challenge['image'])
 
     if challenge is None:
         bt.logging.warning("Waiting for cache to populate. Challenge skipped.")
         return
+
+    # prepare metadata for logging
+    if modality == 'video':
+        video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
+        challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
+        challenge_metadata['fps'] = challenge['fps']
+        challenge_metadata['num_frames'] = challenge['num_frames']
+    elif modality == 'image':
+        challenge_metadata['image'] = wandb.Image(challenge['image'])
 
     # update logging dict with everything except image/video data
     challenge_metadata.update({k: v for k, v in challenge.items() if k != modality})
@@ -121,6 +125,7 @@ async def forward(self):
         responses=responses,
         uids=miner_uids,
         axons=axons,
+        challenge_modality=modality,
         performance_trackers=self.performance_trackers)
 
     self.update_scores(rewards, miner_uids)
@@ -132,7 +137,8 @@ async def forward(self):
     challenge_metadata['scores'] = list(self.scores)
 
     for uid, pred, reward in zip(miner_uids, responses, rewards):
-        bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
+        if pred != -1:
+            bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
 
     # W&B logging if enabled
     if not self.config.wandb.off:
@@ -140,3 +146,5 @@ async def forward(self):
 
     # ensure state is saved after each challenge
     self.save_miner_history()
+    if label == 1:
+        cache._prune_extracted_cache()

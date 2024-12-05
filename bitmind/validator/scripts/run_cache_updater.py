@@ -12,7 +12,9 @@ from bitmind.validator.config import (
     IMAGE_PARQUET_CACHE_UPDATE_INTERVAL,
     VIDEO_ZIP_CACHE_UPDATE_INTERVAL,
     REAL_VIDEO_CACHE_DIR,
-    REAL_IMAGE_CACHE_DIR
+    REAL_IMAGE_CACHE_DIR,
+    MAX_COMPRESSED_GB,
+    MAX_EXTRACTED_GB
 )
 
 
@@ -23,7 +25,10 @@ async def main(args):
         datasets=IMAGE_DATASETS['real'],
         parquet_update_interval=args.image_parquet_interval,
         image_update_interval=args.image_interval,
-        num_images_per_source=100
+        num_parquets_per_dataset=5,
+        num_images_per_source=100,
+        max_extracted_size_gb=MAX_EXTRACTED_GB,
+        max_compressed_size_gb=MAX_COMPRESSED_GB
     )
     image_cache.start_updater()
     
@@ -32,12 +37,15 @@ async def main(args):
         datasets=VIDEO_DATASETS['real'],
         video_update_interval=args.video_interval,
         zip_update_interval=args.video_zip_interval,
-        num_videos_per_source=10
+        num_zips_per_dataset=2,
+        num_videos_per_zip=50,
+        max_extracted_size_gb=MAX_EXTRACTED_GB,
+        max_compressed_size_gb=MAX_COMPRESSED_GB
     )
     video_cache.start_updater()
     
     while True:
-        bt.logging.info("Caches running and updating...")
+        bt.logging.info("Caches running...")
         await asyncio.sleep(600)  # Status update every 10 minutes
 
 

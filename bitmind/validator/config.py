@@ -39,10 +39,13 @@ VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
 SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Update intervals in hours
-VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 12
-IMAGE_PARQUET_CACHE_UPDATE_INTERVAL = 12
-VIDEO_CACHE_UPDATE_INTERVAL = 2
-IMAGE_CACHE_UPDATE_INTERVAL = 2
+VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 3
+IMAGE_PARQUET_CACHE_UPDATE_INTERVAL = 2
+VIDEO_CACHE_UPDATE_INTERVAL = 1
+IMAGE_CACHE_UPDATE_INTERVAL = 1
+
+MAX_COMPRESSED_GB = 100
+MAX_EXTRACTED_GB = 10
 
 CHALLENGE_TYPE = {
     0: 'real',
@@ -53,7 +56,7 @@ CHALLENGE_TYPE = {
 IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
     "real": [
         {"path": "bitmind/bm-real"},
-        {"path": "bitmind/open-images-v7"},
+        {"path": "open-image-v7-256"},
         {"path": "bitmind/celeb-a-hq"},
         {"path": "bitmind/ffhq-256"},
         {"path": "bitmind/MS-COCO-unique-256"},
@@ -78,6 +81,7 @@ VIDEO_DATASETS = {
     ]
 }
 
+
 # Prompt generation model configurations
 IMAGE_ANNOTATION_MODEL: str = "Salesforce/blip2-opt-6.7b-coco"
 TEXT_MODERATION_MODEL: str = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
@@ -90,7 +94,8 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "use_safetensors": True,
             "torch_dtype": torch.float16,
             "variant": "fp16"
-        }
+        },
+        "use_autocast": False
     },
     "SG161222/RealVisXL_V4.0": {
         "pipeline_cls": StableDiffusionXLPipeline,

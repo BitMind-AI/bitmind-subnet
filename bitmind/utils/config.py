@@ -250,20 +250,6 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
-        "--neuron.video_cache_refresh_interval",
-        type=int,
-        help="Interval at which to refresh video cache (hours)",
-        default=4,
-    )
-
-    parser.add_argument(
-        "--neuron.zip_cache_refresh_interval",
-        type=int,
-        help="Interval at which to refresh zipped video cache (hours)",
-        default=12,
-    )
-
-    parser.add_argument(
         "--neuron.name",
         type=str,
         help="Trials for this neuron go in neuron.root / (wallet_cold - wallet_hot) / neuron.name. ",

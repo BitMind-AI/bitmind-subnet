@@ -1,6 +1,7 @@
 import gc
 import json
 import os
+import random
 import time
 import warnings
 from pathlib import Path
@@ -19,6 +20,7 @@ from bitmind.validator.config import (
     T2VIS_MODELS,
     T2VIS_MODEL_NAMES,
     T2V_MODEL_NAMES,
+    T2I_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_t2vis_model,
     get_modality
@@ -134,26 +136,37 @@ class SyntheticDataGenerator:
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
 
-        for model_name in T2VIS_MODEL_NAMES:
+
+        # shuffle and interleave models
+        t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
+        t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
+        model_names = [m for pair in zip(t2v_model_names, t2i_model_names) for m in pair]
+        for model_name in model_names:
             modality = get_modality(model_name)
             for i, prompt in enumerate(prompts):
                 bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
 
                 # Generate image/video from current model and prompt
+                start = time.time()
                 output = self.run_t2vis(prompt, modality, t2vis_model_name=model_name)
 
+                bt.logging.info(f'Writing to cache {self.output_dir}')
                 base_path = self.output_dir / modality / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output'}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
                 if modality == 'image':
-                    output['gen_output'].images[0].save(base_path.with_suffix('.png'))
+                    out_path = base_path.with_suffix('.png')
+                    output['gen_output'].images[0].save(out_path)
                 elif modality == 'video':
+                    bt.logging.info("Writing to cache")
+                    out_path = str(base_path.with_suffix('.mp4'))
                     export_to_video(
                         output['gen_output'].frames[0],
-                        str(base_path.with_suffix('.mp4')), 
+                        out_path,
                         fps=30
                     )
+                bt.logging.info(f"Wrote to {out_path}")
 
     def generate(
         self,
@@ -224,10 +237,10 @@ class SyntheticDataGenerator:
             RuntimeError: If generation fails.
         """
         self.load_t2vis_model(t2vis_model_name)
+        model_config = T2VIS_MODELS[self.t2vis_model_name]
 
         bt.logging.info("Preparing generation arguments")
-        gen_args = T2VIS_MODELS[self.t2vis_model_name].get(
-            'generate_args', {}).copy()
+        gen_args = model_config.get('generate_args', {}).copy()
         
         # Process generation arguments
         for k, v in gen_args.items():
@@ -250,12 +263,18 @@ class SyntheticDataGenerator:
                 self.t2vis_model
             )
 
-            torch_dtype =  T2VIS_MODELS[self.t2vis_model_name].get(
-                'from_pretrained_args', {}).get('torch_dtype', torch.bfloat16)
-
-            bt.logging.info("Generating media from prompt")
+            bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
+            bt.logging.info(f"Generation args: {gen_args}")
             start_time = time.time()
-            with torch.autocast(self.device, torch_dtype, cache_enabled=False):
+            if model_config.get('use_autocast', True):
+                pretrained_args = model_config.get('from_pretrained_args', {})
+                torch_dtype = pretrained_args.get('torch_dtype', torch.bfloat16)
+                with torch.autocast(self.device, torch_dtype, cache_enabled=False): 
+                    gen_output = self.t2vis_model(
+                        prompt=truncated_prompt,
+                        **gen_args
+                    )
+            else:
                 gen_output = self.t2vis_model(
                     prompt=truncated_prompt,
                     **gen_args
@@ -283,6 +302,7 @@ class SyntheticDataGenerator:
                 bt.logging.error(f"Image generation error: {e}")
                 raise RuntimeError(f"Failed to generate image: {e}")
 
+        print(f"Finished generation in {gen_time/60} minutes")
         return {
             'prompt': truncated_prompt,
             'prompt_long': prompt,

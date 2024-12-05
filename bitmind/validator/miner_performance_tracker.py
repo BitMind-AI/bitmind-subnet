@@ -72,7 +72,7 @@ class MinerPerformanceTracker:
             precision = precision_score(labels, predictions, zero_division=0)
             recall = recall_score(labels, predictions, zero_division=0)
             f1 = f1_score(labels, predictions, zero_division=0)
-            mcc = matthews_corrcoef(labels, predictions) if len(np.unique(labels)) > 1 else 0.0
+            mcc = max(0, matthews_corrcoef(labels, predictions)) if len(np.unique(labels)) > 1 else 0.0
             auc = roc_auc_score(labels, pred_probs) if len(np.unique(labels)) > 1 else 0.0
         except Exception as e:
             bt.logging.warning(f'Error in reward computation: {e}')
