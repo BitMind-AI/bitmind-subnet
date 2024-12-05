@@ -1,3 +1,4 @@
+import os
 import random
 from io import BytesIO
 from pathlib import Path
@@ -89,7 +90,8 @@ class VideoCache(BaseCache):
         num_frames: int = 6,
         fps: Optional[float] = None,
         min_fps: Optional[float] = None,
-        max_fps: Optional[float] = None
+        max_fps: Optional[float] = None,
+        remove_from_cache: bool = True
     ) -> Optional[Dict[str, Union[List[Image.Image], str, float]]]:
         """
         Sample random frames from a random video in the cache.
@@ -181,6 +183,13 @@ class VideoCache(BaseCache):
             except ffmpeg.Error as e:
                 bt.logging.error(f'FFmpeg error at {timestamp}s: {e.stderr.decode()}')
                 continue
+
+        if remove_from_cache:
+            try:
+                os.remove(video_path)
+                os.remove(video_path.with_suffix('.json'))
+            except Exception as e:
+                bt.logging.warning(f"Failed to remove files for {video_path}: {e}")
  
         bt.logging.success(f"Sampled {len(frames)} frames at {frame_rate}fps")
         return {

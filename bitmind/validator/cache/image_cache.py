@@ -1,3 +1,4 @@
+import os
 import json
 import random
 from pathlib import Path
@@ -79,7 +80,7 @@ class ImageCache(BaseCache):
                 bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
         return extracted_files
 
-    def sample(self) -> Optional[Dict[str, Any]]:
+    def sample(self, remove_from_cache=True) -> Optional[Dict[str, Any]]:
         """
         Sample a random image and its metadata from the cache.
 
@@ -116,6 +117,13 @@ class ImageCache(BaseCache):
             except Exception as e:
                 bt.logging.warning(f"Failed to load image {image_path}: {e}")
                 continue
+
+        if remove_from_cache:
+            try:
+                os.remove(image_path)
+                os.remove(image_path.with_suffix('.json'))
+            except Exception as e:
+                bt.logging.warning(f"Failed to remove files for {image_path}: {e}")
 
         bt.logging.warning(f"Failed to find valid image after {attempts} attempts")
         return None
