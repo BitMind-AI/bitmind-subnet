@@ -19,12 +19,13 @@ IMAGE_DATASETS = {
     ]
 }
 
+# see bitmind-subnet/create_video_dataset_example.sh 
 VIDEO_DATASETS = {
     "real": [
-        {"path": "/home/user/.cache/huggingface/video_datasets/training"}
+        {"path": ""}
     ],
     "fake": [
-        {"path": "/home/user/.cache/huggingface/video_datasets/training"}
+        {"path": ""}
     ]
 }
 
