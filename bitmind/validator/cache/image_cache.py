@@ -29,6 +29,8 @@ class ImageCache(BaseCache):
         image_update_interval: int = 1,
         num_parquets_per_dataset: int = 5,
         num_images_per_source: int = 100,
+        max_compressed_size_gb: int = 100,
+        max_extracted_size_gb: int = 10
     ) -> None:
         """        
         Args:
@@ -44,7 +46,9 @@ class ImageCache(BaseCache):
             compressed_update_interval=parquet_update_interval,
             num_sources_per_dataset=num_parquets_per_dataset,
             file_extensions=['.jpg', '.jpeg', '.png'],
-            compressed_file_extension='.parquet'
+            compressed_file_extension='.parquet',
+            max_compressed_size_gb=max_compressed_size_gb,
+            max_extracted_size_gb=max_extracted_size_gb
         )
         self.num_images_per_source = num_images_per_source
                 
