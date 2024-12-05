@@ -8,7 +8,7 @@ import time
 import argparse
 
 # self heal restart interval
-RESTART_INTERVAL_HOURS = 6
+RESTART_INTERVAL_HOURS = 3
 
 
 def should_update_local(local_commit, remote_commit):

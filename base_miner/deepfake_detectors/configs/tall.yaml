@@ -1,0 +1,3 @@
+hf_repo: 'bitmind/tall'  # Hugging Face repository for downloading model files
+config_name: 'tall.yaml'  # pre-trained configuration file in HuggingFace
+weights: 'tall_trainFF_testCDF.pth'  # UCF model checkpoint in HuggingFace

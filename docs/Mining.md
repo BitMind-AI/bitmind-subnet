@@ -45,16 +45,15 @@ chmod +x setup_miner_env.sh
 
 *Only for training -- deployed miner instances do not require access to these datasets.*
 
-If you intend on training a miner, you can download the our open source datasets by running:
+You can optionally pre-download the training datasets by running:
 
 ```bash
-python bitmind/download_data.py
+python base_miner/datasets/download_data.py
 ```
 
-This step is optional. If you choose not to run it, the dataset will be downloaded automatically when you run our training scripts.
+Feel free to skip this step - datasets will be downloaded automatically when you run the training scripts.
 
-The download location of this script is `~/.cache/huggingface`
-
+The default list of datasets and default download location are defined in `base_miner/config.py` 
 
 
 ## Registration
@@ -89,10 +88,16 @@ First, make sure to update `validator.env` with your **wallet**, **hotkey**, and
 
 
 ```bash
-DETECTOR=CAMO                                  # Options: CAMO, UCF, NPR
-DETECTOR_CONFIG=camo.yaml                      # Configs live in base_miner/deepfake_detectors/configs
+IMAGE_DETECTOR=CAMO                            # Options: CAMO, UCF, NPR, None
+IMAGE_DETECTOR_CONFIG=camo.yaml                # Configs live in base_miner/deepfake_detectors/configs
                                                # Supply a filename or relative path
-DEVICE=cpu                                     # Options: cpu, cuda
+
+VIDEO_DETECTOR=TALL                            # Options: TALL, None
+VIDEO_DETECTOR_CONFIG=tall.yaml                # Configs live in base_miner/deepfake_detectors/configs
+                                               # Supply a filename or relative path
+
+IMAGE_DETECTOR_DEVICE=cpu                         # Options: cpu, cuda
+VIDEO_DETECTOR_DEVICE=cpu
 
 # Subtensor Network Configuration:
 NETUID=34                                      # Network User ID options: 34, 168
@@ -138,7 +143,7 @@ The model with the lowest validation accuracy will be saved to `base_miner/NPR/c
 
 ### UCF
 ```python
-cd base_miner/UCF/ && python train_detector.py
+cd base_miner/DFB/ && python train_detector.py --detector [UCF, TALL] --modality [image, video]
 ```
 The model with the lowest validation accuracy will be saved to `base_miner/UCF/logs/training/<experiment_name>/`.<br>
 

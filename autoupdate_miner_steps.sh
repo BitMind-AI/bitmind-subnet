@@ -5,5 +5,5 @@
 # THIS FILE ITSELF MAY CHANGE FROM UPDATE TO UPDATE, SO WE CAN DYNAMICALLY FIX ANY ISSUES
 
 echo $CONDA_PREFIX
-$CONDA_PREFIX/bin/pip install -e .
+./setup_env.sh
 echo "Autoupdate steps complete :)"

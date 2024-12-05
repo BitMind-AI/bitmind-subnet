@@ -28,9 +28,10 @@ import os
 import sys
 import numpy as np
 
-from base_miner import DETECTOR_REGISTRY
+from base_miner.registry import DETECTOR_REGISTRY
+from base_miner.deepfake_detectors import NPRImageDetector, UCFImageDetector, CAMOImageDetector, TALLVideoDetector
 from bitmind.base.miner import BaseMinerNeuron
-from bitmind.protocol import ImageSynapse
+from bitmind.protocol import ImageSynapse, VideoSynapse, decode_video_synapse
 from bitmind.utils.config import get_device
 
 
@@ -38,145 +39,131 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        if self.config.neuron.device == 'auto':
-            self.config.neuron.device = get_device()
-        self.load_detector()
-
-    def load_detector(self):
-        self.deepfake_detector = DETECTOR_REGISTRY[self.config.neuron.detector](
-            config=self.config.neuron.detector_config,
-            device=self.config.neuron.device
+        bt.logging.info("Attaching forward function to miner axon.")
+        self.axon.attach(
+            forward_fn=self.forward_image,
+            blacklist_fn=self.blacklist_image,
+            priority_fn=self.priority_image,
+        ).attach(
+            forward_fn=self.forward_video,
+            blacklist_fn=self.blacklist_video,
+            priority_fn=self.priority_video,
         )
-    
-    async def forward(
+        bt.logging.info(f"Axon created: {self.axon}")
+
+        bt.logging.info("Loading image detection model if configured")
+        self.load_image_detector()
+        bt.logging.info("Loading video detection model if configured")
+        self.load_video_detector()
+        
+    def load_image_detector(self):
+        if (str(self.config.neuron.image_detector).lower() == 'none' or
+            str(self.config.neuron.image_detector_config).lower() == 'none'):
+            bt.logging.warning("No image detector configuration provided, skipping.")
+            self.image_detector = None
+            return
+
+        if self.config.neuron.image_detector_device == 'auto':
+            bt.logging.warning("Automatic device configuration enabled for image detector")
+            self.config.neuron.image_detector_device = get_device()
+            
+        self.image_detector = DETECTOR_REGISTRY[self.config.neuron.image_detector](
+            config_name=self.config.neuron.image_detector_config,
+            device=self.config.neuron.image_detector_device
+        )
+        bt.logging.info(f"Loaded image detection model: {self.config.neuron.image_detector}")
+
+    def load_video_detector(self):
+        if (str(self.config.neuron.video_detector).lower() == 'none' or
+            str(self.config.neuron.video_detector_config).lower() == 'none'):
+            bt.logging.warning("No video detector configuration provided, skipping.")
+            self.video_detector = None
+            return
+
+        if self.config.neuron.video_detector_device == 'auto':
+            bt.logging.warning("Automatic device configuration enabled for video detector")
+            self.config.neuron.video_detector_device = get_device()
+
+        self.video_detector = DETECTOR_REGISTRY[self.config.neuron.video_detector](
+            config_name=self.config.neuron.video_detector_config,
+            device=self.config.neuron.video_detector_device
+        )
+        bt.logging.info(f"Loaded video detection model: {self.config.neuron.video_detector}")
+
+    async def forward_image(
         self, synapse: ImageSynapse
     ) -> ImageSynapse:
         """
-        Loads the deepfake detection model (a PyTorch binary classifier) from the path specified in --neuron.model_path.
-        Processes the incoming ImageSynapse and passes the image to the loaded model for classification.
-        The model is loaded here, rather than in __init__, so that miners may (backup) and overwrite
-        their model file as a means of updating their miner's predictor.
+        Perform inference on image
 
         Args:
-            synapse (ImageSynapse): The synapse object containing the list of b64 encoded images in the
+            synapse (bt.Synapse): The synapse object containing the list of b64 encoded images in the
             'images' field.
 
         Returns:
-            ImageSynapse: The synapse object with the 'predictions' field populated with a list of probabilities
+            bt.Synapse: The synapse object with the 'predictions' field populated with a list of probabilities
 
         """
-        try:
-            image_bytes = base64.b64decode(synapse.image)
-            image = Image.open(io.BytesIO(image_bytes))
+        if self.image_detector is None:
+            bt.logging.info("Image detection model not configured; skipping image challenge")
+        else:
+            bt.logging.info("Received image challenge!")
+            try:
+                image_bytes = base64.b64decode(synapse.image)
+                image = Image.open(io.BytesIO(image_bytes))
+                synapse.prediction = self.image_detector(image)
+            except Exception as e:
+                bt.logging.error("Error performing inference")
+                bt.logging.error(e)
 
-            pred = self.deepfake_detector(image)
-
-            synapse.prediction = pred
-            
-        except Exception as e:
-            bt.logging.error("Error performing inference")
-            bt.logging.error(e)
-
-        bt.logging.info(f"PREDICTION: {synapse.prediction}")
+            bt.logging.info(f"PREDICTION = {synapse.prediction}")
+            label = synapse.testnet_label
+            if synapse.testnet_label != -1:
+                bt.logging.info(f"LABEL (testnet only) = {label}")
         return synapse
 
-    async def blacklist(
-        self, synapse: ImageSynapse
-    ) -> typing.Tuple[bool, str]:
+    async def forward_video(
+        self, synapse: VideoSynapse
+    ) -> VideoSynapse:
         """
-        Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
-        define the logic for blacklisting requests based on your needs and desired security parameters.
-
-        Blacklist runs before the synapse data has been deserialized (i.e. before synapse.data is available).
-        The synapse is instead contructed via the headers of the request. It is important to blacklist
-        requests before they are deserialized to avoid wasting resources on requests that will be ignored.
-
+        Perform inference on video 
         Args:
-            synapse (ImageSynapse): A synapse object constructed from the headers of the incoming request.
+            synapse (bt.Synapse): The synapse object containing the list of b64 encoded images in the
+            'images' field.
 
         Returns:
-            Tuple[bool, str]: A tuple containing a boolean indicating whether the synapse's hotkey is blacklisted,
-                            and a string providing the reason for the decision.
+            bt.Synapse: The synapse object with the 'predictions' field populated with a list of probabilities
 
-        This function is a security measure to prevent resource wastage on undesired requests. It should be enhanced
-        to include checks against the metagraph for entity registration, validator status, and sufficient stake
-        before deserialization of synapse data to minimize processing overhead.
-
-        Example blacklist logic:
-        - Reject if the hotkey is not a registered entity within the metagraph.
-        - Consider blacklisting entities that are not validators or have insufficient stake.
-
-        In practice it would be wise to blacklist requests from entities that are not validators, or do not have
-        enough stake. This can be checked via metagraph.S and metagraph.validator_permit. You can always attain
-        the uid of the sender via a metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
-
-        Otherwise, allow the request to be processed further.
         """
-        if synapse.dendrite is None or synapse.dendrite.hotkey is None:
-            bt.logging.warning("Received a request without a dendrite or hotkey.")
-            return True, "Missing dendrite or hotkey"
+        if self.video_detector is None:
+            bt.logging.info("Video detection model not configured; skipping video challenge")
+        else:
+            bt.logging.info("Received video challenge!")
+            try:
+                frames_tensor = decode_video_synapse(synapse)
+                frames_tensor = frames_tensor.to(self.config.neuron.video_detector_device)
+                synapse.prediction = self.video_detector(frames_tensor)
+            except Exception as e:
+                bt.logging.error("Error performing inference")
+                bt.logging.error(e)
 
-        # TODO(developer): Define how miners should blacklist requests.
-        uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
-        if (
-            not self.config.blacklist.allow_non_registered
-            and synapse.dendrite.hotkey not in self.metagraph.hotkeys
-        ):
-            # Ignore requests from un-registered entities.
-            bt.logging.trace(
-                f"Blacklisting un-registered hotkey {synapse.dendrite.hotkey}"
-            )
-            return True, "Unrecognized hotkey"
+            bt.logging.info(f"PREDICTION = {synapse.prediction}")
+            label = synapse.testnet_label
+            if synapse.testnet_label != -1:
+                bt.logging.info(f"LABEL (testnet only) = {label}")
+        return synapse
 
-        if self.config.blacklist.force_validator_permit:
-            # If the config is set to force validator permit, then we should only allow requests from validators.
-            if not self.metagraph.validator_permit[uid]:
-                bt.logging.warning(
-                    f"Blacklisting a request from non-validator hotkey {synapse.dendrite.hotkey}"
-                )
-                return True, "Non-validator hotkey"
+    async def blacklist_image(self, synapse: ImageSynapse) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
 
-        bt.logging.trace(
-            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
-        )
-        return False, "Hotkey recognized!"
+    async def blacklist_video(self, synapse: VideoSynapse) -> typing.Tuple[bool, str]:
+        return await self.blacklist(synapse)
 
-    async def priority(self, synapse: ImageSynapse) -> float:
-        """
-        The priority function determines the order in which requests are handled. More valuable or higher-priority
-        requests are processed before others. You should design your own priority mechanism with care.
+    async def priority_image(self, synapse: ImageSynapse) -> float:
+        return await self.priority(synapse)
 
-        This implementation assigns priority to incoming requests based on the calling entity's stake in the metagraph.
-
-        Args:
-            synapse (ImageSynapse): The synapse object that contains metadata about the incoming request.
-
-        Returns:
-            float: A priority score derived from the stake of the calling entity.
-
-        Miners may recieve messages from multiple entities at once. This function determines which request should be
-        processed first. Higher values indicate that the request should be processed first. Lower values indicate
-        that the request should be processed later.
-
-        Example priority logic:
-        - A higher stake results in a higher priority value.
-        """
-        if synapse.dendrite is None or synapse.dendrite.hotkey is None:
-            bt.logging.warning("Received a request without a dendrite or hotkey.")
-            return 0.0
-
-        # TODO(developer): Define how miners should prioritize requests.
-        caller_uid = self.metagraph.hotkeys.index(
-            synapse.dendrite.hotkey
-        )  # Get the caller index.
-
-        prirority = float(
-            self.metagraph.S[caller_uid]
-        )  # Return the stake as the priority.
-        bt.logging.trace(
-            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
-        )
-        return prirority
+    async def priority_video(self, synapse: VideoSynapse) -> float:
+        return await self.priority(synapse)
 
     def save_state(self):
         pass

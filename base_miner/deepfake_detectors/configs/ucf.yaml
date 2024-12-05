@@ -1,4 +1,4 @@
 # UCFDetector Generalist Configuration
 hf_repo: 'bitmind/bm-ucf'  # Hugging Face repository for downloading model files
-train_config: 'bm-general-config-v1.yaml'  # pre-trained configuration file in HuggingFace
+config_name: 'bm-general-config-v1.yaml'  # pre-trained configuration file in HuggingFace
 weights: 'bm-general-v1.pth'  # UCF model checkpoint in HuggingFace

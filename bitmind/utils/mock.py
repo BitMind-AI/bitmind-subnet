@@ -6,7 +6,7 @@ import numpy as np
 from typing import List
 from PIL import Image
 
-from bitmind.constants import DIFFUSER_NAMES
+from bitmind.validator.config import T2VIS_MODEL_NAMES as MODEL_NAMES
 from bitmind.validator.miner_performance_tracker import MinerPerformanceTracker
 
 
@@ -43,17 +43,17 @@ class MockImageDataset:
         return [self.__getitem__(i) for i in range(k)], [i for i in range(k)]
 
 
-class MockSyntheticImageGenerator:
-    def __init__(self, prompt_type, use_random_diffuser, diffuser_name):
+class MockSyntheticDataGenerator:
+    def __init__(self, prompt_type, use_random_t2v_model, t2v_model_name):
         self.prompt_type = prompt_type
-        self.diffuser_name = diffuser_name
-        self.use_random_diffuser = use_random_diffuser
+        self.t2v_model_name = t2v_model_name
+        self.use_random_t2v_model = use_random_t2v_model
 
-    def generate(self, k=1, real_images=None):
-        if self.use_random_diffuser:
-            self.load_diffuser('random')
+    def generate(self, k=1, real_images=None, modality='image'):
+        if self.use_random_t2v_model:
+            self.load_t2v_model('random')
         else:
-            self.load_diffuser(self.diffuser_name)
+            self.load_t2v_model(self.t2v_model_name)
 
         return [{
             'prompt': f'mock {self.prompt_type} prompt',
@@ -61,13 +61,13 @@ class MockSyntheticImageGenerator:
             'id': i
         } for i in range(k)]
 
-    def load_diffuser(self, diffuser_name) -> None:
+    def load_diffuser(self, t2v_model_name) -> None:
         """
         loads a huggingface diffuser model.
         """
-        if diffuser_name == 'random':
-            diffuser_name = np.random.choice(DIFFUSER_NAMES, 1)[0]
-        self.diffuser_name = diffuser_name
+        if t2v_model_name == 'random':
+            t2v_model_name = np.random.choice(MODEL_NAMES, 1)[0]
+        self.t2v_model_name = t2v_model_name
 
 
 class MockValidator:
@@ -90,7 +90,7 @@ class MockValidator:
                 False)
             for i in range(3)
         ]
-        self.synthetic_image_generator = MockSyntheticImageGenerator(
+        self.synthetic_data_generator = MockSyntheticDataGenerator(
             prompt_type='annotation', use_random_diffuser=True, diffuser_name=None)
         self.total_real_images = sum([len(ds) for ds in self.real_image_datasets])
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)

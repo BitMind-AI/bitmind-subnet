@@ -54,9 +54,15 @@ class BaseValidatorNeuron(BaseNeuron):
     def __init__(self, config=None):
         super().__init__(config=config)
 
-        self.history_cache_path = os.path.join(
-            self.config.neuron.full_path, "miner_performance_tracker.pkl")
-
+        self.performance_trackers = {
+            'image': None,
+            'video': None
+        }
+            
+        self.image_history_cache_path = os.path.join(
+            self.config.neuron.full_path, "image_miner_performance_tracker.pkl")
+        self.video_history_cache_path = os.path.join(
+            self.config.neuron.full_path, "video_miner_performance_tracker.pkl")
         self.load_miner_history()
 
         # Save a copy of the hotkeys to local memory.
@@ -169,9 +175,8 @@ class BaseValidatorNeuron(BaseNeuron):
 
                 # Sync metagraph and potentially set weights.
                 self.sync()
-
-                self.step += 1
                 time.sleep(60)
+                self.step += 1
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
         except KeyboardInterrupt:
@@ -376,22 +381,39 @@ class BaseValidatorNeuron(BaseNeuron):
         bt.logging.debug(f"Updated moving avg scores: {self.scores}")
 
     def save_miner_history(self):
-        bt.logging.info(f"Saving miner performance history to {self.history_cache_path}")
-        joblib.dump(self.performance_tracker, self.history_cache_path)
+        bt.logging.info(f"Saving miner performance history to {self.image_history_cache_path}")
+        joblib.dump(self.performance_trackers['image'], self.image_history_cache_path)
+        bt.logging.info(f"Saving miner performance history to {self.video_history_cache_path}")
+        joblib.dump(self.performance_trackers['video'], self.video_history_cache_path)
 
     def load_miner_history(self):
-        if os.path.exists(self.history_cache_path):
-            bt.logging.info(f"Loading miner performance history from {self.history_cache_path}")
-            self.performance_tracker = joblib.load(self.history_cache_path)
-            pred_history = self.performance_tracker.prediction_history
-            num_miners_history = len([
-                uid for uid in pred_history
-                if len([p for p in pred_history[uid] if p != -1]) > 0
-            ])
-            bt.logging.info(f"Loaded history for {num_miners_history} miners")
-        else:
-            bt.logging.info(f"No miner performance history found at {self.history_cache_path} - starting fresh!")
-            self.performance_tracker = MinerPerformanceTracker()
+        def load(path):
+            if os.path.exists(path):
+                bt.logging.info(f"Loading miner performance history from {path}")
+                try:
+                    tracker = joblib.load(path)
+                    num_miners_history = len([
+                        uid for uid in tracker.prediction_history
+                        if len([p for p in tracker.prediction_history[uid] if p != -1]) > 0
+                    ])
+                    bt.logging.info(f"Loaded history for {num_miners_history} miners")
+                except Exception as e:
+                    bt.logging.error(f'Error loading miner performance tracker: {e}')
+                    tracker = MinerPerformanceTracker()
+            else:
+                bt.logging.info(f"No miner performance history found at {path} - starting fresh!")
+                tracker = MinerPerformanceTracker()
+            return tracker
+
+        try:
+            self.performance_trackers['image'] = load(self.image_history_cache_path)
+        except Exception as e:
+            # just for 2.0.0 upgrade for miner performance to carry over
+            v1_history_cache_path = os.path.join(
+                self.config.neuron.full_path, "miner_performance_tracker.pkl")
+            self.performance_trackers['image'] = load(v1_history_cache_path)
+
+        self.performance_trackers['video'] = load(self.video_history_cache_path)
 
     def save_state(self):
         """Saves the state of the validator to a file."""

@@ -1,7 +1,7 @@
 # The MIT License (MIT)
 # Copyright © 2023 Yuma Rao
 # developer: dubm
-# Copyright © 2023 Bitmind
+# Copyright © 2023 BitMind
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -17,38 +17,19 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from PIL import Image
-from io import BytesIO
-from datetime import datetime
-import bittensor as bt
-import pandas as pd
+import random
+import time
+
 import numpy as np
-import os
+import pandas as pd
 import wandb
+import bittensor as bt
 
+from bitmind.protocol import prepare_synapse
+from bitmind.utils.image_transforms import apply_augmentation_by_level
 from bitmind.utils.uids import get_random_uids
-from bitmind.utils.data import sample_dataset_index_name
-from bitmind.protocol import prepare_image_synapse
+from bitmind.validator.config import CHALLENGE_TYPE, MAINNET_UID, TARGET_IMAGE_SIZE
 from bitmind.validator.reward import get_rewards
-from bitmind.image_transforms import apply_augmentation_by_level
-
-
-def sample_random_real_image(datasets, total_images, retries=10):
-    random_idx = np.random.randint(0, total_images)
-    source, idx = sample_real_image(datasets, random_idx)
-    if source[idx]['image'] is None:
-        if retries:
-            return sample_random_real_image(datasets, total_images, retries-1)
-        return None, None
-    return source, idx
-
-
-def sample_real_image(datasets, index):
-    cumulative_sizes = np.cumsum([len(ds) for ds in datasets])
-    source_index = np.searchsorted(cumulative_sizes - 1, index % (cumulative_sizes[-1]))
-    source = datasets[source_index]
-    valid_index = index - (cumulative_sizes[source_index - 1] if source_index > 0 else 0)
-    return source, valid_index
 
 
 async def forward(self):
@@ -58,115 +39,112 @@ async def forward(self):
 
     Steps are:
     1. Sample miner UIDs
-    2. Get an image. 50/50 chance of:
-        A. REAL (label = 0): Randomly sample a real image from self.real_image_datasets
-        B. FAKE (label = 1): Generate a synthetic image with self.random_image_generator
+    2. Sample synthetic/real image/video (50/50 chance for each choice)
     3. Apply random data augmentation to the image
-    4. Base64 encode the image and prepare an ImageSynapse
+    4. Encode data and prepare Synapse
     5. Query miner axons
-    6. Log results, including image and miner responses (soon to be W&B)
-    7. Compute rewards and update scores
+    6. Compute rewards and update scores
 
     Args:
         self (:obj:`bittensor.neuron.Neuron`): The neuron object which contains all the necessary state for the validator.
 
     """
-    wandb_data = {}
+    challenge_metadata = {}  # for bookkeeping
+    challenge = {}           # for querying miners
 
+    modality = 'video' if np.random.rand() > 0.5 else 'image'
+    label = 0 if np.random.rand() > self._fake_prob else 1
+    challenge_metadata['label'] = label
+    challenge_metadata['modality'] = modality
+
+    bt.logging.info(f"Sampling data from {modality} cache")
+    cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
+
+    if modality == 'video':
+        num_frames = random.randint(
+            self.config.neuron.clip_frames_min,
+            self.config.neuron.clip_frames_max)
+        challenge = cache.sample(num_frames, min_fps=8, max_fps=30)
+
+    elif modality == 'image':
+        challenge = cache.sample()
+
+    if challenge is None:
+        bt.logging.warning("Waiting for cache to populate. Challenge skipped.")
+        return
+
+    # prepare metadata for logging
+    if modality == 'video':
+        video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
+        challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
+        challenge_metadata['fps'] = challenge['fps']
+        challenge_metadata['num_frames'] = challenge['num_frames']
+    elif modality == 'image':
+        challenge_metadata['image'] = wandb.Image(challenge['image'])
+
+    # update logging dict with everything except image/video data
+    challenge_metadata.update({k: v for k, v in challenge.items() if k != modality})
+    input_data = challenge[modality]  # extract video or image
+
+    # apply data augmentation pipeline
+    try:
+       input_data, level, data_aug_params = apply_augmentation_by_level(input_data, TARGET_IMAGE_SIZE)
+    except Exception as e:
+       level, data_aug_params = -1, {}
+       bt.logging.error(f"Unable to applay augmentations: {e}")
+
+    challenge_metadata['data_aug_params'] = data_aug_params
+    challenge_metadata['data_aug_level'] = level
+
+    # sample miner uids for challenge
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    bt.logging.info("Generating challenge")
-    if np.random.rand() > self._fake_prob:
-        label = 0
-        source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-        wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
-        wandb_data['source_image_index'] = local_index
-        sample = source_dataset[local_index]
-
-    else:
-        label = 1
-        if self.config.neuron.prompt_type == 'annotation':
-            retries = 10
-            while retries > 0:
-                retries -= 1
-                source_dataset, local_index = sample_random_real_image(self.real_image_datasets, self.total_real_images)
-                source_sample = source_dataset[local_index]
-                source_image = source_sample['image']
-                if source_image is None:
-                    continue
-
-                # generate captions for the real images, then synthetic images from these captions
-                sample = self.synthetic_image_generator.generate(
-                    k=1, real_images=[source_sample])[0]  # {'prompt': str, 'image': PIL Image ,'id': int}
-
-                wandb_data['model'] = self.synthetic_image_generator.diffuser_name
-                wandb_data['source_dataset'] = source_dataset.huggingface_dataset_name
-                wandb_data['source_image_index'] = local_index
-                wandb_data['image'] = wandb.Image(sample['image'])
-                wandb_data['prompt'] = sample['prompt']
-                if not np.any(np.isnan(sample['image'])):
-                    break
-        else:
-            raise NotImplementedError(f'unsupported neuron.prompt_type: {self.config.neuron.prompt_type}')
-
-    image = sample['image']
-    image, level, data_aug_params = apply_augmentation_by_level(image)
-
-    bt.logging.info(f"Querying {len(miner_uids)} miners...")
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
+    challenge_metadata['miner_uids'] = list(miner_uids)
+    challenge_metadata['miner_hotkeys'] = list([axon.hotkey for axon in axons])
+
+    # prepare synapse
+    synapse = prepare_synapse(input_data, modality=modality)
+    if self.metagraph.netuid != MAINNET_UID:
+        synapse.testnet_label = label
+
+    bt.logging.info(f"Sending {modality} challenge to {len(miner_uids)} miners")
+    start = time.time()
     responses = await self.dendrite(
         axons=axons,
-        synapse=prepare_image_synapse(image=image),
+        synapse=synapse,
         deserialize=True,
         timeout=9
     )
+    bt.logging.info(f"Responses received in {time.time() - start}s")
+    bt.logging.success(f"{CHALLENGE_TYPE[label]} {modality} challenge complete!")
+    bt.logging.info({k: v for k, v in challenge_metadata.items() if k not in ('miner_uids', 'miner_hotkeys')})
 
+    bt.logging.info(f"Scoring responses")
     rewards, metrics = get_rewards(
         label=label,
         responses=responses,
         uids=miner_uids,
         axons=axons,
-        performance_tracker=self.performance_tracker)
-    
-    # Logging image source (model for synthetic, dataset for real) and verification details
-    source_name = wandb_data['model'] if 'model' in wandb_data else wandb_data['source_dataset']
-    bt.logging.info(f'{"real" if label == 0 else "fake"} image | source: {source_name}: {sample["id"]}')
-    
-    # Logging responses and rewards
-    bt.logging.info(f"Received responses: {responses}")
-    bt.logging.info(f"Scored responses: {rewards}")
-    
-    # Update the scores based on the rewards.
+        challenge_modality=modality,
+        performance_trackers=self.performance_trackers)
+
     self.update_scores(rewards, miner_uids)
 
-    # update logging data
-    wandb_data['data_aug_params'] = data_aug_params
-    wandb_data['label'] = label
-    wandb_data['miner_uids'] = list(miner_uids)
-    wandb_data['miner_hotkeys'] = list([axon.hotkey for axon in axons])
-    wandb_data['predictions'] = responses
-    wandb_data['data_aug_level'] = level
-    wandb_data['correct'] = [
-        np.round(y_hat) == y
-        for y_hat, y in zip(responses, [label] * len(responses))
-    ]
-    wandb_data['rewards'] = list(rewards)
-    wandb_data['scores'] = list(self.scores)
+    for metric_name in list(metrics[0].keys()):
+        challenge_metadata[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
+    challenge_metadata['predictions'] = responses
+    challenge_metadata['rewards'] = rewards
+    challenge_metadata['scores'] = list(self.scores)
 
-    metric_names = list(metrics[0].keys())
-    for metric_name in metric_names:
-        wandb_data[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
+    for uid, pred, reward in zip(miner_uids, responses, rewards):
+        if pred != -1:
+            bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
 
     # W&B logging if enabled
     if not self.config.wandb.off:
-        wandb.log(wandb_data)
+        wandb.log(challenge_metadata)
 
     # ensure state is saved after each challenge
     self.save_miner_history()
-
-    # Track miners who have responded
-    self.last_responding_miner_uids = []
-    for i, pred in enumerate(responses):
-        # Logging specific prediction details
-        if pred != -1:
-            bt.logging.info(f'Miner uid: {miner_uids[i]} | prediction: {pred} | correct: {np.round(pred) == label} | reward: {rewards[i]}')
-            self.last_responding_miner_uids.append(miner_uids[i])
+    if label == 1:
+        cache._prune_extracted_cache()

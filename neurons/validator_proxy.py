@@ -20,11 +20,14 @@ import threading
 import socket
 import base64
 
-from bitmind.image_transforms import base_transforms
+from bitmind.validator.config import TARGET_IMAGE_SIZE
+from bitmind.utils.image_transforms import get_base_transforms
 from bitmind.protocol import ImageSynapse, prepare_image_synapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
 import bitmind
+
+base_transforms = get_base_transforms(TARGET_IMAGE_SIZE)
 
 
 def preprocess_image(b64_image):

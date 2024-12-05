@@ -8,7 +8,7 @@ from base_miner.deepfake_detectors import DeepfakeDetector
 
 
 @DETECTOR_REGISTRY.register_module(module_name='CAMO')
-class CAMODetector(DeepfakeDetector):
+class CAMOImageDetector(DeepfakeDetector):
     """
     This DeepfakeDetector subclass implements Content-Aware Model Orchestration
     (CAMO), a mixture-of-experts approach to the binary classification of
@@ -21,17 +21,17 @@ class CAMODetector(DeepfakeDetector):
     
     Attributes:
         model_name (str): Name of the detector instance.
-        config (str): Name of the YAML file in deepfake_detectors/config/ to load
+        config_name (str): Name of the YAML file in deepfake_detectors/config/ to load
                       attributes from.
         device (str): The type of device ('cpu' or 'cuda').
     """
 
-    def __init__(self, model_name: str = 'CAMO', config: str = 'camo.yaml', device: str = 'cpu'):
+    def __init__(self, model_name: str = 'CAMO', config_name: str = 'camo.yaml', device: str = 'cpu'):
         """
         Initialize the CAMODetector with dynamic model selection based on config.
         """
         self.detectors = {}
-        super().__init__(model_name, config, device)
+        super().__init__(model_name, config_name, device)
 
         gate_names = [
             content_type for content_type in self.content_type
@@ -50,7 +50,7 @@ class CAMODetector(DeepfakeDetector):
             if model_name in DETECTOR_REGISTRY:
                 self.detectors[content_type] = DETECTOR_REGISTRY[model_name](
                     model_name=f'{model_name}_{content_type.capitalize()}',
-                    config=detector_config,
+                    config_name=detector_config,
                     device=self.device
                 )
             else:

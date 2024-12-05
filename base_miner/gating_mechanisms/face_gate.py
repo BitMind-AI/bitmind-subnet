@@ -4,8 +4,8 @@ import numpy as np
 import dlib
 
 from base_miner.gating_mechanisms import Gate
-from base_miner.UCF.config.constants import DLIB_FACE_PREDICTOR_PATH
-from base_miner import GATE_REGISTRY
+from base_miner.DFB.config.constants import DLIB_FACE_PREDICTOR_PATH
+from base_miner.registry import GATE_REGISTRY
 from base_miner.gating_mechanisms.utils import get_face_landmarks, align_and_crop_face
 
 

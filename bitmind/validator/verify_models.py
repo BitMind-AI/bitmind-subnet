@@ -1,6 +1,6 @@
 import os
-from bitmind.synthetic_image_generation.synthetic_image_generator import SyntheticImageGenerator
-from bitmind.constants import DIFFUSER_NAMES, IMAGE_ANNOTATION_MODEL, TEXT_MODERATION_MODEL
+from bitmind.synthetic_data_generation import SyntheticDataGenerator
+from bitmind.validator.config import T2VIS_MODEL_NAMES as MODEL_NAMES, IMAGE_ANNOTATION_MODEL, TEXT_MODERATION_MODEL
 import bittensor as bt
 
 
@@ -38,10 +38,9 @@ def main():
     It also initializes and loads diffusers for uncached models.
     """
     bt.logging.info("Verifying validator model downloads....")
-    synthetic_image_generator = SyntheticImageGenerator(
+    synthetic_image_generator = SyntheticDataGenerator(
         prompt_type='annotation',
-        use_random_diffuser=True,
-        diffuser_name=None
+        use_random_t2vis_model=True
     )
 
     # Check and load annotation and moderation models if not cached
@@ -50,14 +49,14 @@ def main():
         synthetic_image_generator.image_annotation_generator.clear_gpu()
 
     # Initialize and load diffusers if not cached
-    for model_name in DIFFUSER_NAMES:
+    for model_name in MODEL_NAMES:
         if not is_model_cached(model_name):
-            synthetic_image_generator = SyntheticImageGenerator(
+            synthetic_image_generator = SyntheticDataGenerator(
                 prompt_type='annotation',
-                use_random_diffuser=False,
-                diffuser_name=model_name
+                use_random_t2vis_model=False,
+                t2vis_model_name=model_name
             )
-            synthetic_image_generator.load_diffuser(model_name)
+            synthetic_image_generator.load_t2vis_model(model_name)
             synthetic_image_generator.clear_gpu()
 
 
