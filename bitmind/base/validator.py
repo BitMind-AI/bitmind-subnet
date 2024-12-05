@@ -392,10 +392,9 @@ class BaseValidatorNeuron(BaseNeuron):
                 bt.logging.info(f"Loading miner performance history from {path}")
                 try:
                     tracker = joblib.load(path)
-                    pred_history = self.performance_tracker.prediction_history
                     num_miners_history = len([
-                        uid for uid in pred_history
-                        if len([p for p in pred_history[uid] if p != -1]) > 0
+                        uid for uid in tracker.prediction_history
+                        if len([p for p in tracker.prediction_history[uid] if p != -1]) > 0
                     ])
                     bt.logging.info(f"Loaded history for {num_miners_history} miners")
                 except Exception as e:
