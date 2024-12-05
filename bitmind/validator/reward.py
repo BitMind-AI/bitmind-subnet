@@ -59,7 +59,7 @@ def get_rewards(
                 miner_hotkey = axon.hotkey
 
                 tracked_hotkeys = tracker.miner_hotkeys
-                if uid in tracked_hotkeys and tracked_hotkeys != miner_hotkey:
+                if uid in tracked_hotkeys and tracked_hotkeys[uid] != miner_hotkey:
                     bt.logging.info(f"Miner hotkey changed for UID {uid}. Resetting performance metrics.")
                     tracker.reset_miner_history(uid, miner_hotkey)
 
@@ -68,7 +68,6 @@ def get_rewards(
                 metrics_10 = tracker.get_metrics(uid, window=10)
                 reward = 0.5 * metrics_100['mcc'] + 0.5 * metrics_10['accuracy']
                 reward *= compute_penalty(pred_prob)
-
                 miner_modality_rewards[modality] = reward
                 miner_modality_metrics[modality] = metrics_100
 
