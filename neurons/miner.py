@@ -141,6 +141,7 @@ class Miner(BaseMinerNeuron):
             bt.logging.info("Received video challenge!")
             try:
                 frames_tensor = decode_video_synapse(synapse)
+                frames_tensor = frames_tensor.to(self.config.neuron.video_detector_device)
                 synapse.prediction = self.video_detector(frames_tensor)
             except Exception as e:
                 bt.logging.error("Error performing inference")
