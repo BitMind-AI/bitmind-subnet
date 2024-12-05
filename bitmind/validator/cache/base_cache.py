@@ -175,8 +175,8 @@ class BaseCache(ABC):
         """Asynchronously refresh compressed files according to update interval."""
         while True:
             try:
-                self._prune_compressed_cache()
                 self._clear_incomplete_sources()
+                self._prune_compressed_cache()
                 last_update = get_most_recent_update_time(self.compressed_dir)
                 time_elapsed = time.time() - last_update
 
