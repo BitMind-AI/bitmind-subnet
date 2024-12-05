@@ -1,7 +1,8 @@
 <p align="center">
   <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="150"/>
 </p>
-<h1 align="center">BitMind Deepfake Detection Subnet (Bittensor Subnet 34)</h1>
+<h1 align="center">BitMind Subnet (Bittensor Subnet 34)<br>Deepfake Detection</h1>
+
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
