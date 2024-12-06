@@ -10,7 +10,8 @@ from diffusers import (
     CogVideoXPipeline,
     MochiPipeline,
     AnimateDiffPipeline,
-    EulerDiscreteScheduler
+    EulerDiscreteScheduler,
+    AutoPipelineForInpainting
 )
 
 from .model_utils import load_annimatediff_motion_adapter
@@ -144,6 +145,18 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())
 
+# Image-to-image model configurations
+I2I_MODELS: Dict[str, Dict[str, Any]] = {
+    "diffusers/stable-diffusion-xl-1.0-inpainting-0.1": {
+        "pipeline_cls": AutoPipelineForInpainting,
+        "from_pretrained_args": {
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+            "variant": "fp16"
+        }
+    }
+}
+I2I_MODEL_NAMES: List[str] = list(I2I_MODELS.keys())
 
 # Text-to-video model configurations
 T2V_MODELS: Dict[str, Dict[str, Any]] = {
@@ -199,7 +212,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
 T2V_MODEL_NAMES: List[str] = list(T2V_MODELS.keys())
 
 # Combined model configurations
-T2VIS_MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **T2V_MODELS}
+T2VIS_MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **I2I_MODELS, **T2V_MODELS}
 T2VIS_MODEL_NAMES: List[str] = list(T2VIS_MODELS.keys())
 
 
@@ -208,6 +221,8 @@ def get_modality(model_name):
         return 'video'
     elif model_name in T2I_MODEL_NAMES:
         return 'image'
+    elif model_name in I2I_MODEL_NAMES:
+        return 'i2i'
 
 
 def select_random_t2vis_model(modality: Optional[str] = None) -> str:
