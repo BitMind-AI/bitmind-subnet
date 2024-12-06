@@ -146,7 +146,7 @@ class ValidatorProxy:
         bt.logging.info(f"[ORGANIC] Querying {len(miner_uids)} miners...")
         predictions = await self.dendrite(
             axons=[metagraph.axons[uid] for uid in miner_uids],
-    	    synapse=prepare_synapse(image=image, modality='image'),
+    	    synapse=prepare_synapse(image, modality='image'),
             deserialize=True,
             timeout=9
         )
