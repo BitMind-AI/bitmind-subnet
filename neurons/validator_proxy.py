@@ -22,7 +22,7 @@ import base64
 
 from bitmind.validator.config import TARGET_IMAGE_SIZE
 from bitmind.utils.image_transforms import get_base_transforms
-from bitmind.protocol import ImageSynapse, prepare_image_synapse
+from bitmind.protocol import ImageSynapse, prepare_synapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
 import bitmind
@@ -146,7 +146,7 @@ class ValidatorProxy:
         bt.logging.info(f"[ORGANIC] Querying {len(miner_uids)} miners...")
         predictions = await self.dendrite(
             axons=[metagraph.axons[uid] for uid in miner_uids],
-    	    synapse=prepare_image_synapse(image=image),
+    	    synapse=prepare_synapse(image, modality='image'),
             deserialize=True,
             timeout=9
         )
