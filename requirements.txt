@@ -5,6 +5,7 @@ torchvision==0.20.1
 torchaudio==2.5.1
 tensorflow==2.18.0
 tf-keras==2.18.0
+scikit-learn==1.5.2
 
 # Deep learning tools
 transformers==4.47.0
@@ -34,3 +35,4 @@ wandb==0.17.6
 tensorboardx==2.6.2.2
 loguru==0.7.2
 httpx==0.27.0
+joblib==1.4.2
