@@ -29,6 +29,7 @@ ffmpeg-python==0.2.0
 pyffmpeg==2.4.2.18.1
 imutils==0.5.4
 dlib==19.24.6
+scikit-image==0.24.0
 
 # Data and logging
 wandb==0.19.0
