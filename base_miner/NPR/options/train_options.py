@@ -19,6 +19,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--niter', type=int, default=1000, help='# of iter at starting learning rate')
         parser.add_argument('--beta1', type=float, default=0.9, help='momentum term of adam')
         parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate for adam')
+
         # parser.add_argument('--model_path')
         # parser.add_argument('--no_resize', action='store_true')
         # parser.add_argument('--no_crop', action='store_true')

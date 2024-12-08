@@ -5,7 +5,7 @@ from typing import Optional, BinaryIO, List, Union
 import bittensor as bt
 import ffmpeg
 import numpy as np
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from PIL import Image
 
 from .cache.util import seconds_to_str
