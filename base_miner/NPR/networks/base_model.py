@@ -15,6 +15,7 @@ class BaseModel(nn.Module):
         self.lr = opt.lr
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
         self.device = torch.device('cuda:{}'.format(opt.gpu_ids[0])) if opt.gpu_ids else torch.device('cpu')
+        self.continue_from_checkpoint = opt.continue_from_checkpoint
 
     def save_networks(self, epoch):
         save_filename = 'model_epoch_%s.pth' % epoch
@@ -32,8 +33,11 @@ class BaseModel(nn.Module):
 
     # load models from the disk
     def load_networks(self, epoch):
-        load_filename = 'model_epoch_%s.pth' % epoch
-        load_path = os.path.join(self.save_dir, load_filename)
+        if self.start_from_checkpoint:
+            load_path = self.continue_from_checkpoint
+        else:
+            load_filename = 'model_epoch_%s.pth' % epoch
+            load_path = os.path.join(self.save_dir, load_filename)
 
         print('loading the model from %s' % load_path)
         # if you are using PyTorch newer than 0.4 (e.g., built from
