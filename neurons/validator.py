@@ -17,6 +17,9 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 import bittensor as bt
 import yaml
 import wandb

@@ -1,6 +1,10 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+import bittensor as bt
 import asyncio
 import argparse
-import bittensor as bt
+
 from bitmind.validator.cache.image_cache import ImageCache
 from bitmind.validator.cache.video_cache import VideoCache
 from bitmind.validator.scripts.util import load_validator_info, init_wandb_run
