@@ -107,7 +107,6 @@ class DeepfakeDetector(ABC):
 
             # Set class attributes dynamically from the config dictionary
             for key, value in config_dict.items():
-                print('k:v', key, value)
                 setattr(self, key, value)
 
         except Exception as e:
