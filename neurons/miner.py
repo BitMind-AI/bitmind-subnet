@@ -173,6 +173,7 @@ class Miner(BaseMinerNeuron):
 if __name__ == "__main__":
     import warnings
     warnings.filterwarnings("ignore")
+    bt.logging.set_info()  # bittensor LoggingMachine has a bug, need to set this manually
     with Miner() as miner:
         while True:
             bt.logging.info(f"Miner running | uid {miner.uid} | {time.time()}")
