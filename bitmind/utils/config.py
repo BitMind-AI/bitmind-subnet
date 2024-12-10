@@ -76,6 +76,8 @@ def check_config(cls, config: "bt.Config"):
             bt.logging.enable_debug()
         elif config.logging.trace:
             bt.logging.enable_trace()
+        elif config.logging.info:
+            bt.logging.enable_info()
         else:
             bt.logging.enable_default()
 
