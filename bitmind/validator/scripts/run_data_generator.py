@@ -13,6 +13,8 @@ from bitmind.validator.config import (
 
 
 if __name__ == '__main__':
+    bt.logging.set_info()  # bittensor LoggingMachine has a bug, need to set this manually
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--image-cache-dir', type=str, default=REAL_IMAGE_CACHE_DIR,
                       help='Directory containing real images to use as reference')

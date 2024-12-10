@@ -54,6 +54,8 @@ async def main(args):
 
 
 if __name__ == "__main__":
+    bt.logging.set_info()  # bittensor LoggingMachine has a bug, need to set this manually
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--video-cache-dir', type=str, default=REAL_VIDEO_CACHE_DIR,
                         help='Directory to cache video data')
