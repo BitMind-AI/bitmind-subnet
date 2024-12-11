@@ -62,10 +62,11 @@ def create_final_image(original: Image.Image, mask: Image.Image, inpainted: Imag
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Test I2I Generator on a single image')
+    parser = argparse.ArgumentParser(description='Test InPainting Generator on a single image')
     parser.add_argument('--image_path', type=str, required=True, help='Path to input image')
     parser.add_argument('--output_dir', type=str, default='output', help='Directory to save outputs')
     parser.add_argument('--custom_prompt', type=str, help='Optional custom prompt to use')
+    parser.add_argument('--device', type=str, default='cuda', help='Device to run on (cuda/cpu)')
     args = parser.parse_args()
 
     # Create output directory
@@ -78,10 +79,17 @@ def main():
         image = Image.open(args.image_path)
         
         # Initialize generator
-        generator = InPaintingGenerator(output_dir=output_dir)
+        generator = InPaintingGenerator(
+            use_random_i2i_model=True,
+            output_dir=output_dir,
+            device=args.device
+        )
         
         # Generate transformation
-        result = generator.generate(image, custom_prompt=args.custom_prompt)
+        result = generator.run_i2i(
+            prompt=args.custom_prompt if args.custom_prompt else generator.generate_prompt(image),
+            original_image=image
+        )
         
         # Get final size from generated image
         final_size = result['gen_output'].images[0].size
@@ -90,21 +98,21 @@ def main():
         timestamp = str(int(result['time']))
         
         # 1. Save the original image (resized to match output)
-        original_resized = result['original_image'].resize(final_size, Image.Resampling.LANCZOS)
+        original_resized = image.resize(final_size, Image.Resampling.LANCZOS)
         original_path = output_dir / f"1_original_{timestamp}.png"
         original_resized.save(original_path)
         bt.logging.info(f"Saved original image to {original_path}")
         
         # 2. Save the mask (resized to match output)
-        mask_resized = result['mask'].resize(final_size, Image.Resampling.LANCZOS)
+        mask = generator.create_random_mask(final_size)
         mask_path = output_dir / f"2_mask_{timestamp}.png"
-        mask_resized.save(mask_path)
+        mask.save(mask_path)
         bt.logging.info(f"Saved mask to {mask_path}")
         
         # 3. Save the inpainted region only
         inpaint_only = create_inpaint_only_image(
             original_resized,
-            mask_resized,
+            mask,
             result['gen_output'].images[0]
         )
         inpaint_path = output_dir / f"3_inpaint_only_{timestamp}.png"
@@ -114,7 +122,7 @@ def main():
         # 4. Save the final transformed image (properly combined)
         final_image = create_final_image(
             original_resized,
-            mask_resized,
+            mask,
             result['gen_output'].images[0]
         )
         final_path = output_dir / f"4_final_{timestamp}.png"
@@ -136,7 +144,7 @@ def main():
         bt.logging.info(f"Generation time: {result['gen_time']:.2f} seconds")
         
     except Exception as e:
-        bt.logging.error(f"Error during I2I generation: {e}")
+        bt.logging.error(f"Error during inpainting generation: {e}")
         raise
 
 

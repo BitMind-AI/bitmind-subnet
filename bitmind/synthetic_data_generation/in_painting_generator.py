@@ -20,7 +20,7 @@ from bitmind.validator.config import (
 )
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.image_annotation_generator import ImageAnnotationGenerator
-from bitmind.synthetic_data_generation.image_cache import ImageCache
+from bitmind.validator.cache import ImageCache
 
 
 class InPaintingGenerator:
