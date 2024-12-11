@@ -5,10 +5,12 @@ import bittensor as bt
 
 from bitmind.validator.scripts.util import load_validator_info, init_wandb_run
 from bitmind.synthetic_data_generation import SyntheticDataGenerator
+from bitmind.synthetic_data_generation import InPaintingGenerator
 from bitmind.validator.cache import ImageCache
 from bitmind.validator.config import (
     REAL_IMAGE_CACHE_DIR,
-    SYNTH_CACHE_DIR
+    SYNTH_CACHE_DIR,
+    INPAINT_CACHE_DIR
 )
 
 
@@ -16,8 +18,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--image-cache-dir', type=str, default=REAL_IMAGE_CACHE_DIR,
                       help='Directory containing real images to use as reference')
-    parser.add_argument('--output-dir', type=str, default=SYNTH_CACHE_DIR,
+    parser.add_argument('--synth-output-dir', type=str, default=SYNTH_CACHE_DIR,
                       help='Directory to save generated synthetic data')
+    parser.add_argument('--inpaint-output-dir', type=str, default=INPAINT_CACHE_DIR,
+                      help='Directory to save generated inpainting data')
     parser.add_argument('--device', type=str, default='cuda',
                       help='Device to run generation on (cuda/cpu)')
     parser.add_argument('--batch-size', type=int, default=3,
@@ -40,13 +44,22 @@ if __name__ == '__main__':
         use_random_t2vis_model=True,
         device=args.device,
         image_cache=image_cache,
-        output_dir=args.output_dir)
+        output_dir=args.synth_output_dir)
 
-    bt.logging.info("Starting standalone data generator service")
+    ipg = InPaintingGenerator(
+        use_random_i2i_model=True,
+        device=args.device,
+        image_cache=image_cache,
+        output_dir=args.inpaint_output_dir)
+
+    bt.logging.info("Starting data generator service")
     sdg.batch_generate(batch_size=1)
+    ipg.batch_generate(batch_size=1)
+    
     while True:
         try:
             sdg.batch_generate(batch_size=args.batch_size)
+            ipg.batch_generate(batch_size=args.batch_size)
         except Exception as e:
             bt.logging.error(f"Error in batch generation: {str(e)}")
             time.sleep(5)

@@ -249,3 +249,13 @@ def select_random_t2vis_model(modality: Optional[str] = None) -> str:
         return np.random.choice(T2V_MODEL_NAMES)
     else:
         raise NotImplementedError(f"Unsupported modality: {modality}")
+
+
+def select_random_i2i_model() -> str:
+    """
+    Select a random image-to-image inpainting model.
+
+    Returns:
+        The name of the selected model.
+    """
+    return np.random.choice(I2I_MODEL_NAMES)
