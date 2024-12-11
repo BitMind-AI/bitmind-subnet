@@ -60,7 +60,6 @@ class Validator(BaseValidatorNeuron):
     """
     def __init__(self, config=None):
         super(Validator, self).__init__(config=config)
-
         bt.logging.info("load_state()")
         self.load_state()
 
@@ -158,7 +157,7 @@ class Validator(BaseValidatorNeuron):
 if __name__ == "__main__":
     import warnings
     warnings.filterwarnings("ignore")
-    bt.logging.set_info()  # bittensor LoggingMachine has a bug, need to set this manually
+
     with Validator() as validator:
         while True:
             bt.logging.info(f"Validator running | uid {validator.uid} | {time.time()}")

@@ -13,7 +13,6 @@ from bitmind.validator.config import (
 
 
 if __name__ == '__main__':
-    bt.logging.set_info()  # bittensor LoggingMachine has a bug, need to set this manually
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--image-cache-dir', type=str, default=REAL_IMAGE_CACHE_DIR,
@@ -26,6 +25,7 @@ if __name__ == '__main__':
                       help='Number of images to generate per batch')
     args = parser.parse_args()
 
+    bt.logging.set_info()
     init_wandb_run(run_base_name='data-generator', **load_validator_info())
 
     image_cache = ImageCache(args.image_cache_dir)
