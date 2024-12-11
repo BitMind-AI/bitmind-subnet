@@ -65,6 +65,7 @@ def check_config(cls, config: "bt.Config"):
         os.makedirs(config.neuron.full_path, exist_ok=True)
 
     config = replace_empty_with_default(config, add_all_args(cls))
+    config.logging.info = True
 
     if not config.neuron.dont_save_events:
         # Add custom event logger for the events.
@@ -76,6 +77,8 @@ def check_config(cls, config: "bt.Config"):
             bt.logging.enable_debug()
         elif config.logging.trace:
             bt.logging.enable_trace()
+        elif config.logging.info:
+            bt.logging.enable_info()
         else:
             bt.logging.enable_default()
 

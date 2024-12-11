@@ -1,6 +1,10 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+import bittensor as bt
 import asyncio
 import argparse
-import bittensor as bt
+
 from bitmind.validator.cache.image_cache import ImageCache
 from bitmind.validator.cache.video_cache import VideoCache
 from bitmind.validator.scripts.util import load_validator_info, init_wandb_run
@@ -50,6 +54,7 @@ async def main(args):
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--video-cache-dir', type=str, default=REAL_VIDEO_CACHE_DIR,
                         help='Directory to cache video data')
@@ -65,6 +70,7 @@ if __name__ == "__main__":
                         help='Update interval for video zip files in hours')
     args = parser.parse_args()
 
+    bt.logging.set_info()
     init_wandb_run(run_base_name='cache-updater', **load_validator_info())
 
     try:

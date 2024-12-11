@@ -74,13 +74,18 @@ async def forward(self):
         return
 
     # prepare metadata for logging
-    if modality == 'video':
-        video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
-        challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
-        challenge_metadata['fps'] = challenge['fps']
-        challenge_metadata['num_frames'] = challenge['num_frames']
-    elif modality == 'image':
-        challenge_metadata['image'] = wandb.Image(challenge['image'])
+    try:
+        if modality == 'video':
+            video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
+            challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
+            challenge_metadata['fps'] = challenge['fps']
+            challenge_metadata['num_frames'] = challenge['num_frames']
+        elif modality == 'image':
+            challenge_metadata['image'] = wandb.Image(challenge['image'])
+    except Exception as e:
+        bt.logging.error(e)
+        bt.logging.error(f"{modality} is truncated or corrupt. Challenge skipped.")
+        return
 
     # update logging dict with everything except image/video data
     challenge_metadata.update({k: v for k, v in challenge.items() if k != modality})

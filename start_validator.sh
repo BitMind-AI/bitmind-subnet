@@ -44,8 +44,7 @@ pm2 start neurons/validator.py --name $VALIDATOR_PROCESS_NAME -- \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
   --axon.port $VALIDATOR_AXON_PORT \
-  --proxy.port $VALIDATOR_PROXY_PORT \
-  --logging.info
+  --proxy.port $VALIDATOR_PROXY_PORT
 
 # REAL DATA CACHE UPDATER PROCESS
 if pm2 list | grep -q "$CACHE_UPDATE_PROCESS_NAME"; then

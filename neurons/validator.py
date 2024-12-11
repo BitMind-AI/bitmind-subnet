@@ -17,6 +17,9 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 import bittensor as bt
 import yaml
 import wandb
@@ -57,7 +60,6 @@ class Validator(BaseValidatorNeuron):
     """
     def __init__(self, config=None):
         super(Validator, self).__init__(config=config)
-
         bt.logging.info("load_state()")
         self.load_state()
 
@@ -155,6 +157,7 @@ class Validator(BaseValidatorNeuron):
 if __name__ == "__main__":
     import warnings
     warnings.filterwarnings("ignore")
+
     with Validator() as validator:
         while True:
             bt.logging.info(f"Validator running | uid {validator.uid} | {time.time()}")
