@@ -9,8 +9,8 @@ from bitmind.synthetic_data_generation import InPaintingGenerator
 from bitmind.validator.cache import ImageCache
 from bitmind.validator.config import (
     REAL_IMAGE_CACHE_DIR,
-    SYNTH_CACHE_DIR,
-    INPAINT_CACHE_DIR
+    SYNTH_IMAGE_CACHE_DIR,
+    INPAINT_IMAGE_CACHE_DIR
 )
 
 
@@ -18,9 +18,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--image-cache-dir', type=str, default=REAL_IMAGE_CACHE_DIR,
                       help='Directory containing real images to use as reference')
-    parser.add_argument('--synth-output-dir', type=str, default=SYNTH_CACHE_DIR,
+    parser.add_argument('--synth-output-dir', type=str, default=SYNTH_IMAGE_CACHE_DIR,
                       help='Directory to save generated synthetic data')
-    parser.add_argument('--inpaint-output-dir', type=str, default=INPAINT_CACHE_DIR,
+    parser.add_argument('--inpaint-output-dir', type=str, default=INPAINT_IMAGE_CACHE_DIR,
                       help='Directory to save generated inpainting data')
     parser.add_argument('--device', type=str, default='cuda',
                       help='Device to run generation on (cuda/cpu)')

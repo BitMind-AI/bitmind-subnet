@@ -71,6 +71,9 @@ class InPaintingGenerator:
             text_moderation_model_name=TEXT_MODERATION_MODEL
         )
         self.image_cache = image_cache
+        self.output_dir = Path(output_dir) if output_dir else None
+        if self.output_dir:
+            (self.output_dir / "image").mkdir(parents=True, exist_ok=True)
 
     def generate(
         self,
@@ -330,7 +333,7 @@ class InPaintingGenerator:
             output = self.run_i2i(prompt, image_sample['image'], model_name)
             
             bt.logging.info(f'Writing to cache {self.output_dir}')
-            base_path = Path(self.output_dir) / str(output['time'])
+            base_path = Path(self.output_dir) / 'image' / str(output['time'])
             metadata = {k: v for k, v in output.items() if k != 'gen_output'}
             base_path.with_suffix('.json').write_text(json.dumps(metadata))
             
