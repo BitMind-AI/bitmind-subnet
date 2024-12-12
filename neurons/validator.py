@@ -35,7 +35,8 @@ from bitmind.validator.config import (
     WANDB_ENTITY,
     REAL_VIDEO_CACHE_DIR,
     REAL_IMAGE_CACHE_DIR,
-    SYNTH_IMAGE_CACHE_DIR,
+    SYNTH_IMAGE_T2I_CACHE_DIR,
+    SYNTH_IMAGE_I2I_CACHE_DIR,
     SYNTH_VIDEO_CACHE_DIR,
     VALIDATOR_INFO_PATH
 )
@@ -72,7 +73,10 @@ class Validator(BaseValidatorNeuron):
 
         # synthetic media caches are populated by the SyntheticDataGenerator process (started by start_validator.sh)
         self.synthetic_media_cache = {
-            'image': ImageCache(SYNTH_IMAGE_CACHE_DIR),
+            'image': {
+                't2i': ImageCache(SYNTH_IMAGE_T2I_CACHE_DIR),
+                'i2i': ImageCache(SYNTH_IMAGE_I2I_CACHE_DIR)
+            },
             'video': VideoCache(SYNTH_VIDEO_CACHE_DIR)
         }
 

@@ -35,8 +35,8 @@ SYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'synthetic'
 REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
 REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
 SYNTH_VIDEO_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'video'
-SYNTH_IMAGE_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 't2i'
-INPAINT_IMAGE_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 'i2i'
+SYNTH_IMAGE_T2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 't2i'
+SYNTH_IMAGE_I2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 'i2i'
 VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
 SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
