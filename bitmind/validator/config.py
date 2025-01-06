@@ -30,15 +30,19 @@ WANDB_ENTITY: str = 'bitmindai'
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
 SN34_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34'
+SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
+
 REAL_CACHE_DIR: Path = SN34_CACHE_DIR / 'real'
 SYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'synthetic'
+
 REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
 REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
-SYNTH_VIDEO_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'video'
-SYNTH_IMAGE_T2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 't2i'
-SYNTH_IMAGE_I2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 'i2i'
-VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
-SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+T2V_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2v' 
+T2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2i'
+I2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'i2i'
 
 # Update intervals in hours
 VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 3
