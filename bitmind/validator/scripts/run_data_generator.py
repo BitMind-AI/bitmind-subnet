@@ -48,20 +48,12 @@ if __name__ == '__main__':
         image_cache=image_cache,
         output_dir=args.t2i_output_dir)
 
-    ipg = InPaintingGenerator(
-        use_random_i2i_model=True,
-        device=args.device,
-        image_cache=image_cache,
-        output_dir=args.i2i_output_dir)
-
     bt.logging.info("Starting data generator service")
     sdg.batch_generate(batch_size=1)
-    ipg.batch_generate(batch_size=1)
     
     while True:
         try:
             sdg.batch_generate(batch_size=args.batch_size)
-            ipg.batch_generate(batch_size=args.batch_size)
         except Exception as e:
             bt.logging.error(f"Error in batch generation: {str(e)}")
             time.sleep(5)
