@@ -58,22 +58,21 @@ async def forward(self):
     challenge_metadata['modality'] = modality
 
     bt.logging.info(f"Sampling data from {modality} cache")
-    
+    cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
+
     if modality == 'video':
-        cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
         num_frames = random.randint(
             self.config.neuron.clip_frames_min,
             self.config.neuron.clip_frames_max)
         challenge = cache.sample(num_frames, min_fps=8, max_fps=30)
+
     elif modality == 'image':
-        if label == 1:  # synthetic
-            # 20% chance to use i2i (in-painting
+        if label == 1: 
+            # 20% chance to use i2i (in-painting)
             synthetic_type = 'i2i' if np.random.rand() < 0.2 else 't2i'
-            cache = self.media_cache[CHALLENGE_TYPE[label]][modality][synthetic_type]
             challenge_metadata['synthetic_type'] = synthetic_type
-            bt.logging.info(f"Using {synthetic_type} image cache")
-        else:  # real
-            cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
+            cache = cache[synthetic_type]
+
         challenge = cache.sample()
 
     if challenge is None:
