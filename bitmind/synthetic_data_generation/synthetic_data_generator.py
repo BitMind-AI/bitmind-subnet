@@ -6,6 +6,7 @@ import time
 import warnings
 from pathlib import Path
 from typing import Dict, Optional, Any, Union
+from itertools import zip_longest
 
 import bittensor as bt
 import numpy as np
@@ -21,6 +22,7 @@ from bitmind.validator.config import (
     MODEL_NAMES,
     T2V_MODEL_NAMES,
     T2I_MODEL_NAMES,
+    I2I_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_model,
     get_task,
@@ -137,12 +139,19 @@ class SyntheticDataGenerator:
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
 
-        # shuffle and interleave models
+        # shuffle and interleave models to add stochasticity to initial validator challenges
+        i2i_model_names = random.sample(I2I_MODEL_NAMES, len(I2I_MODEL_NAMES))
         t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
         t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
-        model_names = [m for pair in zip(t2v_model_names, t2i_model_names) for m in pair]
-        for model_name in model_names:
+        model_names_interleaved = [
+            m for triple in zip_longest(t2v_model_names, t2i_model_names, i2i_model_names) 
+            for m in triple if m is not None
+        ]
+
+        # for each model, generate an image/video from the prompt generated for its specific tokenizer max len
+        for model_name in model_names_interleaved:
             modality = get_modality(model_name)
+            task = get_task(model_name)
             for i, prompt in enumerate(prompts):
                 bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
 
@@ -150,7 +159,7 @@ class SyntheticDataGenerator:
                 output = self._run_generation(prompt, model_name=model_name)
 
                 bt.logging.info(f'Writing to cache {self.output_dir}')
-                base_path = self.output_dir / modality / str(output['time'])
+                base_path = self.output_dir / modality / task / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output'}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
