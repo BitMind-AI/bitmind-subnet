@@ -1,2 +1,3 @@
 from .synthetic_data_generator import SyntheticDataGenerator
 from .in_painting_generator import InPaintingGenerator
+from .prompt_generator import PromptGenerator

@@ -81,13 +81,18 @@ async def forward(self):
         return
 
     # prepare metadata for logging
-    if modality == 'video':
-        video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
-        challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
-        challenge_metadata['fps'] = challenge['fps']
-        challenge_metadata['num_frames'] = challenge['num_frames']
-    elif modality == 'image':
-        challenge_metadata['image'] = wandb.Image(challenge['image'])
+    try:
+        if modality == 'video':
+            video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
+            challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
+            challenge_metadata['fps'] = challenge['fps']
+            challenge_metadata['num_frames'] = challenge['num_frames']
+        elif modality == 'image':
+            challenge_metadata['image'] = wandb.Image(challenge['image'])
+    except Exception as e:
+        bt.logging.error(e)
+        bt.logging.error(f"{modality} is truncated or corrupt. Challenge skipped.")
+        return
 
     # update logging dict with everything except image/video data
     challenge_metadata.update({k: v for k, v in challenge.items() if k != modality})
@@ -137,8 +142,10 @@ async def forward(self):
 
     self.update_scores(rewards, miner_uids)
 
-    for metric_name in list(metrics[0].keys()):
-        challenge_metadata[f'miner_{metric_name}'] = [m[metric_name] for m in metrics]
+    for modality in ['image', 'video']:
+        for metric_name in list(metrics[0][modality].keys()):
+            challenge_metadata[f'miner_{modality}_{metric_name}'] = [m[modality][metric_name] for m in metrics]
+
     challenge_metadata['predictions'] = responses
     challenge_metadata['rewards'] = rewards
     challenge_metadata['scores'] = list(self.scores)

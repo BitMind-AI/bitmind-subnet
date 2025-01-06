@@ -26,7 +26,7 @@ from bitmind.validator.config import (
     get_modality
 )
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
-from bitmind.synthetic_data_generation.image_annotation_generator import ImageAnnotationGenerator
+from bitmind.synthetic_data_generation.prompt_generator import PromptGenerator
 from bitmind.validator.cache import ImageCache
 
 
@@ -59,7 +59,7 @@ class SyntheticDataGenerator:
         prompt_type: The type of prompt generation strategy ('random', 'annotation').
         prompt_generator_name: Name of the prompt generation model.
         t2vis_model_name: Name of the t2v or t2i model.
-        image_annotation_generator: The generator object for annotating images if required.
+        prompt_generator: The vlm/llm pipeline for generating input prompts for t2i/t2v models
         output_dir: Directory to write generated data.
     """
 
@@ -106,20 +106,20 @@ class SyntheticDataGenerator:
             self.t2vis_model_name = None
 
         self.prompt_type = prompt_type
-        if self.prompt_type == 'annotation':
-            self.image_annotation_generator = ImageAnnotationGenerator(
-                model_name=IMAGE_ANNOTATION_MODEL,
-                text_moderation_model_name=TEXT_MODERATION_MODEL
-            )
-        else:
-            raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
+        self.image_cache = image_cache
+        if self.prompt_type == 'annotation' and self.image_cache is None:
+            raise ValueError(f"image_cache cannot be None if prompt_type == 'annotation'")
+
+        self.prompt_generator = PromptGenerator(
+            vlm_name=IMAGE_ANNOTATION_MODEL,
+            llm_name=TEXT_MODERATION_MODEL
+        )
 
         self.output_dir = Path(output_dir) if output_dir else None
         if self.output_dir:
             (self.output_dir / "video").mkdir(parents=True, exist_ok=True)
             (self.output_dir / "image").mkdir(parents=True, exist_ok=True)
 
-        self.image_cache = image_cache
 
     def batch_generate(self, batch_size: int = 5) -> None:
         """
@@ -135,7 +135,6 @@ class SyntheticDataGenerator:
             bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
-
 
         # shuffle and interleave models
         t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
@@ -206,10 +205,10 @@ class SyntheticDataGenerator:
                 raise ValueError(
                     "image can't be None if self.prompt_type is 'annotation'"
                 )
-            self.image_annotation_generator.load_models()
-            prompt = self.image_annotation_generator.generate(image)
+            self.prompt_generator.load_models()
+            prompt = self.prompt_generator.generate(image)
             if clear_gpu:
-                self.image_annotation_generator.clear_gpu()
+                self.prompt_generator.clear_gpu()
         else:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
         return prompt
