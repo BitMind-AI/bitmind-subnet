@@ -61,6 +61,7 @@ if __name__ == "__main__":
     parser.add_argument("--miner", action="store_true")
     parser.add_argument("--no-self-heal", action="store_true", help="Disable the automatic restart of the PM2 process")
     parser.add_argument("--no-auto-update", action="store_true", help="Disable the automatic update of the local repository")
+    parser.add_argument("--clear-cache", action="store_true", help="Clear the cache before starting validator")
 
     args = parser.parse_args()
     if not (args.miner ^ args.validator):
@@ -69,11 +70,13 @@ if __name__ == "__main__":
 
     neuron_type = 'miner' if args.miner else 'validator'
 
-    os.system(f"./start_{neuron_type}.sh")
+    if args.clear_cache and args.validator:
+        os.system(f"./start_{neuron_type}.sh --clear-cache")
+    else:
+        os.system(f"./start_{neuron_type}.sh")
 
     if not args.no_auto_update or not args.no_self_heal:
         run_auto_update_self_heal(
             neuron_type,
             auto_update=not args.no_auto_update,
             self_heal=not args.no_self_heal)
-
