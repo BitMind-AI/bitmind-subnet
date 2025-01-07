@@ -162,7 +162,7 @@ class SyntheticDataGenerator:
 
                 bt.logging.info(f'Writing to cache {self.output_dir}')
                 base_path = self.output_dir / task / str(output['time'])
-                metadata = {k: v for k, v in output.items() if k != 'gen_output'}
+                metadata = {k: v for k, v in output.items() if k != 'gen_output' and 'image' not in k}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
                 if modality == 'image':
@@ -333,7 +333,9 @@ class SyntheticDataGenerator:
             'gen_output': gen_output,  # image or video
             'time': time.time(),
             'model_name': self.model_name,
-            'gen_time': gen_time
+            'gen_time': gen_time,
+            'mask_image': gen_args.get('mask_image', None),
+            'image': gen_args.get('image', None)
         }
 
     def load_model(self, model_name: Optional[str] = None, modality: Optional[str] = None) -> None:
