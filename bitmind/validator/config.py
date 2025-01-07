@@ -30,15 +30,19 @@ WANDB_ENTITY: str = 'bitmindai'
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
 SN34_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34'
+SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
+
 REAL_CACHE_DIR: Path = SN34_CACHE_DIR / 'real'
 SYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'synthetic'
+
 REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
 REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
-SYNTH_VIDEO_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'video'
-SYNTH_IMAGE_T2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 't2i'
-SYNTH_IMAGE_I2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image' / 'i2i'
-VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
-SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+T2V_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2v' 
+T2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2i'
+I2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'i2i'
 
 # Update intervals in hours
 VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 3
@@ -141,7 +145,7 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
         "from_pretrained_args": {
             "use_safetensors": True,
             "torch_dtype": torch.float16,
-        }
+        },
     }
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())
@@ -154,6 +158,12 @@ I2I_MODELS: Dict[str, Dict[str, Any]] = {
             "use_safetensors": True,
             "torch_dtype": torch.float16,
             "variant": "fp16"
+        },
+        "generate_args": {
+            "guidance_scale": 7.5,
+            "num_inference_steps": 50,
+            "strength": 0.99,
+            "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
         }
     }
 }
@@ -213,27 +223,34 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
 T2V_MODEL_NAMES: List[str] = list(T2V_MODELS.keys())
 
 # Combined model configurations
-T2VIS_MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **I2I_MODELS, **T2V_MODELS}
-T2VIS_MODEL_NAMES: List[str] = list(T2VIS_MODELS.keys())
+MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **I2I_MODELS, **T2V_MODELS}
+MODEL_NAMES: List[str] = list(MODELS.keys())
 
 
 def get_modality(model_name):
-    if model_name in T2V_MODEL_NAMES:
+     if model_name in T2V_MODEL_NAMES:
         return 'video'
+     elif model_name in T2I_MODEL_NAMES + I2I_MODEL_NAMES:
+        return 'image'   
+
+
+def get_task(model_name):
+    if model_name in T2V_MODEL_NAMES:
+        return 't2v'
     elif model_name in T2I_MODEL_NAMES:
-        return 'image'
+        return 't2i'
     elif model_name in I2I_MODEL_NAMES:
         return 'i2i'
 
 
-def select_random_t2vis_model(modality: Optional[str] = None) -> str:
+def select_random_model(task: Optional[str] = None) -> str:
     """
     Select a random text-to-image or text-to-video model based on the specified
     modality.
 
     Args:
-        modality: The type of model to select ('image', 'video', or 'random').
-            If None or 'random', randomly chooses between image and video.
+        modality: The type of model to select ('t2v', 't2i', 'i2i', or 'random').
+            If None or 'random', randomly chooses between the valid options
 
     Returns:
         The name of the selected model.
@@ -241,22 +258,15 @@ def select_random_t2vis_model(modality: Optional[str] = None) -> str:
     Raises:
         NotImplementedError: If the specified modality is not supported.
     """
-    if modality is None or modality == 'random':
-        modality = np.random.choice(['image', 'video'])
+    if task is None or task == 'random':
+        task = np.random.choice(['t2i', 'i2i', 't2v'])
 
-    if modality == 'image':
+    if task == 't2i':
         return np.random.choice(T2I_MODEL_NAMES)
-    elif modality == 'video':
+    elif task == 't2v':
         return np.random.choice(T2V_MODEL_NAMES)
+    elif task == 'i2i':
+        return np.random.choice(I2I_MODEL_NAMES)
     else:
-        raise NotImplementedError(f"Unsupported modality: {modality}")
+        raise NotImplementedError(f"Unsupported task: {task}")
 
-
-def select_random_i2i_model() -> str:
-    """
-    Select a random image-to-image inpainting model.
-
-    Returns:
-        The name of the selected model.
-    """
-    return np.random.choice(I2I_MODEL_NAMES)
