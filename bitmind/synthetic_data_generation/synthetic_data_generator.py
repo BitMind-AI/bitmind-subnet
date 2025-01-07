@@ -120,9 +120,9 @@ class SyntheticDataGenerator:
 
         self.output_dir = Path(output_dir) if output_dir else None
         if self.output_dir:
-            (self.output_dir / "video").mkdir(parents=True, exist_ok=True)
-            (self.output_dir / "image").mkdir(parents=True, exist_ok=True)
-
+            (self.output_dir / "t2v").mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "t2i").mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "i2i").mkdir(parents=True, exist_ok=True)
 
     def batch_generate(self, batch_size: int = 5) -> None:
         """
