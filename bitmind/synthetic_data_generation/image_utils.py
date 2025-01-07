@@ -62,7 +62,7 @@ def save_images_to_disk(image_dataset, start_index, num_images, save_directory, 
             print(f"Failed to save image {i}: {e}")
 
 
-def create_random_mask(self, size: Tuple[int, int]) -> Image.Image:
+def create_random_mask(size: Tuple[int, int]) -> Image.Image:
     """
     Create a random mask for i2i transformation.
     """

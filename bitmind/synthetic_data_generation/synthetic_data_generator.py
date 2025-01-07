@@ -132,9 +132,11 @@ class SyntheticDataGenerator:
             batch_size: Number of prompts to generate in each batch.
         """
         prompts = []
+        images = []
         bt.logging.info(f"Generating {batch_size} prompts")
         for i in range(batch_size):
             image_sample = self.image_cache.sample()
+            images.append(image_sample['image'])
             bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
@@ -156,10 +158,10 @@ class SyntheticDataGenerator:
                 bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
 
                 # Generate image/video from current model and prompt
-                output = self._run_generation(prompt, model_name=model_name)
+                output = self._run_generation(prompt, task=task, model_name=model_name, image=images[i])
 
                 bt.logging.info(f'Writing to cache {self.output_dir}')
-                base_path = self.output_dir / modality / task / str(output['time'])
+                base_path = self.output_dir / task / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output'}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
@@ -179,7 +181,7 @@ class SyntheticDataGenerator:
     def generate(
         self,
         image: Optional[Image.Image] = None,
-        modality: str = 'image',
+        task: Optional[str] = None,
         model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -198,7 +200,7 @@ class SyntheticDataGenerator:
         """
         prompt = self.generate_prompt(image, clear_gpu=True)
         bt.logging.info("Generating synthetic data...")
-        gen_data = self._run_generation(prompt, modality, model_name)
+        gen_data = self._run_generation(prompt, task, model_name, image)
         self.clear_gpu()
         return gen_data
 
