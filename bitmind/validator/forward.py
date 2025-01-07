@@ -32,6 +32,21 @@ from bitmind.validator.config import CHALLENGE_TYPE, MAINNET_UID, TARGET_IMAGE_S
 from bitmind.validator.reward import get_rewards
 
 
+def determine_challenge_type(media_cache, fake_prob=0.5):
+    modality = 'video' if np.random.rand() > 0.5 else 'image'
+    label = 0 if np.random.rand() > fake_prob else 1
+    cache = media_cache[CHALLENGE_TYPE[label]][modality]
+    task = None
+    if label == 1:
+        if modality == 'video':
+            task = 't2v'
+        elif modality == 'image':
+            # 20% chance to use i2i (in-painting)
+            task = 'i2i' if np.random.rand() < 0.2 else 't2i'
+        cache = cache[task]
+    return label, modality, task, cache
+
+
 async def forward(self):
     """
     The forward function is called by the validator every time step.
@@ -52,13 +67,12 @@ async def forward(self):
     challenge_metadata = {}  # for bookkeeping
     challenge = {}           # for querying miners
 
-    modality = 'video' if np.random.rand() > 0.5 else 'image'
-    label = 0 if np.random.rand() > self._fake_prob else 1
+    label, modality, source_model_task, cache = determine_challenge_type(self.media_cache)
     challenge_metadata['label'] = label
     challenge_metadata['modality'] = modality
+    challenge_metadata['source_model_task'] = source_model_task
 
     bt.logging.info(f"Sampling data from {modality} cache")
-    cache = self.media_cache[CHALLENGE_TYPE[label]][modality]
 
     if modality == 'video':
         num_frames = random.randint(

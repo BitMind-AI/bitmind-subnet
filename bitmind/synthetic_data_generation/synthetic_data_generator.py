@@ -6,6 +6,7 @@ import time
 import warnings
 from pathlib import Path
 from typing import Dict, Optional, Any, Union
+from itertools import zip_longest
 
 import bittensor as bt
 import numpy as np
@@ -17,14 +18,17 @@ from bitmind.validator.config import (
     HUGGINGFACE_CACHE_DIR,
     TEXT_MODERATION_MODEL,
     IMAGE_ANNOTATION_MODEL,
-    T2VIS_MODELS,
-    T2VIS_MODEL_NAMES,
+    MODELS,
+    MODEL_NAMES,
     T2V_MODEL_NAMES,
     T2I_MODEL_NAMES,
+    I2I_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
-    select_random_t2vis_model,
+    select_random_model,
+    get_task,
     get_modality
 )
+from bitmind.synthetic_data_generation.image_utils import create_random_mask
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.prompt_generator import PromptGenerator
 from bitmind.validator.cache import ImageCache
@@ -54,19 +58,19 @@ class SyntheticDataGenerator:
     various text-to-video (t2v) and text-to-image (t2i) models.
 
     Attributes:
-        use_random_t2vis_model: Whether to randomly select a t2v or t2i for each
+        use_random_model: Whether to randomly select a t2v or t2i for each
             generation task.
         prompt_type: The type of prompt generation strategy ('random', 'annotation').
         prompt_generator_name: Name of the prompt generation model.
-        t2vis_model_name: Name of the t2v or t2i model.
+        model_name: Name of the t2v, t2i, or i2i model.
         prompt_generator: The vlm/llm pipeline for generating input prompts for t2i/t2v models
         output_dir: Directory to write generated data.
     """
 
     def __init__(
         self,
-        t2vis_model_name: Optional[str] = None,
-        use_random_t2vis_model: bool = True,
+        model_name: Optional[str] = None,
+        use_random_model: bool = True,
         prompt_type: str = 'annotation',
         output_dir: Optional[Union[str, Path]] = None,
         image_cache: Optional[ImageCache] = None,
@@ -76,34 +80,33 @@ class SyntheticDataGenerator:
         Initialize the SyntheticDataGenerator.
 
         Args:
-            t2vis_model_name: Name of the text-to-video or text-to-image model.
-            use_random_t2vis_model: Whether to randomly select models for generation.
+            model_name: Name of the generative image/video model
+            use_random_model: Whether to randomly select models for generation.
             prompt_type: The type of prompt generation strategy.
             output_dir: Directory to write generated data.
             device: Device identifier.
-            run_as_daemon: Whether to run generation in the background.
             image_cache: Optional image cache instance.
 
         Raises:
             ValueError: If an invalid model name is provided.
             NotImplementedError: If an unsupported prompt type is specified.
         """
-        if not use_random_t2vis_model and t2vis_model_name not in T2VIS_MODEL_NAMES:
+        if not use_random_model and model_name not in MODEL_NAMES:
             raise ValueError(
-                f"Invalid model name '{t2vis_model_name}'. "
-                f"Options are {T2VIS_MODEL_NAMES}"
+                f"Invalid model name '{model_name}'. "
+                f"Options are {MODEL_NAMES}"
             )
 
-        self.use_random_t2vis_model = use_random_t2vis_model
-        self.t2vis_model_name = t2vis_model_name
-        self.t2vis_model = None
+        self.use_random_model = use_random_model
+        self.model_name = model_name
+        self.model = None
         self.device = device
 
-        if self.use_random_t2vis_model and t2vis_model_name is not None:
+        if self.use_random_model and model_name is not None:
             bt.logging.warning(
-                "t2vis_model_name will be ignored (use_random_t2vis_model=True)"
+                "model_name will be ignored (use_random_model=True)"
             )
-            self.t2vis_model_name = None
+            self.model_name = None
 
         self.prompt_type = prompt_type
         self.image_cache = image_cache
@@ -117,9 +120,9 @@ class SyntheticDataGenerator:
 
         self.output_dir = Path(output_dir) if output_dir else None
         if self.output_dir:
-            (self.output_dir / "video").mkdir(parents=True, exist_ok=True)
-            (self.output_dir / "image").mkdir(parents=True, exist_ok=True)
-
+            (self.output_dir / "t2v").mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "t2i").mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "i2i").mkdir(parents=True, exist_ok=True)
 
     def batch_generate(self, batch_size: int = 5) -> None:
         """
@@ -129,29 +132,37 @@ class SyntheticDataGenerator:
             batch_size: Number of prompts to generate in each batch.
         """
         prompts = []
+        images = []
         bt.logging.info(f"Generating {batch_size} prompts")
         for i in range(batch_size):
             image_sample = self.image_cache.sample()
+            images.append(image_sample['image'])
             bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
 
-        # shuffle and interleave models
+        # shuffle and interleave models to add stochasticity to initial validator challenges
+        i2i_model_names = random.sample(I2I_MODEL_NAMES, len(I2I_MODEL_NAMES))
         t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
         t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
-        model_names = [m for pair in zip(t2v_model_names, t2i_model_names) for m in pair]
-        for model_name in model_names:
+        model_names_interleaved = [
+            m for triple in zip_longest(t2v_model_names, t2i_model_names, i2i_model_names) 
+            for m in triple if m is not None
+        ]
+
+        # for each model, generate an image/video from the prompt generated for its specific tokenizer max len
+        for model_name in model_names_interleaved:
             modality = get_modality(model_name)
+            task = get_task(model_name)
             for i, prompt in enumerate(prompts):
                 bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
 
                 # Generate image/video from current model and prompt
-                start = time.time()
-                output = self.run_t2vis(prompt, modality, t2vis_model_name=model_name)
+                output = self._run_generation(prompt, task=task, model_name=model_name, image=images[i])
 
                 bt.logging.info(f'Writing to cache {self.output_dir}')
-                base_path = self.output_dir / modality / str(output['time'])
-                metadata = {k: v for k, v in output.items() if k != 'gen_output'}
+                base_path = self.output_dir / task / str(output['time'])
+                metadata = {k: v for k, v in output.items() if k != 'gen_output' and 'image' not in k}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
                 if modality == 'image':
@@ -170,8 +181,8 @@ class SyntheticDataGenerator:
     def generate(
         self,
         image: Optional[Image.Image] = None,
-        modality: str = 'image',
-        t2vis_model_name: Optional[str] = None
+        task: Optional[str] = None,
+        model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on input parameters.
@@ -189,7 +200,7 @@ class SyntheticDataGenerator:
         """
         prompt = self.generate_prompt(image, clear_gpu=True)
         bt.logging.info("Generating synthetic data...")
-        gen_data = self.run_t2vis(prompt, modality, t2vis_model_name)
+        gen_data = self._run_generation(prompt, task, model_name, image)
         self.clear_gpu()
         return gen_data
 
@@ -213,11 +224,12 @@ class SyntheticDataGenerator:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
         return prompt
 
-    def run_t2vis(
+    def _run_generation(
         self,
         prompt: str,
-        modality: str,
-        t2vis_model_name: Optional[str] = None,        
+        task: Optional[str] = None,
+        model_name: Optional[str] = None,
+        image: Optional[Image.Image] = None,
         generate_at_target_size: bool = False,
 
     ) -> Dict[str, Any]:
@@ -226,8 +238,10 @@ class SyntheticDataGenerator:
 
         Args:
             prompt: The text prompt used to inspire the generation.
+            task: The generation task type ('t2i', 't2v', 'i2i', or None).
+            model_name: Optional model name to use for generation.
+            image: Optional input image for image-to-image generation.
             generate_at_target_size: If True, generate at TARGET_IMAGE_SIZE dimensions.
-            t2vis_model_name: Optional model name to use for generation.
 
         Returns:
             Dictionary containing generated data and metadata.
@@ -235,12 +249,23 @@ class SyntheticDataGenerator:
         Raises:
             RuntimeError: If generation fails.
         """
-        self.load_t2vis_model(t2vis_model_name)
-        model_config = T2VIS_MODELS[self.t2vis_model_name]
+        self.load_model(model_name)
+        model_config = MODELS[self.model_name]
+        task = get_task(model_name) if task is None else task      
 
         bt.logging.info("Preparing generation arguments")
         gen_args = model_config.get('generate_args', {}).copy()
-        
+
+        # prep inpainting-specific generation args
+        if task == 'i2i':
+            # Use larger image size for better inpainting quality
+            target_size = (1024, 1024)
+            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+
+            gen_args['mask_image'] = create_random_mask(image.size)
+            gen_args['image'] = image
+
         # Process generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
@@ -259,7 +284,7 @@ class SyntheticDataGenerator:
 
             truncated_prompt = truncate_prompt_if_too_long(
                 prompt,
-                self.t2vis_model
+                self.model
             )
 
             bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
@@ -269,12 +294,12 @@ class SyntheticDataGenerator:
                 pretrained_args = model_config.get('from_pretrained_args', {})
                 torch_dtype = pretrained_args.get('torch_dtype', torch.bfloat16)
                 with torch.autocast(self.device, torch_dtype, cache_enabled=False): 
-                    gen_output = self.t2vis_model(
+                    gen_output = self.model(
                         prompt=truncated_prompt,
                         **gen_args
                     )
             else:
-                gen_output = self.t2vis_model(
+                gen_output = self.model(
                     prompt=truncated_prompt,
                     **gen_args
                 )
@@ -287,7 +312,7 @@ class SyntheticDataGenerator:
                     f"default dimensions. Error: {e}"
                 )
                 try:
-                    gen_output = self.t2vis_model(prompt=truncated_prompt)
+                    gen_output = self.model(prompt=truncated_prompt)
                     gen_time = time.time() - start_time
                 except Exception as fallback_error:
                     bt.logging.error(
@@ -307,80 +332,82 @@ class SyntheticDataGenerator:
             'prompt_long': prompt,
             'gen_output': gen_output,  # image or video
             'time': time.time(),
-            'model_name': self.t2vis_model_name,
-            'gen_time': gen_time
+            'model_name': self.model_name,
+            'gen_time': gen_time,
+            'mask_image': gen_args.get('mask_image', None),
+            'image': gen_args.get('image', None)
         }
 
-    def load_t2vis_model(self, model_name: Optional[str] = None, modality: Optional[str] = None) -> None:
+    def load_model(self, model_name: Optional[str] = None, modality: Optional[str] = None) -> None:
         """Load a Hugging Face text-to-image or text-to-video model to a specific GPU."""
         if model_name is not None:
-            self.t2vis_model_name = model_name
-        elif self.use_random_t2vis_model or model_name == 'random':
-            model_name = select_random_t2vis_model(modality)
-            self.t2vis_model_name = model_name
+            self.model_name = model_name
+        elif self.use_random_model or model_name == 'random':
+            model_name = select_random_model(modality)
+            self.model_name = model_name
 
-        bt.logging.info(f"Loading {self.t2vis_model_name}")
+        bt.logging.info(f"Loading {self.model_name}")
         
-        pipeline_cls = T2VIS_MODELS[model_name]['pipeline_cls']
-        pipeline_args = T2VIS_MODELS[model_name]['from_pretrained_args']
+        pipeline_cls = MODELS[model_name]['pipeline_cls']
+        pipeline_args = MODELS[model_name]['from_pretrained_args']
 
-        self.t2vis_model = pipeline_cls.from_pretrained(
+        self.model = pipeline_cls.from_pretrained(
             pipeline_args.get('base', model_name),
             cache_dir=HUGGINGFACE_CACHE_DIR,
             **pipeline_args,
             add_watermarker=False
         )
 
-        self.t2vis_model.set_progress_bar_config(disable=True)
+        self.model.set_progress_bar_config(disable=True)
 
         # Load scheduler if specified
-        if 'scheduler' in T2VIS_MODELS[model_name]:
-            sched_cls = T2VIS_MODELS[model_name]['scheduler']['cls']
-            sched_args = T2VIS_MODELS[model_name]['scheduler']['from_config_args']
-            self.t2vis_model.scheduler = sched_cls.from_config(
-                self.t2vis_model.scheduler.config,
+        if 'scheduler' in MODELS[model_name]:
+            sched_cls = MODELS[model_name]['scheduler']['cls']
+            sched_args = MODELS[model_name]['scheduler']['from_config_args']
+            self.model.scheduler = sched_cls.from_config(
+                self.model.scheduler.config,
                 **sched_args
             )
 
         # Configure model optimizations
-        model_config = T2VIS_MODELS[model_name]
+        model_config = MODELS[model_name]
         if model_config.get('enable_model_cpu_offload', False):
             bt.logging.info(f"Enabling cpu offload for {model_name}")
-            self.t2vis_model.enable_model_cpu_offload()
+            self.model.enable_model_cpu_offload()
         if model_config.get('enable_sequential_cpu_offload', False):
             bt.logging.info(f"Enabling sequential cpu offload for {model_name}")
-            self.t2vis_model.enable_sequential_cpu_offload()
+            self.model.enable_sequential_cpu_offload()
         if model_config.get('vae_enable_slicing', False):
             bt.logging.info(f"Enabling vae slicing for {model_name}")
             try:
-                self.t2vis_model.vae.enable_slicing()
+                self.model.vae.enable_slicing()
             except Exception:
                 try:
-                    self.t2vis_model.enable_vae_slicing()
+                    self.model.enable_vae_slicing()
                 except Exception:
-                    bt.logging.warning(f"Could not enable vae slicing for {self.t2vis_model}")
+                    bt.logging.warning(f"Could not enable vae slicing for {self.model}")
         if model_config.get('vae_enable_tiling', False):
             bt.logging.info(f"Enabling vae tiling for {model_name}")
             try:
-                self.t2vis_model.vae.enable_tiling()
+                self.model.vae.enable_tiling()
             except Exception:
                 try:
-                    self.t2vis_model.enable_vae_tiling()
+                    self.model.enable_vae_tiling()
                 except Exception:
-                    bt.logging.warning(f"Could not enable vae tiling for {self.t2vis_model}")
+                    bt.logging.warning(f"Could not enable vae tiling for {self.model}")
 
-        self.t2vis_model.to(self.device)
+        self.model.to(self.device)
         bt.logging.info(f"Loaded {model_name} using {pipeline_cls.__name__}.")
 
     def clear_gpu(self) -> None:
         """Clear GPU memory by deleting models and running garbage collection."""
-        if self.t2vis_model is not None:
+        if self.model is not None:
             bt.logging.info(
                 "Deleting previous text-to-image or text-to-video model, "
                 "freeing memory"
             )
-            del self.t2vis_model
-            self.t2vis_model = None
+            del self.model
+            self.model = None
             gc.collect()
             torch.cuda.empty_cache()
 
