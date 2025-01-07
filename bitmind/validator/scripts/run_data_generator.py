@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     sdg = SyntheticDataGenerator(
         prompt_type='annotation',
-        use_random_t2vis_model=True,
+        use_random_model=True,
         device=args.device,
         image_cache=image_cache,
         output_dir=args.t2i_output_dir)
