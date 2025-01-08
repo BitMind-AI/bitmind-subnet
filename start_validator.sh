@@ -12,6 +12,19 @@ VALIDATOR_PROCESS_NAME="bitmind_validator"
 DATA_GEN_PROCESS_NAME="bitmind_data_generator"
 CACHE_UPDATE_PROCESS_NAME="bitmind_cache_updater"
 
+# Clear cache if specified 
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --clear-cache)
+      rm -rf ~/.cache/sn34
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
 # Login to Weights & Biases
 if ! wandb login $WANDB_API_KEY; then
   echo "Failed to login to Weights & Biases with the provided API key."

@@ -6,7 +6,7 @@ import numpy as np
 from typing import List
 from PIL import Image
 
-from bitmind.validator.config import T2VIS_MODEL_NAMES as MODEL_NAMES
+from bitmind.validator.config import MODEL_NAMES
 from bitmind.validator.miner_performance_tracker import MinerPerformanceTracker
 
 
