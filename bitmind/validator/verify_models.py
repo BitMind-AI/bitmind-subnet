@@ -46,8 +46,8 @@ def main():
 
     # Check and load annotation and moderation models if not cached
     if not is_model_cached(IMAGE_ANNOTATION_MODEL) or not is_model_cached(TEXT_MODERATION_MODEL):
-        synthetic_image_generator.image_annotation_generator.load_models()
-        synthetic_image_generator.image_annotation_generator.clear_gpu()
+        synthetic_image_generator.prompt_generator.load_models()
+        synthetic_image_generator.prompt_generator.clear_gpu()
 
     # Initialize and load diffusers if not cached
     for model_name in MODEL_NAMES:
