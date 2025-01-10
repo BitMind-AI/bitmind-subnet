@@ -11,7 +11,9 @@ from diffusers import (
     MochiPipeline,
     AnimateDiffPipeline,
     EulerDiscreteScheduler,
-    AutoPipelineForInpainting
+    AutoPipelineForInpainting,
+    IFPipeline,
+    IFSuperResolutionPipeline
 )
 
 from .model_utils import load_annimatediff_motion_adapter
@@ -146,7 +148,41 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "use_safetensors": True,
             "torch_dtype": torch.float16,
         },
-    }
+    },
+    "DeepFloyd/IF": {
+        "pipeline_cls": {
+            "stage1": IFPipeline,
+            "stage2": IFSuperResolutionPipeline
+        },
+        "from_pretrained_args": {
+            "stage1": {
+                "base": "DeepFloyd/IF-I-XL-v1.0",
+                "torch_dtype": torch.float16,
+                "variant": "fp16"
+            },
+            "stage2": {
+                "base": "DeepFloyd/IF-II-L-v1.0",
+                "torch_dtype": torch.float16,
+                "variant": "fp16"
+            }
+        },
+        "pipeline_stages": [
+            {
+                "name": "stage1",
+                "output_attr": "images"
+            },
+            {
+                "name": "stage2",
+                "input_key": "image",
+                "output_attr": "images"
+            }
+        ],
+        "generate_args": {
+            "num_inference_steps": {"min": 25, "max": 50},
+            "guidance_scale": 7.0
+        },
+        "enable_model_cpu_offload": True
+    },
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())
 
@@ -270,3 +306,31 @@ def select_random_model(task: Optional[str] = None) -> str:
     else:
         raise NotImplementedError(f"Unsupported task: {task}")
 
+
+def create_pipeline_generator(model_config: Dict[str, Any], model: Any) -> callable:
+    """Creates a generator function based on pipeline configuration."""
+    
+    if isinstance(model_config.get('pipeline_stages'), list):
+        def generate(prompt: str, **kwargs):
+            output = None
+            for stage in model_config['pipeline_stages']:
+                stage_args = {**kwargs}  # Copy base args
+                
+                # Add stage-specific args
+                if stage.get('input_key') and output is not None:
+                    stage_args[stage['input_key']] = output
+                
+                # Add any stage-specific generation args
+                if stage.get('args'):
+                    stage_args.update(stage['args'])
+                
+                # Run stage
+                result = model[stage['name']](prompt=prompt, **stage_args)
+                
+                # Extract output based on stage config
+                output = getattr(result, stage.get('output_attr', 'images'))[0]
+            return result
+        return generate
+    
+    # Default single-stage pipeline
+    return lambda prompt, **kwargs: model(prompt=prompt, **kwargs)

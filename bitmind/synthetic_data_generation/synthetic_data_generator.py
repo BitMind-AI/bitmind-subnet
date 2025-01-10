@@ -26,7 +26,8 @@ from bitmind.validator.config import (
     TARGET_IMAGE_SIZE,
     select_random_model,
     get_task,
-    get_modality
+    get_modality,
+    create_pipeline_generator
 )
 from bitmind.synthetic_data_generation.image_utils import create_random_mask
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
@@ -231,7 +232,6 @@ class SyntheticDataGenerator:
         model_name: Optional[str] = None,
         image: Optional[Image.Image] = None,
         generate_at_target_size: bool = False,
-
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on a text prompt.
@@ -282,27 +282,24 @@ class SyntheticDataGenerator:
                 gen_args['height'] = TARGET_IMAGE_SIZE[0]
                 gen_args['width'] = TARGET_IMAGE_SIZE[1]
 
-            truncated_prompt = truncate_prompt_if_too_long(
-                prompt,
-                self.model
-            )
-
+            truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
             bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
             bt.logging.info(f"Generation args: {gen_args}")
+            
             start_time = time.time()
+            
+            # Create pipeline-specific generator
+            generate = create_pipeline_generator(model_config, self.model)
+            
+            # Handle autocast if needed
             if model_config.get('use_autocast', True):
                 pretrained_args = model_config.get('from_pretrained_args', {})
                 torch_dtype = pretrained_args.get('torch_dtype', torch.bfloat16)
-                with torch.autocast(self.device, torch_dtype, cache_enabled=False): 
-                    gen_output = self.model(
-                        prompt=truncated_prompt,
-                        **gen_args
-                    )
+                with torch.autocast(self.device, torch_dtype, cache_enabled=False):
+                    gen_output = generate(truncated_prompt, **gen_args)
             else:
-                gen_output = self.model(
-                    prompt=truncated_prompt,
-                    **gen_args
-                )
+                gen_output = generate(truncated_prompt, **gen_args)
+                
             gen_time = time.time() - start_time
 
         except Exception as e:
