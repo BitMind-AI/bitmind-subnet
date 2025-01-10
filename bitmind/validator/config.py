@@ -305,32 +305,3 @@ def select_random_model(task: Optional[str] = None) -> str:
         return np.random.choice(I2I_MODEL_NAMES)
     else:
         raise NotImplementedError(f"Unsupported task: {task}")
-
-
-def create_pipeline_generator(model_config: Dict[str, Any], model: Any) -> callable:
-    """Creates a generator function based on pipeline configuration."""
-    
-    if isinstance(model_config.get('pipeline_stages'), list):
-        def generate(prompt: str, **kwargs):
-            output = None
-            for stage in model_config['pipeline_stages']:
-                stage_args = {**kwargs}  # Copy base args
-                
-                # Add stage-specific args
-                if stage.get('input_key') and output is not None:
-                    stage_args[stage['input_key']] = output
-                
-                # Add any stage-specific generation args
-                if stage.get('args'):
-                    stage_args.update(stage['args'])
-                
-                # Run stage
-                result = model[stage['name']](prompt=prompt, **stage_args)
-                
-                # Extract output based on stage config
-                output = getattr(result, stage.get('output_attr', 'images'))[0]
-            return result
-        return generate
-    
-    # Default single-stage pipeline
-    return lambda prompt, **kwargs: model(prompt=prompt, **kwargs)

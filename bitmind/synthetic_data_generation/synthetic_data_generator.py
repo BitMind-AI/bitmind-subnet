@@ -26,8 +26,7 @@ from bitmind.validator.config import (
     TARGET_IMAGE_SIZE,
     select_random_model,
     get_task,
-    get_modality,
-    create_pipeline_generator
+    get_modality
 )
 from bitmind.synthetic_data_generation.image_utils import create_random_mask
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
@@ -225,6 +224,42 @@ class SyntheticDataGenerator:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
         return prompt
 
+    def create_pipeline_generator(self, model_config: Dict[str, Any], model: Any) -> callable:
+        """
+        Creates a generator function based on pipeline configuration.
+        
+        Args:
+            model_config: Model configuration dictionary
+            model: Loaded model instance(s)
+            
+        Returns:
+            Callable that handles the generation process for the model
+        """
+        if isinstance(model_config.get('pipeline_stages'), list):
+            def generate(prompt: str, **kwargs):
+                output = None
+                for stage in model_config['pipeline_stages']:
+                    stage_args = {**kwargs}  # Copy base args
+                    
+                    # Add stage-specific args
+                    if stage.get('input_key') and output is not None:
+                        stage_args[stage['input_key']] = output
+                    
+                    # Add any stage-specific generation args
+                    if stage.get('args'):
+                        stage_args.update(stage['args'])
+                    
+                    # Run stage
+                    result = model[stage['name']](prompt=prompt, **stage_args)
+                    
+                    # Extract output based on stage config
+                    output = getattr(result, stage.get('output_attr', 'images'))[0]
+                return result
+            return generate
+        
+        # Default single-stage pipeline
+        return lambda prompt, **kwargs: model(prompt=prompt, **kwargs)
+
     def _run_generation(
         self,
         prompt: str,
@@ -289,7 +324,7 @@ class SyntheticDataGenerator:
             start_time = time.time()
             
             # Create pipeline-specific generator
-            generate = create_pipeline_generator(model_config, self.model)
+            generate = self.create_pipeline_generator(model_config, self.model)
             
             # Handle autocast if needed
             if model_config.get('use_autocast', True):
