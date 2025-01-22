@@ -175,8 +175,8 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
     "tencent/HunyuanVideo": {
         "pipeline_cls": HunyuanVideoPipeline,
         "from_pretrained_args": {
-            # custom functions supplied as tuple of (fn, args)
-            "transformer": (
+            "model_id": "tencent/HunyuanVideo",
+            "transformer": (  # custom functions supplied as tuple of (fn, args)
                 load_hunyuanvideo_transformer,
                 { 
                     "model_id": "tencent/HunyuanVideo",
