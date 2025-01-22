@@ -9,7 +9,7 @@ scikit-learn==1.5.2
 
 # Deep learning tools
 transformers==4.47.0
-#git+https://github.com/huggingface/diffusers.git@6a51427b6a226591ccc40249721c486855f53e1c#egg=diffusers
+diffusers==0.32.2
 accelerate==1.2.0
 bitsandbytes==0.45.0
 sentencepiece==0.2.0

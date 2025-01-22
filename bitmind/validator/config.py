@@ -9,12 +9,13 @@ from diffusers import (
     FluxPipeline,
     CogVideoXPipeline,
     MochiPipeline,
+    HunyuanVideoPipeline,
     AnimateDiffPipeline,
     EulerDiscreteScheduler,
-    AutoPipelineForInpainting
+    AutoPipelineForInpainting,
 )
 
-from .model_utils import load_annimatediff_motion_adapter
+from .model_utils import load_annimatediff_motion_adapter, load_hunyuanvideo_transformer
 
 
 TARGET_IMAGE_SIZE: tuple[int, int] = (256, 256)
@@ -171,6 +172,32 @@ I2I_MODEL_NAMES: List[str] = list(I2I_MODELS.keys())
 
 # Text-to-video model configurations
 T2V_MODELS: Dict[str, Dict[str, Any]] = {
+    "tencent/HunyuanVideo": {
+        "pipeline_cls": HunyuanVideoPipeline,
+        "from_pretrained_args": {
+            # custom functions supplied as tuple of (fn, args)
+            "transformer": (
+                load_hunyuanvideo_transformer,
+                { 
+                    "model_id": "tencent/HunyuanVideo",
+                    "subfolder": "transformer",
+                    "torch_dtype": torch.bfloat16,
+                    "revision": 'refs/pr/18'
+                }
+            ),
+            "revision": 'refs/pr/18',
+            "torch_dtype": torch.float16
+        },
+        "generate_args": {
+            "num_frames": {"min": 61, "max": 129},
+            "resolution": {"options": [
+                [720, 1280], [1280, 720], [1104, 832], [832,1104], [960,960],
+                [544, 960], [960, 544],	[624, 832], [832, 624],	[720, 720]
+            ]},
+            "num_inference_steps":  {"min": 30, "max": 50},
+        },
+        "vae_enable_tiling": True
+    },
     "genmo/mochi-1-preview": {
         "pipeline_cls": MochiPipeline,
         "from_pretrained_args": {
@@ -180,7 +207,6 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
         "generate_args": {
             "num_frames": 84
         },
-        #"enable_model_cpu_offload": True,
         "vae_enable_tiling": True
     },
     'THUDM/CogVideoX-5b': {
@@ -205,7 +231,10 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
         "from_pretrained_args": {
             "base": "emilianJR/epiCRealism",
             "torch_dtype": torch.bfloat16,
-            "motion_adapter": load_annimatediff_motion_adapter()
+            "motion_adapter": (
+                load_annimatediff_motion_adapter,
+                {"step": 4}
+            )
         },
         "generate_args": {
             "guidance_scale": 2,
