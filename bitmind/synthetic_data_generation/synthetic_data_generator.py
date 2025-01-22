@@ -361,8 +361,14 @@ class SyntheticDataGenerator:
             if isinstance(v, tuple) and callable(v[0]):
                 pipeline_args[k] = v[0](**v[1])
 
+        if 'model_id' in pipeline_args:
+            model_id = pipeline_args['model_id']
+            del pipeline_args['model_id']
+        else:
+            model_id = model_name
+
         self.model = pipeline_cls.from_pretrained(
-            pipeline_args.get('base', model_name),
+            model_id,
             cache_dir=HUGGINGFACE_CACHE_DIR,
             **pipeline_args,
             add_watermarker=False
