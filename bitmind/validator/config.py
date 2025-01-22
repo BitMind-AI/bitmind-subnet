@@ -186,7 +186,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
                 }
             ),
             "revision": 'refs/pr/18',
-            "torch_dtype": torch.float16
+            "torch_dtype": torch.bfloat16
         },
         "generate_args": {
             "num_frames": {"min": 61, "max": 129},
@@ -196,6 +196,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             ]},
             "num_inference_steps":  {"min": 30, "max": 50},
         },
+        "use_autocast": False,
         "vae_enable_tiling": True
     },
     "genmo/mochi-1-preview": {
@@ -229,7 +230,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
     'ByteDance/AnimateDiff-Lightning': {
         "pipeline_cls": AnimateDiffPipeline,
         "from_pretrained_args": {
-            "base": "emilianJR/epiCRealism",
+            "model_id": "emilianJR/epiCRealism",
             "torch_dtype": torch.bfloat16,
             "motion_adapter": (
                 load_annimatediff_motion_adapter,
