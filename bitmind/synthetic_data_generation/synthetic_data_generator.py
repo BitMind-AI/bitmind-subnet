@@ -286,6 +286,7 @@ class SyntheticDataGenerator:
             elif 'resolution' in gen_args:
                 gen_args['height'] = gen_args['resolution'][0]
                 gen_args['width'] = gen_args['resolution'][1]
+                del gen_args['resolution']
 
             truncated_prompt = truncate_prompt_if_too_long(
                 prompt,
