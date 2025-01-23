@@ -211,7 +211,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "num_inference_steps": {"min": 30, "max": 65},
             "resolution": [480, 848]
         },
-        "save_args": {"fps": 30}
+        "save_args": {"fps": 30},
         "vae_enable_tiling": True
     },
     'THUDM/CogVideoX-5b': {
