@@ -267,17 +267,13 @@ class SyntheticDataGenerator:
             gen_args['mask_image'] = create_random_mask(image.size)
             gen_args['image'] = image
 
-        # Process generation arguments
+        # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
                 if "min" in v and "max" in v:
                     gen_args[k] = np.random.randint(v['min'], v['max'])
                 if "options" in v:
                     gen_args[k] = random.choice(v['options'])
-
-            for dim in ('height', 'width'):
-                if isinstance(gen_args.get(dim), list):
-                    gen_args[dim] = np.random.choice(gen_args[dim])
 
         try:
             if generate_at_target_size:

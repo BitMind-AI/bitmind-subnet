@@ -194,8 +194,9 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
                 [720, 1280], [1280, 720], [1104, 832], [832,1104], [960,960],
                 [544, 960], [960, 544],	[624, 832], [832, 624],	[720, 720]
             ]},
-            "num_inference_steps":  {"min": 30, "max": 50},
+            "num_inference_steps": {"min": 30, "max": 50},
         },
+        "save_args": {"fps": 30},
         "use_autocast": False,
         "vae_enable_tiling": True
     },
@@ -206,8 +207,11 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "torch_dtype": torch.bfloat16
         },
         "generate_args": {
-            "num_frames": 84
+            "num_frames": 84,
+            "num_inference_steps": {"min": 30, "max": 65},
+            "resolution": [480, 848]
         },
+        "save_args": {"fps": 30}
         "vae_enable_tiling": True
     },
     'THUDM/CogVideoX-5b': {
@@ -221,7 +225,9 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "num_videos_per_prompt": 1,
             "num_inference_steps": {"min": 50, "max": 125},
             "num_frames": 48,
+            "resolution": [720, 480]
         },
+        "save_args": {"fps": 8},
         "enable_model_cpu_offload": True,
         #"enable_sequential_cpu_offload": True,
         "vae_enable_slicing": True,
@@ -240,7 +246,13 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
         "generate_args": {
             "guidance_scale": 2,
             "num_inference_steps": {"min": 50, "max": 125},
+            "resolution": {"options": [
+                [512, 512], [512, 768], [512, 1024],
+                [768, 512], [768, 768], [768, 1024],
+                [1024, 512], [1024, 768], [1024, 1024]
+            ]}
         },
+        "save_args": {"fps": 15},
         "scheduler": {
             "cls": EulerDiscreteScheduler,
             "from_config_args": {
