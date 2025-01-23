@@ -12,7 +12,7 @@ from diffusers import (
     HunyuanVideoPipeline,
     AnimateDiffPipeline,
     EulerDiscreteScheduler,
-    AutoPipelineForInpainting,
+    AutoPipelineForInpainting
 )
 
 from .model_utils import load_annimatediff_motion_adapter, load_hunyuanvideo_transformer
