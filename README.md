@@ -1,11 +1,11 @@
 <p align="center">
   <img src="static/Bitmind-Logo.png" alt="BitMind Logo" width="150"/>
 </p>
-<h1 align="center">BitMind Subnet (Bittensor Subnet 34)<br>Deepfake Detection</h1>
-
-The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. 
+<h1 align="center">BitMind Subnet<br>Bittensor Subnet 34 | Deepfake Detection</h2
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. 
 
 ## Quick Links
 - [Mining Guide ⛏️](docs/Mining.md)
@@ -15,7 +15,7 @@ The BitMind Subnet leverages advanced generative and discriminative AI models wi
 - [Project Structure and Terminology 📖](docs/Glossary.md)
 - [Contributor Guide 🤝](docs/Contributor_Guide.md)
 
-## Mission
+## Decentralized Detection of AI Generated Content
 Rapid advancements in generative AI have led to a massive proliferation of synthetic media that is increasingly difficult to distinguish from authentic content, posing significant challenges for the integrity of digital information and the trust that underpins modern society.
 
 To address this growing challenge, SN34 aims to create the most accurate fully-generalized detection system. Here, fully-generalized means that the system is capable of detecting both synthetic and semi-synthetic media from all known generative architectures. Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding miners whose detection algorithms are the most accurate across all cutting-edge generative models.
@@ -57,12 +57,12 @@ The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class devel
 ## Community
 
 <p align="left">
-  <a href="https://discord.gg/bitmind">
+  <a href="https://discord.gg/kKQR98CrUn">
     <img src="static/Join-BitMind-Discord.png" alt="Join us on Discord" width="60%">
   </a>
 </p>
 
-For real-time discussions, community support, and regular updates, <a href="https://discord.gg/bitmind">join our Discord server</a>. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
+For real-time discussions, community support, and regular updates, <a href="https://discord.gg/kKQR98CrUn">join our Discord server</a>. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
 
 ## License
 
