@@ -4,26 +4,29 @@
 <h1 align="center">BitMind Subnet (Bittensor Subnet 34)<br>Deepfake Detection</h1>
 
 
+The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. 
+
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
+
+## Quick Links
 - [Mining Guide ⛏️](docs/Mining.md)
 - [Validator Guide 🔧](docs/Validating.md)
+- [Architecture Diagrams 🏗️](#validator-architecture)
 - [Incentive Mechanism 📈](docs/Incentive.md)
 - [Project Structure and Terminology 📖](docs/Glossary.md)
 - [Contributor Guide 🤝](docs/Contributor_Guide.md)
 
-## Identifying AI-Generated Media with a Decentralized Framework
 
-The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. 
 
 **Purpose:**
-As generative AI technology advances rapidly, the creation of sophisticated synthetic media has become increasingly prevalent and accessible. This surge in AI-generated content poses significant challenges for content authenticity and digital trust. The BitMind Subnet enables reliable identification of AI-generated media, helping preserve the authenticity and credibility of digital content across the internet.
+Rapid advancements in generative AI have led to a massive proliferation of synthetic media that is increasingly difficult to distinguish from authentic content, posing significant challenges for the integrity of digital information and the trust that underpins modern society.
+
+To address this growing challenge, SN34 aims to create the most accurate fully-generalized detection system. Here, fully-generalized means that the system is capable of detecting both synthetic and semi-synthetic media from all known generative architectures.
 
 **Features:**
 
-- **Infinitely Fine:** Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding only miners whose detection algorithms account for the latest models
-
--
+- **Evolving Incentive Mechanism:** Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding only miners whose detection algorithms account for the latest models
 
 **Core Components:**
 
@@ -38,8 +41,7 @@ As generative AI technology advances rapidly, the creation of sophisticated synt
 
 ![Subnet Architecture](static/Subnet-Arch.png)
 
-
-**Validator Architecture**
+**Validator Architecture** 
 - Pink arrows represent data flow for data generation, downloads, and caching.
 - Blue arrows represent validator challenge generation and scoring.
 
