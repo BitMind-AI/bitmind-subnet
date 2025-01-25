@@ -3,35 +3,45 @@
 </p>
 <h1 align="center">BitMind Subnet<br><small>Bittensor Subnet 34 | Deepfake Detection</small></h1>
 
-
-
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. 
+
+The BitMind Subnet is **the world's first decentralized AI-generated content detection network**. Our incentive mechanism rewards the most accurate detection algorithms, creating an adaptive defense against synthetic media.
 
 ## Quick Links
-<table>
+<table style="width:100%; border:0; border-collapse:collapse;">
 <tr>
-<td width="50%" valign="top">
+<td width="50%" valign="top" style="border:0;">
 
 **Docs**
 
-- [Mining Guide ⛏️](docs/Mining.md)
-- [Validator Guide 🔧](docs/Validating.md)
-- [Architecture Diagrams 🏗️](#Subnet-Architecture)
-- [Incentive Mechanism 📈](docs/Incentive.md)
-- [Project Structure and Terminology 📖](docs/Glossary.md)
-- [Contributor Guide 🤝](docs/Contributor_Guide.md)
+🧠 [Learn About Bittensor](https://docs.bittensor.com/learn/bittensor-building-blocks)
+
+⛏️ [Mining Guide](docs/Mining.md)
+
+🔧 [Validator Guide](docs/Validating.md)
+
+🏗️ [Architecture Diagrams](#Subnet-Architecture)
+
+📈 [Incentive Mechanism](docs/Incentive.md)
+
 
 </td>
 
-<td width="50%" valign="top">
+<td width="50%" valign="top" style="border:0;">
 
 **Resources**
 
-- [BitMind Huggingface](https://huggingface.co/bitmind)
-- [Weights and Biases [Mainnet 34]](https://wandb.ai/bitmindai/bitmind-subnet)
-- [Weights and Biases [Testnet 168]](https://wandb.ai/bitmindai/bitmind)
+🚀 [Applications powered by Subnet 34](https://www.bitmind.ai/apps)
+
+🤗 [BitMind Huggingface](https://huggingface.co/bitmind)
+
+📊 [Mainnet 34 W&B](https://wandb.ai/bitmindai/bitmind-subnet) |  [Testnet 168 W&B](https://wandb.ai/bitmindai/bitmind)
+
+📖 [Project Structure and Terminology](docs/Glossary.md)
+
+🤝 [Contributor Guide](docs/Contributor_Guide.md)
+
 
 </td>
 </tr>
@@ -39,36 +49,53 @@ The BitMind Subnet leverages advanced generative and discriminative AI models wi
 
 
 ## Decentralized Detection of AI Generated Content
-Rapid advancements in generative AI have led to a massive proliferation of synthetic media that is increasingly difficult to distinguish from authentic content, posing significant challenges for the integrity of digital information and the trust that underpins modern society.
+The explosive growth of generative AI technology has unleashed an unprecedented wave of synthetic media creation. These AI-generated images, videos, and other content have become remarkably sophisticated, making them virtually indistinguishable from authentic media. This development presents a critical challenge to information integrity and societal trust in the digital age, as the line between real and synthetic content continues to blur.
 
-To address this growing challenge, SN34 aims to create the most accurate fully-generalized detection system. Here, fully-generalized means that the system is capable of detecting both synthetic and semi-synthetic media from all known generative architectures. Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding miners whose detection algorithms are the most accurate across all cutting-edge generative models.
+To address this growing challenge, SN34 aims to create the most accurate fully-generalized detection system. Here, fully-generalized means that the system is capable of detecting both synthetic and semi-synthetic media with high degrees of accuracy regardless of their content or what model generated them. Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding miners whose detection algorithms best adapt to new forms of synthetic content.
 
 
 ## Core Components
 
+> This documentation assumes basic familiarity with Bittensor concepts. For an introduction, please check out the docs: https://docs.bittensor.com/learn/bittensor-building-blocks. 
+
 **Miners** 
 - Miners are tasked with running binary classifiers that discern between genuine and AI-generated content, and are rewarded based on their accuracy. 
 - Miners predict a float value in [0., 1.], with values greater than 0.5 indicating the image or video is AI generated. 
-- Miners are rewarded based on their accuracy.
+- Miners are rewarded based on the accuracy of their predictions. For a more detailed breakdown of rewards, weights and incentive, please see our [incentive mechanism docs](docs/Incentive.md)
 
 
 **Validators** 
 - Validators challenge miners with a balanced mix of real and synthetic media drawn from a diverse pool of sources.
 - We continually add new datasets and generative models to our validators in order to maximize coverage of the types of diverse data.
 
+
 ## Subnet Architecture
 
+
 ![Subnet Architecture](static/Subnet-Arch.png)
-<p align="center"><i>Overview of subnet components</i></p><br>
 
+<details>
+<summary align=center><i>Figure 1 (above): Ecosystem Overview</i></summary>
+<br>
 
-**Organic Traffic (Green Arrows)**: Shows how applications interact with the subnet to detect AI-generated images and vidoeos
+> This diagram provides an overview of the validator neuron, miner neuron, and other components external to the subnet.
 
-**Organic Traffic (Blue Arrows)**: Shows how validators generate synthetic data, challenge miners and score their responses.
+- The green arrows show how applications interact with the subnet to provide AI-generated image and video detection functionality.
+- The blue arrows show how validators generate synthetic data, challenge miners and score their responses.
+
+</details>
+
+<br>
 
 
 ![Subnet Architecture](static/Vali-Arch.png)
-<p align="center"><i>Detailed breakdown of all validator components</i></p><br>
+
+<details>
+<summary align=center><i>Figure 2 (above): Validator Components</i></summary>
+<br>
+
+> This diagram presents the same architecture as figure 1, but with organic traffic ommitted and with a more detailed look at scored challenges and the associated validator neuron components.
+
 
 **Challenge Generation and Scoring (Blue Arrows)**
 
@@ -76,7 +103,7 @@ For each challenge, the validator performs the following steps:
 1. Randomly samples a real or synthetic image/video from the cache
 2. Applies random augmentations to the sampled media
 3. Distributes the augmented data to 50 randomly selected miners for classification
-4. Updates its scoring vector based on each miner's historical performance and computed rewards for the current challenge
+4. Updates its score vector based on each miner's historical performance and computed rewards for the current challenge
 5. Logs comprehensive challenge results to [Weights and Biases](https://wandb.ai/bitmindai/bitmind-subnet), including the generated media, original prompt, miner responses and rewards, and other challenge metadata
 
 **Synthetic Data Generation (Pink Arrows)**:
@@ -85,17 +112,11 @@ The synthetic data generator coordinates a VLM and LLM to generate prompts for o
 
 **Dataset Downloads (Green Arrows)**:
 
-The real data fetcher performs partial dataset downloads, fetching random compressed chunks of datasets from HuggingFace and unpacking random portions of these chunks into the cache along with their metadata. Partial downloads avoid requiring TBs of space for large video datasets like OpenVid1M. 
+The real data fetcher performs partial dataset downloads, fetching random compressed chunks of datasets from HuggingFace and unpacking random portions of these chunks into the cache along with their metadata. Partial downloads avoid requiring TBs of space for large video datasets like OpenVid1M.
+
+</details>
 
 
-## The BitMind Platform
-
-The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class developer experience for Bittensor miners. 
-
-⚡ **Access Compute**: We offer a wide variety of CPU and GPU options<br>
-⚡ **Develop in VSCode**: Develop in a feature-rich IDE (we support Jupyter too if you hate rich features)<br>
-⚡ **Fully Managed Devops:** No more tinkering with networking configuration - register and deploy your miner in just a few clicks <br>
-⚡ **Monitor Emissions:** View the emissions for all of your miners in our Miner Dashboard
 
 ## Community
 
@@ -108,9 +129,7 @@ The [BitMind platform](https://app.bitmindlabs.ai/) offers a best-in-class devel
 For real-time discussions, community support, and regular updates, <a href="https://discord.gg/kKQR98CrUn">join our Discord server</a>. Connect with developers, researchers, and users to get the most out of BitMind Subnet.
 
 ## License
-
 This repository is licensed under the MIT License.
-
 ```text
 # The MIT License (MIT)
 # Copyright © 2023 Yuma Rao
