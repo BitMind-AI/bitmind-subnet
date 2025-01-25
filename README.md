@@ -15,26 +15,25 @@ The BitMind Subnet leverages advanced generative and discriminative AI models wi
 - [Project Structure and Terminology 📖](docs/Glossary.md)
 - [Contributor Guide 🤝](docs/Contributor_Guide.md)
 
-**Purpose:**
+## Mission
 Rapid advancements in generative AI have led to a massive proliferation of synthetic media that is increasingly difficult to distinguish from authentic content, posing significant challenges for the integrity of digital information and the trust that underpins modern society.
 
-To address this growing challenge, SN34 aims to create the most accurate fully-generalized detection system. Here, fully-generalized means that the system is capable of detecting both synthetic and semi-synthetic media from all known generative architectures.
+To address this growing challenge, SN34 aims to create the most accurate fully-generalized detection system. Here, fully-generalized means that the system is capable of detecting both synthetic and semi-synthetic media from all known generative architectures. Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding miners whose detection algorithms are the most accurate across all cutting-edge generative models.
 
-**Features:**
 
-- **Evolving Incentive Mechanism:** Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding miners whose detection algorithms are the most accurate across all cutting-edge generative models.
+## Core Components
 
-**Core Components:**
+**Miners** 
+- Miners are tasked with running binary classifiers that discern between genuine and AI-generated content, and are rewarded based on their accuracy. 
+- Miners predict a float value in [0., 1.], with values greater than 0.5 indicating the image or video is AI generated. 
+- Miners are rewarded based on their accuracy.
 
-- **Miners** are asked with running binary classifiers that discern between genuine and AI-generated content, and rewarded based on their accuracy. 
-  - Miners predict a float value in [0., 1.], with values greater than 0.5 indicating the image or video is AI generated. 
 
-- **Validators** challenge miners with a balanced mix of real and synthetic media drawn from a diverse pool of sources.
-  - Miners are rewarded based on their accuracy.
-  - We continuously add new datasets and generative models to our validators in order to maximize the coverage of the types of media miners are incentivized to detect. 
+**Validators** 
+- Validators challenge miners with a balanced mix of real and synthetic media drawn from a diverse pool of sources
+- We continuously add new datasets and generative models to our validators in order to maximize the coverage of the types of media miners are incentivized to detect. 
 
 ## Subnet Architecture
-
 
 ![Subnet Architecture](static/Subnet-Arch.png)
 *Overview of all main subnet components*<br>
