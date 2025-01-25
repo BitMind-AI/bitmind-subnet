@@ -6,9 +6,6 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-
-## Quick Links
-
 - [Mining Guide ⛏️](docs/Mining.md)
 - [Validator Guide 🔧](docs/Validating.md)
 - [Incentive Mechanism 📈](docs/Incentive.md)
@@ -17,15 +14,6 @@
 
 ## Identifying AI-Generated Media with a Decentralized Framework
 
-- **Applications:** See [our applications page](https://www.bitmindlabs.ai/apps) for a list of applications built on the BitMind Subnet to detect AI-generated media
-  - [Agent Smith Browser Extension](https://chromewebstore.google.com/detail/bitmind-agent-smith/ejlhmbdnjjlifeeelpnlkkechnmojnhg)
-  - [BitMind ID](https://bitmindid.com/)
-  - [BitMind X Bot](https://x.com/bitmindbot)
-  - [BitMind Discord Bot Invite Link](https://discord.com/oauth2/authorize?client_id=1274036214361620560&permissions=139586825408&integration_type=0&scope=bot+applications.commands)
-
-**IMPORTANT**: If you are new to Bittensor, we recommend familiarizing yourself with the basics on the [Bittensor Website](https://bittensor.com/) before proceeding.
-
-**Overview:**
 The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. 
 
 **Purpose:**
@@ -33,19 +21,30 @@ As generative AI technology advances rapidly, the creation of sophisticated synt
 
 **Features:**
 
-- **Infinitely Fine-Tunable:** Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding only miners whose detection algorithms account for the latest models
+- **Infinitely Fine:** Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding only miners whose detection algorithms account for the latest models
+
+-
 
 **Core Components:**
 
-- **Miners** Tasked with running binary classifiers that discern between genuine and AI-generated content.
-  - Predict a float value in [0., 1.], with predictions > 0.5 indicating the image or video is AI-generated
-  - Miners run both a image detection model and a video detection model 
+- **Miners** are asked with running binary classifiers that discern between genuine and AI-generated content, and rewarded based on their accuracy. 
+  - Miners predict a float value in [0., 1.], with values greater than 0.5 indicating the image or video is AI generated. 
 
-- **Validators:** Responsible for challenging miners with a balanced mix of real and synthetic media, drawn from a diverse pool of sources.
-  - We continuously add new datasets and generative models to our validators in order to maximize the coverage of the types of media our miners are incentivized to detect. 
+- **Validators** challenge miners with a balanced mix of real and synthetic media drawn from a diverse pool of sources.
+  - Miners are rewarded based on their accuracy.
+  - We continuously add new datasets and generative models to our validators in order to maximize the coverage of the types of media miners are incentivized to detect. 
 
-**Subnet Architecture Diagram**
+**Subnet Architecture Overview**
+
 ![Subnet Architecture](static/Subnet-Arch.png)
+
+
+**Validator Architecture**
+- Pink arrows represent data flow for data generation, downloads, and caching.
+- Blue arrows represent validator challenge generation and scoring.
+
+![Subnet Architecture](static/Vali-Arch.png)
+
 
 ## The BitMind Platform
 
