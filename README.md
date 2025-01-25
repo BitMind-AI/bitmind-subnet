@@ -13,9 +13,12 @@ The BitMind Subnet is **the world's first decentralized AI-generated content det
 
 <table style="border: none !important; width: 100% !important; border-collapse: collapse !important;">
   <tbody>
+    <tr>
+      <td><b>Docs</b></td>
+      <td><b>Resources</b></td>
+    </tr>
     <tr style="vertical-align: top !important">
       <td>
-        <b>Docs</b><br>
         <a href="https://docs.bittensor.com/learn/bittensor-building-blocks">🧠 Learn About Bittensor</a><br>
         <a href="docs/Mining.md">⛏️ Mining Guide</a><br>
         <a href="docs/Validating.md">🔧 Validator Guide</a><br>
@@ -23,7 +26,6 @@ The BitMind Subnet is **the world's first decentralized AI-generated content det
         <a href="docs/Incentive.md">📈 Incentive Mechanism</a><br>
         <a href="docs/Contributor_Guide.md">🤝 Contributor Guide</a></td>
       <td>
-        <b>Resources</b><br>
         <a href="https://www.bitmind.ai/apps">🚀 SN34-Powered Applications</a><br>
         <a href="https://huggingface.co/bitmind">🤗 BitMind Huggingface</a><br>
         <a href="https://wandb.ai/bitmindai/bitmind-subnet">📊 Mainnet 34 W&B</a> | <a href="https://wandb.ai/bitmindai/bitmind">Testnet 168 W&B</a><br>
