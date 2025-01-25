@@ -10,36 +10,25 @@ The BitMind Subnet is **the world's first decentralized AI-generated content det
 
 ## Quick Links
 
-<style>
-  table#example-table td {
-    border: none;
-  }
-</style>
-<table id="example-table" width=75%>
+
+<table border=0 width=100%>
   <tbody>
     <tr>
       <td><b>Docs</b></td>
       <td><b>Resources</b></td>
     </tr>
-    <tr>
-      <td>🧠 <a href="https://docs.bittensor.com/learn/bittensor-building-blocks">Learn About Bittensor</a>
-      <td><a href="https://www.bitmind.ai/apps">🚀 SN34-Powered Applications</a></td>
-    </tr>
-    <tr>
-      <td><a href="docs/Mining.md">⛏️ Mining Guide</a></td>
-      <td><a href="https://huggingface.co/bitmind">🤗 BitMind Huggingface</a></td>
-    </tr>
-    <tr>
-      <td><a href="docs/Validating.md">🔧 Validator Guide</a></td>
-      <td><a href="https://wandb.ai/bitmindai/bitmind-subnet">📊 Mainnet 34 W&B</a> | <a href="https://wandb.ai/bitmindai/bitmind">Testnet 168 W&B</a></td>
-    </tr>
-    <tr>
-      <td><a href="#Subnet-Architecture">🏗️ Architecture Diagrams</a></td>
-      <td><a href="docs/Glossary.md">📖 Project Structure and Terminology</a></td>
-    </tr>
-    <tr>
-      <td><<a href="docs/Contributor_Guide.md">🤝 Contributor Guide</a></td>
-      <td></td>
+    <tr style="vertical-align: top">
+      <td>
+        <a href="https://docs.bittensor.com/learn/bittensor-building-blocks">🧠 Learn About Bittensor</a><br>
+        <a href="docs/Mining.md">⛏️ Mining Guide</a><br>
+        <a href="docs/Validating.md">🔧 Validator Guide</a><br>
+       <a href="#Subnet-Architecture">🏗️ Architecture Diagrams</a><br>
+        <a href="docs/Contributor_Guide.md">🤝 Contributor Guide</a></td>
+      <td>
+        <a href="https://www.bitmind.ai/apps">🚀 SN34-Powered Applications</a><br>
+        <a href="https://huggingface.co/bitmind">🤗 BitMind Huggingface</a><br>
+        <a href="https://wandb.ai/bitmindai/bitmind-subnet">📊 Mainnet 34 W&B</a> | <a href="https://wandb.ai/bitmindai/bitmind">Testnet 168 W&B</a><br>
+        <a href="docs/Glossary.md">📖 Project Structure and Terminology</a><br></td>
     </tr>
   </tbody>
 </table>
