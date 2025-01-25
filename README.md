@@ -9,38 +9,49 @@
 The BitMind Subnet is **the world's first decentralized AI-generated content detection network**. Our incentive mechanism rewards the most accurate detection algorithms, creating an adaptive defense against synthetic media.
 
 ## Quick Links
-<table>
-<tr>
-<td width="50%" valign="top" style="border: none !important;">
 
-**Docs**
+<style>
+  table#example-table td {
+    border: none;
+  }
+</style>
+<table id="example-table" width=75%>
+  <tbody>
+    <tr>
+      <td><b>Docs</b></td>
+      <td><b>Resources</b></td>
+    </tr>
+    <tr>
+      <td>🧠 <a href="https://docs.bittensor.com/learn/bittensor-building-blocks">Learn About Bittensor</a>
+      <td><a href="https://www.bitmind.ai/apps">🚀 SN34-Powered Applications</a></td>
+    </tr>
+    <tr>
+      <td><a href="docs/Mining.md">⛏️ Mining Guide</a></td>
+      <td><a href="https://huggingface.co/bitmind">🤗 BitMind Huggingface</a></td>
+    </tr>
+    <tr>
+      <td><a href="docs/Validating.md">🔧 Validator Guide</a></td>
+      <td><a href="https://wandb.ai/bitmindai/bitmind-subnet">📊 Mainnet 34 W&B</a> | <a href="https://wandb.ai/bitmindai/bitmind">Testnet 168 W&B</a></td>
+    </tr>
+    <tr>
+      <td><a href="#Subnet-Architecture">🏗️ Architecture Diagrams</a></td>
+      <td><a href="docs/Glossary.md">📖 Project Structure and Terminology</a></td>
+    </tr>
+    <tr>
+      <td><<a href="docs/Contributor_Guide.md">🤝 Contributor Guide</a></td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
 
-🧠 [Learn About Bittensor](https://docs.bittensor.com/learn/bittensor-building-blocks)
-
-⛏️ [Mining Guide](docs/Mining.md)
-
-🔧 [Validator Guide](docs/Validating.md)
-
-🏗️ [Architecture Diagrams](#Subnet-Architecture)
-
-📈 [Incentive Mechanism](docs/Incentive.md)
 
 
-</td>
 
-<td width="50%" valign="top" style="border: none !important;">
 
-**Resources**
 
-🚀 [Applications powered by Subnet 34](https://www.bitmind.ai/apps)
 
-🤗 [BitMind Huggingface](https://huggingface.co/bitmind)
 
-📊 [Mainnet 34 W&B](https://wandb.ai/bitmindai/bitmind-subnet) |  [Testnet 168 W&B](https://wandb.ai/bitmindai/bitmind)
 
-📖 [Project Structure and Terminology](docs/Glossary.md)
-
-🤝 [Contributor Guide](docs/Contributor_Guide.md)
 
 
 </td>
