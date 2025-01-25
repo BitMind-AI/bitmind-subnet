@@ -3,21 +3,17 @@
 </p>
 <h1 align="center">BitMind Subnet (Bittensor Subnet 34)<br>Deepfake Detection</h1>
 
-
 The BitMind Subnet leverages advanced generative and discriminative AI models within the Bittensor network to detect AI-generated images and videos. 
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-
 ## Quick Links
 - [Mining Guide ⛏️](docs/Mining.md)
 - [Validator Guide 🔧](docs/Validating.md)
-- [Architecture Diagrams 🏗️](#validator-architecture)
+- [Architecture Diagrams 🏗️](#Subnet-Architecture)
 - [Incentive Mechanism 📈](docs/Incentive.md)
 - [Project Structure and Terminology 📖](docs/Glossary.md)
 - [Contributor Guide 🤝](docs/Contributor_Guide.md)
-
-
 
 **Purpose:**
 Rapid advancements in generative AI have led to a massive proliferation of synthetic media that is increasingly difficult to distinguish from authentic content, posing significant challenges for the integrity of digital information and the trust that underpins modern society.
@@ -26,7 +22,7 @@ To address this growing challenge, SN34 aims to create the most accurate fully-g
 
 **Features:**
 
-- **Evolving Incentive Mechanism:** Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding only miners whose detection algorithms account for the latest models
+- **Evolving Incentive Mechanism:** Our incentive mechanism evolves alongside state-of-the-art generative AI, rewarding miners whose detection algorithms are the most accurate across all cutting-edge generative models.
 
 **Core Components:**
 
@@ -37,16 +33,18 @@ To address this growing challenge, SN34 aims to create the most accurate fully-g
   - Miners are rewarded based on their accuracy.
   - We continuously add new datasets and generative models to our validators in order to maximize the coverage of the types of media miners are incentivized to detect. 
 
-**Subnet Architecture Overview**
+## Subnet Architecture
+
 
 ![Subnet Architecture](static/Subnet-Arch.png)
-
-**Validator Architecture** 
-- Pink arrows represent data flow for data generation, downloads, and caching.
-- Blue arrows represent validator challenge generation and scoring.
+*Overview of all main subnet components*<br>
+*Green arrows: Organic traffic flows*<br>
+*Blue arrows: validator challenge generation and scoring*
 
 ![Subnet Architecture](static/Vali-Arch.png)
-
+*Detailed breakdown of all validator components*<br>
+*Pink arrows: Asynchronous data generation and download flows*<br>
+*Blue arrows: Validator challenge generation and scoring*
 
 ## The BitMind Platform
 
