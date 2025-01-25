@@ -59,12 +59,16 @@ To address this growing challenge, SN34 aims to create the most accurate fully-g
 ## Subnet Architecture
 
 ![Subnet Architecture](static/Subnet-Arch.png)
-*Overview of all main subnet components*<br>
+<p align="center"><i>Overview of subnet components</i></p><br>
 
+
+**Organic Traffic (Green Arrows)**: Shows how applications interact with the subnet to detect AI-generated images and vidoeos
+
+**Organic Traffic (Blue Arrows)**: Shows how validators generate synthetic data, challenge miners and score their responses.
 
 
 ![Subnet Architecture](static/Vali-Arch.png)
-*Detailed breakdown of all validator components*<br>
+<p align="center"><i>Detailed breakdown of all validator components</i></p><br>
 
 **Challenge Generation and Scoring (Blue Arrows)**
 
@@ -73,11 +77,7 @@ For each challenge, the validator performs the following steps:
 2. Applies random augmentations to the sampled media
 3. Distributes the augmented data to 50 randomly selected miners for classification
 4. Updates its scoring vector based on each miner's historical performance and computed rewards for the current challenge
-5. Logs comprehensive challenge results to [Weights and Biases](https://wandb.ai/bitmindai/bitmind-subnet), including:
-  - Generated media
-  - Original prompt
-  - Miner responses 
-  - Challenge metadata
+5. Logs comprehensive challenge results to [Weights and Biases](https://wandb.ai/bitmindai/bitmind-subnet), including the generated media, original prompt, miner responses and rewards, and other challenge metadata
 
 **Synthetic Data Generation (Pink Arrows)**:
 
