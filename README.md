@@ -9,9 +9,9 @@
 The BitMind Subnet is **the world's first decentralized AI-generated content detection network**. Our incentive mechanism rewards the most accurate detection algorithms, creating an adaptive defense against synthetic media.
 
 ## Quick Links
-<table style="width:100%; border:0; border-collapse:collapse;">
+<table>
 <tr>
-<td width="50%" valign="top" style="border:0;">
+<td width="50%" valign="top" style="border: none !important;">
 
 **Docs**
 
@@ -28,7 +28,7 @@ The BitMind Subnet is **the world's first decentralized AI-generated content det
 
 </td>
 
-<td width="50%" valign="top" style="border:0;">
+<td width="50%" valign="top" style="border: none !important;">
 
 **Resources**
 
