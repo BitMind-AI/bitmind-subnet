@@ -370,7 +370,17 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # Compute forward pass rewards, assumes uids are mutually exclusive.
         # shape: [ metagraph.n ]
-        scattered_rewards: np.ndarray = np.zeros_like(self.scores)
+        scattered_rewards: np.ndarray = self.scores.copy()
+
+        # Ensure deregistered hotkey rewards do not carry over to new hotkeys
+        dereg_uids = np.array([
+            uid for uid in range(self.metagraph.n) if (
+                self.performance_trackers["image"].is_new_miner(uid) and
+                self.performance_trackers["video"].is_new_miner(uid)
+            )
+        ])
+        scattered_rewards[dereg_uids] = 0
+
         scattered_rewards[uids_array] = rewards
         bt.logging.debug(f"Scattered rewards: {rewards}")
 
