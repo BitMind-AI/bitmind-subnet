@@ -5,13 +5,9 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-
 The BitMind Subnet is **the world's first decentralized AI-generated content detection network**. Our incentive mechanism rewards the most accurate detection algorithms, creating an adaptive defense against synthetic media.
 
-## Quick Links
-
-
-<table style="border: none !important; width: 100% !important; border-collapse: collapse !important;">
+<table style="border: none !important; width: 100% !important; border-collapse: collapse !important; margin: 0 auto !important;">
   <tbody>
     <tr>
       <td><b>Docs</b></td>
@@ -19,33 +15,20 @@ The BitMind Subnet is **the world's first decentralized AI-generated content det
     </tr>
     <tr style="vertical-align: top !important">
       <td>
-        <a href="https://docs.bittensor.com/learn/bittensor-building-blocks">🧠 Learn About Bittensor</a><br>
-        <a href="docs/Mining.md">⛏️ Mining Guide</a><br>
-        <a href="docs/Validating.md">🔧 Validator Guide</a><br>
-        <a href="#Subnet-Architecture">🏗️ Architecture Diagrams</a><br>
-        <a href="docs/Incentive.md">📈 Incentive Mechanism</a><br>
-        <a href="docs/Contributor_Guide.md">🤝 Contributor Guide</a></td>
+        ⛏️ <a href="docs/Mining.md">Mining Guide</a><br>
+        🔧 <a href="docs/Validating.md">Validator Guide</a><br>
+        🏗️ <a href="#Subnet-Architecture">Architecture Diagrams</a><br>
+        📈 <a href="docs/Incentive.md">Incentive Mechanism</a><br>
+        🤝 <a href="docs/Contributor_Guide.md">Contributor Guide</a></td>
       <td>
-        <a href="https://www.bitmind.ai/apps">🚀 SN34-Powered Applications</a><br>
-        <a href="https://huggingface.co/bitmind">🤗 BitMind Huggingface</a><br>
-        <a href="https://wandb.ai/bitmindai/bitmind-subnet">📊 Mainnet 34 W&B</a> | <a href="https://wandb.ai/bitmindai/bitmind">Testnet 168 W&B</a><br>
-        <a href="docs/Glossary.md">📖 Project Structure and Terminology</a><br></td>
+        🚀 <a href="https://www.bitmind.ai/apps">SN34-Powered Applications</a><br>
+        🤗 <a href="https://huggingface.co/bitmind">BitMind Huggingface</a><br>
+        📊 <a href="https://wandb.ai/bitmindai/bitmind-subnet">Mainnet 34 W&B</a> | <a href="https://wandb.ai/bitmindai/bitmind">Testnet 168 W&B</a><br>
+        📖 <a href="docs/Glossary.md">Project Structure and Terminology</a><br>
+        <a href="https://docs.bittensor.com/learn/bittensor-building-blocks">🧠 Bittensor Introduction</a><br> 
+      </td>
     </tr>
   </tbody>
-</table>
-
-
-
-
-
-
-
-
-
-
-
-</td>
-</tr>
 </table>
 
 
