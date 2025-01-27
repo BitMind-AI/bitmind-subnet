@@ -83,12 +83,7 @@ To address this growing challenge, SN34 aims to create the most accurate fully-g
 
 **Challenge Generation and Scoring (Blue Arrows)**
 
-For each challenge, the validator performs the following steps:
-1. Randomly samples a real or synthetic image/video from the cache
-2. Applies random augmentations to the sampled media
-3. Distributes the augmented data to 50 randomly selected miners for classification
-4. Updates its score vector based on each miner's historical performance and computed rewards for the current challenge
-5. Logs comprehensive challenge results to [Weights and Biases](https://wandb.ai/bitmindai/bitmind-subnet), including the generated media, original prompt, miner responses and rewards, and other challenge metadata
+For each challenge, the validator randomly samples a real or synthetic image/video from the cache, applies random augmentations to the sampled media, and distributes the augmented data to 50 randomly selected miners for classification. It then scores the miners responses, and logs comprehensive challenge results to [Weights and Biases](https://wandb.ai/bitmindai/bitmind-subnet), including the generated media, original prompt, miner responses and rewards, and other challenge metadata.
 
 **Synthetic Data Generation (Pink Arrows)**:
 
