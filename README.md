@@ -5,7 +5,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-The BitMind Subnet is **the world's first decentralized AI-generated content detection network**. Our incentive mechanism rewards the most accurate detection algorithms, creating an adaptive defense against synthetic media.
+The BitMind Subnet is **the world's first decentralized AI-generated content detection network**. Built on Bittensor, our incentive mechanism rewards the most accurate detection algorithms, creating an adaptive defense against synthetic media.
 
 <table style="border: none !important; width: 100% !important; border-collapse: collapse !important; margin: 0 auto !important;">
   <tbody>
@@ -45,12 +45,11 @@ To address this growing challenge, SN34 aims to create the most accurate fully-g
 **Miners** 
 - Miners are tasked with running binary classifiers that discern between genuine and AI-generated content, and are rewarded based on their accuracy. 
 - Miners predict a float value in [0., 1.], with values greater than 0.5 indicating the image or video is AI generated. 
-- Miners are rewarded based on the accuracy of their predictions. For a more detailed breakdown of rewards, weights and incentive, please see our [incentive mechanism docs](docs/Incentive.md)
 
 
 **Validators** 
 - Validators challenge miners with a balanced mix of real and synthetic media drawn from a diverse pool of sources.
-- We continually add new datasets and generative models to our validators in order to maximize coverage of the types of diverse data.
+- We continually add new datasets and generative models to our validators in order to maximize coverage of the types of diverse data. Models and datasets are defined in  `bitmind/validator/config.py`.
 
 
 ## Subnet Architecture
