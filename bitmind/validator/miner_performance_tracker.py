@@ -87,11 +87,6 @@ class MinerPerformanceTracker:
             'auc': auc
         }
 
-    def is_new_miner_hotkey(self, uid):
-        if len(self.prediction_history[uid]) == 0:
-            return True
-        return False
-
     def _empty_metrics(self):
         """
         Return a dictionary of empty metrics
