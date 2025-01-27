@@ -101,8 +101,8 @@ def get_rewards(
                 miner_rewards.append(0.0)
 
         total_reward = (
-            0.2 * miner_modality_rewards['video'] +
-            0.8 * miner_modality_rewards['image']
+            0.4 * miner_modality_rewards['video'] +
+            0.6 * miner_modality_rewards['image']
         )
         miner_rewards.append(total_reward)
         miner_metrics.append(miner_modality_metrics)

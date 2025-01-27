@@ -1,7 +1,18 @@
 import torch
-from diffusers import MotionAdapter
+from diffusers import MotionAdapter, HunyuanVideoTransformer3DModel
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
+
+
+def load_hunyuanvideo_transformer(
+      model_id: str = "tencent/HunyuanVideo",
+      subfolder: str = "transformer",
+      torch_dtype: torch.dtype = torch.bfloat16, 
+      revision: str = 'refs/pr/18'
+):
+    return HunyuanVideoTransformer3DModel.from_pretrained(
+        model_id, subfolder=subfolder, torch_dtype=torch_dtype, revision=revision
+    )
 
 
 def load_annimatediff_motion_adapter(

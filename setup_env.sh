@@ -32,7 +32,6 @@ sudo npm install -g pm2@latest
 # Python Package Installation
 ############################
 
-pip install git+https://github.com/huggingface/diffusers.git@6a51427b6a226591ccc40249721c486855f53e1c
 pip install -e .
 
 ############################
