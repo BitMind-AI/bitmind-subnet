@@ -1,20 +1,23 @@
-
-
 def get_tokenizer_with_min_len(model):
     """
-    Returns the tokenizer with the smallest maximum token length from the 't2vis_model` object.
-
-    If a second tokenizer exists, it compares both and returns the one with the smaller 
-    maximum token length. Otherwise, it returns the available tokenizer.
+    Returns the tokenizer with the smallest maximum token length.
     
+    Args:
+        model: Single pipeline or dict of pipeline stages.
+        
     Returns:
-        tuple: A tuple containing the tokenizer and its maximum token length.
+        tuple: (tokenizer, max_token_length)
     """
-    # Check if a second tokenizer is available in the t2vis_model
-    if hasattr(model, 'tokenizer_2'):
-        if model.tokenizer.model_max_length > model.tokenizer_2.model_max_length:
-            return model.tokenizer_2, model.tokenizer_2.model_max_length
-    return model.tokenizer, model.tokenizer.model_max_length
+    # Get the model to check for tokenizers
+    pipeline = model['stage1'] if isinstance(model, dict) else model
+    
+    # If model has two tokenizers, return the one with smaller max length
+    if hasattr(pipeline, 'tokenizer_2'):
+        len_1 = pipeline.tokenizer.model_max_length
+        len_2 = pipeline.tokenizer_2.model_max_length
+        return (pipeline.tokenizer_2, len_2) if len_2 < len_1 else (pipeline.tokenizer, len_1)
+    
+    return pipeline.tokenizer, pipeline.tokenizer.model_max_length
 
 
 def truncate_prompt_if_too_long(prompt: str, model):

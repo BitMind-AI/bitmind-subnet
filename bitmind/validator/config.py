@@ -156,32 +156,46 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
         },
         "from_pretrained_args": {
             "stage1": {
-                "base": "DeepFloyd/IF-I-XL-v1.0",
+                "base": "DeepFloyd/IF-I-M-v1.0",
                 "torch_dtype": torch.float16,
-                "variant": "fp16"
+                "variant": "fp16",
+                "clean_caption": False
             },
             "stage2": {
-                "base": "DeepFloyd/IF-II-L-v1.0",
+                "base": "DeepFloyd/IF-II-M-v1.0",
                 "torch_dtype": torch.float16,
-                "variant": "fp16"
+                "variant": "fp16",
+                "text_encoder": None
             }
         },
         "pipeline_stages": [
             {
                 "name": "stage1",
-                "output_attr": "images"
+                "args": {
+                    "output_type": "pt",
+                    "num_images_per_prompt": 1,
+                    "return_dict": True
+                },
+                "output_attr": "images",
+                "output_transform": lambda x: x[0].unsqueeze(0),
+                "save_prompt_embeds": True
             },
             {
                 "name": "stage2",
                 "input_key": "image",
-                "output_attr": "images"
+                "args": {
+                    "output_type": "pil",
+                    "num_images_per_prompt": 1
+                },
+                "output_attr": "images",
+                "use_prompt_embeds": True
             }
         ],
-        "generate_args": {
-            "num_inference_steps": {"min": 25, "max": 50},
-            "guidance_scale": 7.0
-        },
-        "enable_model_cpu_offload": True
+        # "enable_model_cpu_offload": False,
+        # "enable_sequential_cpu_offload": False,
+        # "vae_enable_slicing": True,
+        # "vae_enable_tiling": True,
+        "clear_memory_on_stage_end": True
     },
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())

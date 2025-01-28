@@ -134,24 +134,30 @@ class SyntheticDataGenerator:
         prompts = []
         images = []
         bt.logging.info(f"Generating {batch_size} prompts")
+        
+        # Generate all prompts first
         for i in range(batch_size):
             image_sample = self.image_cache.sample()
             images.append(image_sample['image'])
             bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
+            
+        # If specific model is set, use only that model
+        if not self.use_random_model and self.model_name:
+            model_names = [self.model_name]
+        else:
+            # shuffle and interleave models to add stochasticity
+            i2i_model_names = random.sample(I2I_MODEL_NAMES, len(I2I_MODEL_NAMES))
+            t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
+            t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
+            model_names = [
+                m for triple in zip_longest(t2v_model_names, t2i_model_names, i2i_model_names) 
+                for m in triple if m is not None
+            ]
 
-        # shuffle and interleave models to add stochasticity to initial validator challenges
-        i2i_model_names = random.sample(I2I_MODEL_NAMES, len(I2I_MODEL_NAMES))
-        t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
-        t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
-        model_names_interleaved = [
-            m for triple in zip_longest(t2v_model_names, t2i_model_names, i2i_model_names) 
-            for m in triple if m is not None
-        ]
-
-        # for each model, generate an image/video from the prompt generated for its specific tokenizer max len
-        for model_name in model_names_interleaved:
+        # Generate for each model/prompt combination
+        for model_name in model_names:
             modality = get_modality(model_name)
             task = get_task(model_name)
             for i, prompt in enumerate(prompts):
@@ -238,6 +244,9 @@ class SyntheticDataGenerator:
         if isinstance(model_config.get('pipeline_stages'), list):
             def generate(prompt: str, **kwargs):
                 output = None
+                prompt_embeds = None
+                negative_embeds = None
+                
                 for stage in model_config['pipeline_stages']:
                     stage_args = {**kwargs}  # Copy base args
                     
@@ -249,11 +258,38 @@ class SyntheticDataGenerator:
                     if stage.get('args'):
                         stage_args.update(stage['args'])
                     
+                    # Handle prompt embeddings
+                    if stage.get('use_prompt_embeds') and prompt_embeds is not None:
+                        stage_args['prompt_embeds'] = prompt_embeds
+                        stage_args['negative_prompt_embeds'] = negative_embeds
+                        stage_args.pop('prompt', None)
+                    elif stage.get('save_prompt_embeds'):
+                        # Get embeddings directly from encode_prompt
+                        prompt_embeds, negative_embeds = model[stage['name']].encode_prompt(
+                            prompt=prompt,
+                            device=model[stage['name']].device,
+                            num_images_per_prompt=stage_args.get('num_images_per_prompt', 1),
+                        )
+                        stage_args['prompt_embeds'] = prompt_embeds
+                        stage_args['negative_prompt_embeds'] = negative_embeds
+                        stage_args.pop('prompt', None)
+                    else:
+                        stage_args['prompt'] = prompt
+                    
                     # Run stage
-                    result = model[stage['name']](prompt=prompt, **stage_args)
+                    result = model[stage['name']](**stage_args)
                     
                     # Extract output based on stage config
-                    output = getattr(result, stage.get('output_attr', 'images'))[0]
+                    output = getattr(result, stage.get('output_attr', 'images'))
+                    
+                    # Clear memory if configured
+                    if model_config.get('clear_memory_on_stage_end'):
+                        import gc
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                        gc.collect()
+                        
                 return result
             return generate
         
@@ -371,65 +407,84 @@ class SyntheticDataGenerator:
         }
 
     def load_model(self, model_name: Optional[str] = None, modality: Optional[str] = None) -> None:
-        """Load a Hugging Face text-to-image or text-to-video model to a specific GPU."""
+        """Load a Hugging Face text-to-image or text-to-video model."""
         if model_name is not None:
             self.model_name = model_name
         elif self.use_random_model or model_name == 'random':
-            model_name = select_random_model(modality)
-            self.model_name = model_name
+            self.model_name = select_random_model(modality)
 
         bt.logging.info(f"Loading {self.model_name}")
-        
-        pipeline_cls = MODELS[model_name]['pipeline_cls']
-        pipeline_args = MODELS[model_name]['from_pretrained_args']
+        model_config = MODELS[self.model_name]
+        pipeline_cls = model_config['pipeline_cls']
+        pipeline_args = model_config['from_pretrained_args']
 
-        self.model = pipeline_cls.from_pretrained(
-            pipeline_args.get('base', model_name),
-            cache_dir=HUGGINGFACE_CACHE_DIR,
-            **pipeline_args,
-            add_watermarker=False
-        )
-
-        self.model.set_progress_bar_config(disable=True)
-
-        # Load scheduler if specified
-        if 'scheduler' in MODELS[model_name]:
-            sched_cls = MODELS[model_name]['scheduler']['cls']
-            sched_args = MODELS[model_name]['scheduler']['from_config_args']
-            self.model.scheduler = sched_cls.from_config(
-                self.model.scheduler.config,
-                **sched_args
+        # Handle multi-stage pipeline
+        if isinstance(pipeline_cls, dict):
+            self.model = {}
+            for stage_name, stage_cls in pipeline_cls.items():
+                stage_args = pipeline_args.get(stage_name, {})
+                base_model = stage_args.get('base', self.model_name)
+                stage_args_filtered = {k:v for k,v in stage_args.items() if k != 'base'}
+                
+                bt.logging.info(f"Loading {stage_name} from {base_model}")
+                self.model[stage_name] = stage_cls.from_pretrained(
+                    base_model,
+                    cache_dir=HUGGINGFACE_CACHE_DIR,
+                    **stage_args_filtered,
+                    add_watermarker=False
+                )
+                self.model[stage_name].set_progress_bar_config(disable=True)
+                
+                # Apply CPU offloading if enabled
+                if model_config.get('enable_model_cpu_offload', False):
+                    bt.logging.info(f"Enabling cpu offload for {stage_name}")
+                    self.model[stage_name].enable_model_cpu_offload(device=self.device)
+                else:
+                    # Only move to device if not using CPU offload
+                    self.model[stage_name].to(self.device)
+        else:
+            # Single-stage pipeline
+            self.model = pipeline_cls.from_pretrained(
+                pipeline_args.get('base', self.model_name),
+                cache_dir=HUGGINGFACE_CACHE_DIR,
+                **pipeline_args,
+                add_watermarker=False
             )
+            
+            self.model.set_progress_bar_config(disable=True)
 
-        # Configure model optimizations
-        model_config = MODELS[model_name]
-        if model_config.get('enable_model_cpu_offload', False):
-            bt.logging.info(f"Enabling cpu offload for {model_name}")
-            self.model.enable_model_cpu_offload()
-        if model_config.get('enable_sequential_cpu_offload', False):
-            bt.logging.info(f"Enabling sequential cpu offload for {model_name}")
-            self.model.enable_sequential_cpu_offload()
-        if model_config.get('vae_enable_slicing', False):
-            bt.logging.info(f"Enabling vae slicing for {model_name}")
-            try:
-                self.model.vae.enable_slicing()
-            except Exception:
-                try:
-                    self.model.enable_vae_slicing()
-                except Exception:
-                    bt.logging.warning(f"Could not enable vae slicing for {self.model}")
-        if model_config.get('vae_enable_tiling', False):
-            bt.logging.info(f"Enabling vae tiling for {model_name}")
-            try:
-                self.model.vae.enable_tiling()
-            except Exception:
-                try:
-                    self.model.enable_vae_tiling()
-                except Exception:
-                    bt.logging.warning(f"Could not enable vae tiling for {self.model}")
+            # Configure model optimizations
+            if model_config.get('enable_model_cpu_offload', False):
+                bt.logging.info(f"Enabling cpu offload for {self.model_name}")
+                self.model.enable_model_cpu_offload(device=self.device)
+            else:
+                # Only apply other optimizations and move to device if not using CPU offload
+                if model_config.get('enable_sequential_cpu_offload', False):
+                    bt.logging.info(f"Enabling sequential cpu offload for {self.model_name}")
+                    self.model.enable_sequential_cpu_offload()
+                if model_config.get('vae_enable_slicing', False):
+                    bt.logging.info(f"Enabling vae slicing for {self.model_name}")
+                    try:
+                        self.model.vae.enable_slicing()
+                    except Exception:
+                        try:
+                            self.model.enable_vae_slicing()
+                        except Exception:
+                            bt.logging.warning(f"Could not enable vae slicing for {self.model}")
+                if model_config.get('vae_enable_tiling', False):
+                    bt.logging.info(f"Enabling vae tiling for {self.model_name}")
+                    try:
+                        self.model.vae.enable_tiling()
+                    except Exception:
+                        try:
+                            self.model.enable_vae_tiling()
+                        except Exception:
+                            bt.logging.warning(f"Could not enable vae tiling for {self.model}")
+            
+            # Move to device only if not using CPU offload
+            self.model.to(self.device)
 
-        self.model.to(self.device)
-        bt.logging.info(f"Loaded {model_name} using {pipeline_cls.__name__}.")
+        bt.logging.info(f"Loaded {self.model_name}")
 
     def clear_gpu(self) -> None:
         """Clear GPU memory by deleting models and running garbage collection."""
