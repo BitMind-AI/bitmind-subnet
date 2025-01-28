@@ -129,8 +129,7 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "guidance_scale": 2,
             "num_inference_steps": {"min": 50, "max": 125},
             "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
-            "height": [512, 768],
-            "width": [512, 768]
+            "resolution": [512, 768]
         },
         "enable_model_cpu_offload": False
     },
