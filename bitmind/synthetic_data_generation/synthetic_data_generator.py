@@ -10,6 +10,7 @@ from itertools import zip_longest
 
 import bittensor as bt
 import numpy as np
+import random
 import torch
 from diffusers.utils import export_to_video
 from PIL import Image
@@ -337,26 +338,27 @@ class SyntheticDataGenerator:
             gen_args['mask_image'] = create_random_mask(image.size)
             gen_args['image'] = image
 
-        # Process generation arguments
+        # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
-                gen_args[k] = np.random.randint(
-                    gen_args[k]['min'],
-                    gen_args[k]['max']
-                )
-            for dim in ('height', 'width'):
-                if isinstance(gen_args.get(dim), list):
-                    gen_args[dim] = np.random.choice(gen_args[dim])
+                if "min" in v and "max" in v:
+                    gen_args[k] = np.random.randint(v['min'], v['max'])
+                if "options" in v:
+                    gen_args[k] = random.choice(v['options'])
 
         try:
             if generate_at_target_size:
                 gen_args['height'] = TARGET_IMAGE_SIZE[0]
                 gen_args['width'] = TARGET_IMAGE_SIZE[1]
+            elif 'resolution' in gen_args:
+                gen_args['height'] = gen_args['resolution'][0]
+                gen_args['width'] = gen_args['resolution'][1]
+                del gen_args['resolution']
 
             truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
             bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
             bt.logging.info(f"Generation args: {gen_args}")
-            
+
             start_time = time.time()
             
             # Create pipeline-specific generator
@@ -414,6 +416,7 @@ class SyntheticDataGenerator:
             self.model_name = select_random_model(modality)
 
         bt.logging.info(f"Loading {self.model_name}")
+        
         model_config = MODELS[self.model_name]
         pipeline_cls = model_config['pipeline_cls']
         pipeline_args = model_config['from_pretrained_args']

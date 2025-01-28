@@ -9,6 +9,7 @@ from diffusers import (
     FluxPipeline,
     CogVideoXPipeline,
     MochiPipeline,
+    HunyuanVideoPipeline,
     AnimateDiffPipeline,
     EulerDiscreteScheduler,
     AutoPipelineForInpainting,
@@ -16,7 +17,7 @@ from diffusers import (
     IFSuperResolutionPipeline
 )
 
-from .model_utils import load_annimatediff_motion_adapter
+from .model_utils import load_annimatediff_motion_adapter, load_hunyuanvideo_transformer
 
 
 TARGET_IMAGE_SIZE: tuple[int, int] = (256, 256)
@@ -221,6 +222,34 @@ I2I_MODEL_NAMES: List[str] = list(I2I_MODELS.keys())
 
 # Text-to-video model configurations
 T2V_MODELS: Dict[str, Dict[str, Any]] = {
+    "tencent/HunyuanVideo": {
+        "pipeline_cls": HunyuanVideoPipeline,
+        "from_pretrained_args": {
+            "model_id": "tencent/HunyuanVideo",
+            "transformer": (  # custom functions supplied as tuple of (fn, args)
+                load_hunyuanvideo_transformer,
+                { 
+                    "model_id": "tencent/HunyuanVideo",
+                    "subfolder": "transformer",
+                    "torch_dtype": torch.bfloat16,
+                    "revision": 'refs/pr/18'
+                }
+            ),
+            "revision": 'refs/pr/18',
+            "torch_dtype": torch.bfloat16
+        },
+        "generate_args": {
+            "num_frames": {"min": 61, "max": 129},
+            "resolution": {"options": [
+                [720, 1280], [1280, 720], [1104, 832], [832,1104], [960,960],
+                [544, 960], [960, 544],	[624, 832], [832, 624],	[720, 720]
+            ]},
+            "num_inference_steps": {"min": 30, "max": 50},
+        },
+        "save_args": {"fps": 30},
+        "use_autocast": False,
+        "vae_enable_tiling": True
+    },
     "genmo/mochi-1-preview": {
         "pipeline_cls": MochiPipeline,
         "from_pretrained_args": {
@@ -228,9 +257,11 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "torch_dtype": torch.bfloat16
         },
         "generate_args": {
-            "num_frames": 84
+            "num_frames": 84,
+            "num_inference_steps": {"min": 30, "max": 65},
+            "resolution": [480, 848]
         },
-        #"enable_model_cpu_offload": True,
+        "save_args": {"fps": 30},
         "vae_enable_tiling": True
     },
     'THUDM/CogVideoX-5b': {
@@ -244,7 +275,9 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "num_videos_per_prompt": 1,
             "num_inference_steps": {"min": 50, "max": 125},
             "num_frames": 48,
+            "resolution": [720, 480]
         },
+        "save_args": {"fps": 8},
         "enable_model_cpu_offload": True,
         #"enable_sequential_cpu_offload": True,
         "vae_enable_slicing": True,
@@ -253,14 +286,23 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
     'ByteDance/AnimateDiff-Lightning': {
         "pipeline_cls": AnimateDiffPipeline,
         "from_pretrained_args": {
-            "base": "emilianJR/epiCRealism",
+            "model_id": "emilianJR/epiCRealism",
             "torch_dtype": torch.bfloat16,
-            "motion_adapter": load_annimatediff_motion_adapter()
+            "motion_adapter": (
+                load_annimatediff_motion_adapter,
+                {"step": 4}
+            )
         },
         "generate_args": {
             "guidance_scale": 2,
             "num_inference_steps": {"min": 50, "max": 125},
+            "resolution": {"options": [
+                [512, 512], [512, 768], [512, 1024],
+                [768, 512], [768, 768], [768, 1024],
+                [1024, 512], [1024, 768], [1024, 1024]
+            ]}
         },
+        "save_args": {"fps": 15},
         "scheduler": {
             "cls": EulerDiscreteScheduler,
             "from_config_args": {
