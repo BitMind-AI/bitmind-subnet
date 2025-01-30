@@ -14,8 +14,7 @@ from diffusers import (
     EulerDiscreteScheduler,
     AutoPipelineForInpainting,
     IFPipeline,
-    IFSuperResolutionPipeline,
-    DiffusionPipeline
+    IFSuperResolutionPipeline
 )
 
 from .model_utils import (
