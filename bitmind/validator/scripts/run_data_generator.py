@@ -33,7 +33,7 @@ if __name__ == '__main__':
         bt.logging.info(f"No model selected.")
 
     bt.logging.set_info()
-    #init_wandb_run(run_base_name='data-generator', **load_validator_info())
+    init_wandb_run(run_base_name='data-generator', **load_validator_info())
 
     image_cache = ImageCache(args.image_cache_dir)
     while True:
