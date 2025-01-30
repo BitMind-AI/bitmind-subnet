@@ -157,16 +157,20 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
         },
         "from_pretrained_args": {
             "stage1": {
-                "base": "DeepFloyd/IF-I-M-v1.0",
+                "base": "DeepFloyd/IF-I-XL-v1.0",
                 "torch_dtype": torch.float16,
                 "variant": "fp16",
-                "clean_caption": False
+                "clean_caption": False,
+                "watermarker": None,
+                "requires_safety_checker": False
             },
             "stage2": {
-                "base": "DeepFloyd/IF-II-M-v1.0",
+                "base": "DeepFloyd/IF-II-L-v1.0",
                 "torch_dtype": torch.float16,
                 "variant": "fp16",
-                "text_encoder": None
+                "text_encoder": None,
+                "watermarker": None,
+                "requires_safety_checker": False
             }
         },
         "pipeline_stages": [

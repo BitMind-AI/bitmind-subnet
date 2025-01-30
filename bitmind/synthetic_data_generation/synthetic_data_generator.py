@@ -445,6 +445,9 @@ class SyntheticDataGenerator:
                 else:
                     # Only move to device if not using CPU offload
                     self.model[stage_name].to(self.device)
+
+                # Disable watermarker
+                self.model[stage_name].watermarker = None
         else:
             # Single-stage pipeline
             self.model = pipeline_cls.from_pretrained(
@@ -486,6 +489,9 @@ class SyntheticDataGenerator:
             
             # Move to device only if not using CPU offload
             self.model.to(self.device)
+
+            # Disable watermarker
+            self.model.watermarker = None
 
         bt.logging.info(f"Loaded {self.model_name}")
 
