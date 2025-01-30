@@ -14,11 +14,15 @@ from diffusers import (
     EulerDiscreteScheduler,
     AutoPipelineForInpainting,
     IFPipeline,
-    IFSuperResolutionPipeline
+    IFSuperResolutionPipeline,
+    DiffusionPipeline
 )
 
-from .model_utils import load_annimatediff_motion_adapter, load_hunyuanvideo_transformer
-from .custom_diffuser_pipelines.janus_pipeline import JanusPipeline
+from .model_utils import (
+    load_annimatediff_motion_adapter,
+    load_hunyuanvideo_transformer,
+    JanusWrapper
+)
 
 
 TARGET_IMAGE_SIZE: tuple[int, int] = (256, 256)
@@ -199,9 +203,10 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
         "clear_memory_on_stage_end": True
     },
     "deepseek-ai/Janus-Pro-7B": {
-        "pipeline_cls": JanusPipeline,
+        "pipeline_cls": JanusWrapper,
         "from_pretrained_args": {
-            "torch_dtype": torch.bfloat16
+            "torch_dtype": torch.bfloat16,
+            "use_safetensors": True,
         },
         "generate_args": {
             "temperature": 1.0,
@@ -211,7 +216,8 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "img_size": 384,
             "patch_size": 16
         },
-        "use_autocast": False
+        "use_autocast": False,
+        "enable_model_cpu_offload": False
     },
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())
