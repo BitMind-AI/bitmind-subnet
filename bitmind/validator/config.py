@@ -18,6 +18,7 @@ from diffusers import (
 )
 
 from .model_utils import load_annimatediff_motion_adapter, load_hunyuanvideo_transformer
+from .custom_diffuser_pipelines.janus_pipeline import JanusPipeline
 
 
 TARGET_IMAGE_SIZE: tuple[int, int] = (256, 256)
@@ -196,6 +197,21 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             }
         ],
         "clear_memory_on_stage_end": True
+    },
+    "deepseek-ai/Janus-Pro-7B": {
+        "pipeline_cls": JanusPipeline,
+        "from_pretrained_args": {
+            "torch_dtype": torch.bfloat16
+        },
+        "generate_args": {
+            "temperature": 1.0,
+            "parallel_size": 4,
+            "cfg_weight": 5.0,
+            "image_token_num_per_image": 576,
+            "img_size": 384,
+            "patch_size": 16
+        },
+        "use_autocast": False
     },
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())
