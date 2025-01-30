@@ -419,14 +419,22 @@ class SyntheticDataGenerator:
         
         model_config = MODELS[self.model_name]
         pipeline_cls = model_config['pipeline_cls']
-        pipeline_args = model_config['from_pretrained_args']
+        pipeline_args = model_config['from_pretrained_args'].copy()
+
+        # Handle custom loading functions passed as tuples
+        for k, v in pipeline_args.items():
+            if isinstance(v, tuple) and callable(v[0]):
+                pipeline_args[k] = v[0](**v[1])
+
+        # Get model_id if specified, otherwise use model_name
+        model_id = pipeline_args.pop('model_id', self.model_name)
 
         # Handle multi-stage pipeline
         if isinstance(pipeline_cls, dict):
             self.model = {}
             for stage_name, stage_cls in pipeline_cls.items():
                 stage_args = pipeline_args.get(stage_name, {})
-                base_model = stage_args.get('base', self.model_name)
+                base_model = stage_args.get('base', model_id)
                 stage_args_filtered = {k:v for k,v in stage_args.items() if k != 'base'}
                 
                 bt.logging.info(f"Loading {stage_name} from {base_model}")
@@ -451,13 +459,22 @@ class SyntheticDataGenerator:
         else:
             # Single-stage pipeline
             self.model = pipeline_cls.from_pretrained(
-                pipeline_args.get('base', self.model_name),
+                model_id,
                 cache_dir=HUGGINGFACE_CACHE_DIR,
                 **pipeline_args,
                 add_watermarker=False
             )
             
             self.model.set_progress_bar_config(disable=True)
+
+            # Load scheduler if specified
+            if 'scheduler' in model_config:
+                sched_cls = model_config['scheduler']['cls']
+                sched_args = model_config['scheduler']['from_config_args']
+                self.model.scheduler = sched_cls.from_config(
+                    self.model.scheduler.config,
+                    **sched_args
+                )
 
             # Configure model optimizations
             if model_config.get('enable_model_cpu_offload', False):

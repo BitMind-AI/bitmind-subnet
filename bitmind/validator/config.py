@@ -131,8 +131,7 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "guidance_scale": 2,
             "num_inference_steps": {"min": 50, "max": 125},
             "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
-            "height": [512, 768],
-            "width": [512, 768]
+            "resolution": [512, 768]
         },
         "enable_model_cpu_offload": False
     },
@@ -196,10 +195,6 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
                 "use_prompt_embeds": True
             }
         ],
-        # "enable_model_cpu_offload": False,
-        # "enable_sequential_cpu_offload": False,
-        # "vae_enable_slicing": True,
-        # "vae_enable_tiling": True,
         "clear_memory_on_stage_end": True
     },
 }
