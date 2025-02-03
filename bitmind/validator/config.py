@@ -12,10 +12,16 @@ from diffusers import (
     HunyuanVideoPipeline,
     AnimateDiffPipeline,
     EulerDiscreteScheduler,
-    AutoPipelineForInpainting
+    AutoPipelineForInpainting,
+    IFPipeline,
+    IFSuperResolutionPipeline
 )
 
-from .model_utils import load_annimatediff_motion_adapter, load_hunyuanvideo_transformer
+from .model_utils import (
+    load_annimatediff_motion_adapter,
+    load_hunyuanvideo_transformer,
+    JanusWrapper
+)
 
 
 TARGET_IMAGE_SIZE: tuple[int, int] = (256, 256)
@@ -129,8 +135,7 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "guidance_scale": 2,
             "num_inference_steps": {"min": 50, "max": 125},
             "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
-            "height": [512, 768],
-            "width": [512, 768]
+            "resolution": [512, 768]
         },
         "enable_model_cpu_offload": False
     },
@@ -147,7 +152,72 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "use_safetensors": True,
             "torch_dtype": torch.float16,
         },
-    }
+    },
+    "DeepFloyd/IF": {
+        "pipeline_cls": {
+            "stage1": IFPipeline,
+            "stage2": IFSuperResolutionPipeline
+        },
+        "from_pretrained_args": {
+            "stage1": {
+                "base": "DeepFloyd/IF-I-XL-v1.0",
+                "torch_dtype": torch.float16,
+                "variant": "fp16",
+                "clean_caption": False,
+                "watermarker": None,
+                "requires_safety_checker": False
+            },
+            "stage2": {
+                "base": "DeepFloyd/IF-II-L-v1.0",
+                "torch_dtype": torch.float16,
+                "variant": "fp16",
+                "text_encoder": None,
+                "watermarker": None,
+                "requires_safety_checker": False
+            }
+        },
+        "pipeline_stages": [
+            {
+                "name": "stage1",
+                "args": {
+                    "output_type": "pt",
+                    "num_images_per_prompt": 1,
+                    "return_dict": True
+                },
+                "output_attr": "images",
+                "output_transform": lambda x: x[0].unsqueeze(0),
+                "save_prompt_embeds": True
+            },
+            {
+                "name": "stage2",
+                "input_key": "image",
+                "args": {
+                    "output_type": "pil",
+                    "num_images_per_prompt": 1
+                },
+                "output_attr": "images",
+                "use_prompt_embeds": True
+            }
+        ],
+        "clear_memory_on_stage_end": True
+    },
+    "deepseek-ai/Janus-Pro-7B": {
+        "pipeline_cls": JanusWrapper,
+        "from_pretrained_args": {
+            "torch_dtype": torch.bfloat16,
+            "use_safetensors": True,
+        },
+        "generate_args": {
+            "temperature": 1.0,
+            "parallel_size": 4,
+            "cfg_weight": 5.0,
+            "image_token_num_per_image": 576,
+            "img_size": 384,
+            "patch_size": 16
+        },
+        "use_autocast": False,
+        "enable_model_cpu_offload": False
+    },
 }
 T2I_MODEL_NAMES: List[str] = list(T2I_MODELS.keys())
 
@@ -311,4 +381,3 @@ def select_random_model(task: Optional[str] = None) -> str:
         return np.random.choice(I2I_MODEL_NAMES)
     else:
         raise NotImplementedError(f"Unsupported task: {task}")
-

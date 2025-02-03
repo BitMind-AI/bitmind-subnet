@@ -16,6 +16,7 @@ sentencepiece==0.2.0
 timm==1.0.12
 einops==0.8.0
 ultralytics==8.3.44
+janus @ git+https://github.com/deepseek-ai/Janus.git
 
 # Image/Video processing
 datasets==3.1.0
