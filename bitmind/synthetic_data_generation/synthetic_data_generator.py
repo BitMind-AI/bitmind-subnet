@@ -33,6 +33,12 @@ from bitmind.synthetic_data_generation.image_utils import create_random_mask
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.prompt_generator import PromptGenerator
 from bitmind.validator.cache import ImageCache
+from bitmind.validator.model_utils import (
+    load_hunyuanvideo_transformer,
+    load_annimatediff_motion_adapter,
+    JanusWrapper,
+    create_pipeline_generator
+)
 
 
 future_warning_modules_to_ignore = [
@@ -231,72 +237,6 @@ class SyntheticDataGenerator:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
         return prompt
 
-    def create_pipeline_generator(self, model_config: Dict[str, Any], model: Any) -> callable:
-        """
-        Creates a generator function based on pipeline configuration.
-        
-        Args:
-            model_config: Model configuration dictionary
-            model: Loaded model instance(s)
-            
-        Returns:
-            Callable that handles the generation process for the model
-        """
-        if isinstance(model_config.get('pipeline_stages'), list):
-            def generate(prompt: str, **kwargs):
-                output = None
-                prompt_embeds = None
-                negative_embeds = None
-                
-                for stage in model_config['pipeline_stages']:
-                    stage_args = {**kwargs}  # Copy base args
-                    
-                    # Add stage-specific args
-                    if stage.get('input_key') and output is not None:
-                        stage_args[stage['input_key']] = output
-                    
-                    # Add any stage-specific generation args
-                    if stage.get('args'):
-                        stage_args.update(stage['args'])
-                    
-                    # Handle prompt embeddings
-                    if stage.get('use_prompt_embeds') and prompt_embeds is not None:
-                        stage_args['prompt_embeds'] = prompt_embeds
-                        stage_args['negative_prompt_embeds'] = negative_embeds
-                        stage_args.pop('prompt', None)
-                    elif stage.get('save_prompt_embeds'):
-                        # Get embeddings directly from encode_prompt
-                        prompt_embeds, negative_embeds = model[stage['name']].encode_prompt(
-                            prompt=prompt,
-                            device=model[stage['name']].device,
-                            num_images_per_prompt=stage_args.get('num_images_per_prompt', 1),
-                        )
-                        stage_args['prompt_embeds'] = prompt_embeds
-                        stage_args['negative_prompt_embeds'] = negative_embeds
-                        stage_args.pop('prompt', None)
-                    else:
-                        stage_args['prompt'] = prompt
-                    
-                    # Run stage
-                    result = model[stage['name']](**stage_args)
-                    
-                    # Extract output based on stage config
-                    output = getattr(result, stage.get('output_attr', 'images'))
-                    
-                    # Clear memory if configured
-                    if model_config.get('clear_memory_on_stage_end'):
-                        import gc
-                        import torch
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                        gc.collect()
-                        
-                return result
-            return generate
-        
-        # Default single-stage pipeline
-        return lambda prompt, **kwargs: model(prompt=prompt, **kwargs)
-
     def _run_generation(
         self,
         prompt: str,
@@ -362,7 +302,7 @@ class SyntheticDataGenerator:
             start_time = time.time()
             
             # Create pipeline-specific generator
-            generate = self.create_pipeline_generator(model_config, self.model)
+            generate = create_pipeline_generator(model_config, self.model)
             
             # Handle autocast if needed
             if model_config.get('use_autocast', True):
