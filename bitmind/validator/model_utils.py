@@ -6,7 +6,8 @@ from safetensors.torch import load_file
 from transformers import AutoModelForCausalLM
 from janus.models import VLChatProcessor
 import PIL.Image
-from typing import Dict, Any, Any
+from typing import Dict, Any, Any, Optional
+import bittensor as bt
 
 
 def load_hunyuanvideo_transformer(
@@ -238,3 +239,67 @@ def create_pipeline_generator(model_config: Dict[str, Any], model: Any) -> calla
     
     # Default single-stage pipeline
     return lambda prompt, **kwargs: model(prompt=prompt, **kwargs)
+
+
+def enable_model_optimizations(
+    model: Any,
+    device: str,
+    enable_cpu_offload: bool = False,
+    enable_sequential_cpu_offload: bool = False,
+    enable_vae_slicing: bool = False,
+    enable_vae_tiling: bool = False,
+    disable_progress_bar: bool = True,
+    stage_name: Optional[str] = None,
+) -> None:
+    """
+    Enables various model optimizations for better memory usage and performance.
+    
+    Args:
+        model: The model to optimize
+        device: Device to move model to ('cuda', 'cpu', etc)
+        enable_cpu_offload: Whether to enable model CPU offloading
+        enable_sequential_cpu_offload: Whether to enable sequential CPU offloading
+        enable_vae_slicing: Whether to enable VAE slicing
+        enable_vae_tiling: Whether to enable VAE tiling
+        disable_progress_bar: Whether to disable the progress bar
+        stage_name: Optional name of pipeline stage for logging
+    """
+    model_name = f"{stage_name} " if stage_name else ""
+    
+    if disable_progress_bar:
+        bt.logging.info(f"Disabling progress bar for {model_name}model")
+        model.set_progress_bar_config(disable=True)
+
+    # Handle CPU offloading
+    if enable_cpu_offload:
+        bt.logging.info(f"Enabling CPU offload for {model_name}model")
+        model.enable_model_cpu_offload(device=device)
+    elif enable_sequential_cpu_offload:
+        bt.logging.info(f"Enabling sequential CPU offload for {model_name}model")
+        model.enable_sequential_cpu_offload()
+    else:
+        # Only move to device if not using CPU offload
+        bt.logging.info(f"Moving {model_name}model to {device}")
+        model.to(device)
+
+    # Handle VAE optimizations if not using CPU offload
+    if not enable_cpu_offload:
+        if enable_vae_slicing:
+            bt.logging.info(f"Enabling VAE slicing for {model_name}model")
+            try:
+                model.vae.enable_slicing()
+            except Exception:
+                try:
+                    model.enable_vae_slicing()
+                except Exception as e:
+                    bt.logging.warning(f"Failed to enable VAE slicing for {model_name}model: {e}")
+
+        if enable_vae_tiling:
+            bt.logging.info(f"Enabling VAE tiling for {model_name}model")
+            try:
+                model.vae.enable_tiling()
+            except Exception:
+                try:
+                    model.enable_vae_tiling()
+                except Exception as e:
+                    bt.logging.warning(f"Failed to enable VAE tiling for {model_name}model: {e}")

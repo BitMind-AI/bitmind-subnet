@@ -37,7 +37,8 @@ from bitmind.validator.model_utils import (
     load_hunyuanvideo_transformer,
     load_annimatediff_motion_adapter,
     JanusWrapper,
-    create_pipeline_generator
+    create_pipeline_generator,
+    enable_model_optimizations
 )
 
 
@@ -384,15 +385,16 @@ class SyntheticDataGenerator:
                     **stage_args_filtered,
                     add_watermarker=False
                 )
-                self.model[stage_name].set_progress_bar_config(disable=True)
                 
-                # Apply CPU offloading if enabled
-                if model_config.get('enable_model_cpu_offload', False):
-                    bt.logging.info(f"Enabling cpu offload for {stage_name}")
-                    self.model[stage_name].enable_model_cpu_offload(device=self.device)
-                else:
-                    # Only move to device if not using CPU offload
-                    self.model[stage_name].to(self.device)
+                enable_model_optimizations(
+                    model=self.model[stage_name],
+                    device=self.device,
+                    enable_cpu_offload=model_config.get('enable_model_cpu_offload', False),
+                    enable_sequential_cpu_offload=model_config.get('enable_sequential_cpu_offload', False),
+                    enable_vae_slicing=model_config.get('vae_enable_slicing', False),
+                    enable_vae_tiling=model_config.get('vae_enable_tiling', False),
+                    stage_name=stage_name
+                )
 
                 # Disable watermarker
                 self.model[stage_name].watermarker = None
@@ -404,8 +406,6 @@ class SyntheticDataGenerator:
                 **pipeline_args,
                 add_watermarker=False
             )
-            
-            self.model.set_progress_bar_config(disable=True)
 
             # Load scheduler if specified
             if 'scheduler' in model_config:
@@ -416,36 +416,14 @@ class SyntheticDataGenerator:
                     **sched_args
                 )
 
-            # Configure model optimizations
-            if model_config.get('enable_model_cpu_offload', False):
-                bt.logging.info(f"Enabling cpu offload for {self.model_name}")
-                self.model.enable_model_cpu_offload(device=self.device)
-            else:
-                # Only apply other optimizations and move to device if not using CPU offload
-                if model_config.get('enable_sequential_cpu_offload', False):
-                    bt.logging.info(f"Enabling sequential cpu offload for {self.model_name}")
-                    self.model.enable_sequential_cpu_offload()
-                if model_config.get('vae_enable_slicing', False):
-                    bt.logging.info(f"Enabling vae slicing for {self.model_name}")
-                    try:
-                        self.model.vae.enable_slicing()
-                    except Exception:
-                        try:
-                            self.model.enable_vae_slicing()
-                        except Exception:
-                            bt.logging.warning(f"Could not enable vae slicing for {self.model}")
-                if model_config.get('vae_enable_tiling', False):
-                    bt.logging.info(f"Enabling vae tiling for {self.model_name}")
-                    try:
-                        self.model.vae.enable_tiling()
-                    except Exception:
-                        try:
-                            self.model.enable_vae_tiling()
-                        except Exception:
-                            bt.logging.warning(f"Could not enable vae tiling for {self.model}")
-            
-            # Move to device only if not using CPU offload
-            self.model.to(self.device)
+            enable_model_optimizations(
+                model=self.model,
+                device=self.device,
+                enable_cpu_offload=model_config.get('enable_model_cpu_offload', False),
+                enable_sequential_cpu_offload=model_config.get('enable_sequential_cpu_offload', False),
+                enable_vae_slicing=model_config.get('vae_enable_slicing', False),
+                enable_vae_tiling=model_config.get('vae_enable_tiling', False)
+            )
 
             # Disable watermarker
             self.model.watermarker = None
