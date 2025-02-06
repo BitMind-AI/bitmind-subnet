@@ -294,8 +294,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
             "guidance_scale": 2,
             "num_videos_per_prompt": 1,
             "num_inference_steps": {"min": 50, "max": 125},
-            "num_frames": 48,
-            "resolution": [720, 480]
+            "num_frames": 48
         },
         "save_args": {"fps": 8},
         "enable_model_cpu_offload": True,
