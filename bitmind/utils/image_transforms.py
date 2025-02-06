@@ -237,8 +237,12 @@ class ApplyDeeperForensicsDistortion:
         self.level_min = level_min
         self.level_max = level_max
 
-    def __call__(self, img):
-        self.level = random.randint(self.level_min, self.level_max)
+    def __call__(self, img, level=None):
+        if level is None:
+            self.level = random.randint(self.level_min, self.level_max)
+        else:
+            self.level = level
+
         if self.level > 0:
             self.distortion_param = get_distortion_parameter(self.distortion_type, self.level)
             self.distortion_func = get_distortion_function(self.distortion_type)
@@ -312,13 +316,10 @@ class ComposeWithParams:
         self.transforms = transforms
         self.params = {}
 
-    def __call__(self, input_data):
-        transform_params = {
-            RandomResizedCropWithParams: 'RandomResizedCrop',
-            RandomHorizontalFlipWithParams: 'RandomHorizontalFlip',
-            RandomVerticalFlipWithParams: 'RandomVerticalFlip',
-            RandomRotationWithParams: 'RandomRotation'
-        }
+    def __call__(self, input_data, clear_params=True):
+        if clear_params:
+            self.params = {}
+
         output_data = []
         list_input = True
         if not isinstance(input_data, list):
@@ -326,14 +327,18 @@ class ComposeWithParams:
             list_input = False
 
         for img in input_data:
-            for t in self.transforms:
-                if type(t) in transform_params and transform_params[type(t)] in self.params:
-                    params = self.params[transform_params[type(t)]]
-                    img = t(img, **params)
+            for transform in self.transforms:
+                try:
+                    name = transform.__name__
+                except AttributeError:
+                    name = transform.__class__.__name__
+
+                if name in self.params:
+                    img = transform(img, **self.params[name])
                 else:
-                    img = t(img)
-                    if type(t) in transform_params:
-                        self.params[transform_params[type(t)]] = t.params
+                    img = transform(img)
+                    if hasattr(transform, 'params'):
+                        self.params[name] = transform.params
             output_data.append(img)
 
         if list_input:
