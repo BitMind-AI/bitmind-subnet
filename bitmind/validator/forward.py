@@ -34,7 +34,7 @@ from bitmind.validator.reward import get_rewards
 
 
 def determine_challenge_type(media_cache, fake_prob=0.5):
-    modality = 'video'# if np.random.rand() > 0.5 else 'image'
+    modality = 'video' if np.random.rand() > 0.5 else 'image'
     label = 0 if np.random.rand() > fake_prob else 1
     cache = media_cache[CHALLENGE_TYPE[label]][modality]
     task = None
@@ -134,7 +134,8 @@ async def forward(self):
 
     # apply data augmentation pipeline
     try:
-        input_data, level, data_aug_params = apply_augmentation_by_level(input_data, TARGET_IMAGE_SIZE)
+        input_data, level, data_aug_params = apply_augmentation_by_level(
+            input_data, TARGET_IMAGE_SIZE, challenge.get('mask_center', None))
     except Exception as e:
         level, data_aug_params = -1, {}
         bt.logging.error(f"Unable to apply augmentations: {e}")
