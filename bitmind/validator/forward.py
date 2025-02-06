@@ -110,9 +110,11 @@ async def forward(self):
             if 'videos' in challenge:
                 for i, video in enumerate(challenge['videos']):
                     video_arr = np.stack([np.array(img) for img in video], axis=0)
+                    video_arr = video_arr.transpose(0, 3, 1, 2)
                     challenge_metadata[f'video_{i}'] = wandb.Video(video_arr, fps=1) 
             else:
                 video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
+                video_arr = video_arr.transpose(0, 3, 1, 2)
                 challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
             challenge_metadata['fps'] = challenge['fps']
             challenge_metadata['num_frames'] = challenge['num_frames']
@@ -132,10 +134,10 @@ async def forward(self):
 
     # apply data augmentation pipeline
     try:
-       input_data, level, data_aug_params = apply_augmentation_by_level(input_data, TARGET_IMAGE_SIZE)
+        input_data, level, data_aug_params = apply_augmentation_by_level(input_data, TARGET_IMAGE_SIZE)
     except Exception as e:
-       level, data_aug_params = -1, {}
-       bt.logging.error(f"Unable to apply augmentations: {e}")
+        level, data_aug_params = -1, {}
+        bt.logging.error(f"Unable to apply augmentations: {e}")
 
     challenge_metadata['data_aug_params'] = data_aug_params
     challenge_metadata['data_aug_level'] = level
