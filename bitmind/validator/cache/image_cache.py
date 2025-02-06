@@ -126,7 +126,8 @@ class ImageCache(BaseCache):
                     'image': image,
                     'path': str(image_path),
                     'dataset': metadata.get('dataset', None),
-                    'index': metadata.get('index', None)
+                    'index': metadata.get('index', None),
+                    'mask_center': metadata.get('mask_center', None)
                 }
 
             except Exception as e:

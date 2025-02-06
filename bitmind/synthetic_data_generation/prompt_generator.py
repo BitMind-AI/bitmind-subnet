@@ -185,8 +185,7 @@ class PromptGenerator:
             description += '.'
 
         moderated_description = self.moderate(description)
-        enhanced_description = self.enhance(description)
-        return enhanced_description
+        return self.enhance(moderated_description)
 
     def moderate(self, description: str, max_new_tokens: int = 80) -> str:
         """

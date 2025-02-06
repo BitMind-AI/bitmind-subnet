@@ -268,6 +268,7 @@ class SyntheticDataGenerator:
 
         bt.logging.info("Preparing generation arguments")
         gen_args = model_config.get('generate_args', {}).copy()
+        mask_center = None
 
         # prep inpainting-specific generation args
         if task == 'i2i':
@@ -276,7 +277,7 @@ class SyntheticDataGenerator:
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
                 image = image.resize(target_size, Image.Resampling.LANCZOS)
 
-            gen_args['mask_image'] = create_random_mask(image.size)
+            gen_args['mask_image'], mask_center = create_random_mask(image.size)
             gen_args['image'] = image
 
         # Prepare generation arguments
@@ -346,6 +347,7 @@ class SyntheticDataGenerator:
             'model_name': self.model_name,
             'gen_time': gen_time,
             'mask_image': gen_args.get('mask_image', None),
+            'mask_center': mask_center,
             'image': gen_args.get('image', None)
         }
 

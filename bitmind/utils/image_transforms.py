@@ -18,15 +18,37 @@ def center_crop():
 
 
 class RandomResizedCropWithParams(transforms.RandomResizedCrop):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, include_point=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.params = None
+        self.include_point = include_point
+        print(f"created RRC with point included: {self.include_point}")
 
     def forward(self, img, crop_params=None):
+        """
+        Args:
+            img: PIL Image to be cropped and resized
+            crop_params: Optional pre-computed crop parameters (i, j, h, w)
+        """
         if crop_params is None:
             i, j, h, w = super().get_params(img, self.scale, self.ratio)
+            if self.include_point is not None:
+                x, y = self.include_point
+                width, height = img.shape[1:]
+
+                # adjust crop to keep mask point
+                if x < j:
+                    j = max(0, x - 10)
+                elif x > j + w: 
+                    j = min(width - w, x - w + 10)
+
+                if y < i:
+                    i = max(0, y - 10)
+                elif y > i + h:
+                    i = min(height - h, y - h + 10)
         else:
             i, j, h, w = crop_params
+
         self.params = {'crop_params': (i, j, h, w)}
         return F.resized_crop(img, i, j, h, w, self.size, self.interpolation, antialias=self.antialias)
 
@@ -34,29 +56,35 @@ class RandomResizedCropWithParams(transforms.RandomResizedCrop):
 class RandomHorizontalFlipWithParams(transforms.RandomHorizontalFlip):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.params = None
+        self.params = {}
 
-    def forward(self, img, do_flip=False):
-        if do_flip or (torch.rand(1) < self.p):
-            self.params = {'do_flip': True}
-            return transforms.functional.hflip(img)
+    def forward(self, img, do_flip=None):
+        if do_flip is not None:
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.hflip(img) if do_flip else img
+        elif not hasattr(self, 'params'):
+            do_flip = torch.rand(1) < self.p
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.hflip(img) if do_flip else img
         else:
-            self.params = {'do_flip': False}
-            return img
+            return transforms.functional.hflip(img) if self.params.get('do_flip', False) else img
 
 
 class RandomVerticalFlipWithParams(transforms.RandomVerticalFlip):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.params = None
+        self.params = {}
 
-    def forward(self, img, do_flip=True):
-        if do_flip or (torch.rand(1) < self.p):
-            self.params = {'do_flip': True}
-            return transforms.functional.vflip(img)
+    def forward(self, img, do_flip=None):
+        if do_flip is not None:
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.vflip(img) if do_flip else img
+        elif not hasattr(self, 'params'):
+            do_flip = torch.rand(1) < self.p
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.vflip(img) if do_flip else img
         else:
-            self.params = {'do_flip': False}
-            return img
+            return transforms.functional.vflip(img) if self.params.get('do_flip', False) else img
 
 
 class RandomRotationWithParams(transforms.RandomRotation):
@@ -134,6 +162,7 @@ def get_distortion_parameter(distortion_type, level):
     }
     return param_dict[distortion_type][level - 1]
 
+
 def get_distortion_function(distortion_type):
     """Get distortion function based on type."""
     func_dict = {
@@ -146,6 +175,7 @@ def get_distortion_function(distortion_type):
     }
     return func_dict[distortion_type]
 
+
 def rgb_to_bgr(tensor_img):
     """Convert a PyTorch tensor image from RGB to BGR format.
     
@@ -155,6 +185,7 @@ def rgb_to_bgr(tensor_img):
     if tensor_img.shape[0] == 3:
         tensor_img = tensor_img[[2, 1, 0], ...]
     return tensor_img
+
 
 def bgr_to_rgb(tensor_img):
     """Convert a PyTorch tensor image from BGR to RGB format.
@@ -166,6 +197,7 @@ def bgr_to_rgb(tensor_img):
         tensor_img = tensor_img[[2, 1, 0], ...]
     return tensor_img
 
+
 def bgr2ycbcr(img_bgr):
     """Convert BGR image to YCbCr color space."""
     img_bgr = img_bgr.astype(np.float32)
@@ -174,6 +206,7 @@ def bgr2ycbcr(img_bgr):
     img_ycbcr[:, :, 0] = (img_ycbcr[:, :, 0] * (235 - 16) + 16) / 255.0
     img_ycbcr[:, :, 1:] = (img_ycbcr[:, :, 1:] * (240 - 16) + 16) / 255.0
     return img_ycbcr
+
 
 def ycbcr2bgr(img_ycbcr):
     """Convert YCbCr image to BGR color space."""
@@ -184,6 +217,7 @@ def ycbcr2bgr(img_ycbcr):
     img_bgr = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCR_CB2BGR)
     return img_bgr
 
+
 def color_saturation(img, param):
     """Apply color saturation distortion."""
     ycbcr = bgr2ycbcr(img)
@@ -192,10 +226,12 @@ def color_saturation(img, param):
     img = ycbcr2bgr(ycbcr).astype(np.uint8)
     return img
 
+
 def color_contrast(img, param):
     """Apply color contrast distortion."""
     img = img.astype(np.float32) * param
     return img.astype(np.uint8)
+
 
 def block_wise(img, param):
     """Apply block-wise distortion."""
@@ -208,6 +244,7 @@ def block_wise(img, param):
         img[r_h:r_h + width, r_w:r_w + width, :] = block
     return img
 
+
 def gaussian_noise_color(img, param):
     """Apply colored Gaussian noise."""
     ycbcr = bgr2ycbcr(img) / 255
@@ -216,9 +253,11 @@ def gaussian_noise_color(img, param):
     b = ycbcr2bgr(b)
     return np.clip(b, 0, 255).astype(np.uint8)
 
+
 def gaussian_blur(img, param):
     """Apply Gaussian blur."""
     return cv2.GaussianBlur(img, (param, param), param * 1.0 / 6)
+
 
 def jpeg_compression(img, param):
     """Apply JPEG compression distortion."""
@@ -237,8 +276,12 @@ class ApplyDeeperForensicsDistortion:
         self.level_min = level_min
         self.level_max = level_max
 
-    def __call__(self, img):
-        self.level = random.randint(self.level_min, self.level_max)
+    def __call__(self, img, level=None):
+        if level is None:
+            self.level = random.randint(self.level_min, self.level_max)
+        else:
+            self.level = level
+
         if self.level > 0:
             self.distortion_param = get_distortion_parameter(self.distortion_type, self.level)
             self.distortion_func = get_distortion_function(self.distortion_type)
@@ -312,13 +355,10 @@ class ComposeWithParams:
         self.transforms = transforms
         self.params = {}
 
-    def __call__(self, input_data):
-        transform_params = {
-            RandomResizedCropWithParams: 'RandomResizedCrop',
-            RandomHorizontalFlipWithParams: 'RandomHorizontalFlip',
-            RandomVerticalFlipWithParams: 'RandomVerticalFlip',
-            RandomRotationWithParams: 'RandomRotation'
-        }
+    def __call__(self, input_data, clear_params=True):
+        if clear_params:
+            self.params = {}
+
         output_data = []
         list_input = True
         if not isinstance(input_data, list):
@@ -326,14 +366,18 @@ class ComposeWithParams:
             list_input = False
 
         for img in input_data:
-            for t in self.transforms:
-                if type(t) in transform_params and transform_params[type(t)] in self.params:
-                    params = self.params[transform_params[type(t)]]
-                    img = t(img, **params)
+            for transform in self.transforms:
+                try:
+                    name = transform.__name__
+                except AttributeError:
+                    name = transform.__class__.__name__
+
+                if name in self.params:
+                    img = transform(img, **self.params[name])
                 else:
-                    img = t(img)
-                    if type(t) in transform_params:
-                        self.params[transform_params[type(t)]] = t.params
+                    img = transform(img)
+                    if hasattr(transform, 'params'):
+                        self.params[name] = transform.params
             output_data.append(img)
 
         if list_input:
@@ -351,12 +395,13 @@ def get_base_transforms(target_image_size=TARGET_IMAGE_SIZE):
     ])
 
 
-def get_random_augmentations(target_image_size=TARGET_IMAGE_SIZE):
+def get_random_augmentations(target_image_size=TARGET_IMAGE_SIZE, mask_point=None):
     return ComposeWithParams([
         ConvertToRGB(),
         transforms.ToTensor(),
         RandomRotationWithParams(20, interpolation=transforms.InterpolationMode.BILINEAR),
-        RandomResizedCropWithParams(TARGET_IMAGE_SIZE, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
+        RandomResizedCropWithParams(
+            TARGET_IMAGE_SIZE, scale=(0.2, 1.0), ratio=(1.0, 1.0), include_point=mask_point),
         RandomHorizontalFlipWithParams(),
         RandomVerticalFlipWithParams()
     ])
@@ -378,12 +423,13 @@ def get_tall_base_transforms(target_image_size=TARGET_IMAGE_SIZE):
     ])
 
 # Medium difficulty transforms with mild distortions
-def get_random_augmentations_medium(target_image_size=TARGET_IMAGE_SIZE):
+def get_random_augmentations_medium(target_image_size=TARGET_IMAGE_SIZE, mask_point=None):
     return ComposeWithParams([
         ConvertToRGB(),
         transforms.ToTensor(),
         RandomRotationWithParams(20, interpolation=transforms.InterpolationMode.BILINEAR),
-        RandomResizedCropWithParams(target_image_size, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
+        RandomResizedCropWithParams(
+            TARGET_IMAGE_SIZE, scale=(0.2, 1.0), ratio=(1.0, 1.0), include_point=mask_point),
         RandomHorizontalFlipWithParams(),
         RandomVerticalFlipWithParams(),
         ApplyDeeperForensicsDistortion('CS', level_min=0, level_max=1),
@@ -392,12 +438,13 @@ def get_random_augmentations_medium(target_image_size=TARGET_IMAGE_SIZE):
     ])
 
 # Hard difficulty transforms with more severe distortions
-def get_random_augmentations_hard(target_image_size=TARGET_IMAGE_SIZE):
+def get_random_augmentations_hard(target_image_size=TARGET_IMAGE_SIZE, mask_point=None):
     return ComposeWithParams([
         ConvertToRGB(),
         transforms.ToTensor(), 
         RandomRotationWithParams(20, interpolation=transforms.InterpolationMode.BILINEAR),
-        RandomResizedCropWithParams(target_image_size, scale=(0.2, 1.0), ratio=(1.0, 1.0)),
+        RandomResizedCropWithParams(
+            TARGET_IMAGE_SIZE, scale=(0.2, 1.0), ratio=(1.0, 1.0), include_point=mask_point),
         RandomHorizontalFlipWithParams(),
         RandomVerticalFlipWithParams(),
         ApplyDeeperForensicsDistortion('CS', level_min=0, level_max=2),
@@ -408,7 +455,11 @@ def get_random_augmentations_hard(target_image_size=TARGET_IMAGE_SIZE):
     ])
 
 
-def apply_augmentation_by_level(image, target_image_size, level_probs={
+def apply_augmentation_by_level(
+    image, 
+    target_image_size, 
+    mask_point=None, 
+    level_probs={
         0: 0.25,  # No augmentations (base transforms)
         1: 0.45,  # Basic augmentations
         2: 0.15,  # Medium distortions
@@ -449,16 +500,16 @@ def apply_augmentation_by_level(image, target_image_size, level_probs={
         if rand_val <= cum_prob:
             level = curr_level
             break
-    
+
     # Apply appropriate transform
     if level == 0:
         tforms = get_base_transforms(target_image_size)
     elif level == 1:
-        tforms = get_random_augmentations(target_image_size)
+        tforms = get_random_augmentations(target_image_size, mask_point)
     elif level == 2:
-        tforms = get_random_augmentations_medium(target_image_size)
+        tforms = get_random_augmentations_medium(target_image_size, mask_point)
     else:  # level == 3
-        tforms = get_random_augmentations_hard(target_image_size)
+        tforms = get_random_augmentations_hard(target_image_size, mask_point)
 
     transformed = tforms(image)
         
