@@ -36,13 +36,16 @@ class RandomHorizontalFlipWithParams(transforms.RandomHorizontalFlip):
         super().__init__(*args, **kwargs)
         self.params = None
 
-    def forward(self, img, do_flip=False):
-        if do_flip or (torch.rand(1) < self.p):
-            self.params = {'do_flip': True}
-            return transforms.functional.hflip(img)
+    def forward(self, img, do_flip=None):
+        if do_flip is not None:
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.hflip(img) if do_flip else img
+        elif not hasattr(self, 'params'):
+            do_flip = torch.rand(1) < self.p
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.hflip(img) if do_flip else img
         else:
-            self.params = {'do_flip': False}
-            return img
+            return transforms.functional.hflip(img) if self.params['do_flip'] else img
 
 
 class RandomVerticalFlipWithParams(transforms.RandomVerticalFlip):
@@ -50,13 +53,16 @@ class RandomVerticalFlipWithParams(transforms.RandomVerticalFlip):
         super().__init__(*args, **kwargs)
         self.params = None
 
-    def forward(self, img, do_flip=True):
-        if do_flip or (torch.rand(1) < self.p):
-            self.params = {'do_flip': True}
-            return transforms.functional.vflip(img)
+    def forward(self, img, do_flip=None):
+        if do_flip is not None:
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.vflip(img) if do_flip else img
+        elif not hasattr(self, 'params'):
+            do_flip = torch.rand(1) < self.p
+            self.params = {'do_flip': do_flip}
+            return transforms.functional.vflip(img) if do_flip else img
         else:
-            self.params = {'do_flip': False}
-            return img
+            return transforms.functional.vflip(img) if self.params['do_flip'] else img
 
 
 class RandomRotationWithParams(transforms.RandomRotation):
@@ -454,7 +460,7 @@ def apply_augmentation_by_level(image, target_image_size, level_probs={
         if rand_val <= cum_prob:
             level = curr_level
             break
-    
+
     # Apply appropriate transform
     if level == 0:
         tforms = get_base_transforms(target_image_size)
