@@ -461,9 +461,9 @@ def apply_augmentation_by_level(
     mask_point=None, 
     level_probs={
         0: 0.25,  # No augmentations (base transforms)
-        1: 0.45,  # Basic augmentations
-        2: 0.15,  # Medium distortions
-        3: 0.15   # Hard distortions
+        1: 0.25,  # Basic augmentations
+        2: 0.25,  # Medium distortions
+        3: 0.25   # Hard distortions
     }):
     """
     Apply image transformations based on randomly selected level.
