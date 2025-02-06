@@ -33,6 +33,7 @@ sudo npm install -g pm2@latest
 ############################
 
 pip install -e .
+pip install -r requirements.txt
 
 ############################
 # Environment Files Setup  #
