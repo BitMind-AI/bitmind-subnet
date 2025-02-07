@@ -49,7 +49,7 @@ def determine_challenge_type(media_cache, fake_prob=0.5):
 
 
 def sample_video_frames(video_cache, min_frames, max_frames, min_fps=8, max_fps=30):
-    if np.random.rand() > 1:
+    if np.random.rand() > 0.2:
         num_frames = random.randint(min_frames, max_frames)
         challenge = video_cache.sample(num_frames, min_fps=min_fps, max_fps=max_fps)
 
