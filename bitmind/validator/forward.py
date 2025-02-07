@@ -56,6 +56,8 @@ def sample_video_frames(video_cache, min_frames, max_frames, min_fps=8, max_fps=
     else:
         num_frames_A = random.randint(min_frames, max_frames - 1)
         sample_A = video_cache.sample(num_frames_A, min_fps=min_fps, max_fps=max_fps)
+        if sample_A is None:
+            return None
         num_frames_B = random.randint(min_frames, max(max_frames - num_frames_A, min_frames + 1))
         sample_B = video_cache.sample(num_frames_B, fps=sample_A['fps'])
         challenge = {
