@@ -33,6 +33,13 @@ from bitmind.synthetic_data_generation.image_utils import create_random_mask
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.prompt_generator import PromptGenerator
 from bitmind.validator.cache import ImageCache
+from bitmind.validator.model_utils import (
+    load_hunyuanvideo_transformer,
+    load_annimatediff_motion_adapter,
+    JanusWrapper,
+    create_pipeline_generator,
+    enable_model_optimizations
+)
 
 
 future_warning_modules_to_ignore = [
@@ -135,24 +142,30 @@ class SyntheticDataGenerator:
         prompts = []
         images = []
         bt.logging.info(f"Generating {batch_size} prompts")
+        
+        # Generate all prompts first
         for i in range(batch_size):
             image_sample = self.image_cache.sample()
             images.append(image_sample['image'])
             bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
             prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
+            
+        # If specific model is set, use only that model
+        if not self.use_random_model and self.model_name:
+            model_names = [self.model_name]
+        else:
+            # shuffle and interleave models to add stochasticity
+            i2i_model_names = random.sample(I2I_MODEL_NAMES, len(I2I_MODEL_NAMES))
+            t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
+            t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
+            model_names = [
+                m for triple in zip_longest(t2v_model_names, t2i_model_names, i2i_model_names) 
+                for m in triple if m is not None
+            ]
 
-        # shuffle and interleave models to add stochasticity to initial validator challenges
-        i2i_model_names = random.sample(I2I_MODEL_NAMES, len(I2I_MODEL_NAMES))
-        t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
-        t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
-        model_names_interleaved = [
-            m for triple in zip_longest(t2v_model_names, t2i_model_names, i2i_model_names) 
-            for m in triple if m is not None
-        ]
-
-        # for each model, generate an image/video from the prompt generated for its specific tokenizer max len
-        for model_name in model_names_interleaved:
+        # Generate for each model/prompt combination
+        for model_name in model_names:
             modality = get_modality(model_name)
             task = get_task(model_name)
             for i, prompt in enumerate(prompts):
@@ -232,7 +245,6 @@ class SyntheticDataGenerator:
         model_name: Optional[str] = None,
         image: Optional[Image.Image] = None,
         generate_at_target_size: bool = False,
-
     ) -> Dict[str, Any]:
         """
         Generate synthetic data based on a text prompt.
@@ -256,6 +268,7 @@ class SyntheticDataGenerator:
 
         bt.logging.info("Preparing generation arguments")
         gen_args = model_config.get('generate_args', {}).copy()
+        mask_center = None
 
         # prep inpainting-specific generation args
         if task == 'i2i':
@@ -264,7 +277,7 @@ class SyntheticDataGenerator:
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
                 image = image.resize(target_size, Image.Resampling.LANCZOS)
 
-            gen_args['mask_image'] = create_random_mask(image.size)
+            gen_args['mask_image'], mask_center = create_random_mask(image.size)
             gen_args['image'] = image
 
         # Prepare generation arguments
@@ -284,28 +297,24 @@ class SyntheticDataGenerator:
                 gen_args['width'] = gen_args['resolution'][1]
                 del gen_args['resolution']
 
-            truncated_prompt = truncate_prompt_if_too_long(
-                prompt,
-                self.model
-            )
-
+            truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
             bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
             bt.logging.info(f"Generation args: {gen_args}")
 
             start_time = time.time()
+            
+            # Create pipeline-specific generator
+            generate = create_pipeline_generator(model_config, self.model)
+            
+            # Handle autocast if needed
             if model_config.get('use_autocast', True):
                 pretrained_args = model_config.get('from_pretrained_args', {})
                 torch_dtype = pretrained_args.get('torch_dtype', torch.bfloat16)
-                with torch.autocast(self.device, torch_dtype, cache_enabled=False): 
-                    gen_output = self.model(
-                        prompt=truncated_prompt,
-                        **gen_args
-                    )
+                with torch.autocast(self.device, torch_dtype, cache_enabled=False):
+                    gen_output = generate(truncated_prompt, **gen_args)
             else:
-                gen_output = self.model(
-                    prompt=truncated_prompt,
-                    **gen_args
-                )
+                gen_output = generate(truncated_prompt, **gen_args)
+                
             gen_time = time.time() - start_time
 
         except Exception as e:
@@ -338,78 +347,90 @@ class SyntheticDataGenerator:
             'model_name': self.model_name,
             'gen_time': gen_time,
             'mask_image': gen_args.get('mask_image', None),
+            'mask_center': mask_center,
             'image': gen_args.get('image', None)
         }
 
     def load_model(self, model_name: Optional[str] = None, modality: Optional[str] = None) -> None:
-        """Load a Hugging Face text-to-image or text-to-video model to a specific GPU."""
+        """Load a Hugging Face text-to-image or text-to-video model."""
         if model_name is not None:
             self.model_name = model_name
         elif self.use_random_model or model_name == 'random':
-            model_name = select_random_model(modality)
-            self.model_name = model_name
+            self.model_name = select_random_model(modality)
 
         bt.logging.info(f"Loading {self.model_name}")
+        
+        model_config = MODELS[self.model_name]
+        pipeline_cls = model_config['pipeline_cls']
+        pipeline_args = model_config['from_pretrained_args'].copy()
 
-        pipeline_cls = MODELS[model_name]['pipeline_cls']
-        pipeline_args = MODELS[model_name]['from_pretrained_args']
+        # Handle custom loading functions passed as tuples
         for k, v in pipeline_args.items():
             if isinstance(v, tuple) and callable(v[0]):
                 pipeline_args[k] = v[0](**v[1])
 
-        if 'model_id' in pipeline_args:
-            model_id = pipeline_args['model_id']
-            del pipeline_args['model_id']
+        # Get model_id if specified, otherwise use model_name
+        model_id = pipeline_args.pop('model_id', self.model_name)
+
+        # Handle multi-stage pipeline
+        if isinstance(pipeline_cls, dict):
+            self.model = {}
+            for stage_name, stage_cls in pipeline_cls.items():
+                stage_args = pipeline_args.get(stage_name, {})
+                base_model = stage_args.get('base', model_id)
+                stage_args_filtered = {k:v for k,v in stage_args.items() if k != 'base'}
+                
+                bt.logging.info(f"Loading {stage_name} from {base_model}")
+                self.model[stage_name] = stage_cls.from_pretrained(
+                    base_model,
+                    cache_dir=HUGGINGFACE_CACHE_DIR,
+                    **stage_args_filtered,
+                    add_watermarker=False
+                )
+                
+                enable_model_optimizations(
+                    model=self.model[stage_name],
+                    device=self.device,
+                    enable_cpu_offload=model_config.get('enable_model_cpu_offload', False),
+                    enable_sequential_cpu_offload=model_config.get('enable_sequential_cpu_offload', False),
+                    enable_vae_slicing=model_config.get('vae_enable_slicing', False),
+                    enable_vae_tiling=model_config.get('vae_enable_tiling', False),
+                    stage_name=stage_name
+                )
+
+                # Disable watermarker
+                self.model[stage_name].watermarker = None
         else:
-            model_id = model_name
-
-        self.model = pipeline_cls.from_pretrained(
-            model_id,
-            cache_dir=HUGGINGFACE_CACHE_DIR,
-            **pipeline_args,
-            add_watermarker=False
-        )
-
-        self.model.set_progress_bar_config(disable=True)
-
-        # Load scheduler if specified
-        if 'scheduler' in MODELS[model_name]:
-            sched_cls = MODELS[model_name]['scheduler']['cls']
-            sched_args = MODELS[model_name]['scheduler']['from_config_args']
-            self.model.scheduler = sched_cls.from_config(
-                self.model.scheduler.config,
-                **sched_args
+            # Single-stage pipeline
+            self.model = pipeline_cls.from_pretrained(
+                model_id,
+                cache_dir=HUGGINGFACE_CACHE_DIR,
+                **pipeline_args,
+                add_watermarker=False
             )
 
-        # Configure model optimizations
-        model_config = MODELS[model_name]
-        if model_config.get('enable_model_cpu_offload', False):
-            bt.logging.info(f"Enabling cpu offload for {model_name}")
-            self.model.enable_model_cpu_offload()
-        if model_config.get('enable_sequential_cpu_offload', False):
-            bt.logging.info(f"Enabling sequential cpu offload for {model_name}")
-            self.model.enable_sequential_cpu_offload()
-        if model_config.get('vae_enable_slicing', False):
-            bt.logging.info(f"Enabling vae slicing for {model_name}")
-            try:
-                self.model.vae.enable_slicing()
-            except Exception:
-                try:
-                    self.model.enable_vae_slicing()
-                except Exception:
-                    bt.logging.warning(f"Could not enable vae slicing for {self.model}")
-        if model_config.get('vae_enable_tiling', False):
-            bt.logging.info(f"Enabling vae tiling for {model_name}")
-            try:
-                self.model.vae.enable_tiling()
-            except Exception:
-                try:
-                    self.model.enable_vae_tiling()
-                except Exception:
-                    bt.logging.warning(f"Could not enable vae tiling for {self.model}")
+            # Load scheduler if specified
+            if 'scheduler' in model_config:
+                sched_cls = model_config['scheduler']['cls']
+                sched_args = model_config['scheduler']['from_config_args']
+                self.model.scheduler = sched_cls.from_config(
+                    self.model.scheduler.config,
+                    **sched_args
+                )
 
-        self.model.to(self.device)
-        bt.logging.info(f"Loaded {model_name} using {pipeline_cls.__name__}.")
+            enable_model_optimizations(
+                model=self.model,
+                device=self.device,
+                enable_cpu_offload=model_config.get('enable_model_cpu_offload', False),
+                enable_sequential_cpu_offload=model_config.get('enable_sequential_cpu_offload', False),
+                enable_vae_slicing=model_config.get('vae_enable_slicing', False),
+                enable_vae_tiling=model_config.get('vae_enable_tiling', False)
+            )
+
+            # Disable watermarker
+            self.model.watermarker = None
+
+        bt.logging.info(f"Loaded {self.model_name}")
 
     def clear_gpu(self) -> None:
         """Clear GPU memory by deleting models and running garbage collection."""

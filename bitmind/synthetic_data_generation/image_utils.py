@@ -75,35 +75,35 @@ def create_random_mask(size: Tuple[int, int]) -> Image.Image:
         height = np.random.randint(h//4, h//2)
 
         # Center the rectangle with some random offset
-        x1 = (w - width) // 2 + np.random.randint(-width//4, width//4)
-        y1 = (h - height) // 2 + np.random.randint(-height//4, height//4)
+        x = (w - width) // 2 + np.random.randint(-width//4, width//4)
+        y = (h - height) // 2 + np.random.randint(-height//4, height//4)
 
         # Create mask with PIL draw for smoother edges
         draw = ImageDraw.Draw(mask)
         draw.rounded_rectangle(
-            [x1, y1, x1 + width, y1 + height],
+            [x, y, x + width, y + height],
             radius=min(width, height) // 10,  # Smooth corners
             fill='white'
         )
     else:
         # Circular mask with feathered edges
         draw = ImageDraw.Draw(mask)
-        center_x = w//2
-        center_y = h//2
+        x = w//2
+        y = h//2
 
         # Make radius proportional to image size
         radius = min(w, h) // 4
 
         # Add small random offset to center
-        center_x += np.random.randint(-radius//4, radius//4)
-        center_y += np.random.randint(-radius//4, radius//4)
+        x += np.random.randint(-radius//4, radius//4)
+        y += np.random.randint(-radius//4, radius//4)
 
         # Draw multiple circles with decreasing opacity for feathered edge
         for r in range(radius, radius-10, -1):
             opacity = int(255 * (r - (radius-10)) / 10)
             draw.ellipse(
-                [center_x-r, center_y-r, center_x+r, center_y+r],
+                [x-r, y-r, x+r, y+r],
                 fill=(255, 255, 255, opacity)
             )
 
-    return mask
+    return mask, (x, y)

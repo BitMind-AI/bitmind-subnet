@@ -19,6 +19,7 @@
 
 import random
 import time
+import re
 
 import numpy as np
 import pandas as pd
@@ -45,6 +46,27 @@ def determine_challenge_type(media_cache, fake_prob=0.5):
             task = 'i2i' if np.random.rand() < 0.2 else 't2i'
         cache = cache[task]
     return label, modality, task, cache
+
+
+def sample_video_frames(video_cache, min_frames, max_frames, min_fps=8, max_fps=30):
+    if np.random.rand() > 0.2:
+        num_frames = random.randint(min_frames, max_frames)
+        challenge = video_cache.sample(num_frames, min_fps=min_fps, max_fps=max_fps)
+
+    else:
+        num_frames_A = random.randint(min_frames, max_frames - 1)
+        sample_A = video_cache.sample(num_frames_A, min_fps=min_fps, max_fps=max_fps)
+        if sample_A is None:
+            return None
+        num_frames_B = random.randint(min_frames, max(max_frames - num_frames_A, min_frames + 1))
+        sample_B = video_cache.sample(num_frames_B, fps=sample_A['fps'])
+        challenge = {
+            'videos': [sample_A['video'], sample_B['video']],  # for wandb logging to handle different shapes
+            'video': sample_A['video'] + sample_B['video'],
+            'num_frames': sample_A['num_frames'] + sample_B['num_frames'],
+            'fps': sample_A['fps']
+        }
+    return challenge
 
 
 async def forward(self):
@@ -75,11 +97,8 @@ async def forward(self):
     bt.logging.info(f"Sampling data from {modality} cache")
 
     if modality == 'video':
-        num_frames = random.randint(
-            self.config.neuron.clip_frames_min,
-            self.config.neuron.clip_frames_max)
-        challenge = cache.sample(num_frames, min_fps=8, max_fps=30)
-
+        challenge = sample_video_frames(
+            cache, self.config.neuron.clip_frames_min, self.config.neuron.clip_frames_max)
     elif modality == 'image':
         challenge = cache.sample()
 
@@ -90,8 +109,15 @@ async def forward(self):
     # prepare metadata for logging
     try:
         if modality == 'video':
-            video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
-            challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
+            if 'videos' in challenge:
+                for i, video in enumerate(challenge['videos']):
+                    video_arr = np.stack([np.array(img) for img in video], axis=0)
+                    video_arr = video_arr.transpose(0, 3, 1, 2)
+                    challenge_metadata[f'video_{i}'] = wandb.Video(video_arr, fps=1) 
+            else:
+                video_arr = np.stack([np.array(img) for img in challenge['video']], axis=0)
+                video_arr = video_arr.transpose(0, 3, 1, 2)
+                challenge_metadata['video'] = wandb.Video(video_arr, fps=1)
             challenge_metadata['fps'] = challenge['fps']
             challenge_metadata['num_frames'] = challenge['num_frames']
         elif modality == 'image':
@@ -102,15 +128,19 @@ async def forward(self):
         return
 
     # update logging dict with everything except image/video data
-    challenge_metadata.update({k: v for k, v in challenge.items() if k != modality})
+    challenge_metadata.update({
+        k: v for k, v in challenge.items() 
+        if re.match(r'^(?!image$|video$|videos$|video_\d+$).+', k)
+    })
     input_data = challenge[modality]  # extract video or image
 
     # apply data augmentation pipeline
     try:
-       input_data, level, data_aug_params = apply_augmentation_by_level(input_data, TARGET_IMAGE_SIZE)
+        input_data, level, data_aug_params = apply_augmentation_by_level(
+            input_data, TARGET_IMAGE_SIZE, challenge.get('mask_center', None))
     except Exception as e:
-       level, data_aug_params = -1, {}
-       bt.logging.error(f"Unable to applay augmentations: {e}")
+        level, data_aug_params = -1, {}
+        bt.logging.error(f"Unable to apply augmentations: {e}")
 
     challenge_metadata['data_aug_params'] = data_aug_params
     challenge_metadata['data_aug_level'] = level

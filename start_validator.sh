@@ -37,10 +37,22 @@ if ! huggingface-cli login --token $HUGGING_FACE_TOKEN; then
   exit 1
 fi
 
-# VALIDATOR PROCESS
+# STOP VALIDATOR PROCESS
 if pm2 list | grep -q "$VALIDATOR_PROCESS_NAME"; then
   echo "Process '$VALIDATOR_PROCESS_NAME' is already running. Deleting it..."
   pm2 delete $VALIDATOR_PROCESS_NAME
+fi
+
+# STOP REAL DATA CACHE UPDATER PROCESS
+if pm2 list | grep -q "$CACHE_UPDATE_PROCESS_NAME"; then
+  echo "Process '$CACHE_UPDATE_PROCESS_NAME' is already running. Deleting it..."
+  pm2 delete $CACHE_UPDATE_PROCESS_NAME
+fi
+
+# STOP SYNTHETIC DATA GENERATOR PROCESS
+if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
+  echo "Process '$DATA_GEN_PROCESS_NAME' is already running. Deleting it..."
+  pm2 delete $DATA_GEN_PROCESS_NAME
 fi
 
 echo "Verifying access to synthetic image generation models. This may take a few minutes."
@@ -59,20 +71,8 @@ pm2 start neurons/validator.py --name $VALIDATOR_PROCESS_NAME -- \
   --axon.port $VALIDATOR_AXON_PORT \
   --proxy.port $VALIDATOR_PROXY_PORT
 
-# REAL DATA CACHE UPDATER PROCESS
-if pm2 list | grep -q "$CACHE_UPDATE_PROCESS_NAME"; then
-  echo "Process '$CACHE_UPDATE_PROCESS_NAME' is already running. Deleting it..."
-  pm2 delete $CACHE_UPDATE_PROCESS_NAME
-fi
-
 echo "Starting real data cache updater process"
 pm2 start bitmind/validator/scripts/run_cache_updater.py --name $CACHE_UPDATE_PROCESS_NAME
-
-# SYNTHETIC DATA GENERATOR PROCESS
-if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
-  echo "Process '$DATA_GEN_PROCESS_NAME' is already running. Deleting it..."
-  pm2 delete $DATA_GEN_PROCESS_NAME
-fi
 
 echo "Starting synthetic data generation process"
 pm2 start bitmind/validator/scripts/run_data_generator.py --name $DATA_GEN_PROCESS_NAME -- \

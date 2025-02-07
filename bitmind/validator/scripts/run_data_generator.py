@@ -8,12 +8,12 @@ from bitmind.synthetic_data_generation import SyntheticDataGenerator
 from bitmind.validator.cache import ImageCache
 from bitmind.validator.config import (
     REAL_IMAGE_CACHE_DIR,
-    SYNTH_CACHE_DIR
+    SYNTH_CACHE_DIR,
+    MODEL_NAMES,
+    get_task
 )
 
-
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--image-cache-dir', type=str, default=REAL_IMAGE_CACHE_DIR,
                       help='Directory containing real images to use as reference')
@@ -23,7 +23,14 @@ if __name__ == '__main__':
                       help='Device to run generation on (cuda/cpu)')
     parser.add_argument('--batch-size', type=int, default=3,
                       help='Number of images to generate per batch')
+    parser.add_argument('--model', type=str, default=None, choices=MODEL_NAMES,
+                      help='Specific model to test. If not specified, uses random models')
     args = parser.parse_args()
+
+    if args.model:
+        bt.logging.info(f"Using model {args.model} ({get_task(args.model)})")
+    else:
+        bt.logging.info(f"No model selected.")
 
     bt.logging.set_info()
     init_wandb_run(run_base_name='data-generator', **load_validator_info())
@@ -39,7 +46,8 @@ if __name__ == '__main__':
 
     sdg = SyntheticDataGenerator(
         prompt_type='annotation',
-        use_random_model=True,
+        use_random_model=args.model is None,
+        model_name=args.model,
         device=args.device,
         image_cache=image_cache,
         output_dir=args.output_dir)
