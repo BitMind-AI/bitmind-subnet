@@ -148,13 +148,13 @@ class ValidatorProxy:
     def _configure_routes(self):
         """Configure FastAPI routes"""
         self.app.add_api_route(
-            "/validator_proxy",
+            "/forward_image",
             self.handle_image_request,
             methods=["POST"],
             dependencies=[Depends(self.verify_auth)]
         )
         self.app.add_api_route(
-            "/validator_proxy_video", 
+            "/forward_video", 
             self.handle_video_request,
             methods=["POST"],
             dependencies=[Depends(self.verify_auth)]
