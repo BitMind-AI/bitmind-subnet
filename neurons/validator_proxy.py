@@ -15,6 +15,7 @@ import asyncio
 import cv2
 import os
 import httpx
+import time
 import socket
 from functools import lru_cache
 
@@ -30,14 +31,6 @@ FRAME_FORMAT = "RGB"
 DEFAULT_TIMEOUT = 30
 DEFAULT_SAMPLE_SIZE = 190
 
-@dataclass
-class ValidatorConfig:
-    """Configuration for the validator proxy service"""
-    port: int
-    proxy_client_url: str
-    neuron_path: Path
-    sample_size: int = DEFAULT_SAMPLE_SIZE
-    timeout: int = DEFAULT_TIMEOUT
 
 class MediaProcessor:
     """Handles processing of images and videos"""
@@ -134,16 +127,18 @@ class PredictionService:
 
 class ValidatorProxy:
     """FastAPI server that proxies requests to validator miners"""
-    def __init__(self, validator: Any, config: ValidatorConfig):
-        self.config = config
+    def __init__(self, validator):
+        self.validator = validator
         self.media_processor = MediaProcessor(TARGET_IMAGE_SIZE)
         self.dendrite = bt.dendrite(wallet=validator.wallet)
         self.prediction_service = PredictionService(validator, self.dendrite)
-        self.metrics = ProxyCounter(config.neuron_path / "proxy_counter.json")
+        self.metrics = ProxyCounter(os.path.join(validator.config.neuron.full_path, "proxy_counter.json"))
         self.app = FastAPI(title="Validator Proxy", version="1.0.0")
         self._configure_routes()
 
-        self.auth_verifier = self._setup_auth()
+        if self.validator.config.proxy.port:
+            self.auth_verifier = self._setup_auth()
+            self.start()
 
     def _configure_routes(self):
         """Configure FastAPI routes"""
@@ -167,17 +162,18 @@ class ValidatorProxy:
         )
 
     def _setup_auth(self) -> callable:
-        """Set up authentication verifier"""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.config.proxy_client_url}/get-credentials",
+        """Set up authentication verifier using synchronous HTTP client"""
+        with httpx.Client() as client:
+            response = client.post(
+                f"{self.validator.config.proxy.proxy_client_url}/get-credentials",
                 json={
-                    "postfix": f":{self.config.port}/validator_proxy" if self.config.port else "",
+                    "postfix": f":{self.validator.config.proxy.port}" if self.validator.config.proxy.port else "",
                     "uid": self.validator.uid
                 },
                 timeout=DEFAULT_TIMEOUT
             )
             creds = response.json()
+
         signature = base64.b64decode(creds["signature"])
         message = creds["message"]
 
@@ -244,6 +240,7 @@ class ValidatorProxy:
                 detail="Missing video data"
             )
 
+        s = time.time()
         try:
             video = self.media_processor.process_video(video_data)
         except Exception as e:
@@ -251,11 +248,11 @@ class ValidatorProxy:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to process video: {str(e)}"
             )
-
+        bt.logging.info(f"finished processing video in {time.time() - s:.6f}s")
         predictions, uids = await self.prediction_service.get_predictions(
             video, 
             modality='video',
-            timeout=30  # Longer timeout for videos
+            timeout=15
         )
 
         response = {
@@ -280,5 +277,5 @@ class ValidatorProxy:
         uvicorn.run(
             self.app,
             host="0.0.0.0",
-            port=self.config.port
+            port=self.validator.config.proxy.port
         )
