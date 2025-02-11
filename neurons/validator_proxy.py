@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request, status
 from fastapi.security import APIKeyHeader
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from typing import Optional, Dict, List, Union, Any
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ from bitmind.validator.proxy import ProxyCounter
 AUTH_HEADER = APIKeyHeader(name="Authorization")
 FRAME_FORMAT = "RGB"
 DEFAULT_TIMEOUT = 30
-DEFAULT_SAMPLE_SIZE = 190
+DEFAULT_SAMPLE_SIZE = 256
 
 
 class MediaProcessor:
@@ -111,7 +112,7 @@ class PredictionService:
         uids = self.validator.last_responding_miner_uids
         if not uids:
             bt.logging.warning("No recent miner UIDs found, sampling random UIDs")
-            uids = get_random_uids(self.validator, k=self.validator.config.neuron.sample_size)
+            uids = get_random_uids(self.validator, k=DEFAULT_SAMPLE_SIZE)
         return uids
 
     def get_rich_data(self, uids: List[int]) -> Dict[str, List]:
@@ -252,7 +253,6 @@ class ValidatorProxy:
         predictions, uids = await self.prediction_service.get_predictions(
             video, 
             modality='video',
-            timeout=15
         )
 
         response = {
@@ -274,8 +274,7 @@ class ValidatorProxy:
 
     def start(self):
         """Start the FastAPI server"""
-        uvicorn.run(
-            self.app,
-            host="0.0.0.0",
-            port=self.validator.config.proxy.port
+        self.executor = ThreadPoolExecutor(max_workers=1)
+        self.executor.submit(
+            uvicorn.run, self.app, host="0.0.0.0", port=self.validator.config.proxy.port
         )

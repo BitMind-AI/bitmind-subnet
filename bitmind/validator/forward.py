@@ -187,9 +187,12 @@ async def forward(self):
     challenge_metadata['rewards'] = rewards
     challenge_metadata['scores'] = list(self.scores)
 
+    bt.logging.info(f"Scored responses:")
+    self.last_responding_miner_uids = []
     for uid, pred, reward in zip(miner_uids, responses, rewards):
         if pred != -1:
             bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
+            self.last_responding_miner_uids.append(uid)
 
     # W&B logging if enabled
     if not self.config.wandb.off:
