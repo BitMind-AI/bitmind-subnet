@@ -17,7 +17,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from typing import List
+from typing import List, Union
 from pydantic import BaseModel, Field
 from torchvision import transforms
 from io import BytesIO
@@ -100,11 +100,10 @@ class ImageSynapse(bt.Synapse):
         frozen=False
     )
 
-    # Optional request output, filled by receiving axon.
-    prediction: float = pydantic.Field(
+    prediction: Union[float, List[float]] = pydantic.Field(
         title="Prediction",
-        description="Probability that the image is AI generated/modified",
-        default=-1.,
+        description="Probability vector for [real, synthetic, semi-synthetic] classes.",
+        default=[-1., -1., -1],
         frozen=False
     )
 
@@ -153,10 +152,10 @@ class VideoSynapse(bt.Synapse):
     )
 
     # Optional request output, filled by receiving axon.
-    prediction: float = pydantic.Field(
+    prediction: Union[float, List[float]] = pydantic.Field(
         title="Prediction",
-        description="Probability that the image is AI generated/modified",
-        default=-1.,
+        description="Probability vector for [real, synthetic, semi-synthetic] classes.",
+        default=[-1., -1., -1],
         frozen=False
     )
 
@@ -214,9 +213,7 @@ def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
             # Extract the JPEG data
             jpeg_data = combined_bytes[start_pos:current_pos]
             try:
-                # Convert to PIL Image
                 img = Image.open(BytesIO(jpeg_data))
-                # Convert to numpy array
                 frames.append(img)
             except Exception as e:
                 print(f"Error processing frame: {e}")

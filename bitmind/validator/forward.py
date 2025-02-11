@@ -168,6 +168,9 @@ async def forward(self):
     bt.logging.success(f"{CHALLENGE_TYPE[label]} {modality} challenge complete!")
     bt.logging.info({k: v for k, v in challenge_metadata.items() if k not in ('miner_uids', 'miner_hotkeys')})
 
+    # handle previous protocol where prediction was a float
+    responses = [[1-r, r, 0.] if isinstance(r, float) else r for r in responses]
+
     bt.logging.info(f"Scoring responses")
     rewards, metrics = get_rewards(
         label=label,
