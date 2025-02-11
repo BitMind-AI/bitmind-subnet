@@ -1,184 +1,284 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
-from concurrent.futures import ThreadPoolExecutor
-from starlette.concurrency import run_in_threadpool
+from fastapi import FastAPI, HTTPException, Depends, Request, status
+from fastapi.security import APIKeyHeader
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 from PIL import Image
-from io import BytesIO
+from typing import Optional, Dict, List, Union, Any
+from dataclasses import dataclass
+from pathlib import Path
 import bittensor as bt
-import pandas as pd
 import numpy as np
 import uvicorn
 import base64
-import json
-import os
-import random
+import tempfile
 import asyncio
-import traceback
+import cv2
+import os
 import httpx
-import threading
 import socket
-import base64
+from functools import lru_cache
 
 from bitmind.validator.config import TARGET_IMAGE_SIZE
 from bitmind.utils.image_transforms import get_base_transforms
-from bitmind.protocol import ImageSynapse, prepare_synapse
+from bitmind.protocol import prepare_synapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
-import bitmind
 
-base_transforms = get_base_transforms(TARGET_IMAGE_SIZE)
+# Constants
+AUTH_HEADER = APIKeyHeader(name="Authorization")
+FRAME_FORMAT = "RGB"
+DEFAULT_TIMEOUT = 30
+DEFAULT_SAMPLE_SIZE = 190
 
+@dataclass
+class ValidatorConfig:
+    """Configuration for the validator proxy service"""
+    port: int
+    proxy_client_url: str
+    neuron_path: Path
+    sample_size: int = DEFAULT_SAMPLE_SIZE
+    timeout: int = DEFAULT_TIMEOUT
 
-def preprocess_image(b64_image):
-    image_bytes = base64.b64decode(b64_image)
-    image_buffer = BytesIO(image_bytes)
-    pil_image = Image.open(image_buffer)
-    return base_transforms(pil_image)
+class MediaProcessor:
+    """Handles processing of images and videos"""
+    def __init__(self, target_size: tuple):
+        self.transforms = get_base_transforms(target_size)
 
+    def process_image(self, b64_image: str) -> Any:
+        """Process base64 encoded image"""
+        image_bytes = base64.b64decode(b64_image)
+        image = Image.open(BytesIO(image_bytes))
+        return self.transforms(image)
+
+    def process_video(self, video_data: bytes) -> List[Any]:
+        """Process raw video bytes into transformed frames"""
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as temp_file:
+            temp_file.write(video_data)
+            temp_file.flush()
+
+            cap = cv2.VideoCapture(temp_file.name)
+            if not cap.isOpened():
+                raise ValueError("Failed to open video stream")
+
+            try:
+                frames = []
+                while True:
+                    success, frame = cap.read()
+                    if not success:
+                        break
+
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_frame = Image.fromarray(rgb_frame)
+                    frames.append(pil_frame)
+
+                if not frames:
+                    raise ValueError("No frames extracted from video")
+
+                return self.transforms(frames)
+            finally:
+                cap.release()
+
+class PredictionService:
+    """Handles interaction with miners for predictions"""
+    def __init__(self, validator, dendrite):
+        self.validator = validator
+        self.dendrite = dendrite
+        self.metagraph = validator.metagraph
+
+    async def get_predictions(
+        self, 
+        data: Any, 
+        modality: str,
+        timeout: int = DEFAULT_TIMEOUT
+    ) -> tuple[List[float], List[int]]:
+        """Get predictions from miners"""
+        miner_uids = self._get_miner_uids()
+
+        predictions = await self.dendrite(
+            axons=[self.metagraph.axons[uid] for uid in miner_uids],
+            synapse=prepare_synapse(data, modality=modality),
+            deserialize=True,
+            timeout=timeout
+        )
+
+        valid_indices = [i for i, v in enumerate(predictions) if v != -1.]
+        if not valid_indices:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No valid predictions received"
+            )
+
+        valid_preds = np.array(predictions)[valid_indices]
+        valid_uids = np.array(miner_uids)[valid_indices]
+
+        return valid_preds.tolist(), valid_uids.tolist()
+
+    def _get_miner_uids(self) -> List[int]:
+        """Get list of miner UIDs to query"""
+        uids = self.validator.last_responding_miner_uids
+        if not uids:
+            bt.logging.warning("No recent miner UIDs found, sampling random UIDs")
+            uids = get_random_uids(self.validator, k=self.validator.config.neuron.sample_size)
+        return uids
+
+    def get_rich_data(self, uids: List[int]) -> Dict[str, List]:
+        """Get additional miner metadata"""
+        return {
+            'uids': [int(uid) for uid in uids],
+            'ranks': [float(self.metagraph.R[uid]) for uid in uids],
+            'incentives': [float(self.metagraph.I[uid]) for uid in uids],
+            'emissions': [float(self.metagraph.E[uid]) for uid in uids],
+            'hotkeys': [str(self.metagraph.hotkeys[uid]) for uid in uids],
+            'coldkeys': [str(self.metagraph.coldkeys[uid]) for uid in uids]
+        }
 
 class ValidatorProxy:
-    def __init__(
-        self,
-        validator,
-    ):
-        self.validator = validator
-        self.get_credentials()
-        self.miner_request_counter = {}
+    """FastAPI server that proxies requests to validator miners"""
+    def __init__(self, validator: Any, config: ValidatorConfig):
+        self.config = config
+        self.media_processor = MediaProcessor(TARGET_IMAGE_SIZE)
         self.dendrite = bt.dendrite(wallet=validator.wallet)
-        self.app = FastAPI()
+        self.prediction_service = PredictionService(validator, self.dendrite)
+        self.metrics = ProxyCounter(config.neuron_path / "proxy_counter.json")
+        self.app = FastAPI(title="Validator Proxy", version="1.0.0")
+        self._configure_routes()
+
+        self.auth_verifier = self._setup_auth()
+
+    def _configure_routes(self):
+        """Configure FastAPI routes"""
         self.app.add_api_route(
             "/validator_proxy",
-            self.forward,
+            self.handle_image_request,
             methods=["POST"],
-            dependencies=[Depends(self.get_self)],
+            dependencies=[Depends(self.verify_auth)]
+        )
+        self.app.add_api_route(
+            "/validator_proxy_video", 
+            self.handle_video_request,
+            methods=["POST"],
+            dependencies=[Depends(self.verify_auth)]
         )
         self.app.add_api_route(
             "/healthcheck",
             self.healthcheck,
             methods=["GET"],
-            dependencies=[Depends(self.get_self)],
+            dependencies=[Depends(self.verify_auth)]
         )
 
-        self.loop = asyncio.get_event_loop()
-        self.proxy_counter = ProxyCounter(
-            os.path.join(self.validator.config.neuron.full_path, "proxy_counter.json")
-        )
-        if self.validator.config.proxy.port:
-            self.start_server()
-
-    def get_credentials(self):
-        with httpx.Client(timeout=httpx.Timeout(30)) as client:
-            response = client.post(
-                f"{self.validator.config.proxy.proxy_client_url}/get-credentials",
+    def _setup_auth(self) -> callable:
+        """Set up authentication verifier"""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.config.proxy_client_url}/get-credentials",
                 json={
-                    "postfix": (
-                        f":{self.validator.config.proxy.port}/validator_proxy"
-                        if self.validator.config.proxy.port
-                        else ""
-                    ),
-                    "uid": self.validator.uid,
+                    "postfix": f":{self.config.port}/validator_proxy" if self.config.port else "",
+                    "uid": self.validator.uid
                 },
+                timeout=DEFAULT_TIMEOUT
             )
-        response.raise_for_status()
-        response = response.json()
-        message = response["message"]
-        signature = response["signature"]
-        signature = base64.b64decode(signature)
+            creds = response.json()
+        signature = base64.b64decode(creds["signature"])
+        message = creds["message"]
 
-        def verify_credentials(public_key_bytes):
-            public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
+        def verify(key_bytes: bytes) -> bool:
             try:
-                public_key.verify(signature, message.encode("utf-8"))
+                key = Ed25519PublicKey.from_public_bytes(key_bytes)
+                key.verify(signature, message.encode())
+                return True
             except InvalidSignature:
-                raise Exception("Invalid signature")
+                return False
 
-        self.verify_credentials = verify_credentials
+        return verify
 
-    def start_server(self):
-        self.executor = ThreadPoolExecutor(max_workers=1)
-        self.executor.submit(
-            uvicorn.run, self.app, host="0.0.0.0", port=self.validator.config.proxy.port
-        )
-
-    def authenticate_token(self, public_key_bytes):
-        public_key_bytes = base64.b64decode(public_key_bytes)
+    async def verify_auth(self, auth: str = Depends(AUTH_HEADER)) -> None:
+        """Verify authentication token"""
         try:
-            self.verify_credentials(public_key_bytes)
-            bt.logging.info("Successfully authenticated token")
-            return public_key_bytes
+            key_bytes = base64.b64decode(auth)
+            if not self.auth_verifier(key_bytes):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication token"
+                )
         except Exception as e:
-            bt.logging.error(f"Exception occured in authenticating token: {e}")
-            bt.logging.error(traceback.print_exc())
             raise HTTPException(
-                status_code=401, detail="Error getting authentication token"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e)
             )
 
-    async def healthcheck(self, request: Request):
-        authorization: str = request.headers.get("authorization")
-
-        if not authorization:
-            raise HTTPException(status_code=401, detail="Authorization header missing")
-
-        self.authenticate_token(authorization)
-        return {'status': 'healthy'}
-
-    async def forward(self, request: Request):
-        authorization: str = request.headers.get("authorization")
-        if not authorization:
-            raise HTTPException(status_code=401, detail="Authorization header missing")
-        self.authenticate_token(authorization)
-
-        bt.logging.info("Received an organic request!")
+    async def handle_image_request(self, request: Request) -> Dict[str, Any]:
+        """Handle image processing requests"""
         payload = await request.json()
 
-        if "seed" not in payload:
-            payload["seed"] = random.randint(0, int(1e9))
+        try:
+            image = self.media_processor.process_image(payload['image'])
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to process image: {str(e)}"
+            )
 
-        metagraph = self.validator.metagraph
-        miner_uids = self.validator.last_responding_miner_uids
-        if len(miner_uids) == 0:
-            bt.logging.warning("[ORGANIC] No recent miner uids found, sampling random uids")
-            miner_uids = get_random_uids(self.validator, k=self.validator.config.neuron.sample_size)
-
-        image = preprocess_image(payload['image'])
-
-        bt.logging.info(f"[ORGANIC] Querying {len(miner_uids)} miners...")
-        predictions = await self.dendrite(
-            axons=[metagraph.axons[uid] for uid in miner_uids],
-    	    synapse=prepare_synapse(image, modality='image'),
-            deserialize=True,
-            timeout=9
+        predictions, uids = await self.prediction_service.get_predictions(
+            image, 
+            modality='image'
         )
 
-        bt.logging.info(f"[ORGANIC] {predictions}")
-        valid_pred_idx = np.array([i for i, v in enumerate(predictions) if v != -1.])
-        if len(valid_pred_idx) > 0:
-            valid_preds = np.array(predictions)[valid_pred_idx]
-            valid_pred_uids = np.array(miner_uids)[valid_pred_idx]
-            if len(valid_preds) > 0:
-                self.proxy_counter.update(is_success=True)
-                self.proxy_counter.save()
+        response = {
+            'preds': predictions,
+            'fqdn': socket.getfqdn()
+        }
 
-                data = {
-                    'preds': [float(p) for p in list(valid_preds)],
-                    'fqdn': socket.getfqdn()
-                }
+        # add rich data if requested
+        if payload.get('rich', '').lower() == 'true':
+            response.update(self.prediction_service.get_rich_data(uids))
 
-                rich_response: bool = payload.get("rich", "false").lower() == "true"
-                if rich_response:
-                    data['uids'] = [int(uid) for uid in valid_pred_uids],
-                    data['ranks'] = [float(metagraph.R[uid]) for uid in valid_pred_uids],
-                    data['incentives'] = [float(metagraph.I[uid]) for uid in valid_pred_uids]
-                    data['emissions'] = [float(metagraph.E[uid]) for uid in valid_pred_uids]
-                    data['hotkeys'] = [str(metagraph.hotkeys[uid]) for uid in valid_pred_uids]
-                    data['coldkeys'] = [str(metagraph.coldkeys[uid]) for uid in valid_pred_uids]
+        self.metrics.update(is_success=True)
+        return response
 
-                return data
+    async def handle_video_request(self, request: Request) -> Dict[str, Any]:
+        """Handle video processing requests"""
+        video_data = await request.body()
+        if not video_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing video data"
+            )
 
-        self.proxy_counter.update(is_success=False)
-        self.proxy_counter.save()
-        return HTTPException(status_code=500, detail="No valid response received")
+        try:
+            video = self.media_processor.process_video(video_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to process video: {str(e)}"
+            )
 
-    async def get_self(self):
-        return self
+        predictions, uids = await self.prediction_service.get_predictions(
+            video, 
+            modality='video',
+            timeout=30  # Longer timeout for videos
+        )
+
+        response = {
+            'preds': predictions,
+            'fqdn': socket.getfqdn()
+        }
+
+        # add rich data if requested
+        request_json = await request.json() if request.headers.get('content-type') == 'application/json' else {}
+        if request_json.get('rich', '').lower() == 'true':
+            response.update(self.prediction_service.get_rich_data(uids))
+
+        self.metrics.update(is_success=True)
+        return response
+
+    async def healthcheck(self, request: Request) -> Dict[str, str]:
+        """Health check endpoint"""
+        return {'status': 'healthy'}
+
+    def start(self):
+        """Start the FastAPI server"""
+        uvicorn.run(
+            self.app,
+            host="0.0.0.0",
+            port=self.config.port
+        )
