@@ -9,11 +9,14 @@ class MinerPerformanceTracker:
     """
     Tracks all recent miner performance to facilitate reward computation.
     """
+    VERSION = 2
+
     def __init__(self, store_last_n_predictions: int = 100):
         self.prediction_history: Dict[int, deque] = {}
         self.label_history: Dict[int, deque] = {}
         self.miner_hotkeys: Dict[int, str] = {}
         self.store_last_n_predictions = store_last_n_predictions
+        self.version = self.VERSION
 
     def reset_miner_history(self, uid: int, miner_hotkey: str):
         """
