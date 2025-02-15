@@ -168,12 +168,6 @@ async def forward(self):
     bt.logging.success(f"{CHALLENGE_TYPE[label]} {modality} challenge complete!")
     bt.logging.info({k: v for k, v in challenge_metadata.items() if k not in ('miner_uids', 'miner_hotkeys')})
 
-    # handle previous protocol where prediction was a float
-    responses = [
-        np.array([1-r, r, 0.]) if isinstance(r, float)
-        else np.array(r) for r in responses
-    ]
-
     bt.logging.info(f"Scoring responses")
     rewards, metrics = get_rewards(
         label=label,
@@ -184,6 +178,9 @@ async def forward(self):
         performance_trackers=self.performance_trackers)
 
     self.update_scores(rewards, miner_uids)
+    for uid, pred, reward in zip(miner_uids, responses, rewards):
+        if -1 not in pred:
+            bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
 
     for modality in ['image', 'video']:
         for metric_name in list(metrics[0][modality].keys()):
@@ -192,10 +189,6 @@ async def forward(self):
     challenge_metadata['predictions'] = responses
     challenge_metadata['rewards'] = rewards
     challenge_metadata['scores'] = list(self.scores)
-
-    for uid, pred, reward in zip(miner_uids, responses, rewards):
-        if pred != -1:
-            bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
 
     # W&B logging if enabled
     if not self.config.wandb.off:
