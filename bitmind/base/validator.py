@@ -19,6 +19,7 @@
 
 from traceback import print_exception
 from typing import List, Union
+from collections import deque
 import bittensor as bt
 import numpy as np
 import threading
@@ -239,7 +240,8 @@ class BaseValidatorNeuron(BaseNeuron):
 
     def set_weights(self):
         """
-        Sets the validator weights to the metagraph hotkeys based on the scores it has received from the miners. The weights determine the trust and incentive level the validator assigns to miner nodes on the network.
+        Sets the validator weights to the metagraph hotkeys based on the scores it has received from the miners. 
+        The weights determine the trust and incentive level the validator assigns to miner nodes on the network.
         """
 
         # Check if self.scores contains any NaN values and log a warning if it does.
@@ -393,16 +395,48 @@ class BaseValidatorNeuron(BaseNeuron):
         joblib.dump(self.performance_trackers['video'], self.video_history_cache_path)
 
     def load_miner_history(self):
+        def convert_v1_to_v2(tracker):
+            """Convert a v1 tracker to v2 format"""
+            new_tracker = MinerPerformanceTracker(tracker.store_last_n_predictions)
+
+            # copy hotkeys, transform predictions from float to vector
+            new_tracker.miner_hotkeys = tracker.miner_hotkeys.copy()
+            for uid in tracker.prediction_history:
+                new_predictions = deque(maxlen=tracker.store_last_n_predictions)
+                new_labels = deque(maxlen=tracker.store_last_n_predictions)
+
+                for pred, label in zip(tracker.prediction_history[uid], tracker.label_history[uid]):
+                    new_labels.append(label)
+                    if isinstance(pred, float):
+                        if pred != -1:
+                            # convert old binary prediction to probability vector [p_real, p_synthetic, p_semi]
+                            new_predictions.append(np.array([1 - pred, pred, 0.0]))
+                        else:
+                            new_predictions.append(np.array([-1., -1., -1.]))
+                    elif isinstance(pred, np.ndarray):
+                        new_predictions.append(pred)
+                    else:
+                        raise ValueError(f"Invalid prediction type encountered while loading history: {pred}")
+
+                new_tracker.prediction_history[uid] = new_predictions
+                new_tracker.label_history[uid] = new_labels
+            return new_tracker
+
         def load(path):
             if os.path.exists(path):
                 bt.logging.info(f"Loading miner performance history from {path}")
                 try:
                     tracker = joblib.load(path)
+                    if not hasattr(tracker, 'version'):
+                        bt.logging.info(f"Converting performance tracker from v1 to v2 format")
+                        tracker = convert_v1_to_v2(tracker)
+
                     num_miners_history = len([
                         uid for uid in tracker.prediction_history
-                        if len([p for p in tracker.prediction_history[uid] if p != -1]) > 0
+                        if len([p for p in tracker.prediction_history[uid] if not np.array_equal(p, -1)]) > 0
                     ])
                     bt.logging.info(f"Loaded history for {num_miners_history} miners")
+
                 except Exception as e:
                     bt.logging.error(f'Error loading miner performance tracker: {e}')
                     tracker = MinerPerformanceTracker()
@@ -411,14 +445,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 tracker = MinerPerformanceTracker()
             return tracker
 
-        try:
-            self.performance_trackers['image'] = load(self.image_history_cache_path)
-        except Exception as e:
-            # just for 2.0.0 upgrade for miner performance to carry over
-            v1_history_cache_path = os.path.join(
-                self.config.neuron.full_path, "miner_performance_tracker.pkl")
-            self.performance_trackers['image'] = load(v1_history_cache_path)
-
+        self.performance_trackers['image'] = load(self.image_history_cache_path)
         self.performance_trackers['video'] = load(self.video_history_cache_path)
 
     def save_state(self):
