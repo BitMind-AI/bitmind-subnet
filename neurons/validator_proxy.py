@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from typing import Optional, Dict, List, Union, Any
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 import bittensor as bt
 import numpy as np
