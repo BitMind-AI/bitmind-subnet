@@ -37,6 +37,10 @@ def compute_penalty_multiplier(y_pred: np.ndarray) -> float:
     return 1.0 if (sum_check and range_check) else 0.0
 
 
+def transform_rational(mcc, pole=1.01):
+    return 1 / (pole - np.array(mcc))
+
+
 def get_rewards(
     label: int,
     responses: List[np.ndarray],
@@ -81,7 +85,8 @@ def get_rewards(
                     tracker.update(uid, pred_probs, label, miner_hotkey)
 
                 metrics = tracker.get_metrics(uid, window=100)
-                reward = (0.7 * metrics['binary_f1'] + 0.3 * metrics['multi_class_f1'])
+                reward = (0.9 * metrics['binary_mcc'] + 0.1 * metrics['multi_class_mcc'])
+                reward = transform_rational(reward)
                 reward *= compute_penalty_multiplier(pred_probs)
                 
                 miner_modality_rewards[modality] = reward

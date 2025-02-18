@@ -1,16 +1,14 @@
-from sklearn.metrics import f1_score
+from sklearn.metrics import matthews_corrcoef
 from typing import Dict, List
 from collections import deque
 import bittensor as bt
 import numpy as np
-
 
 class MinerPerformanceTracker:
     """
     Tracks all recent miner performance to facilitate reward computation.
     """
     VERSION = 2
-
     def __init__(self, store_last_n_predictions: int = 100):
         self.prediction_history: Dict[int, deque] = {}
         self.label_history: Dict[int, deque] = {}
@@ -29,14 +27,12 @@ class MinerPerformanceTracker:
     def update(self, uid: int, prediction: np.ndarray, label: int, miner_hotkey: str):
         """
         Update the miner prediction history
-
         Args:
         - prediction: numpy array of shape (3,) containing probabilities for [real, synthetic, semi-synthetic]
         - label: integer label (0 for real, 1 for synthetic, 2 for semi-synthetic)
         """
         if uid not in self.prediction_history or self.miner_hotkeys.get(uid) != miner_hotkey:
             self.reset_miner_history(uid, miner_hotkey)
-
         self.prediction_history[uid].append(prediction)   # store full probability vector
         self.label_history[uid].append(label)
 
@@ -49,7 +45,6 @@ class MinerPerformanceTracker:
 
         recent_preds = list(self.prediction_history[uid])
         recent_labels = list(self.label_history[uid])
-
         if window is not None:
             window = min(window, len(recent_preds))
             recent_preds = recent_preds[-window:]
@@ -63,20 +58,16 @@ class MinerPerformanceTracker:
 
         try:
             predictions = np.argmax(pred_probs, axis=1)
-
-            # multiclass F1 (real vs synthetic vs semi-synthetic)
-            multi_class_f1 = f1_score(labels, predictions, average='weighted')
-
-            # binary f-1 (real vs any synthetic)
+            # multiclass MCC (real vs synthetic vs semi-synthetic)
+            multi_class_mcc = matthews_corrcoef(labels, predictions)
+            # binary MCC (real vs any synthetic)
             binary_labels = (labels > 0).astype(int)
             binary_preds = (predictions > 0).astype(int)
-            binary_f1 = f1_score(binary_labels, binary_preds)
-
+            binary_mcc = matthews_corrcoef(binary_labels, binary_preds)
             return {
-                'multi_class_f1': multi_class_f1,
-                'binary_f1': binary_f1
+                'multi_class_mcc': multi_class_mcc,
+                'binary_mcc': binary_mcc
             }
-
         except Exception as e:
             bt.logging.warning(f'Error in reward computation: {e}')
             return self._empty_metrics()
@@ -86,8 +77,8 @@ class MinerPerformanceTracker:
         Return a dictionary of empty metrics
         """
         return {
-            'multi_class_f1': 0,
-            'binary_f1': 0
+            'multi_class_mcc': 0,
+            'binary_mcc': 0
         }
 
     def get_prediction_count(self, uid: int) -> int:
