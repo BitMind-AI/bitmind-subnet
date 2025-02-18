@@ -4,11 +4,13 @@ from collections import deque
 import bittensor as bt
 import numpy as np
 
+
 class MinerPerformanceTracker:
     """
     Tracks all recent miner performance to facilitate reward computation.
     """
     VERSION = 2
+
     def __init__(self, store_last_n_predictions: int = 100):
         self.prediction_history: Dict[int, deque] = {}
         self.label_history: Dict[int, deque] = {}
@@ -33,7 +35,7 @@ class MinerPerformanceTracker:
         """
         if uid not in self.prediction_history or self.miner_hotkeys.get(uid) != miner_hotkey:
             self.reset_miner_history(uid, miner_hotkey)
-        self.prediction_history[uid].append(prediction)   # store full probability vector
+        self.prediction_history[uid].append(np.array(prediction))   # store full probability vector
         self.label_history[uid].append(label)
 
     def get_metrics(self, uid: int, window: int = None):

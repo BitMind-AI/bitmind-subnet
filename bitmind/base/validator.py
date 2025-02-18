@@ -406,14 +406,17 @@ class BaseValidatorNeuron(BaseNeuron):
                 new_labels = deque(maxlen=tracker.store_last_n_predictions)
 
                 for pred, label in zip(tracker.prediction_history[uid], tracker.label_history[uid]):
-                    if pred != -1:
-                        # convert old binary prediction to probability vector [p_real, p_synthetic, p_semi]
-                        new_pred = np.array([1 - pred, pred, 0.0])
-                        new_predictions.append(new_pred)
-                        new_labels.append(label)
+                    new_labels.append(label)
+                    if isinstance(pred, float):
+                        if pred != -1:
+                            # convert old binary prediction to probability vector [p_real, p_synthetic, p_semi]
+                            new_predictions.append(np.array([1 - pred, pred, 0.0]))
+                        else:
+                            new_predictions.append(np.array([-1., -1., -1.]))
+                    elif isinstance(pred, np.ndarray):
+                        new_predictions.append(pred)
                     else:
-                        new_predictions.append(-1)
-                        new_labels.append(label)
+                        raise ValueError(f"Invalid prediction type encountered while loading history: {pred}")
 
                 new_tracker.prediction_history[uid] = new_predictions
                 new_tracker.label_history[uid] = new_labels
