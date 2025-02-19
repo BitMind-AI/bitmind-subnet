@@ -178,10 +178,16 @@ async def forward(self):
         performance_trackers=self.performance_trackers)
 
     self.update_scores(rewards, miner_uids)
+
+    responding_miner_uids = []
     for uid, pred, reward in zip(miner_uids, responses, rewards):
         if -1 not in pred:
             bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
+            responding_miner_uids.append(uid)
 
+    if len(responding_miner_uids) > 0:
+        self.last_responding_miner_uids = responding_miner_uids 
+    
     for modality in ['image', 'video']:
         for metric_name in list(metrics[0][modality].keys()):
             challenge_metadata[f'miner_{modality}_{metric_name}'] = [m[modality][metric_name] for m in metrics]
