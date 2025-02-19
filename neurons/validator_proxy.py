@@ -47,31 +47,45 @@ class MediaProcessor:
 
     def process_video(self, video_data: bytes) -> List[Any]:
         """Process raw video bytes into transformed frames"""
+        bt.logging.debug(f"Starting video processing with {len(video_data)} bytes")
+
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as temp_file:
+            bt.logging.debug(f"Created temp file: {temp_file.name}")
             temp_file.write(video_data)
             temp_file.flush()
 
             cap = cv2.VideoCapture(temp_file.name)
             if not cap.isOpened():
+                bt.logging.error("Failed to open video stream")
                 raise ValueError("Failed to open video stream")
-
             try:
                 frames = []
+                frame_count = 0
                 while True:
                     success, frame = cap.read()
                     if not success:
                         break
-
+                    frame_count += 1
                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     pil_frame = Image.fromarray(rgb_frame)
                     frames.append(pil_frame)
 
-                if not frames:
-                    raise ValueError("No frames extracted from video")
+                bt.logging.debug(f"Extracted {frame_count} frames")
 
-                return self.transforms(frames)
+                if not frames:
+                    bt.logging.error("No frames extracted from video")
+                    raise ValueError("No frames extracted from video")
+    
+                transformed = self.transforms(frames)
+                bt.logging.debug(f"Transformed frames shape: {type(transformed)}")
+                return transformed
+
+            except Exception as e:
+                bt.logging.error(f"Error in video processing: {str(e)}")
+                raise
             finally:
                 cap.release()
+
 
 class PredictionService:
     """Handles interaction with miners for predictions"""
@@ -235,39 +249,61 @@ class ValidatorProxy:
 
     async def handle_video_request(self, request: Request) -> Dict[str, Any]:
         """Handle video processing requests"""
-        video_data = await request.body()
-        if not video_data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing video data"
-            )
-
-        s = time.time()
         try:
-            video = self.media_processor.process_video(video_data)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to process video: {str(e)}"
+            form = await request.form()
+            if "video" not in form:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Missing video file in form data"
+                )
+
+            video_file = form["video"]
+            bt.logging.debug(f"Received video file of type: {type(video_file)}")
+
+            video_data = await video_file.read()
+            bt.logging.debug(f"Read video data of size: {len(video_data)} bytes")
+
+            if not video_data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Empty video file"
+                )
+
+            s = time.time()
+            try:
+                video = self.media_processor.process_video(video_data)
+                bt.logging.debug(f"Processed video into {len(video)} frames")
+            except Exception as e:
+                bt.logging.error(f"Video processing error: {str(e)}")
+                bt.logging.error(f"Video data type: {type(video_data)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to process video: {str(e)}"
+                )
+  
+            bt.logging.info(f"finished processing video in {time.time() - s:.6f}s")
+            predictions, uids = await self.prediction_service.get_predictions(
+                video, 
+                modality='video',
             )
-        bt.logging.info(f"finished processing video in {time.time() - s:.6f}s")
-        predictions, uids = await self.prediction_service.get_predictions(
-            video, 
-            modality='video',
-        )
+            bt.logging.debug(f"Got predictions of length: {len(predictions)}")
 
-        response = {
-            'preds': predictions,
-            'fqdn': socket.getfqdn()
-        }
+            response = {
+                'preds': predictions,
+                'fqdn': socket.getfqdn()
+            }
 
-        # add rich data if requested
-        request_json = await request.json() if request.headers.get('content-type') == 'application/json' else {}
-        if request_json.get('rich', '').lower() == 'true':
-            response.update(self.prediction_service.get_rich_data(uids))
+            # add rich data if requested
+            rich_param = form.get('rich', '').lower()
+            if rich_param == 'true':
+                response.update(self.prediction_service.get_rich_data(uids))
 
-        self.metrics.update(is_success=True)
-        return response
+            self.metrics.update(is_success=True)
+            return response
+
+        except Exception as e:
+            bt.logging.error(f"Unexpected error in handle_video_request: {str(e)}")
+            raise
 
     async def healthcheck(self, request: Request) -> Dict[str, str]:
         """Health check endpoint"""
