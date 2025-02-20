@@ -30,7 +30,7 @@ from bitmind.validator.proxy import ProxyCounter
 # Constants
 AUTH_HEADER = APIKeyHeader(name="Authorization")
 FRAME_FORMAT = "RGB"
-DEFAULT_TIMEOUT = 9
+DEFAULT_TIMEOUT = 40
 DEFAULT_SAMPLE_SIZE = 50
 
 
