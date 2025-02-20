@@ -6,5 +6,4 @@
 
 echo $CONDA_PREFIX
 ./setup_env.sh
-rm -rf ~/.cache/sn34
 echo "Autoupdate steps complete :)"
