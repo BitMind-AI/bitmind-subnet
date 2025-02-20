@@ -17,29 +17,33 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-
 from typing import List, Dict, Tuple, Any
 import bittensor as bt
 import numpy as np
 
 
-def compute_penalty(y_pred: float) -> float:
+def compute_penalty_multiplier(y_pred: np.ndarray) -> float:
     """
     Compute penalty for predictions outside valid range.
 
     Args:
-        y_pred (float): Predicted value
+        y_pred (np.ndarray): Predicted probabilities for each class, shape (3,)
 
     Returns:
         float: 0.0 if prediction is invalid, 1.0 if valid
     """
-    bad = (y_pred < 0.0) or (y_pred > 1.0)
-    return 0.0 if bad else 1.0
+    sum_check = np.abs(np.sum(y_pred) - 1.0) < 1e-6
+    range_check = np.all((y_pred >= 0.0) & (y_pred <= 1.0))
+    return 1.0 if (sum_check and range_check) else 0.0
+
+
+def transform_rational(mcc, pole=1.01):
+    return 1 / (pole - np.array(mcc))
 
 
 def get_rewards(
-    label: float,
-    responses: List[float],
+    label: int,
+    responses: List[np.ndarray],
     uids: List[int],
     axons: List[bt.axon],
     challenge_modality: str,
@@ -49,8 +53,8 @@ def get_rewards(
     Calculate rewards for miner responses based on performance metrics.
 
     Args:
-        label: The true label (1.0 for fake, 0.0 for real)
-        responses: List of responses from the miners
+        label: The true label (0 for real, 1 for synthetic, 2 for semi-synthetic)
+        responses: List of probability vectors from miners, each shape (3,)
         uids: List of miner UIDs
         axons: List of miner axons
         challenge_modality: Type of challenge ('video' or 'image')
@@ -64,7 +68,7 @@ def get_rewards(
     miner_rewards = []
     miner_metrics = []
 
-    for axon, uid, pred_prob in zip(axons, uids, responses):
+    for axon, uid, pred_probs in zip(axons, uids, responses):
         miner_modality_rewards = {}
         miner_modality_metrics = {}
 
@@ -73,36 +77,29 @@ def get_rewards(
             try:
                 miner_hotkey = axon.hotkey
 
-                tracked_hotkeys = tracker.miner_hotkeys
-                if uid in tracked_hotkeys and tracked_hotkeys[uid] != miner_hotkey:
-                    bt.logging.info(
-                        f"Miner hotkey changed for UID {uid}. Resetting performance metrics."
-                    )
+                if uid in tracker.miner_hotkeys and tracker.miner_hotkeys[uid] != miner_hotkey:
+                    bt.logging.info(f"Miner hotkey changed for UID {uid}. Resetting performance metrics.")
                     tracker.reset_miner_history(uid, miner_hotkey)
 
                 if modality == challenge_modality:
-                    performance_trackers[modality].update(
-                        uid, pred_prob, label, miner_hotkey
-                    )
+                    tracker.update(uid, pred_probs, label, miner_hotkey)
 
-                metrics_100 = tracker.get_metrics(uid, window=100)
-                metrics_10 = tracker.get_metrics(uid, window=10)
-                reward = 0.5 * metrics_100['mcc'] + 0.5 * metrics_10['accuracy']
-                reward *= compute_penalty(pred_prob)
+                metrics = tracker.get_metrics(uid, window=100)
+                reward = (0.9 * metrics['binary_mcc'] + 0.1 * metrics['multi_class_mcc'])
+                reward *= compute_penalty_multiplier(pred_probs)
+                
                 miner_modality_rewards[modality] = reward
-                miner_modality_metrics[modality] = metrics_100
+                miner_modality_metrics[modality] = metrics
 
             except Exception as e:
-                bt.logging.error(
-                    f"Couldn't calculate reward for miner {uid}, "
-                    f"prediction: {pred_prob}, label: {label}"
-                )
+                bt.logging.error(f"Couldn't calculate reward for miner {uid}, prediction: {pred_probs}, label: {label}")
                 bt.logging.exception(e)
                 miner_rewards.append(0.0)
+                continue
 
         total_reward = (
-            0.4 * miner_modality_rewards['video'] +
-            0.6 * miner_modality_rewards['image']
+            0.4 * miner_modality_rewards.get('video', 0.0) +
+            0.6 * miner_modality_rewards.get('image', 0.0)
         )
         miner_rewards.append(total_reward)
         miner_metrics.append(miner_modality_metrics)

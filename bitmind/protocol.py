@@ -17,12 +17,13 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from typing import List
+from typing import List, Union
 from pydantic import BaseModel, Field
 from torchvision import transforms
 from io import BytesIO
 from PIL import Image
 import bittensor as bt
+import numpy as np
 import base64
 import pydantic
 import torch
@@ -100,24 +101,30 @@ class ImageSynapse(bt.Synapse):
         frozen=False
     )
 
-    # Optional request output, filled by receiving axon.
-    prediction: float = pydantic.Field(
+    prediction: Union[float, List[float]] = pydantic.Field(
         title="Prediction",
-        description="Probability that the image is AI generated/modified",
-        default=-1.,
+        description="Probability vector for [real, synthetic, semi-synthetic] classes.",
+        default=[-1., -1., -1.],
         frozen=False
     )
 
-    def deserialize(self) -> float:
+    def deserialize(self) -> np.ndarray:
         """
-        Deserialize the output. This method retrieves the response from
-        the miner, deserializes it and returns it as the output of the dendrite.query() call.
+        Deserialize the output. Backwards compatible with binary float outputs.
 
         Returns:
-        - float: The deserialized miner prediction
-        prediction probabilities
+        - float: The deserialized miner prediction probabilities
         """
-        return self.prediction
+        p = self.prediction
+        if isinstance(p, float):
+            if p == -1:
+                return np.array([-1., -1., -1.])
+            else:
+                return np.array([1-p, p, 0.])
+        elif isinstance(p, list):
+            return np.array(p)
+        else:
+            raise ValueError(f"Unsupported prediction type: {type(p)}")
 
 
 def prepare_video_synapse(frames: List[Image.Image]):
@@ -153,23 +160,30 @@ class VideoSynapse(bt.Synapse):
     )
 
     # Optional request output, filled by receiving axon.
-    prediction: float = pydantic.Field(
+    prediction: Union[float, List[float]] = pydantic.Field(
         title="Prediction",
-        description="Probability that the image is AI generated/modified",
-        default=-1.,
+        description="Probability vector for [real, synthetic, semi-synthetic] classes.",
+        default=[-1., -1., -1.],
         frozen=False
     )
 
-    def deserialize(self) -> float:
+    def deserialize(self) -> np.ndarray:
         """
-        Deserialize the output. This method retrieves the response from
-        the miner, deserializes it and returns it as the output of the dendrite.query() call.
+        Deserialize the output. Backwards compatible with binary float outputs.
 
         Returns:
-        - float: The deserialized miner prediction
-        prediction probabilities
+        - float: The deserialized miner prediction probabilities
         """
-        return self.prediction
+        p = self.prediction
+        if isinstance(p, float):
+            if p == -1:
+                return np.array([-1., -1., -1.])
+            else:
+                return np.array([1-p, p, 0.])
+        elif isinstance(p, list):
+            return np.array(p)
+        else:
+            raise ValueError(f"Unsupported prediction type: {type(p)}")
 
 
 def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
@@ -214,9 +228,7 @@ def decode_video_synapse(synapse: VideoSynapse) -> List[torch.Tensor]:
             # Extract the JPEG data
             jpeg_data = combined_bytes[start_pos:current_pos]
             try:
-                # Convert to PIL Image
                 img = Image.open(BytesIO(jpeg_data))
-                # Convert to numpy array
                 frames.append(img)
             except Exception as e:
                 print(f"Error processing frame: {e}")
