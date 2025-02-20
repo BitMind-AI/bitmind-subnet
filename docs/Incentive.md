@@ -9,11 +9,7 @@ This document covers the current state of SN34's incentive mechanism.
 
 ## TLDR
 
-Miner rewards are a weighted combination of their performance on video and image detection challenges.
-
-Performance on video and image challenges are computed separately -- each is a weighted combination of the MCC of the last 100 predictions and the accuracy of the last 10. 
-
-Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. The weights assigned by validators determine the distribution of rewards among miners, incentivizing high-quality predictions and consistent performance.
+Miner rewards are a weighted combination of their performance on video and image detection challenges. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. These scores are used by validators to set weights for miners, which determine their reward distribution, incentivizing high-quality predictions and consistent performance.
 
 
 <p align="center">
@@ -23,21 +19,14 @@ Validators keep track of miner performance using a score vector, which is update
 </em></p>
 
 
-
 ## Rewards
-> Total rewards are a weighted combination of video and image rewards. Rewards for both image and video challenges are the [Matthews Correlation Coefficient (MCC)](https://en.wikipedia.org/wiki/Phi_coefficient) of (up to) a miner's last 100 predictions, combined with the accuracy of their last 10. 
+>A miner's total reward $C$ combines their performance across both image and video challenges, weighted by configurable parameters $p$ that controls the emphasis placed on each modality.
 
-Total rewards
-
-$$ 
-C_{total} = 0.6 \cdot C_{image} + 0.4 \cdot C_{video} 
+$$
+C = \sum_{m \in \{image, video\}} p_m \sum_{k \in \{b,m\}} w_k MCC_k
 $$
 
-Rewards for modality *m*
-
-$$ 
-C_m = 0.5 \cdot MCC_m + 0.5 \cdot Accuracy_m
-$$
+The reward for each modality $m$ is a weighted combination of binary and multiclass ($b$ and $m$) Matthews Correlation Coefficient (MCC) scores. The weights $w_k$ allow emphasis to be shifted as needed between the binary distinction between synthetic and authentic, and the more granular separation of fully- and semi-synthetic content. 
 
 
 ## Scores
