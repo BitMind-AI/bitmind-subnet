@@ -110,7 +110,7 @@ class PredictionService:
             timeout=timeout
         )
 
-        valid_indices = [i for i, v in enumerate(predictions) if v != -1.]
+        valid_indices = [i for i, v in enumerate(predictions) if -1 not in v]
         if not valid_indices:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -120,7 +120,7 @@ class PredictionService:
         valid_preds = np.array(predictions)[valid_indices]
         valid_uids = np.array(miner_uids)[valid_indices]
 
-        return valid_preds.tolist(), valid_uids.tolist()
+        return [p[1] + p[2] for p in predictions], valid_uids.tolist()
 
     def _get_miner_uids(self) -> List[int]:
         """Get list of miner UIDs to query"""
