@@ -62,7 +62,8 @@ MAX_EXTRACTED_GB = 10
 
 CHALLENGE_TYPE = {
     0: 'real',
-    1: 'synthetic'
+    1: 'synthetic',
+    2: 'semi-synthetic'
 }
 
 # Image datasets configuration

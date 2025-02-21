@@ -1,5 +1,5 @@
 # Core ML frameworks
-bittensor==9.0.0
+bittensor==9.0.1
 torch==2.5.1
 torchvision==0.20.1
 torchaudio==2.5.1
