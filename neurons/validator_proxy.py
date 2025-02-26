@@ -30,7 +30,7 @@ from bitmind.validator.proxy import ProxyCounter
 # Constants
 AUTH_HEADER = APIKeyHeader(name="Authorization")
 FRAME_FORMAT = "RGB"
-DEFAULT_TIMEOUT = 40
+DEFAULT_TIMEOUT = 9
 DEFAULT_SAMPLE_SIZE = 50
 
 
@@ -120,7 +120,7 @@ class PredictionService:
         valid_preds = np.array(predictions)[valid_indices]
         valid_uids = np.array(miner_uids)[valid_indices]
 
-        return [p[1] + p[2] for p in predictions], valid_uids.tolist()
+        return [p[1] + p[2] for p in valid_preds], valid_uids.tolist()
 
     def _get_miner_uids(self) -> List[int]:
         """Get list of miner UIDs to query"""

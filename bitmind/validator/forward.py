@@ -44,7 +44,7 @@ def determine_challenge_type(media_cache, fake_prob=0.5):
         elif modality == 'image':
             # 20% chance to use i2i (in-painting)
             task = 'i2i' if np.random.rand() < 0.2 else 't2i'
-            label = 2
+            label = 2 if task == 'i2i' else 1
         cache = cache[task]
     return label, modality, task, cache
 
