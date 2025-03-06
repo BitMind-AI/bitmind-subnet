@@ -43,13 +43,35 @@ VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
 
 REAL_CACHE_DIR: Path = SN34_CACHE_DIR / 'real'
 SYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'synthetic'
+SEMISYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'semisynthetic'
 
 REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
 REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
 
-T2V_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2v' 
-T2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2i'
-I2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'i2i'
+SYNTH_VIDEO_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'video'
+SYNTH_IMAGE_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image'
+
+SEMISYNTH_VIDEO_CACHE_DIR: Path = SEMISYNTH_CACHE_DIR / 'video'
+SEMISYNTH_IMAGE_CACHE_DIR: Path = SEMISYNTH_CACHE_DIR / 'image'
+
+CHALLENGE_TYPE = {
+    0: 'real',
+    1: 'synthetic',
+    2: 'semisynthetic'
+}
+P_REAL: float = 0.5
+P_SYNTH: float = 0.4
+P_SEMISYNTH: float = 0.1
+CHALLENGE_DISTRIBUTION: List = [P_REAL, P_SYNTH, P_SEMISYNTH]
+
+# Probability of concatenating together two videos
+# Will only ever combine videos of the same type 
+# i.e. real + real, synth + synth, semisynth + semisynth
+P_STITCH: float = 0.2
+
+# Number of frames in challenge 
+MIN_FRAMES = 8
+MAX_FRAMES = 144
 
 # Update intervals in hours
 VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 3
@@ -60,13 +82,8 @@ IMAGE_CACHE_UPDATE_INTERVAL = 1
 MAX_COMPRESSED_GB = 100
 MAX_EXTRACTED_GB = 10
 
-CHALLENGE_TYPE = {
-    0: 'real',
-    1: 'synthetic',
-    2: 'semi-synthetic'
-}
 
-# Image datasets configuration
+# dataset configurations
 IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
     "real": [
         {"path": "bitmind/bm-real"},
@@ -79,6 +96,9 @@ IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
         {"path": "bitmind/caltech-256"},
         {"path": "bitmind/caltech-101"},
         {"path": "bitmind/dtd"}
+    ],
+    "semisynthetic": [
+        {"path": "bitmind/faceswap"}
     ]
 }
 
@@ -92,6 +112,12 @@ VIDEO_DATASETS = {
             "path": "shangxd/imagenet-vidvrd",
             "filetype": "zip"
     	}
+    ],
+    "semisynthetic": [
+        {
+            "path": "bitmind/semisynthetic-video",
+            "filetype": "zip"
+        }
     ]
 }
 
