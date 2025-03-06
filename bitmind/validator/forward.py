@@ -38,9 +38,8 @@ async def forward(self):
     """
 
     # create challenge
-    challenge = Challenge.create(self)
-    if challenge.data is None:
-        bt.logging.warning("Challenge skipped -- waiting for cache to populate")
+    challenge = Challenge.create(self.media_cache)
+    if challenge is None:
         return
     
     # prepare metadata
@@ -48,7 +47,7 @@ async def forward(self):
         return
 
     # sample miners
-    miner_uids = get_random_uids(self, k=self.config.sample_size)
+    miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
     axons = [self.metagraph.axons[uid] for uid in miner_uids]
     challenge.metadata['miner_uids'] = list(miner_uids)
     challenge.metadata['miner_hotkeys'] = list([axon.hotkey for axon in axons])

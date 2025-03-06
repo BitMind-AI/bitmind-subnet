@@ -54,15 +54,20 @@ SYNTH_IMAGE_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image'
 SEMISYNTH_VIDEO_CACHE_DIR: Path = SEMISYNTH_CACHE_DIR / 'video'
 SEMISYNTH_IMAGE_CACHE_DIR: Path = SEMISYNTH_CACHE_DIR / 'image'
 
-CHALLENGE_TYPE = {
+MODALITIES = ('image', 'video')
+MODALITY_PROBS = (0.5, 0.5)
+
+LABELS = (0, 1, 2)
+LABEL_TO_TYPE = {
     0: 'real',
     1: 'synthetic',
     2: 'semisynthetic'
 }
+
 P_REAL: float = 0.5
 P_SYNTH: float = 0.4
 P_SEMISYNTH: float = 0.1
-CHALLENGE_DISTRIBUTION: List = [P_REAL, P_SYNTH, P_SEMISYNTH]
+LABEL_PROBS: List[float] = (P_REAL, P_SYNTH, P_SEMISYNTH)
 
 # Probability of concatenating together two videos
 # Will only ever combine videos of the same type 

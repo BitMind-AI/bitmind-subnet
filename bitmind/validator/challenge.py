@@ -1,6 +1,5 @@
 import random
-import re
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -13,12 +12,15 @@ from bitmind.utils.image_transforms import apply_augmentation_by_level
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.reward import get_rewards
 from bitmind.validator.config import (
-    CHALLENGE_TYPE, 
     TARGET_IMAGE_SIZE, 
-    CHALLENGE_DISTRIBUTION,
     MIN_FRAMES,
     MAX_FRAMES,
-    P_STITCH
+    P_STITCH,
+    LABELS,
+    LABEL_TO_TYPE,
+    LABEL_PROBS,
+    MODALITIES,
+    MODALITY_PROBS,
 )
 
 
@@ -34,9 +36,12 @@ class Challenge:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     # Class variables
-    target_image_size: tuple = TARGET_IMAGE_SIZE
-    challenge_distribution: List[float] = CHALLENGE_DISTRIBUTION
-    challenge_types: Dict[int, str] = CHALLENGE_TYPE
+    target_image_size: Tuple[int] = TARGET_IMAGE_SIZE
+    modality_options: Tuple[int] = MODALITIES
+    modality_probs: List[float] = MODALITY_PROBS
+    label_options: Tuple[int] = LABELS
+    label_probs: Tuple[float] = LABEL_PROBS
+    label_to_type: Dict[int, str] = field(default_factory=lambda: LABEL_TO_TYPE)
     min_frames: int = MIN_FRAMES
     max_frames: int = MAX_FRAMES
     stitch_prob: float = P_STITCH
@@ -47,9 +52,9 @@ class Challenge:
         challenge = cls()
 
         # randomly initialize challenge parameters
-        challenge.label = np.random.choice([0, 1, 2], p=challenge.challenge_distribution)
-        challenge.media_type = challenge.challenge_types[challenge.label]
-        challenge.modality = 'video' if np.random.rand() > 0.5 else 'image'
+        challenge.modality = np.random.choice(cls.modality_options, p=cls.modality_probs)
+        challenge.label = np.random.choice(cls.label_options, p=cls.label_probs)
+        challenge.media_type = challenge.label_to_type[challenge.label]
 
         # initialize metadata
         challenge.metadata = {
@@ -59,22 +64,29 @@ class Challenge:
         }
 
         # sample data from cache
-        bt.logging.info(f"Sampling data from {challenge.modality} cache")
+        bt.logging.info(f"Sampling data from {challenge.media_type} {challenge.modality} cache")
         cache = media_cache[challenge.media_type][challenge.modality]
         if challenge.modality == 'video':
             challenge.data = challenge.sample_video_frames(
-                cache, challenge.clip_frames_min, challenge.clip_frames_max)
+                cache, challenge.min_frames, challenge.max_frames)
         elif challenge.modality == 'image':
             challenge.data = cache.sample()
 
+        if challenge.data is None:
+            bt.logging.warning(f"Challenge skipped -- waiting for {challenge.media_type} cache to populate")
+            return None
+
         # apply augmentation
-        original_media = challenge.get_media()
+        original_media = challenge.data.get(challenge.modality, None)
+        print('original media', original_media)
         try:
             augmented_data, aug_level, aug_params = apply_augmentation_by_level(
                 original_media, 
                 cls.target_image_size, 
-                cls.data.get('mask_center', None))
+                challenge.data.get('mask_center', None))
+
         except Exception as e:
+            print('chaenge', challenge)
             augmented_data = original_media
             aug_level = -1
             aug_params = {}
@@ -109,11 +121,11 @@ class Challenge:
                 
     def get_media(self):
         """Extract the input data (image or video) from the challenge data."""
-        return self.data[self.modality]
+        return self.data.get(self.modality, None)
     
     def get_augmented_media(self):
         """Extract the input data (image or video) from the challenge data."""
-        return self.data[f'{self.modality}_augmented']
+        return self.data.get(f'{self.modality}_augmented', None)
       
     def process_metadata(self) -> bool:
         """Process and enrich metadata for logging."""
@@ -150,7 +162,7 @@ class Challenge:
             # Update metadata with everything except image/video data
             self.metadata.update({
                 k: v for k, v in self.data.items() 
-                if re.match(r'^(?!image$|video$|videos$|video_\d+$).+', k)
+                if 'image' not in k and 'video' not in k
             })
             return True
 
