@@ -29,13 +29,13 @@ class Challenge:
     """Container for challenge data, metadata, and configuration."""
 
     # Challenge state
+    label: int = -1       # 0='real', 1='synthetic', 2='semisynthetic'
     media_type: str = ""  # 'real', 'synthetic', 'semisynthetic'
     modality: str = ""    # 'image', 'video'
-    label: int = -1       # 0='real', 1='synthetic', 2='semisynthetic'
     data: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    # Class variables
+    # Config
     target_image_size: Tuple[int] = TARGET_IMAGE_SIZE
     modality_options: Tuple[int] = MODALITIES
     modality_probs: List[float] = MODALITY_PROBS
@@ -65,7 +65,7 @@ class Challenge:
 
         # sample data from cache
         bt.logging.info(f"Sampling data from {challenge.media_type} {challenge.modality} cache")
-        cache = media_cache[challenge.media_type][challenge.modality]
+        cache = media_cache[challenge.modality][challenge.media_type]
         if challenge.modality == 'video':
             challenge.data = challenge.sample_video_frames(
                 cache, challenge.min_frames, challenge.max_frames)
@@ -78,24 +78,19 @@ class Challenge:
 
         # apply augmentation
         original_media = challenge.data.get(challenge.modality, None)
-        print('original media', original_media)
         try:
             augmented_data, aug_level, aug_params = apply_augmentation_by_level(
                 original_media, 
                 cls.target_image_size, 
                 challenge.data.get('mask_center', None))
 
+            challenge.data[f'{challenge.modality}_augmented'] = augmented_data
+            challenge.metadata['data_aug_params'] = aug_params
+            challenge.metadata['data_aug_level'] = aug_level
+
         except Exception as e:
-            print('chaenge', challenge)
-            augmented_data = original_media
-            aug_level = -1
-            aug_params = {}
             bt.logging.error(f"Unable to apply augmentations: {e}")
 
-        # store augmented data and augmentation metadata
-        challenge.data[f'{challenge.modality}_augmented'] = augmented_data
-        challenge.metadata['data_aug_params'] = aug_params
-        challenge.metadata['data_aug_level'] = aug_level
         return challenge
 
     @staticmethod
@@ -120,15 +115,23 @@ class Challenge:
         return challenge
                 
     def get_media(self):
-        """Extract the input data (image or video) from the challenge data."""
+        """Extract the input data (image or video)"""
         return self.data.get(self.modality, None)
     
     def get_augmented_media(self):
-        """Extract the input data (image or video) from the challenge data."""
-        return self.data.get(f'{self.modality}_augmented', None)
+        """Extract the augmented input data (image or video)"""
+        media = self.data.get(f'{self.modality}_augmented', None)
+        if media is None:
+            bt.logging.warning(f"No augmented media found. Returning original media.")
+            return self.get_media()
+        return media
       
     def process_metadata(self) -> bool:
-        """Process and enrich metadata for logging."""
+        """Prepare challenge metadata and media for logging.
+        Note that for challenges with two videos stitched together, we log the original videos separately
+        as video_0 and video_1, as they are not necessarily the same dimensions and cannot be stacked until
+        after transformations are applied. 
+        """
         try:
             if self.modality == 'video':
                 self.metadata['fps'] = self.data['fps']

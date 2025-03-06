@@ -1,3 +1,4 @@
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Union, Optional, Any
 
@@ -34,6 +35,16 @@ MAINNET_WANDB_PROJECT: str = 'bitmind-subnet'
 TESTNET_WANDB_PROJECT: str = 'bitmind'
 WANDB_ENTITY: str = 'bitmindai'
 
+# Enums
+class MediaType(Enum):
+    REAL = "real"
+    SYNTHETIC = "synthetic"
+    SEMISYNTHETIC = "semisynthetic"
+
+class Modality(Enum):
+    IMAGE = "image"
+    VIDEO = "video"
+
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
 SN34_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34'
@@ -41,33 +52,30 @@ SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
 
-REAL_CACHE_DIR: Path = SN34_CACHE_DIR / 'real'
-SYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'synthetic'
-SEMISYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'semisynthetic'
+IMAGE_CACHE_DIR: Path = SN34_CACHE_DIR / Modality.IMAGE
+VIDEO_CACHE_DIR: Path = SN34_CACHE_DIR / Modality.VIDEO
 
-REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
-REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
+REAL_IMAGE_CACHE_DIR: Path = IMAGE_CACHE_DIR / MediaType.REAL
+SYNTH_IMAGE_CACHE_DIR: Path = IMAGE_CACHE_DIR / MediaType.SYNTHETIC
+SEMISYNTH_IMAGE_CACHE_DIR: Path = IMAGE_CACHE_DIR / MediaType.SEMISYNTHETIC
 
-SYNTH_VIDEO_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'video'
-SYNTH_IMAGE_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'image'
-
-SEMISYNTH_VIDEO_CACHE_DIR: Path = SEMISYNTH_CACHE_DIR / 'video'
-SEMISYNTH_IMAGE_CACHE_DIR: Path = SEMISYNTH_CACHE_DIR / 'image'
-
-MODALITIES = ('image', 'video')
-MODALITY_PROBS = (0.5, 0.5)
+REAL_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / MediaType.REAL
+SYNTH_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / MediaType.SYNTHETIC
+SEMISYNTH_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / MediaType.SEMISYNTHETIC
 
 LABELS = (0, 1, 2)
 LABEL_TO_TYPE = {
-    0: 'real',
-    1: 'synthetic',
-    2: 'semisynthetic'
+    0: MediaType.REAL,
+    1: MediaType.SYNTHETIC,
+    2: MediaType.SEMISYNTHETIC
 }
 
 P_REAL: float = 0.5
 P_SYNTH: float = 0.4
 P_SEMISYNTH: float = 0.1
 LABEL_PROBS: List[float] = (P_REAL, P_SYNTH, P_SEMISYNTH)
+
+MODALITY_PROBS = (0.5, 0.5)
 
 # Probability of concatenating together two videos
 # Will only ever combine videos of the same type 
@@ -372,10 +380,15 @@ MODEL_NAMES: List[str] = list(MODELS.keys())
 
 def get_modality(model_name):
      if model_name in T2V_MODEL_NAMES:
-        return 'video'
+        return Modality.VIDEO
      elif model_name in T2I_MODEL_NAMES + I2I_MODEL_NAMES:
-        return 'image'   
+        return Modality.IMAGE
 
+def get_output_media_type(model_name):
+     if model_name in I2I_MODEL_NAMES:
+        return MediaType.SEMISYNTHETIC
+     elif model_name in T2I_MODEL_NAMES + T2V_MODEL_NAMES:
+        return MediaType.SYNTHETIC
 
 def get_task(model_name):
     if model_name in T2V_MODEL_NAMES:

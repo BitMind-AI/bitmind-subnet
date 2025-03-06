@@ -66,27 +66,23 @@ class Validator(BaseValidatorNeuron):
         self.last_responding_miner_uids = []
         self.validator_proxy = ValidatorProxy(self)
 
-        self.real_media_cache = {
-            'image': ImageCache(REAL_IMAGE_CACHE_DIR),
-            'video': VideoCache(REAL_VIDEO_CACHE_DIR)
+        self.image_cache = {
+            'real': ImageCache(REAL_IMAGE_CACHE_DIR),
+            'synthetic': ImageCache(SYNTH_IMAGE_CACHE_DIR),
+            'semisynthetic': ImageCache(SEMISYNTH_IMAGE_CACHE_DIR),
         }
-        self.synthetic_media_cache = {
-            'image': ImageCache(SYNTH_IMAGE_CACHE_DIR),
-            'video': VideoCache(SYNTH_VIDEO_CACHE_DIR)
-        }
-        self.semisynthetic_media_cache = {
-            'image': ImageCache(SEMISYNTH_IMAGE_CACHE_DIR),
-            'video': VideoCache(SEMISYNTH_VIDEO_CACHE_DIR)
+        self.video_cache = {
+            'real': VideoCache(REAL_VIDEO_CACHE_DIR),
+            'synthetic': VideoCache(SYNTH_VIDEO_CACHE_DIR),
+            'semisynthetic': VideoCache(SEMISYNTH_VIDEO_CACHE_DIR),
         }
         self.media_cache = {
-            'real': self.real_media_cache,
-            'synthetic': self.synthetic_media_cache,
-            'semisynthetic': self.semisynthetic_media_cache,
+            'image': self.image_cache,
+            'video': self.video_cache
         }
 
         self.init_wandb()
         self.store_vali_info()
-        self._fake_prob = self.config.get('fake_prob', 0.5)
 
     async def forward(self):
         """
