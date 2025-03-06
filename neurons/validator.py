@@ -36,9 +36,10 @@ from bitmind.validator.config import (
     WANDB_ENTITY,
     REAL_VIDEO_CACHE_DIR,
     REAL_IMAGE_CACHE_DIR,
-    T2I_CACHE_DIR,
-    I2I_CACHE_DIR,
-    T2V_CACHE_DIR,
+    SYNTH_VIDEO_CACHE_DIR,
+    SYNTH_IMAGE_CACHE_DIR,
+    SEMISYNTH_VIDEO_CACHE_DIR,
+    SEMISYNTH_IMAGE_CACHE_DIR,
     VALIDATOR_INFO_PATH
 )
 
@@ -65,26 +66,22 @@ class Validator(BaseValidatorNeuron):
         self.last_responding_miner_uids = []
         self.validator_proxy = ValidatorProxy(self)
 
-        # real media caches are updated by the bitmind_cache_updater process (started by start_validator.sh)
         self.real_media_cache = {
             'image': ImageCache(REAL_IMAGE_CACHE_DIR),
             'video': VideoCache(REAL_VIDEO_CACHE_DIR)
         }
-
-        # synthetic media caches are populated by the SyntheticDataGenerator process (started by start_validator.sh)
         self.synthetic_media_cache = {
-            'image': {
-                't2i': ImageCache(T2I_CACHE_DIR),
-                'i2i': ImageCache(I2I_CACHE_DIR)
-            },
-            'video': {
-                't2v': VideoCache(T2V_CACHE_DIR)
-            }
+            'image': ImageCache(SYNTH_IMAGE_CACHE_DIR),
+            'video': VideoCache(SYNTH_VIDEO_CACHE_DIR)
         }
-
+        self.semisynthetic_media_cache = {
+            'image': ImageCache(SEMISYNTH_IMAGE_CACHE_DIR),
+            'video': VideoCache(SEMISYNTH_VIDEO_CACHE_DIR)
+        }
         self.media_cache = {
             'real': self.real_media_cache,
             'synthetic': self.synthetic_media_cache,
+            'semisynthetic': self.semisynthetic_media_cache,
         }
 
         self.init_wandb()

@@ -6,6 +6,7 @@ import mimetypes
 import os
 import random
 import warnings
+import shutil
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -66,8 +67,9 @@ q
 
                     # extract video and get metadata
                     video_path = dest_dir / base_filename
-                    temp_path = Path(zip_file.extract(video, path=dest_dir))
-                    temp_path.rename(video_path)
+                    with zip_file.open(video) as source:
+                        with open(video_path, 'wb') as target:
+                            shutil.copyfileobj(source, target)
 
                     video_info = zip_file.getinfo(video)
                     metadata = {
