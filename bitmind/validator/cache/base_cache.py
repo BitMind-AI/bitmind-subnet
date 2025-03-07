@@ -95,16 +95,23 @@ class BaseCache(ABC):
             self._run_extracted_updater()
         )
 
-    def _get_cached_files(self) -> List[Path]:
-        """Get list of all extracted files in cache directory."""
-        return [
-            f for f in self.cache_dir.iterdir() 
-            if f.is_file() and f.suffix.lower() in self.file_extensions
-        ]
+    def _get_cached_files(self, max_depth: int = 3) -> List[Path]:
+        """Get list of all extracted files in cache directory up to a maximum depth."""
+        files = []
+        for depth in range(max_depth + 1):
+            pattern = '*/' * depth + '*'
+            files.extend([
+                f for f in self.cache_dir.glob(pattern)
+                if f.is_file() and f.suffix.lower() in self.file_extensions
+            ])
+        return files
 
     def _get_compressed_files(self) -> List[Path]:
-        """Get list of all compressed files in compressed directory."""
-        return list(self.compressed_dir.glob(f'*{self.compressed_file_extension}'))
+        """Get list of all compressed files in compressed directory. Handles up two two levels
+        of directory nesting """
+        return list(self.compressed_dir.glob(f'*{self.compressed_file_extension}')) + \
+                list(self.compressed_dir.glob(f'*/*{self.compressed_file_extension}')) + \
+                list(self.compressed_dir.glob(f'*/*/*{self.compressed_file_extension}'))
 
     def _extracted_cache_empty(self) -> bool:
         """Check if extracted cache directory is empty."""
@@ -218,7 +225,7 @@ class BaseCache(ABC):
                 bt.logging.info(f"Downloading {n_sources_per_dataset} from {dataset['path']} to {self.compressed_dir}")
                 new_files += download_files(
                     urls=np.random.choice(remote_paths, n_sources_per_dataset),
-                    output_dir=self.compressed_dir)
+                    output_dir=self.compressed_dir / dataset['path'].split('/')[1])
 
             if new_files:
                 bt.logging.info(f"{len(new_files)} new files added to {self.compressed_dir}")

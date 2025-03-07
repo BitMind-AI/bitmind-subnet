@@ -149,16 +149,3 @@ def openvid1m_err_handler(
             return None
     
     return None
-    
-    """
-data_folder = output_path / "data" / "train"
-data_folder.mkdir(parents=True, exist_ok=True)
-data_urls = [
-    "https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/data/train/OpenVid-1M.csv",
-    "https://huggingface.co/datasets/nkp37/OpenVid-1M/resolve/main/data/train/OpenVidHD.csv"
-]
-for data_url in data_urls:
-    data_path = data_folder / Path(data_url).name
-    command = ["wget", "-O", str(data_path), data_url]
-    subprocess.run(command, check=True)
-"""

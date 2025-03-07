@@ -1,4 +1,4 @@
-from enum import Enum
+from strenum import StrEnum
 from pathlib import Path
 from typing import Dict, List, Union, Optional, Any
 
@@ -35,15 +35,18 @@ MAINNET_WANDB_PROJECT: str = 'bitmind-subnet'
 TESTNET_WANDB_PROJECT: str = 'bitmind'
 WANDB_ENTITY: str = 'bitmindai'
 
+
 # Enums
-class MediaType(Enum):
+class MediaType(StrEnum):
     REAL = "real"
     SYNTHETIC = "synthetic"
     SEMISYNTHETIC = "semisynthetic"
 
-class Modality(Enum):
+
+class Modality(StrEnum):
     IMAGE = "image"
     VIDEO = "video"
+
 
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'

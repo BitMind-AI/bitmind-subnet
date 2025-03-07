@@ -73,16 +73,17 @@ class ImageCache(BaseCache):
             n_items_per_source = self.num_images_per_source
 
         extracted_files = []
-        parquet_files = self._get_compressed_files()
-        if not parquet_files:
+        parquet_paths = self._get_compressed_files()
+        if not parquet_paths:
             bt.logging.warning(f"No parquet files found in {self.compressed_dir}")
             return extracted_files
 
-        for parquet_file in parquet_files:
+        for parquet_path in parquet_paths:
+            dataset = Path(parquet_path).relative_to(self.compressed_dir).parts[0]
             try:
                 extracted_files += extract_images_from_parquet(
-                    parquet_file,
-                    self.cache_dir,
+                    parquet_path,
+                    self.cache_dir / dataset,
                     n_items_per_source
                 )
             except Exception as e:

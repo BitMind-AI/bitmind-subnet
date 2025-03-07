@@ -29,8 +29,8 @@ from bitmind.validator.config import (
     get_task,
     get_modality,
     get_output_media_type,
-    MEDIA_TYPE,
-    MODALITY
+    MediaType,
+    Modality
 )
 from bitmind.synthetic_data_generation.image_utils import create_random_mask
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long

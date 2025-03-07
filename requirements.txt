@@ -26,10 +26,10 @@ imageio==2.36.1
 imageio-ffmpeg==0.5.1
 moviepy==2.1.1
 av==13.1.0
+#dlib==19.24.6
 ffmpeg-python==0.2.0
 pyffmpeg==2.4.2.18.1
 imutils==0.5.4
-dlib==19.24.6
 scikit-image==0.24.0
 
 # Data and logging
@@ -39,3 +39,4 @@ loguru==0.7.2
 httpx==0.27.0
 joblib==1.4.2
 python-multipart==0.0.20
+strenum==0.4.15

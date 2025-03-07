@@ -41,10 +41,6 @@ async def forward(self):
     challenge = Challenge.create(self.media_cache)
     if challenge is None:
         return
-    
-    # prepare metadata
-    if not challenge.process_metadata():
-        return
 
     # sample miners
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
@@ -54,7 +50,7 @@ async def forward(self):
     
     # prepare synapse
     synapse = prepare_synapse(
-        challenge.get_augmented_media(),
+        challenge.augmented_media,
         modality=challenge.modality)
 
     # on testnet, add label for eyeballing correctness
