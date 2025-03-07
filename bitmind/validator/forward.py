@@ -109,4 +109,4 @@ async def forward(self):
         wandb.log(challenge.metadata)
 
     self.save_miner_history()
-    self.media_cache[challenge.media_type][challenge.modality]._prune_extracted_cache()
+    self.media_cache[challenge.modality][challenge.media_type]._prune_extracted_cache()
