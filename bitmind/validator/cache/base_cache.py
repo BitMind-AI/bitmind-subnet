@@ -80,11 +80,13 @@ class BaseCache(ABC):
         if self._extracted_cache_empty():
             if self._compressed_cache_empty():
                 bt.logging.info(f"Compressed cache {self.compressed_dir} empty; populating")
-                # grab 1 zip to ensure validator has available data
-                self._refresh_compressed_cache(n_sources_per_dataset=1, n_datasets=1)
-
-            bt.logging.info(f"Extracted cache {self.cache_dir} empty; populating")
-            self._refresh_extracted_cache()
+                # grab 1 zip first to ensure validator has available data
+                for batch_size in [1, None]:
+                    self._refresh_compressed_cache(n_sources_per_dataset=1, n_datasets=batch_size)
+                    self._refresh_extracted_cache()
+            else:
+                bt.logging.info(f"Extracted cache {self.cache_dir} empty; populating")
+                self._refresh_extracted_cache()
 
         # Start background tasks
         bt.logging.info(f"Starting background tasks")
@@ -197,9 +199,13 @@ class BaseCache(ABC):
                 time_elapsed = time.time() - last_update
 
                 if time_elapsed >= self.compressed_update_interval:
+                    cache_state_before = self._get_compressed_files()
                     bt.logging.info(f"[{self.compressed_dir}] Refreshing cache")
                     self._refresh_compressed_cache()
                     bt.logging.info(f"[{self.compressed_dir}] Cache refresh complete")
+                    if set(cache_state_before) == set(self._get_compressed_files()):
+                        bt.logging.warning(f"[{self.compressed_dir}] All datasets small enough to store locally. Stopping updater.")
+                        return
 
                 sleep_time = max(0, self.compressed_update_interval - time_elapsed)
                 bt.logging.info(f"[{self.compressed_dir}] Next compressed cache refresh in {seconds_to_str(sleep_time)}")
