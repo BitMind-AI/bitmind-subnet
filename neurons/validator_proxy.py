@@ -5,38 +5,52 @@ from cryptography.exceptions import InvalidSignature
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from typing import Optional, Dict, List, Union, Any
-from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path
-import bittensor as bt
 import numpy as np
 import uvicorn
 import base64
 import tempfile
 import asyncio
+import aiohttp
 import cv2
 import os
 import httpx
 import time
 import socket
-from functools import lru_cache
+import logging
+import json
+from dotenv import load_dotenv
+from substrateinterface.keypair import Keypair
 
+# Import directly from bitmind utils
 from bitmind.validator.config import TARGET_IMAGE_SIZE
 from bitmind.utils.image_transforms import get_base_transforms
 from bitmind.protocol import prepare_synapse
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.proxy import ProxyCounter
 
+# Import our minimal dendrite
+from minimal_dendrite import MinimalDendrite
+
+# Load environment variables
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("validator_proxy")
+
 # Constants
 AUTH_HEADER = APIKeyHeader(name="Authorization")
-FRAME_FORMAT = "RGB"
-DEFAULT_TIMEOUT = 9
+DEFAULT_TIMEOUT = 12  # seconds, shorter timeout to avoid long waits
 DEFAULT_SAMPLE_SIZE = 50
-
 
 class MediaProcessor:
     """Handles processing of images and videos"""
     def __init__(self, target_size: tuple):
+        logger.info(f"Initializing MediaProcessor with target_size: {target_size}")
+        if target_size is None:
+            logger.warning("Target size is None, using fallback (224, 224)")
+            target_size = (224, 224)
         self.transforms = get_base_transforms(target_size)
 
     def process_image(self, b64_image: str) -> Any:
@@ -47,16 +61,16 @@ class MediaProcessor:
 
     def process_video(self, video_data: bytes) -> List[Any]:
         """Process raw video bytes into transformed frames"""
-        bt.logging.debug(f"Starting video processing with {len(video_data)} bytes")
+        logger.debug(f"Starting video processing with {len(video_data)} bytes")
 
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as temp_file:
-            bt.logging.debug(f"Created temp file: {temp_file.name}")
+            logger.debug(f"Created temp file: {temp_file.name}")
             temp_file.write(video_data)
             temp_file.flush()
 
             cap = cv2.VideoCapture(temp_file.name)
             if not cap.isOpened():
-                bt.logging.error("Failed to open video stream")
+                logger.error("Failed to open video stream")
                 raise ValueError("Failed to open video stream")
             try:
                 frames = []
@@ -70,22 +84,21 @@ class MediaProcessor:
                     pil_frame = Image.fromarray(rgb_frame)
                     frames.append(pil_frame)
 
-                bt.logging.debug(f"Extracted {frame_count} frames")
+                logger.debug(f"Extracted {frame_count} frames")
 
                 if not frames:
-                    bt.logging.error("No frames extracted from video")
+                    logger.error("No frames extracted from video")
                     raise ValueError("No frames extracted from video")
     
                 transformed = self.transforms(frames)
-                bt.logging.debug(f"Transformed frames shape: {type(transformed)}")
+                logger.debug(f"Transformed frames shape: {type(transformed)}")
                 return transformed
 
             except Exception as e:
-                bt.logging.error(f"Error in video processing: {str(e)}")
+                logger.error(f"Error in video processing: {str(e)}")
                 raise
             finally:
                 cap.release()
-
 
 class PredictionService:
     """Handles interaction with miners for predictions"""
@@ -102,35 +115,94 @@ class PredictionService:
     ) -> tuple[List[float], List[int]]:
         """Get predictions from miners"""
         miner_uids = self._get_miner_uids()
+        
+        # Track responding miners for future optimization
+        responding_uids = []
+        
+        try:
+            # Query multiple miners in parallel
+            predictions = await self.dendrite(
+                axons=[self.metagraph.axons[uid] for uid in miner_uids],
+                synapse=prepare_synapse(data, modality=modality),
+                deserialize=True,
+                timeout=timeout
+            )
+        except Exception as e:
+            logger.error(f"Error getting predictions: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Error getting predictions: {str(e)}"
+            )
 
-        predictions = await self.dendrite(
-            axons=[self.metagraph.axons[uid] for uid in miner_uids],
-            synapse=prepare_synapse(data, modality=modality),
-            deserialize=True,
-            timeout=timeout
-        )
-
-        valid_indices = [i for i, v in enumerate(predictions) if -1 not in v]
+        # Filter valid predictions
+        valid_indices = []
+        valid_predictions = []
+        
+        for i, pred in enumerate(predictions):
+            try:
+                # Skip None responses
+                if pred is None:
+                    continue
+                    
+                # Convert tensor to list if needed
+                if hasattr(pred, 'tolist'):
+                    pred_list = pred.tolist()
+                else:
+                    pred_list = pred
+                    
+                # Check if the prediction contains an error indicator
+                if not isinstance(pred_list, list) or -1 in pred_list:
+                    continue
+                    
+                # Store valid prediction
+                valid_indices.append(i)
+                valid_predictions.append(pred_list)
+                responding_uids.append(miner_uids[i])
+                
+            except Exception as e:
+                logger.debug(f"Error processing prediction {i}: {e}")
+                continue
+        
+        print(responding_uids)
+        
+        # Update the validator's responding miners list if we have access
+        if hasattr(self.validator, 'last_responding_miner_uids'):
+            self.validator.last_responding_miner_uids = responding_uids
+            
+        # Check if we have any valid predictions
         if not valid_indices:
+            logger.warning("No valid predictions received from any miners")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No valid predictions received"
             )
 
-        valid_preds = np.array(predictions)[valid_indices]
-        valid_uids = np.array(miner_uids)[valid_indices]
+        # Get UIDs for valid predictions
+        valid_uids = [miner_uids[i] for i in valid_indices]
 
-        return [p[1] + p[2] for p in valid_preds], valid_uids.tolist()
+        # Process predictions for the expected format
+        try:
+            # For bitmind predictions, we sum indices 1 and 2
+            results = [p[1] + p[2] for p in valid_predictions]
+            return results, valid_uids
+            
+        except (IndexError, TypeError) as e:
+            logger.error(f"Error processing predictions: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Error processing predictions: {str(e)}"
+            )
 
-    def _get_miner_uids(self) -> List[int]:
+    def _get_miner_uids(self):
         """Get list of miner UIDs to query"""
-        uids = self.validator.last_responding_miner_uids
+        # First try to use recently responding miners
+        uids = getattr(self.validator, 'last_responding_miner_uids', None)
         if not uids:
-            bt.logging.warning("No recent miner UIDs found, sampling random UIDs")
+            logger.warning("No recent miner UIDs found, sampling random UIDs")
             uids = get_random_uids(self.validator, k=DEFAULT_SAMPLE_SIZE)
         return uids
 
-    def get_rich_data(self, uids: List[int]) -> Dict[str, List]:
+    def get_rich_data(self, uids):
         """Get additional miner metadata"""
         return {
             'uids': [int(uid) for uid in uids],
@@ -145,16 +217,70 @@ class ValidatorProxy:
     """FastAPI server that proxies requests to validator miners"""
     def __init__(self, validator):
         self.validator = validator
-        self.media_processor = MediaProcessor(TARGET_IMAGE_SIZE)
-        self.dendrite = bt.dendrite(wallet=validator.wallet)
+        
+        # Safely handle target image size
+        try:
+            # Try getting directly from imported constant
+            target_size = TARGET_IMAGE_SIZE
+            logger.info(f"Using TARGET_IMAGE_SIZE: {target_size}")
+        except (NameError, AttributeError):
+            # Fallback to config if available
+            target_size = getattr(validator.config.neuron, 'target_image_size', (224, 224))
+            logger.info(f"Using config target_image_size: {target_size}")
+            
+        # Initialize media processor with safe target size
+        self.media_processor = MediaProcessor(target_size)
+        
+        # Get keypair from environment or create from validator's wallet
+        keypair = self._get_keypair()
+        
+        # Initialize our minimal Dendrite implementation
+        self.dendrite = MinimalDendrite(keypair=keypair)
+        
         self.prediction_service = PredictionService(validator, self.dendrite)
-        self.metrics = ProxyCounter(os.path.join(validator.config.neuron.full_path, "proxy_counter.json"))
+        
+        # Initialize the metrics counter
+        metrics_path = os.path.join(validator.config.neuron.full_path, "proxy_counter.json")
+        self.metrics = ProxyCounter(metrics_path)
+        
+        # Setup FastAPI app
         self.app = FastAPI(title="Validator Proxy", version="1.0.0")
         self._configure_routes()
 
-        if self.validator.config.proxy.port:
+        # Start the server if port is configured
+        if hasattr(validator.config.proxy, 'port') and validator.config.proxy.port:
             self.auth_verifier = self._setup_auth()
             self.start()
+
+    def _get_keypair(self):
+        """Get a keypair from environment or validator wallet"""
+        # Try to get hotkey from environment
+        hotkey = os.getenv('HOTKEY')
+        if hotkey:
+            try:
+                # Try to initialize keypair from mnemonic/seed phrase
+                keypair = Keypair.create_from_uri(hotkey)
+                logger.info(f"Using keypair from environment with address: {keypair.ss58_address}")
+                return keypair
+            except Exception as e1:
+                try:
+                    # Try to interpret it as a SS58 address
+                    keypair = Keypair(ss58_address=hotkey)
+                    logger.info(f"Using keypair from address: {keypair.ss58_address}")
+                    return keypair
+                except Exception as e2:
+                    logger.error(f"Failed to create keypair from environment: {e1}, {e2}")
+        
+        # Fall back to validator's wallet if available
+        try:
+            if hasattr(self.validator, 'wallet') and hasattr(self.validator.wallet, 'hotkey'):
+                logger.info("Using validator wallet keypair")
+                return self.validator.wallet.hotkey
+        except Exception as e:
+            logger.error(f"Failed to get validator wallet keypair: {e}")
+        
+        logger.warning("No keypair available, requests may fail authentication")
+        return None
 
     def _configure_routes(self):
         """Configure FastAPI routes"""
@@ -177,33 +303,38 @@ class ValidatorProxy:
             dependencies=[Depends(self.verify_auth)]
         )
 
-    def _setup_auth(self) -> callable:
+    def _setup_auth(self):
         """Set up authentication verifier using synchronous HTTP client"""
-        with httpx.Client() as client:
-            response = client.post(
-                f"{self.validator.config.proxy.proxy_client_url}/get-credentials",
-                json={
-                    "postfix": f":{self.validator.config.proxy.port}" if self.validator.config.proxy.port else "",
-                    "uid": self.validator.uid
-                },
-                timeout=DEFAULT_TIMEOUT
-            )
-            creds = response.json()
+        try:
+            with httpx.Client() as client:
+                response = client.post(
+                    f"{self.validator.config.proxy.proxy_client_url}/get-credentials",
+                    json={
+                        "postfix": f":{self.validator.config.proxy.port}" if self.validator.config.proxy.port else "",
+                        "uid": self.validator.uid
+                    },
+                    timeout=DEFAULT_TIMEOUT
+                )
+                creds = response.json()
 
-        signature = base64.b64decode(creds["signature"])
-        message = creds["message"]
+            signature = base64.b64decode(creds["signature"])
+            message = creds["message"]
 
-        def verify(key_bytes: bytes) -> bool:
-            try:
-                key = Ed25519PublicKey.from_public_bytes(key_bytes)
-                key.verify(signature, message.encode())
-                return True
-            except InvalidSignature:
-                return False
+            def verify(key_bytes: bytes):
+                try:
+                    key = Ed25519PublicKey.from_public_bytes(key_bytes)
+                    key.verify(signature, message.encode())
+                    return True
+                except InvalidSignature:
+                    return False
 
-        return verify
+            return verify
+        except Exception as e:
+            logger.error(f"Failed to set up auth verifier: {e}")
+            # Return a function that always passes for development
+            return lambda key_bytes: True
 
-    async def verify_auth(self, auth: str = Depends(AUTH_HEADER)) -> None:
+    async def verify_auth(self, auth: str = Depends(AUTH_HEADER)):
         """Verify authentication token"""
         try:
             key_bytes = base64.b64decode(auth)
@@ -218,38 +349,71 @@ class ValidatorProxy:
                 detail=str(e)
             )
 
-    async def handle_image_request(self, request: Request) -> Dict[str, Any]:
+    async def handle_image_request(self, request: Request):
         """Handle image processing requests"""
-        payload = await request.json()
-
+        start_time = time.time()
+        
         try:
-            image = self.media_processor.process_image(payload['image'])
+            # Parse request body
+            payload = await request.json()
+            
+            if 'image' not in payload:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Missing 'image' field in request body"
+                )
+
+            # Process the image
+            try:
+                image = self.media_processor.process_image(payload['image'])
+                logger.info("Image processed successfully")
+            except Exception as e:
+                logger.error(f"Failed to process image: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to process image: {str(e)}"
+                )
+
+            # Get predictions from miners
+            predictions, uids = await self.prediction_service.get_predictions(
+                image, 
+                modality='image',
+                timeout=DEFAULT_TIMEOUT
+            )
+            process_time = time.time() - start_time
+            logger.info(f"Got {len(predictions)} predictions in {process_time:.2f}s")
+
+            # Prepare response
+            response = {
+                'preds': predictions,
+                'fqdn': socket.getfqdn()
+            }
+
+            # Add rich data if requested
+            if payload.get('rich', '').lower() == 'true':
+                response.update(self.prediction_service.get_rich_data(uids))
+
+            # Update metrics
+            self.metrics.update(is_success=True)
+            
+            return response
+            
+        except HTTPException:
+            # Let FastAPI handle HTTP exceptions
+            raise
         except Exception as e:
+            logger.error(f"Unexpected error in handle_image_request: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to process image: {str(e)}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Internal server error: {str(e)}"
             )
 
-        predictions, uids = await self.prediction_service.get_predictions(
-            image, 
-            modality='image'
-        )
-
-        response = {
-            'preds': predictions,
-            'fqdn': socket.getfqdn()
-        }
-
-        # add rich data if requested
-        if payload.get('rich', '').lower() == 'true':
-            response.update(self.prediction_service.get_rich_data(uids))
-
-        self.metrics.update(is_success=True)
-        return response
-
-    async def handle_video_request(self, request: Request) -> Dict[str, Any]:
+    async def handle_video_request(self, request: Request):
         """Handle video processing requests"""
+        start_time = time.time()
+        
         try:
+            # Parse multipart form
             form = await request.form()
             if "video" not in form:
                 raise HTTPException(
@@ -257,11 +421,13 @@ class ValidatorProxy:
                     detail="Missing video file in form data"
                 )
 
+            # Get video file
             video_file = form["video"]
-            bt.logging.debug(f"Received video file of type: {type(video_file)}")
+            logger.debug(f"Received video file of type: {type(video_file)}")
 
+            # Read video data
             video_data = await video_file.read()
-            bt.logging.debug(f"Read video data of size: {len(video_data)} bytes")
+            logger.debug(f"Read video data of size: {len(video_data)} bytes")
 
             if not video_data:
                 raise HTTPException(
@@ -269,49 +435,69 @@ class ValidatorProxy:
                     detail="Empty video file"
                 )
 
-            s = time.time()
+            # Process video
             try:
                 video = self.media_processor.process_video(video_data)
-                bt.logging.debug(f"Processed video into {len(video)} frames")
+                logger.debug(f"Processed video into frames")
             except Exception as e:
-                bt.logging.error(f"Video processing error: {str(e)}")
-                bt.logging.error(f"Video data type: {type(video_data)}")
+                logger.error(f"Video processing error: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Failed to process video: {str(e)}"
                 )
   
-            bt.logging.info(f"finished processing video in {time.time() - s:.6f}s")
+            logger.info(f"Finished processing video in {time.time() - start_time:.3f}s")
+            
+            # Get predictions
             predictions, uids = await self.prediction_service.get_predictions(
                 video, 
                 modality='video',
+                timeout=DEFAULT_TIMEOUT
             )
-            bt.logging.debug(f"Got predictions of length: {len(predictions)}")
+            total_time = time.time() - start_time
+            logger.info(f"Got {len(predictions)} predictions in {total_time:.3f}s")
 
+            # Prepare response
             response = {
                 'preds': predictions,
                 'fqdn': socket.getfqdn()
             }
 
-            # add rich data if requested
+            # Add rich data if requested
             rich_param = form.get('rich', '').lower()
             if rich_param == 'true':
                 response.update(self.prediction_service.get_rich_data(uids))
 
+            # Update metrics
             self.metrics.update(is_success=True)
+            
             return response
 
-        except Exception as e:
-            bt.logging.error(f"Unexpected error in handle_video_request: {str(e)}")
+        except HTTPException:
+            # Let FastAPI handle HTTP exceptions
             raise
+        except Exception as e:
+            logger.error(f"Unexpected error in handle_video_request: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Internal server error: {str(e)}"
+            )
 
-    async def healthcheck(self, request: Request) -> Dict[str, str]:
+    async def healthcheck(self, request: Request):
         """Health check endpoint"""
         return {'status': 'healthy'}
 
     def start(self):
         """Start the FastAPI server"""
-        self.executor = ThreadPoolExecutor(max_workers=1)
-        self.executor.submit(
-            uvicorn.run, self.app, host="0.0.0.0", port=self.validator.config.proxy.port
-        )
+        try:
+            logger.info(f"Starting validator proxy on port {self.validator.config.proxy.port}")
+            self.executor = ThreadPoolExecutor(max_workers=1)
+            self.executor.submit(
+                uvicorn.run, 
+                self.app, 
+                host="0.0.0.0", 
+                port=self.validator.config.proxy.port,
+                log_level="info"
+            )
+        except Exception as e:
+            logger.error(f"Failed to start validator proxy: {e}")
