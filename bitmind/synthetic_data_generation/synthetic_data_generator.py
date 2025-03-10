@@ -27,7 +27,10 @@ from bitmind.validator.config import (
     TARGET_IMAGE_SIZE,
     select_random_model,
     get_task,
-    get_modality
+    get_modality,
+    get_output_media_type,
+    MediaType,
+    Modality
 )
 from bitmind.synthetic_data_generation.image_utils import create_random_mask
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
@@ -128,9 +131,10 @@ class SyntheticDataGenerator:
 
         self.output_dir = Path(output_dir) if output_dir else None
         if self.output_dir:
-            (self.output_dir / "t2v").mkdir(parents=True, exist_ok=True)
-            (self.output_dir / "t2i").mkdir(parents=True, exist_ok=True)
-            (self.output_dir / "i2i").mkdir(parents=True, exist_ok=True)
+            (self.output_dir / Modality.IMAGE / MediaType.SYNTHETIC).mkdir(parents=True, exist_ok=True)
+            (self.output_dir / Modality.IMAGE / MediaType.SEMISYNTHETIC).mkdir(parents=True, exist_ok=True)
+            (self.output_dir / Modality.VIDEO / MediaType.SYNTHETIC).mkdir(parents=True, exist_ok=True)
+            (self.output_dir / Modality.VIDEO / MediaType.SEMISYNTHETIC).mkdir(parents=True, exist_ok=True)
 
     def batch_generate(self, batch_size: int = 5) -> None:
         """
@@ -168,6 +172,8 @@ class SyntheticDataGenerator:
         for model_name in model_names:
             modality = get_modality(model_name)
             task = get_task(model_name)
+            media_type = get_output_media_type(model_name)
+
             for i, prompt in enumerate(prompts):
                 bt.logging.info(f"Started generation {i+1}/{batch_size} | Model: {model_name} | Prompt: {prompt}")
 
@@ -175,7 +181,7 @@ class SyntheticDataGenerator:
                 output = self._run_generation(prompt, task=task, model_name=model_name, image=images[i])
 
                 bt.logging.info(f'Writing to cache {self.output_dir}')
-                base_path = self.output_dir / task / str(output['time'])
+                base_path = self.output_dir / modality / media_type / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output' and 'image' not in k}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 

@@ -1,3 +1,4 @@
+from strenum import StrEnum
 from pathlib import Path
 from typing import Dict, List, Union, Optional, Any
 
@@ -34,6 +35,19 @@ MAINNET_WANDB_PROJECT: str = 'bitmind-subnet'
 TESTNET_WANDB_PROJECT: str = 'bitmind'
 WANDB_ENTITY: str = 'bitmindai'
 
+
+# Enums
+class MediaType(StrEnum):
+    REAL = "real"
+    SYNTHETIC = "synthetic"
+    SEMISYNTHETIC = "semisynthetic"
+
+
+class Modality(StrEnum):
+    IMAGE = "image"
+    VIDEO = "video"
+
+
 # Cache directories
 HUGGINGFACE_CACHE_DIR: Path = Path.home() / '.cache' / 'huggingface'
 SN34_CACHE_DIR: Path = Path.home() / '.cache' / 'sn34'
@@ -41,33 +55,52 @@ SN34_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 VALIDATOR_INFO_PATH: Path = SN34_CACHE_DIR / 'validator.yaml'
 
-REAL_CACHE_DIR: Path = SN34_CACHE_DIR / 'real'
-SYNTH_CACHE_DIR: Path = SN34_CACHE_DIR / 'synthetic'
+IMAGE_CACHE_DIR: Path = SN34_CACHE_DIR / Modality.IMAGE
+VIDEO_CACHE_DIR: Path = SN34_CACHE_DIR / Modality.VIDEO
 
-REAL_VIDEO_CACHE_DIR: Path = REAL_CACHE_DIR / 'video'
-REAL_IMAGE_CACHE_DIR: Path = REAL_CACHE_DIR / 'image'
+REAL_IMAGE_CACHE_DIR: Path = IMAGE_CACHE_DIR / MediaType.REAL
+SYNTH_IMAGE_CACHE_DIR: Path = IMAGE_CACHE_DIR / MediaType.SYNTHETIC
+SEMISYNTH_IMAGE_CACHE_DIR: Path = IMAGE_CACHE_DIR / MediaType.SEMISYNTHETIC
 
-T2V_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2v' 
-T2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 't2i'
-I2I_CACHE_DIR: Path = SYNTH_CACHE_DIR / 'i2i'
+REAL_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / MediaType.REAL
+SYNTH_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / MediaType.SYNTHETIC
+SEMISYNTH_VIDEO_CACHE_DIR: Path = VIDEO_CACHE_DIR / MediaType.SEMISYNTHETIC
+
+LABELS = (0, 1, 2)
+LABEL_TO_TYPE = {
+    0: MediaType.REAL,
+    1: MediaType.SYNTHETIC,
+    2: MediaType.SEMISYNTHETIC
+}
+
+P_REAL: float = 0.5
+P_SYNTH: float = 0.4
+P_SEMISYNTH: float = 0.1
+LABEL_PROBS: List[float] = (P_REAL, P_SYNTH, P_SEMISYNTH)
+
+MODALITY_PROBS = (0.5, 0.5)
+
+# Probability of concatenating together two videos
+# Will only ever combine videos of the same type 
+# i.e. real + real, synth + synth, semisynth + semisynth
+P_STITCH: float = 0.2
+
+# Number of frames in challenge 
+MIN_FRAMES = 8
+MAX_FRAMES = 129
 
 # Update intervals in hours
-VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 3
+VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 2
 IMAGE_PARQUET_CACHE_UPDATE_INTERVAL = 2
 VIDEO_CACHE_UPDATE_INTERVAL = 1
 IMAGE_CACHE_UPDATE_INTERVAL = 1
 
-MAX_COMPRESSED_GB = 100
-MAX_EXTRACTED_GB = 10
+MAX_COMPRESSED_GB = 50
+MAX_EXTRACTED_GB = 5
 
-CHALLENGE_TYPE = {
-    0: 'real',
-    1: 'synthetic',
-    2: 'semi-synthetic'
-}
 
-# Image datasets configuration
-IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
+# dataset configurations
+IMAGE_DATASETS = {
     "real": [
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-image-v7-256"},
@@ -79,19 +112,19 @@ IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
         {"path": "bitmind/caltech-256"},
         {"path": "bitmind/caltech-101"},
         {"path": "bitmind/dtd"}
+    ],
+    "semisynthetic": [
+        {"path": "bitmind/face-swap"}
     ]
 }
 
 VIDEO_DATASETS = {
     "real": [
-        {
-            "path": "nkp37/OpenVid-1M",
-            "filetype": "zip"
-        },
-        {
-            "path": "shangxd/imagenet-vidvrd",
-            "filetype": "zip"
-    	}
+        {"path": "shangxd/imagenet-vidvrd", "filetype": "zip"},
+        {"path": "nkp37/OpenVid-1M", "filetype": "zip"}
+    ],
+    "semisynthetic": [
+        {"path": "bitmind/semisynthetic-video", "filetype": "zip"}
     ]
 }
 
@@ -341,10 +374,15 @@ MODEL_NAMES: List[str] = list(MODELS.keys())
 
 def get_modality(model_name):
      if model_name in T2V_MODEL_NAMES:
-        return 'video'
+        return Modality.VIDEO
      elif model_name in T2I_MODEL_NAMES + I2I_MODEL_NAMES:
-        return 'image'   
+        return Modality.IMAGE
 
+def get_output_media_type(model_name):
+     if model_name in I2I_MODEL_NAMES:
+        return MediaType.SEMISYNTHETIC
+     elif model_name in T2I_MODEL_NAMES + T2V_MODEL_NAMES:
+        return MediaType.SYNTHETIC
 
 def get_task(model_name):
     if model_name in T2V_MODEL_NAMES:
