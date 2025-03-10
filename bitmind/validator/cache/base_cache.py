@@ -176,15 +176,15 @@ class BaseCache(ABC):
                 time_elapsed = time.time() - last_update
 
                 if time_elapsed >= self.extracted_update_interval:
-                    bt.logging.info(f"Refreshing cache [{self.cache_dir}]")
+                    bt.logging.info(f"[{self.cache_dir}] Refreshing cache")
                     self._refresh_extracted_cache()
-                    bt.logging.info(f"Cache refresh complete [{self.cache_dir}]")
+                    bt.logging.info(f"[{self.cache_dir}] Cache refresh complete ")
 
                 sleep_time = max(0, self.extracted_update_interval - time_elapsed)
-                bt.logging.info(f"Next cache refresh in {seconds_to_str(sleep_time)} [{self.compressed_dir}]")
+                bt.logging.info(f"[{self.cache_dir}] Next media cache refresh in {seconds_to_str(sleep_time)}")
                 await asyncio.sleep(sleep_time)
             except Exception as e:
-                bt.logging.error(f"Error in extracted cache update: {e}")
+                bt.logging.error(f"[{self.cache_dir}] Error in extracted cache update: {e}")
                 await asyncio.sleep(60)
 
     async def _run_compressed_updater(self) -> None:
@@ -197,15 +197,15 @@ class BaseCache(ABC):
                 time_elapsed = time.time() - last_update
 
                 if time_elapsed >= self.compressed_update_interval:
-                    bt.logging.info(f"Refreshing cache [{self.compressed_dir}]")
+                    bt.logging.info(f"[{self.compressed_dir}] Refreshing cache")
                     self._refresh_compressed_cache()
-                    bt.logging.info(f"Cache refresh complete [{self.cache_dir}]")
+                    bt.logging.info(f"[{self.compressed_dir}] Cache refresh complete")
 
                 sleep_time = max(0, self.compressed_update_interval - time_elapsed)
-                bt.logging.info(f"Next cache refresh in {seconds_to_str(sleep_time)} [{self.compressed_dir}]")
+                bt.logging.info(f"[{self.compressed_dir}] Next compressed cache refresh in {seconds_to_str(sleep_time)}")
                 await asyncio.sleep(sleep_time)
             except Exception as e:
-                bt.logging.error(f"Error in compressed cache update: {e}")
+                bt.logging.error(f"[{self.compressed_dir}] Error in compressed cache update: {e}")
                 await asyncio.sleep(60)
 
     def _refresh_compressed_cache(

@@ -75,7 +75,7 @@ class ImageCache(BaseCache):
         extracted_files = []
         parquet_paths = self._get_compressed_files()
         if not parquet_paths:
-            bt.logging.warning(f"No parquet files found in {self.compressed_dir}")
+            bt.logging.warning(f"[{self.compressed_dir}] No parquet files found")
             return extracted_files
 
         for parquet_path in parquet_paths:
@@ -104,7 +104,7 @@ class ImageCache(BaseCache):
         """
         cached_files = self._get_cached_files()
         if not cached_files:
-            bt.logging.warning("No images available in cache")
+            bt.logging.warning(f"[{self.cache_dir}] No images available in cache")
             return None
 
         attempts = 0
@@ -122,7 +122,7 @@ class ImageCache(BaseCache):
                         os.remove(image_path)
                         os.remove(image_path.with_suffix('.json'))
                     except Exception as e:
-                        bt.logging.warning(f"Failed to remove files for {image_path}: {e}")
+                        bt.logging.warning(f"[{self.cache_dir}] Failed to remove files for {image_path}: {e}")
                 return {
                     'image': image,
                     'path': str(image_path),

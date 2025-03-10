@@ -100,7 +100,7 @@ MAX_EXTRACTED_GB = 5
 
 
 # dataset configurations
-IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
+IMAGE_DATASETS = {
     "real": [
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-image-v7-256"},
@@ -120,20 +120,11 @@ IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
 
 VIDEO_DATASETS = {
     "real": [
-        {
-            "path": "shangxd/imagenet-vidvrd",
-            "filetype": "zip"
-        },
-        {
-            "path": "nkp37/OpenVid-1M",
-            "filetype": "zip"
-        }
+        {"path": "shangxd/imagenet-vidvrd", "filetype": "zip"},
+        {"path": "nkp37/OpenVid-1M", "filetype": "zip"}
     ],
     "semisynthetic": [
-        {
-            "path": "bitmind/semisynthetic-video",
-            "filetype": "zip"
-        }
+        {"path": "bitmind/semisynthetic-video", "filetype": "zip"}
     ]
 }
 

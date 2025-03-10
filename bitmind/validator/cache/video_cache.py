@@ -80,7 +80,7 @@ class VideoCache(BaseCache):
         extracted_files = []
         zip_paths = self._get_compressed_files()
         if not zip_paths:
-            bt.logging.warning(f"No zip files found in {self.compressed_dir}")
+            bt.logging.warning(f"[{self.compressed_dir}] No zip files found")
             return extracted_files
 
         for zip_path in zip_paths:
@@ -91,7 +91,7 @@ class VideoCache(BaseCache):
                     self.cache_dir / dataset, 
                     n_items_per_source)
             except Exception as e:
-                bt.logging.error(f"Error processing zip file {zip_file}: {e}")
+                bt.logging.error(f"[{self.compressed_dir}] Error processing zip file {zip_file}: {e}")
 
         return extracted_files
 
