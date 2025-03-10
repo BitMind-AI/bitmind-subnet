@@ -18,6 +18,7 @@ from bitmind.validator.config import (
     REAL_VIDEO_CACHE_DIR,
     REAL_IMAGE_CACHE_DIR,
     SEMISYNTH_VIDEO_CACHE_DIR,
+    SEMISYNTH_IMAGE_CACHE_DIR,
     MAX_COMPRESSED_GB,
     MAX_EXTRACTED_GB
 )
@@ -38,6 +39,19 @@ async def main(args):
             max_compressed_size_gb=MAX_COMPRESSED_GB
         )
         real_image_cache.start_updater()
+
+        bt.logging.info("Starting semisynthetic image cache updater")
+        semisynth_image_cache = ImageCache(
+            cache_dir=SEMISYNTH_IMAGE_CACHE_DIR,
+            datasets=IMAGE_DATASETS['semisynthetic'],
+            parquet_update_interval=args.image_parquet_interval,
+            image_update_interval=args.image_interval,
+            num_parquets_per_dataset=5,
+            num_images_per_source=100,
+            max_extracted_size_gb=MAX_EXTRACTED_GB,
+            max_compressed_size_gb=MAX_COMPRESSED_GB
+        )
+        semisynth_image_cache.start_updater()
     
     if args.modality in ['all', 'video']:
         bt.logging.info("Starting semisynthetic video cache updater")
@@ -47,7 +61,7 @@ async def main(args):
             video_update_interval=args.video_interval,
             zip_update_interval=args.video_zip_interval,
             num_zips_per_dataset=2,
-            num_videos_per_zip=50,
+            num_videos_per_zip=100,
             max_extracted_size_gb=MAX_EXTRACTED_GB,
             max_compressed_size_gb=MAX_COMPRESSED_GB
         )
@@ -60,9 +74,9 @@ async def main(args):
             video_update_interval=args.video_interval,
             zip_update_interval=args.video_zip_interval,
             num_zips_per_dataset=2,
-            num_videos_per_zip=50,
+            num_videos_per_zip=100,
             max_extracted_size_gb=MAX_EXTRACTED_GB,
-            max_compressed_size_gb=MAX_COMPRESSED_GB
+            max_compressed_size_gb=100,
         )
         real_video_cache.start_updater()
 

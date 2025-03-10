@@ -136,7 +136,11 @@ class VideoCache(BaseCache):
             bt.logging.error(f"Selected video {video_path} not found")
             return None
 
-        duration = get_video_duration(str(video_path))
+        try:
+            duration = get_video_duration(str(video_path))
+        except Exception as e:
+            bt.logging.error(f"Unable to extract video duration from {str(video_path)}")
+            return None
 
         # Use fixed fps if provided, otherwise calculate from range
         frame_rate = fps
@@ -156,7 +160,6 @@ class VideoCache(BaseCache):
         start_time = random.uniform(0, max(0, duration - sample_duration))
         frames: List[Image.Image] = []
 
-        #bt.logging.info(f'Extracting {num_frames} frames at {frame_rate}fps starting at {start_time:.2f}s')
         no_data = []
         for i in range(num_frames):
             timestamp = start_time + (i / frame_rate)

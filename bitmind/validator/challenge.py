@@ -75,15 +75,15 @@ class Challenge:
         """Factory method to create and initialize a challenge."""
         challenge = cls()
 
-        challenge.modality = np.random.choice(
-            challenge.config.modality_options, 
-            p=challenge.config.modality_probs
-        )
         challenge.label = np.random.choice(
             challenge.config.label_options, 
             p=challenge.config.label_probs
         )
         challenge.media_type = challenge.config.label_to_type[challenge.label]
+        challenge.modality = np.random.choice(
+            challenge.config.modality_options, 
+            p=challenge.config.modality_probs
+        )
 
         bt.logging.info(f"Sampling data from {challenge.media_type} {challenge.modality} cache")
         cache = media_cache[challenge.modality][challenge.media_type]
@@ -140,9 +140,9 @@ class Challenge:
     def process_metadata(self, sample) -> bool:
         """Prepare challenge metadata and media for logging to Weights & Biases """
         self.metadata = {
-            'label': self.label,
-            'media_type': self.media_type,
-            'modality': self.modality
+            'label': int(self.label),
+            'media_type': str(self.media_type),
+            'modality': str(self.modality)
         }
         self.metadata.update({
             k: v for k, v in sample.items() 
@@ -159,10 +159,10 @@ class Challenge:
                     self.metadata['video_A'] = create_wandb_video(sample['video_A'], sample['fps_A'])
                     self.metadata['video_B'] = create_wandb_video(sample['video_B'], sample['fps_B'])
                 else:
-                    self.metadata['video'] = create_wandb_video(self.original_media, self.metadata['fps'])
+                    self.metadata['video'] = create_wandb_video(self.original_media, self.metadata.get('fps', 30))
 
                 self.metadata['augmented_video'] = create_wandb_video(
-                    self.augmented_media, self.metadata['fps'])
+                    self.augmented_media, self.metadata.get('fps', 30))
 
             elif self.modality == 'image':
                 self.metadata['image'] = wandb.Image(self.original_media)

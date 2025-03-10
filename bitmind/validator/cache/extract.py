@@ -60,6 +60,8 @@ q
 
             bt.logging.info(f"Extracting {len(selected_videos)} randomly sampled video files from {zip_path}")
             for idx, video in enumerate(selected_videos):
+                if 'MACOSX' in video:
+                    continue
                 try:
                     # extract video and get metadata
                     video_path = dest_dir /  Path(video).name
@@ -187,7 +189,7 @@ def extract_images_from_parquet(
             saved_files.append(str(img_path))
 
         except Exception as e:
-            warnings.warn(f"Failed to extract/save image {idx}: {e}")
+            bt.logging.warning(f"Failed to extract/save image {idx}: {e}")
             continue
 
     return saved_files

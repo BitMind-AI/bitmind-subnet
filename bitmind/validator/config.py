@@ -87,16 +87,16 @@ P_STITCH: float = 0.2
 
 # Number of frames in challenge 
 MIN_FRAMES = 8
-MAX_FRAMES = 144
+MAX_FRAMES = 129
 
 # Update intervals in hours
-VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 3
+VIDEO_ZIP_CACHE_UPDATE_INTERVAL = 2
 IMAGE_PARQUET_CACHE_UPDATE_INTERVAL = 2
 VIDEO_CACHE_UPDATE_INTERVAL = 1
 IMAGE_CACHE_UPDATE_INTERVAL = 1
 
-MAX_COMPRESSED_GB = 100
-MAX_EXTRACTED_GB = 10
+MAX_COMPRESSED_GB = 50
+MAX_EXTRACTED_GB = 5
 
 
 # dataset configurations
@@ -114,20 +114,20 @@ IMAGE_DATASETS: Dict[str, List[Dict[str, str]]] = {
         {"path": "bitmind/dtd"}
     ],
     "semisynthetic": [
-        {"path": "bitmind/faceswap"}
+        {"path": "bitmind/face-swap"}
     ]
 }
 
 VIDEO_DATASETS = {
     "real": [
         {
-            "path": "nkp37/OpenVid-1M",
+            "path": "shangxd/imagenet-vidvrd",
             "filetype": "zip"
         },
         {
-            "path": "shangxd/imagenet-vidvrd",
+            "path": "nkp37/OpenVid-1M",
             "filetype": "zip"
-    	}
+        }
     ],
     "semisynthetic": [
         {

@@ -121,48 +121,57 @@ class BaseCache(ABC):
         """Check if compressed cache directory is empty."""
         return len(self._get_compressed_files()) == 0
 
-    def _prune_compressed_cache(self) -> None:
-        """Check compressed cache size and remove oldest files if over limit."""
-        files = self._get_compressed_files()
-        total_size = sum(f.stat().st_size for f in files)
-        bt.logging.info(f"Compressed cache size: {len(files)} files | {total_size / (1024*1024*1024):.4f} GB [{self.compressed_dir}]")
-        while total_size > self.max_compressed_size_bytes:
-            compressed_files = self._get_compressed_files()
-            if not compressed_files:
-                break
-
-            oldest_file = min(compressed_files, key=lambda f: f.stat().st_mtime)
-            file_size = oldest_file.stat().st_size
-
-            oldest_file.unlink()
-            total_size -= file_size
-            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is  {total_size / (1024*1024*1024):.4f} GB")
-
-    def _prune_extracted_cache(self) -> None:
+    def prune_cache(self, cache="compressed") -> None:
         """Check extracted cache size and remove oldest files if over limit."""
-        files = self._get_cached_files()
-        total_size = sum(f.stat().st_size for f in files)
-        bt.logging.info(f"Extracted cache size: {len(files)} files | {total_size / (1024*1024*1024):.2f} GB [{self.cache_dir}]")
-        while total_size > self.max_extracted_size_bytes:
-            extracted_files = self._get_cached_files()
-            if not extracted_files:
+        if cache == 'compressed':
+            cache_dir = self.compressed_dir
+            files = self._get_compressed_files()
+            max_size = self.max_compressed_size_bytes
+        elif cache == 'extracted':
+            cache_dir = self.cache_dir
+            files = self._get_cached_files()
+            max_size = self.max_extracted_size_bytes
+
+
+        total_size = sum(f.stat().st_size for f in files if f.exists())
+        total_size_gb = total_size / (1024*1024*1024)
+        bt.logging.info(f"[{cache_dir}] Cache size: {len(files)} files | {total_size_gb:.6f} GB")
+        if total_size <= max_size:
+            return
+
+        n_removed = 0
+        bytes_removed = 0
+        remaining_size = total_size
+        sorted_files = sorted(files, key=lambda f: f.stat().st_mtime if f.exists() else float('inf'))
+
+        bt.logging.info(f"[{cache_dir}] Pruning...")        
+        for file in sorted_files:
+            if remaining_size <= max_size:
                 break
+            try:
+                if file.exists():
+                    file_size = file.stat().st_size
+                    file.unlink()
+                    json_file = file.with_suffix('.json')
+                    if json_file.exists():
+                        json_file.unlink()
 
-            oldest_file = min(extracted_files, key=lambda f: f.stat().st_mtime)
-            file_size = oldest_file.stat().st_size
-
-            oldest_file.unlink()
-            json_file = oldest_file.with_suffix('.json')
-            if json_file.exists():
-                json_file.unlink()
-            total_size -= file_size
-            bt.logging.info(f"Removed {oldest_file.name} to stay under size limit - new cache size is  {total_size / (1024*1024*1024):.4f} GB")
+                    n_removed += 1
+                    bytes_removed += file_size
+                    remaining_size -= file_size
+            except Exception as e:
+                continue
+            
+        final_size = total_size - bytes_removed
+        cache_gb = f"{final_size / (1024*1024*1024):.6f}".rstrip('0')
+        removed_gb = f"{bytes_removed / (1024*1024*1024):.6f}".rstrip('0')
+        bt.logging.info(f"[{cache_dir}] Removed {n_removed} ({removed_gb} GB) files. New cache size is {cache_gb} GB")
 
     async def _run_extracted_updater(self) -> None:
         """Asynchronously refresh extracted files according to update interval."""
         while True:
             try:
-                self._prune_extracted_cache()
+                self.prune_cache('extracted')
                 last_update = get_most_recent_update_time(self.cache_dir)
                 time_elapsed = time.time() - last_update
 
@@ -183,7 +192,7 @@ class BaseCache(ABC):
         while True:
             try:
                 self._clear_incomplete_sources()
-                self._prune_compressed_cache()
+                self.prune_cache('compressed')
                 last_update = get_most_recent_update_time(self.compressed_dir)
                 time_elapsed = time.time() - last_update
 
@@ -238,7 +247,7 @@ class BaseCache(ABC):
 
     def _refresh_extracted_cache(self, n_items_per_source: Optional[int] = None) -> None:
         """Refresh the extracted cache with new selections."""
-        bt.logging.info(f"{len(self._get_compressed_files())} files currently cached")
+        bt.logging.info(f"{len(self._get_cached_files())} media files currently cached")
         new_files = self._extract_random_items(n_items_per_source)
         if new_files:
             bt.logging.info(f"{len(new_files)} new files added to {self.cache_dir}")

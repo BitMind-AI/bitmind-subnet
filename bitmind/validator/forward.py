@@ -87,9 +87,16 @@ async def forward(self):
 
     # log results, track responding miners for serving organics
     responding_miner_uids = []
+    unresponsive = 0
     for uid, pred, reward in zip(miner_uids, responses, rewards):
+        if -1 in pred:
+            unresponsive += 1
+            continue
         bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
         responding_miner_uids.append(uid)
+
+    if unresponsive > 0:
+        bt.logging.warning(f"Failed to get responses from {unresponsive} miners")
 
     if responding_miner_uids:
         self.last_responding_miner_uids = responding_miner_uids
@@ -109,4 +116,4 @@ async def forward(self):
         wandb.log(challenge.metadata)
 
     self.save_miner_history()
-    self.media_cache[challenge.modality][challenge.media_type]._prune_extracted_cache()
+    self.media_cache[challenge.modality][challenge.media_type].prune_cache('extracted')
