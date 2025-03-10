@@ -91,7 +91,7 @@ class VideoCache(BaseCache):
                     self.cache_dir / dataset, 
                     n_items_per_source)
             except Exception as e:
-                bt.logging.error(f"[{self.compressed_dir}] Error processing zip file {zip_file}: {e}")
+                bt.logging.error(f"[{self.compressed_dir}] Error processing zip file {zip_path}: {e}")
 
         return extracted_files
 

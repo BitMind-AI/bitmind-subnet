@@ -105,8 +105,6 @@ q
 
                 except Exception as e:
                     bt.logging.warning(f"Error extracting {video}: {e}")
-                    if 'temp_path' in locals() and temp_path.exists():
-                        temp_path.unlink()
                     continue
 
     except Exception as e:

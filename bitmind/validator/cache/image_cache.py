@@ -87,7 +87,7 @@ class ImageCache(BaseCache):
                     n_items_per_source
                 )
             except Exception as e:
-                bt.logging.error(f"Error processing parquet file {parquet_file}: {e}")
+                bt.logging.error(f"Error processing parquet file {parquet_path}: {e}")
         return extracted_files
 
     def sample(self, remove_from_cache=False) -> Optional[Dict[str, Any]]:
