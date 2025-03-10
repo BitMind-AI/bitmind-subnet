@@ -379,9 +379,9 @@ class BaseValidatorNeuron(BaseNeuron):
         bt.logging.debug(f"Updated moving avg scores: {self.scores}")
 
     def save_miner_history(self):
-        bt.logging.info(f"Saving miner performance history to {self.image_history_cache_path}")
+        bt.logging.debug(f"Saving miner performance history to {self.image_history_cache_path}")
         joblib.dump(self.performance_trackers['image'], self.image_history_cache_path)
-        bt.logging.info(f"Saving miner performance history to {self.video_history_cache_path}")
+        bt.logging.debug(f"Saving miner performance history to {self.video_history_cache_path}")
         joblib.dump(self.performance_trackers['video'], self.video_history_cache_path)
 
     def load_miner_history(self):

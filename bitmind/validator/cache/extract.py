@@ -6,6 +6,7 @@ import mimetypes
 import os
 import random
 import warnings
+import shutil
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -59,24 +60,21 @@ q
 
             bt.logging.info(f"Extracting {len(selected_videos)} randomly sampled video files from {zip_path}")
             for idx, video in enumerate(selected_videos):
+                if 'MACOSX' in video:
+                    continue
                 try:
-                    zip_basename = zip_path.name.split('.zip')[0]
-                    original_filename = Path(video).name
-                    base_filename = f"{zip_basename}__{idx}_{original_filename}"
-
                     # extract video and get metadata
-                    video_path = dest_dir / base_filename
-                    temp_path = Path(zip_file.extract(video, path=dest_dir))
-                    temp_path.rename(video_path)
+                    video_path = dest_dir /  Path(video).name
+                    with zip_file.open(video) as source:
+                        with open(video_path, 'wb') as target:
+                            shutil.copyfileobj(source, target)
 
                     video_info = zip_file.getinfo(video)
                     metadata = {
                         'source_zip': str(zip_path),
-                        'original_filename': original_filename,
-                        'original_path_in_zip': video,
+                        'path_in_zip': video,
                         'extraction_date': datetime.now().isoformat(),
                         'file_size': os.path.getsize(video_path),
-                        'mime_type': mimetypes.guess_type(video_path)[0],
                         'zip_metadata': {
                             'compress_size': video_info.compress_size,
                             'file_size': video_info.file_size,
@@ -103,12 +101,10 @@ q
                         json.dump(metadata, f, indent=2, ensure_ascii=False)
 
                     extracted_files.append((str(video_path), str(metadata_path)))
-                    logging.info(f"Extracted {original_filename} from {zip_path}")
+                    logging.info(f"Extracted {Path(video).name} from {zip_path}")
 
                 except Exception as e:
                     bt.logging.warning(f"Error extracting {video}: {e}")
-                    if 'temp_path' in locals() and temp_path.exists():
-                        temp_path.unlink()
                     continue
 
     except Exception as e:
@@ -191,7 +187,7 @@ def extract_images_from_parquet(
             saved_files.append(str(img_path))
 
         except Exception as e:
-            warnings.warn(f"Failed to extract/save image {idx}: {e}")
+            bt.logging.warning(f"Failed to extract/save image {idx}: {e}")
             continue
 
     return saved_files

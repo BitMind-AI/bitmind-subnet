@@ -239,20 +239,6 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
-        "--neuron.clip_frames_min",
-        type=int,
-        help="Min number of frames for video challenge",
-        default=8,
-    )
-
-    parser.add_argument(
-        "--neuron.clip_frames_max",
-        type=int,
-        help="Max number of frames for video challenge",
-        default=24,
-    )
-
-    parser.add_argument(
         "--neuron.name",
         type=str,
         help="Trials for this neuron go in neuron.root / (wallet_cold - wallet_hot) / neuron.name. ",

@@ -78,19 +78,20 @@ class VideoCache(BaseCache):
             n_items_per_source = self.num_videos_per_zip
 
         extracted_files = []
-        zip_files = self._get_compressed_files()
-        if not zip_files:
-            bt.logging.warning(f"No zip files found in {self.compressed_dir}")
+        zip_paths = self._get_compressed_files()
+        if not zip_paths:
+            bt.logging.warning(f"[{self.compressed_dir}] No zip files found")
             return extracted_files
 
-        for zip_file in zip_files:
+        for zip_path in zip_paths:
+            dataset = Path(zip_path).relative_to(self.compressed_dir).parts[0]
             try:
                 extracted_files += extract_videos_from_zip(
-                    zip_file,
-                    self.cache_dir, 
+                    zip_path,
+                    self.cache_dir / dataset, 
                     n_items_per_source)
             except Exception as e:
-                bt.logging.error(f"Error processing zip file {zip_file}: {e}")
+                bt.logging.error(f"[{self.compressed_dir}] Error processing zip file {zip_path}: {e}")
 
         return extracted_files
 
@@ -135,7 +136,11 @@ class VideoCache(BaseCache):
             bt.logging.error(f"Selected video {video_path} not found")
             return None
 
-        duration = get_video_duration(str(video_path))
+        try:
+            duration = get_video_duration(str(video_path))
+        except Exception as e:
+            bt.logging.error(f"Unable to extract video duration from {str(video_path)}")
+            return None
 
         # Use fixed fps if provided, otherwise calculate from range
         frame_rate = fps
@@ -155,8 +160,7 @@ class VideoCache(BaseCache):
         start_time = random.uniform(0, max(0, duration - sample_duration))
         frames: List[Image.Image] = []
 
-        #bt.logging.info(f'Extracting {num_frames} frames at {frame_rate}fps starting at {start_time:.2f}s')
-
+        no_data = []
         for i in range(num_frames):
             timestamp = start_time + (i / frame_rate)
             
@@ -177,7 +181,7 @@ class VideoCache(BaseCache):
                 )
 
                 if not out_bytes:
-                    bt.logging.error(f'No data received for frame at {timestamp}s; Error: {err}')
+                    no_data.append(timestamp)
                     continue
 
                 try:
@@ -192,6 +196,10 @@ class VideoCache(BaseCache):
             except ffmpeg.Error as e:
                 bt.logging.error(f'FFmpeg error at {timestamp}s: {e.stderr.decode()}')
                 continue
+
+        if len(no_data) > 0:
+            tmin, tmax = min(no_data), max(no_data)
+            bt.logging.warning(f'No data received for {len(no_data)} frames between {tmin} and {tmax}')
 
         if remove_from_cache:
             try:
