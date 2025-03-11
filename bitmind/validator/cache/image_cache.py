@@ -102,7 +102,7 @@ class ImageCache(BaseCache):
                 - metadata: Metadata dict
             Returns None if no valid image is available.
         """
-        cached_files = self._get_cached_files()
+        cached_files = self._get_cached_files(group_by_source=True)
         if not cached_files:
             bt.logging.warning(f"[{self.cache_dir}] No images available in cache")
             return None
@@ -112,7 +112,8 @@ class ImageCache(BaseCache):
 
         while attempts < max_attempts:
             attempts += 1
-            image_path = random.choice(cached_files)
+            source = random.choice(list(cached_files.keys()))
+            image_path = random.choice(cached_files[source])
 
             try:
                 image = Image.open(image_path)

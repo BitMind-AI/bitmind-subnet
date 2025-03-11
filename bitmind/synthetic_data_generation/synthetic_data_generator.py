@@ -181,7 +181,7 @@ class SyntheticDataGenerator:
                 output = self._run_generation(prompt, task=task, model_name=model_name, image=images[i])
 
                 bt.logging.info(f'Writing to cache {self.output_dir}')
-                base_path = self.output_dir / modality / media_type / str(output['time'])
+                base_path = self.output_dir / modality / media_type / model_name.split('/')[1] / str(output['time'])
                 metadata = {k: v for k, v in output.items() if k != 'gen_output' and 'image' not in k}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
