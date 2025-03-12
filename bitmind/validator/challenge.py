@@ -85,7 +85,7 @@ class Challenge:
             p=challenge.config.modality_probs
         )
 
-        bt.logging.info(f"Sampling data from {challenge.media_type} {challenge.modality} cache")
+        bt.logging.info(f"Sampling data from {challenge.modality} cache")
         cache = media_cache[challenge.modality][challenge.media_type]
 
         if challenge.modality == 'video':
