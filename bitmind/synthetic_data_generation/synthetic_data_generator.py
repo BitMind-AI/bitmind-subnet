@@ -180,8 +180,12 @@ class SyntheticDataGenerator:
                 # Generate image/video from current model and prompt
                 output = self._run_generation(prompt, task=task, model_name=model_name, image=images[i])
 
-                bt.logging.info(f'Writing to cache {self.output_dir}')
-                base_path = self.output_dir / modality / media_type / str(output['time'])
+                model_output_dir = self.output_dir / modality / media_type / model_name.split('/')[1]
+                model_output_dir.mkdir(parents=True, exist_ok=True)
+                base_path = model_output_dir / str(output['time'])
+
+                bt.logging.info(f'Writing to cache {model_output_dir}')
+
                 metadata = {k: v for k, v in output.items() if k != 'gen_output' and 'image' not in k}
                 base_path.with_suffix('.json').write_text(json.dumps(metadata))
 
