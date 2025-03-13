@@ -372,7 +372,7 @@ class SyntheticDataGenerator:
         
         model_config = MODELS[self.model_name]
         pipeline_cls = model_config['pipeline_cls']
-        pipeline_args = model_config['from_pretrained_args'].copy()
+        pipeline_args = model_config.get('from_pretrained_args', {}).copy()
 
         # Handle custom loading functions passed as tuples
         for k, v in pipeline_args.items():
