@@ -13,6 +13,7 @@ from diffusers import (
     HunyuanVideoPipeline,
     AnimateDiffPipeline,
     EulerDiscreteScheduler,
+    DEISMultistepScheduler,
     AutoPipelineForInpainting,
     IFPipeline,
     IFSuperResolutionPipeline
@@ -269,6 +270,19 @@ I2I_MODELS: Dict[str, Dict[str, Any]] = {
             "num_inference_steps": 50,
             "strength": 0.99,
             "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
+        }
+    },
+    "Lykon/dreamshaper-8-inpainting": {
+        "pipeline_cls": AutoPipelineForInpainting,
+        "from_pretrained_args": {
+            "torch_dtype": torch.float16,
+            "variant": "fp16"
+        },
+        "generate_args": {
+            "num_inference_steps": {"min": 45, "max": 60},
+        },
+        "scheduler": {
+            "cls": DEISMultistepScheduler
         }
     }
 }

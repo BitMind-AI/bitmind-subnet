@@ -422,7 +422,7 @@ class SyntheticDataGenerator:
             # Load scheduler if specified
             if 'scheduler' in model_config:
                 sched_cls = model_config['scheduler']['cls']
-                sched_args = model_config['scheduler']['from_config_args']
+                sched_args = model_config['scheduler'].get('from_config_args', {})
                 self.model.scheduler = sched_cls.from_config(
                     self.model.scheduler.config,
                     **sched_args
