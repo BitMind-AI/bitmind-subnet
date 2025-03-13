@@ -21,7 +21,7 @@ The BitMind Subnet is **the world's first decentralized AI-generated content det
         📈 <a href="docs/Incentive.md">Incentive Mechanism</a><br>
         🤝 <a href="docs/Contributor_Guide.md">Contributor Guide</a></td>
       <td>
-        🚀 <a href="https://www.bitmind.ai/apps">SN34-Powered Applications</a><br>
+        🚀 <a href="<https://www.bitmind.ai/apps>">SN34-Powered Applications</a><br>
         🤗 <a href="https://huggingface.co/bitmind">BitMind Huggingface</a><br>
         📊 <a href="https://wandb.ai/bitmindai/bitmind-subnet">Mainnet 34 W&B</a> | <a href="https://wandb.ai/bitmindai/bitmind">Testnet 168 W&B</a><br>
         📖 <a href="docs/Glossary.md">Project Structure and Terminology</a><br>
@@ -54,46 +54,23 @@ To address this growing challenge, SN34 aims to create the most accurate fully-g
 
 ## Subnet Architecture
 
+> Overview of the validator neuron, miner neuron, and other components external to the subnet.
 
 ![Subnet Architecture](static/Subnet-Arch.png)
 
-<details>
-<summary align=center><i>Figure 1 (above): Ecosystem Overview</i></summary>
-<br>
-
-> This diagram provides an overview of the validator neuron, miner neuron, and other components external to the subnet.
-
-- The green arrows show how applications interact with the subnet to provide AI-generated image and video detection functionality.
-- The blue arrows show how validators generate synthetic data, challenge miners and score their responses.
-
-</details>
-
-<br>
-
-
-![Subnet Architecture](static/Vali-Arch.png)
-
-<details>
-<summary align=center><i>Figure 2 (above): Validator Components</i></summary>
-<br>
-
-> This diagram presents the same architecture as figure 1, but with organic traffic ommitted and with a more detailed look at scored challenges and the associated validator neuron components.
-
-
-**Challenge Generation and Scoring (Blue Arrows)**
+**Challenge Generation and Scoring (Pink Arrows)**
 
 For each challenge, the validator randomly samples a real or synthetic image/video from the cache, applies random augmentations to the sampled media, and distributes the augmented data to 50 randomly selected miners for classification. It then scores the miners responses, and logs comprehensive challenge results to [Weights and Biases](https://wandb.ai/bitmindai/bitmind-subnet), including the generated media, original prompt, miner responses and rewards, and other challenge metadata.
 
-**Synthetic Data Generation (Pink Arrows)**:
+**Data Generation and Downloads (Blue Arrows)**:
 
-The synthetic data generator coordinates a VLM and LLM to generate prompts for our suite of text-to-image, image-to-image, and text-to-video models. Each image or video is written to the cache along with the prompt, generation parameters, and other metadata.
-
-**Dataset Downloads (Green Arrows)**:
+The synthetic data generator coordinates a VLM and LLM to generate prompts for our suite of text-to-image, image-to-image, and text-to-video models. Each generated image/video is written to the cache along with the prompt, generation parameters, and other metadata.
 
 The real data fetcher performs partial dataset downloads, fetching random compressed chunks of datasets from HuggingFace and unpacking random portions of these chunks into the cache along with their metadata. Partial downloads avoid requiring TBs of space for large video datasets like OpenVid1M.
 
-</details>
+**Organic Traffic (Green Arrows)**
 
+<a href="https://www.bitmind.ai/apps">Application</a> requests are distributed to validators by an API server and load balancer in BitMind's cloud. A vector database caches subnet responses to avoid uncessary repetitive calls coming from salient images on the internet. 
 
 
 ## Community

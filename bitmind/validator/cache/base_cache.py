@@ -97,59 +97,111 @@ class BaseCache(ABC):
             self._run_extracted_updater()
         )
 
-    def _get_cached_files(self, max_depth: int = 3) -> List[Path]:
-        """Get list of all extracted files in cache directory up to a maximum depth."""
+    def _get_files(self, cache="extracted", max_depth: int = 3, group_by_source: bool = False) -> Union[List[Path], Dict[str, List[Path]]]:
+        """Get list of files from the specified cache up to a maximum depth.
+
+        Args:
+            cache: Which cache to retrieve files from - either "extracted" or "compressed"
+            max_depth: Maximum directory depth to search
+            group_by_source: If True, returns a dictionary of files grouped by subdirectory
+
+        Returns:
+            Either a flat list of Path objects or a dictionary mapping subdirectories to lists of files
+        """
+        if cache == "extracted":
+            base_dir = self.cache_dir
+            extensions = self.file_extensions
+        elif cache == "compressed":
+            base_dir = self.compressed_dir
+            extensions = [self.compressed_file_extension]
+        else:
+            raise ValueError(f"Invalid cache type: {cache}. Must be 'extracted' or 'compressed'")
+
         files = []
         for depth in range(max_depth + 1):
             pattern = '*/' * depth + '*'
             files.extend([
-                f for f in self.cache_dir.glob(pattern)
-                if f.is_file() and f.suffix.lower() in self.file_extensions
+                f for f in base_dir.glob(pattern)
+                if f.is_file() and any(f.suffix.lower() == ext.lower() for ext in extensions)
             ])
-        return files
 
-    def _get_compressed_files(self) -> List[Path]:
-        """Get list of all compressed files in compressed directory. Handles up two two levels
-        of directory nesting """
-        return list(self.compressed_dir.glob(f'*{self.compressed_file_extension}')) + \
-                list(self.compressed_dir.glob(f'*/*{self.compressed_file_extension}')) + \
-                list(self.compressed_dir.glob(f'*/*/*{self.compressed_file_extension}'))
+        if not group_by_source:
+            return files
+
+        # Group files by subdirectory
+        subdirectory_files = {}
+        for file in files:
+            if file.exists():
+                try:
+                    rel_path = file.relative_to(base_dir)
+                    subdir = str(rel_path.parent)
+                except ValueError:
+                    # Fallback if relative_to fails
+                    subdir = str(file.parent)
+
+                if subdir not in subdirectory_files:
+                    subdirectory_files[subdir] = []
+                subdirectory_files[subdir].append(file)
+
+        return subdirectory_files
+
+    def _get_cached_files(self, max_depth: int = 3, group_by_source: bool = False) -> Union[List[Path], Dict[str, List[Path]]]:
+        return self._get_files(cache="extracted", max_depth=max_depth, group_by_source=group_by_source)
+
+    def _get_compressed_files(self, max_depth: int = 3, group_by_source: bool = False) -> Union[List[Path], Dict[str, List[Path]]]:
+        return self._get_files(cache="compressed", max_depth=max_depth, group_by_source=group_by_source)
 
     def _extracted_cache_empty(self) -> bool:
-        """Check if extracted cache directory is empty."""
         return len(self._get_cached_files()) == 0
 
     def _compressed_cache_empty(self) -> bool:
-        """Check if compressed cache directory is empty."""
         return len(self._get_compressed_files()) == 0
 
     def prune_cache(self, cache="compressed") -> None:
-        """Check extracted cache size and remove oldest files if over limit."""
+        """Check extracted cache size and remove oldest files if over limit.
+        Balances deletion across subdirectories to avoid emptying smaller directories."""
         if cache == 'compressed':
             cache_dir = self.compressed_dir
-            files = self._get_compressed_files()
             max_size = self.max_compressed_size_bytes
         elif cache == 'extracted':
             cache_dir = self.cache_dir
-            files = self._get_cached_files()
             max_size = self.max_extracted_size_bytes
+        else:
+            raise ValueError(f"Invalid cache type: {cache}. Must be 'extracted' or 'compressed'")
 
+        files_dict = self._get_files(cache=cache, group_by_source=True)
 
-        total_size = sum(f.stat().st_size for f in files if f.exists())
+        all_files = [f for subdir_files in files_dict.values() for f in subdir_files]
+        total_size = sum(f.stat().st_size for f in all_files if f.exists())
         total_size_gb = total_size / (1024*1024*1024)
-        bt.logging.info(f"[{cache_dir}] Cache size: {len(files)} files | {total_size_gb:.6f} GB")
+        bt.logging.info(f"[{cache_dir}] Cache size: {len(all_files)} files | {total_size_gb:.6f} GB")
         if total_size <= max_size:
             return
+
+        # xort each subdirectory's files by modification time
+        for subdir in files_dict:
+            files_dict[subdir] = sorted(
+                files_dict[subdir], 
+                key=lambda f: f.stat().st_mtime if f.exists() else float('inf')
+            )
 
         n_removed = 0
         bytes_removed = 0
         remaining_size = total_size
-        sorted_files = sorted(files, key=lambda f: f.stat().st_mtime if f.exists() else float('inf'))
 
-        bt.logging.info(f"[{cache_dir}] Pruning...")        
-        for file in sorted_files:
-            if remaining_size <= max_size:
+        bt.logging.info(f"[{cache_dir}] Pruning...")
+
+        while remaining_size > max_size and any(len(files) > 0 for files in files_dict.values()):
+            largest_subdir = max(
+                files_dict.keys(),
+                key=lambda subdir: len(files_dict[subdir]),
+                default=None
+            )
+
+            if largest_subdir is None or not files_dict[largest_subdir]:
                 break
+
+            file = files_dict[largest_subdir].pop(0)
             try:
                 if file.exists():
                     file_size = file.stat().st_size
@@ -163,7 +215,7 @@ class BaseCache(ABC):
                     remaining_size -= file_size
             except Exception as e:
                 continue
-            
+        
         final_size = total_size - bytes_removed
         cache_gb = f"{final_size / (1024*1024*1024):.6f}".rstrip('0')
         removed_gb = f"{bytes_removed / (1024*1024*1024):.6f}".rstrip('0')

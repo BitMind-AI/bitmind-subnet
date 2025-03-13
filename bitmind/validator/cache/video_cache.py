@@ -126,12 +126,13 @@ class VideoCache(BaseCache):
         if (min_fps is None) != (max_fps is None):
             raise ValueError("min_fps and max_fps must be specified together")
 
-        video_files = self._get_cached_files()
+        video_files = self._get_cached_files(group_by_source=True)
         if not video_files:
             bt.logging.warning("No videos available in cache")
             return None
 
-        video_path = random.choice(video_files)
+        source = random.choice(list(video_files.keys()))
+        video_path = random.choice(video_files[source])
         if not Path(video_path).exists():
             bt.logging.error(f"Selected video {video_path} not found")
             return None
