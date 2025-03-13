@@ -104,7 +104,7 @@ MAX_EXTRACTED_GB = 5
 # dataset configurations
 IMAGE_DATASETS = {
     "real": [
-        {"path": "bitmind/bm-eidon-image", "filetype": "zip"},
+        {"path": "bitmind/bm-eidon-image"},
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-image-v7-256"},
         {"path": "bitmind/celeb-a-hq"},
