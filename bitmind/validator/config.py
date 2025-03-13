@@ -12,11 +12,12 @@ from diffusers import (
     MochiPipeline,
     HunyuanVideoPipeline,
     AnimateDiffPipeline,
+    IFPipeline,
+    IFSuperResolutionPipeline,
     EulerDiscreteScheduler,
     DEISMultistepScheduler,
     AutoPipelineForInpainting,
-    IFPipeline,
-    IFSuperResolutionPipeline
+    StableDiffusionInpaintPipeline
 )
 
 from .model_utils import (
@@ -279,10 +280,16 @@ I2I_MODELS: Dict[str, Dict[str, Any]] = {
             "variant": "fp16"
         },
         "generate_args": {
-            "num_inference_steps": {"min": 45, "max": 60},
+            "num_inference_steps": {"min": 40, "max": 60},
         },
         "scheduler": {
             "cls": DEISMultistepScheduler
+        }
+    },
+    "stable-diffusion-v1-5/stable-diffusion-inpainting": {
+        "pipeline_cls": StableDiffusionInpaintPipeline,
+        "generate_args": {
+            "num_inference_steps": {"min": 40, "max": 60},
         }
     }
 }
