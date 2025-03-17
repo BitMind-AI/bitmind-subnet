@@ -12,10 +12,12 @@ from diffusers import (
     MochiPipeline,
     HunyuanVideoPipeline,
     AnimateDiffPipeline,
-    EulerDiscreteScheduler,
-    AutoPipelineForInpainting,
     IFPipeline,
-    IFSuperResolutionPipeline
+    IFSuperResolutionPipeline,
+    EulerDiscreteScheduler,
+    DEISMultistepScheduler,
+    AutoPipelineForInpainting,
+    StableDiffusionInpaintPipeline
 )
 
 from .model_utils import (
@@ -102,6 +104,7 @@ MAX_EXTRACTED_GB = 5
 # dataset configurations
 IMAGE_DATASETS = {
     "real": [
+        {"path": "bitmind/bm-eidon-image"},
         {"path": "bitmind/bm-real"},
         {"path": "bitmind/open-image-v7-256"},
         {"path": "bitmind/celeb-a-hq"},
@@ -112,6 +115,7 @@ IMAGE_DATASETS = {
         {"path": "bitmind/caltech-256"},
         {"path": "bitmind/caltech-101"},
         {"path": "bitmind/dtd"}
+
     ],
     "semisynthetic": [
         {"path": "bitmind/face-swap"}
@@ -120,6 +124,7 @@ IMAGE_DATASETS = {
 
 VIDEO_DATASETS = {
     "real": [
+        {"path": "bitmind/bm-eidon-video", "filetype": "zip"},
         {"path": "shangxd/imagenet-vidvrd", "filetype": "zip"},
         {"path": "nkp37/OpenVid-1M", "filetype": "zip"}
     ],
@@ -269,6 +274,25 @@ I2I_MODELS: Dict[str, Dict[str, Any]] = {
             "num_inference_steps": 50,
             "strength": 0.99,
             "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
+        }
+    },
+    "Lykon/dreamshaper-8-inpainting": {
+        "pipeline_cls": AutoPipelineForInpainting,
+        "from_pretrained_args": {
+            "torch_dtype": torch.float16,
+            "variant": "fp16"
+        },
+        "generate_args": {
+            "num_inference_steps": {"min": 40, "max": 60},
+        },
+        "scheduler": {
+            "cls": DEISMultistepScheduler
+        }
+    },
+    "stable-diffusion-v1-5/stable-diffusion-inpainting": {
+        "pipeline_cls": StableDiffusionInpaintPipeline,
+        "generate_args": {
+            "num_inference_steps": {"min": 40, "max": 60},
         }
     }
 }

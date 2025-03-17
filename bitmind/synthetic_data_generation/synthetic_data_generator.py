@@ -372,7 +372,7 @@ class SyntheticDataGenerator:
         
         model_config = MODELS[self.model_name]
         pipeline_cls = model_config['pipeline_cls']
-        pipeline_args = model_config['from_pretrained_args'].copy()
+        pipeline_args = model_config.get('from_pretrained_args', {}).copy()
 
         # Handle custom loading functions passed as tuples
         for k, v in pipeline_args.items():
@@ -422,7 +422,7 @@ class SyntheticDataGenerator:
             # Load scheduler if specified
             if 'scheduler' in model_config:
                 sched_cls = model_config['scheduler']['cls']
-                sched_args = model_config['scheduler']['from_config_args']
+                sched_args = model_config['scheduler'].get('from_config_args', {})
                 self.model.scheduler = sched_cls.from_config(
                     self.model.scheduler.config,
                     **sched_args
