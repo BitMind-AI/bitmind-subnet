@@ -89,11 +89,12 @@ async def forward(self):
     # log results, track responding miners for serving organics
     responding_miner_uids = []
     unresponsive_miner_uids = []
-    for uid, pred, reward in zip(miner_uids, responses, rewards):
+    for uid, pred, reward, perf in zip(miner_uids, responses, rewards, metrics):
         if -1 in pred:
             unresponsive_miner_uids.append(uid)
             continue
-        bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
+        metric_str = ' | '.join([f"{modality} {m}: {perf[modality][m]:.4f}" for modality in perf for m in perf[modality]])
+        bt.logging.success(f"UID: {uid} | {pred} | Reward: {reward:.4f} | " + metric_str)
         responding_miner_uids.append(uid)
 
     if len(unresponsive_miner_uids) > 0:
