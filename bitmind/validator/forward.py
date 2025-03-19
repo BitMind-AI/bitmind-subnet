@@ -64,6 +64,7 @@ async def forward(self):
         axons=axons,
         synapse=synapse,
         deserialize=True,
+        run_async=True,
         timeout=9
     )
     bt.logging.info(f"Responses received in {time.time() - start}s")
@@ -87,16 +88,18 @@ async def forward(self):
 
     # log results, track responding miners for serving organics
     responding_miner_uids = []
-    unresponsive = 0
+    unresponsive_miner_uids = []
     for uid, pred, reward in zip(miner_uids, responses, rewards):
         if -1 in pred:
-            unresponsive += 1
+            unresponsive_miner_uids.append(uid)
             continue
         bt.logging.success(f"UID: {uid} | Prediction: {pred} | Reward: {reward}")
         responding_miner_uids.append(uid)
 
-    if unresponsive > 0:
-        bt.logging.warning(f"Failed to get responses from {unresponsive} miners")
+    if len(unresponsive_miner_uids) > 0:
+        bt.logging.warning(f"Failed to get responses from {len(unresponsive_miner_uids)} miners:")
+        for uid in unresponsive_miner_uids:
+            bt.logging.warning(f'UID {uid} ({self.metagraph.axons[uid]})')
 
     if responding_miner_uids:
         self.last_responding_miner_uids = responding_miner_uids

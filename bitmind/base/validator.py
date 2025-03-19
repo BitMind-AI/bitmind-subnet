@@ -34,6 +34,7 @@ from bitmind.validator.miner_performance_tracker import MinerPerformanceTracker
 from bitmind.utils.config import add_validator_args
 from bitmind.utils.mock import MockDendrite
 from bitmind.base.neuron import BaseNeuron
+from bitmind.base.bm_dendrite import BMDendrite
 from bitmind.base.utils.weight_utils import (
     process_weights_for_netuid,
     convert_weights_and_uids_for_emit,
@@ -73,7 +74,7 @@ class BaseValidatorNeuron(BaseNeuron):
         if self.config.mock:
             self.dendrite = MockDendrite(wallet=self.wallet)
         else:
-            self.dendrite = bt.dendrite(wallet=self.wallet)
+            self.dendrite = BMDendrite(self.wallet, batch_size=50)
         bt.logging.info(f"Dendrite: {self.dendrite}")
 
         # Set up initial scoring weights for validation
