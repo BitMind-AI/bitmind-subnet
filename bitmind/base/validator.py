@@ -74,7 +74,7 @@ class BaseValidatorNeuron(BaseNeuron):
         if self.config.mock:
             self.dendrite = MockDendrite(wallet=self.wallet)
         else:
-            self.dendrite = BMDendrite(self.wallet, batch_size=50)
+            self.dendrite = BMDendrite(self.wallet, batch_size=50, max_connections_per_axon=2)
         bt.logging.info(f"Dendrite: {self.dendrite}")
 
         # Set up initial scoring weights for validation
