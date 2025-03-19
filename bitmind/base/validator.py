@@ -34,6 +34,7 @@ from bitmind.validator.miner_performance_tracker import MinerPerformanceTracker
 from bitmind.utils.config import add_validator_args
 from bitmind.utils.mock import MockDendrite
 from bitmind.base.neuron import BaseNeuron
+from bitmind.base.bm_dendrite import BMDendrite
 from bitmind.base.utils.weight_utils import (
     process_weights_for_netuid,
     convert_weights_and_uids_for_emit,
@@ -73,7 +74,7 @@ class BaseValidatorNeuron(BaseNeuron):
         if self.config.mock:
             self.dendrite = MockDendrite(wallet=self.wallet)
         else:
-            self.dendrite = bt.dendrite(wallet=self.wallet)
+            self.dendrite = BMDendrite(self.wallet, batch_size=25, max_connections_per_axon=2)
         bt.logging.info(f"Dendrite: {self.dendrite}")
 
         # Set up initial scoring weights for validation
@@ -362,7 +363,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # Compute forward pass rewards, assumes uids are mutually exclusive.
         # shape: [ metagraph.n ]
-        scattered_rewards: np.ndarray = np.full_like(self.scores, 0.5)
+        scattered_rewards: np.ndarray = self.scores.copy()
         vali_uids = [
             uid for uid in range(len(scattered_rewards)) if
             self.metagraph.validator_permit[uid] and 
