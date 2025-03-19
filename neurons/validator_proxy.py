@@ -101,22 +101,23 @@ class PredictionService:
         timeout: int = DEFAULT_TIMEOUT
     ) -> tuple[List[float], List[int]]:
         """Get predictions from miners"""
-        miner_uids = self._get_miner_uids()
 
+        miner_uids = self._get_miner_uids()
+        s = time.time()
         predictions = await self.dendrite(
             axons=[self.metagraph.axons[uid] for uid in miner_uids],
             synapse=prepare_synapse(data, modality=modality),
             deserialize=True,
+            run_async=True,
             timeout=timeout
-        )
-
+       )
         valid_indices = [i for i, v in enumerate(predictions) if -1 not in v]
         if not valid_indices:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No valid predictions received"
             )
-
+        bt.logging.info(f"Got {len(valid_indices)} organic respones in {time.time()-s:.6f}s")
         valid_preds = np.array(predictions)[valid_indices]
         valid_uids = np.array(miner_uids)[valid_indices]
 
