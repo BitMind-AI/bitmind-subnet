@@ -211,8 +211,8 @@ class BMDendrite(Dendrite):
             
             return all_responses
 
-         responses = await query_all_axons(streaming)
-         return responses[0] if len(responses) == 1 and not is_list else responses
+        responses = await query_all_axons(streaming)
+        return responses[0] if len(responses) == 1 and not is_list else responses
 
     async def call(
         self,

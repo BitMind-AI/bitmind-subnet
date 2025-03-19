@@ -111,14 +111,13 @@ class PredictionService:
             run_async=True,
             timeout=timeout
        )
-        bt.logging.info(f"Got organic respones in {time.time()-s:.6f}s")
         valid_indices = [i for i, v in enumerate(predictions) if -1 not in v]
         if not valid_indices:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No valid predictions received"
             )
-
+        bt.logging.info(f"Got {len(valid_indices)} organic respones in {time.time()-s:.6f}s")
         valid_preds = np.array(predictions)[valid_indices]
         valid_uids = np.array(miner_uids)[valid_indices]
 
