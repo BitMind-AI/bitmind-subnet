@@ -178,6 +178,19 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
         },
         "enable_model_cpu_offload": False
     },
+    "runwayml/stable-diffusion-v1-5-midjourney-v6": {
+        "pipeline_cls": StableDiffusionPipeline,
+        "from_pretrained_args": {
+            "model_id": "runwayml/stable-diffusion-v1-5",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+        },
+        "lora_model_id": "Kvikontent/midjourney-v6",
+        "lora_loading_args": {
+            "use_peft_backend": True
+        },
+        "enable_model_cpu_offload": False
+    },
     "prompthero/openjourney-v4" : {
         "pipeline_cls": StableDiffusionPipeline,
         "from_pretrained_args": {
