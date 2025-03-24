@@ -371,7 +371,7 @@ class BaseValidatorNeuron(BaseNeuron):
         ]
         no_response_uids = [
             uid for uid in uids_array if all([
-                self.miner_performance_trackers[m].get_prediction_count(uid) == 0
+                self.performance_trackers[m].get_prediction_count(uid) == 0
                 for m in ["image", "video"]
             ])
         ]
