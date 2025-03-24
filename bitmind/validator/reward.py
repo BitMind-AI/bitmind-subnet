@@ -89,7 +89,6 @@ def get_rewards(
                 metrics = tracker.get_metrics(uid, window=100)
                 reward = (0.75 * metrics['binary_mcc'] + 0.25 * metrics['multi_class_mcc'])
                 reward *= compute_penalty_multiplier(pred_probs)
-                reward = transform_reward(reward)
 
                 miner_modality_rewards[modality] = reward
                 miner_modality_metrics[modality] = metrics
