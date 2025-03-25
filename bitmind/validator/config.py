@@ -121,7 +121,7 @@ IMAGE_DATASETS = {
     ],
     "synthetic": [
         {"path": "bitmind/JourneyDB"},
-        {"path": "bitmind/GenImage_Midjourney"}
+        {"path": "bitmind/GenImage_MidJourney"}
     ]
 }
 
