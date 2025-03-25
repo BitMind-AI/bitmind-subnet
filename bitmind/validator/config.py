@@ -120,7 +120,8 @@ IMAGE_DATASETS = {
         {"path": "bitmind/face-swap"}
     ],
     "synthetic": [
-        {"path": "bitmind/JourneyDB"}
+        {"path": "bitmind/JourneyDB"},
+        {"path": "bitmind/GenImage_Midjourney"}
     ]
 }
 
