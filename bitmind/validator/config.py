@@ -115,10 +115,12 @@ IMAGE_DATASETS = {
         {"path": "bitmind/caltech-256"},
         {"path": "bitmind/caltech-101"},
         {"path": "bitmind/dtd"}
-
     ],
     "semisynthetic": [
         {"path": "bitmind/face-swap"}
+    ],
+    "synthetic": [
+        {"path": "bitmind/JourneyDB"}
     ]
 }
 
