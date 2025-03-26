@@ -115,10 +115,13 @@ IMAGE_DATASETS = {
         {"path": "bitmind/caltech-256"},
         {"path": "bitmind/caltech-101"},
         {"path": "bitmind/dtd"}
-
     ],
     "semisynthetic": [
         {"path": "bitmind/face-swap"}
+    ],
+    "synthetic": [
+        {"path": "bitmind/JourneyDB"},
+        {"path": "bitmind/GenImage_MidJourney"}
     ]
 }
 
@@ -175,6 +178,19 @@ T2I_MODELS: Dict[str, Dict[str, Any]] = {
             "num_inference_steps": {"min": 50, "max": 125},
             "generator": torch.Generator("cuda" if torch.cuda.is_available() else "cpu"),
             "resolution": [512, 768]
+        },
+        "enable_model_cpu_offload": False
+    },
+    "runwayml/stable-diffusion-v1-5-midjourney-v6": {
+        "pipeline_cls": StableDiffusionPipeline,
+        "from_pretrained_args": {
+            "model_id": "runwayml/stable-diffusion-v1-5",
+            "use_safetensors": True,
+            "torch_dtype": torch.float16,
+        },
+        "lora_model_id": "Kvikontent/midjourney-v6",
+        "lora_loading_args": {
+            "use_peft_backend": True
         },
         "enable_model_cpu_offload": False
     },
