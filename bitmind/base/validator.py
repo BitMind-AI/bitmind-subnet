@@ -365,16 +365,17 @@ class BaseValidatorNeuron(BaseNeuron):
         # shape: [ metagraph.n ]
         scattered_rewards: np.ndarray = np.full_like(self.scores, 0.5)
         vali_uids = [
-            uid for uid in uids_array if
+            uid for uid in range(len(scattered_rewards)) if
             self.metagraph.validator_permit[uid] and 
             self.metagraph.S[uid] > self.config.neuron.vpermit_tao_limit
         ]
         no_response_uids = [
-            uid for uid in uids_array if all([
+            uid for uid in range(len(scattered_rewards)) if all([
                 self.performance_trackers[m].get_prediction_count(uid) == 0
                 for m in ["image", "video"]
             ])
         ]
+
         scattered_rewards[vali_uids] = 0.
         scattered_rewards[no_response_uids] = 0.
         scattered_rewards[uids_array] = rewards
