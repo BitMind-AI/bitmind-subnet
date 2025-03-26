@@ -369,7 +369,6 @@ class BaseValidatorNeuron(BaseNeuron):
             self.metagraph.validator_permit[uid] and 
             self.metagraph.S[uid] > self.config.neuron.vpermit_tao_limit
         ]
-        bt.logging.info(vali_uids)
         no_response_uids = [
             uid for uid in range(len(scattered_rewards)) if all([
                 self.performance_trackers[m].get_prediction_count(uid) == 0
