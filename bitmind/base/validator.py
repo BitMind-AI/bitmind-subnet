@@ -65,7 +65,6 @@ class BaseValidatorNeuron(BaseNeuron):
             self.config.neuron.full_path, "image_miner_performance_tracker.pkl")
         self.video_history_cache_path = os.path.join(
             self.config.neuron.full_path, "video_miner_performance_tracker.pkl")
-        self.load_miner_history()
 
         # Save a copy of the hotkeys to local memory.
         self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
@@ -79,7 +78,8 @@ class BaseValidatorNeuron(BaseNeuron):
 
         # Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
-        self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
+        self.scores = np.zeros(self.metagraph.n, dtype=np.float32)  # in caese no saved scores available
+        self.load_state()
 
         # Init sync with the network. Updates the metagraph.
         self.sync()
