@@ -60,8 +60,8 @@ class Validator(BaseValidatorNeuron):
     """
     def __init__(self, config=None):
         super(Validator, self).__init__(config=config)
-        bt.logging.info("load_state()")
-        self.load_state()
+        bt.logging.info("Starting validator with loaded scores:")
+        bt.logging.info(self.scores)
 
         self.last_responding_miner_uids = []
         self.validator_proxy = ValidatorProxy(self)
