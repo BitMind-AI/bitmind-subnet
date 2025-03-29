@@ -307,6 +307,11 @@ I2I_MODELS: Dict[str, Dict[str, Any]] = {
     },
     "stable-diffusion-v1-5/stable-diffusion-inpainting": {
         "pipeline_cls": StableDiffusionInpaintPipeline,
+        "from_pretrained_args": {
+            "torch_dtype": torch.float16,
+            "variant": "fp16",
+            "use_safetensors": True
+        },
         "generate_args": {
             "num_inference_steps": {"min": 40, "max": 60},
         }
