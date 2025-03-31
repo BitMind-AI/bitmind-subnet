@@ -152,7 +152,13 @@ class Challenge:
             if self.modality == 'video':
                 def create_wandb_video(video_frames, fps):
                     frames = [np.array(img) for img in video_frames]
-                    frames_arr = np.stack(frames, axis=0).transpose(0, 3, 1, 2)
+                    frames_arr = np.stack(frames, axis=0)
+                    if frames_arr.min() >= 0 and frames_arr.max() <= 1:
+                        frames_arr = (frames_arr * 255).astype(np.uint8)
+
+                    if frames_arr.shape[1] != 3:
+                        frames_arr = frames_arr.transpose(0, 3, 1, 2)
+
                     return wandb.Video(frames_arr, format="mp4", fps=fps)
 
                 if 'video_A' in sample:

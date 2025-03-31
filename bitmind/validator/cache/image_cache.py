@@ -127,7 +127,7 @@ class ImageCache(BaseCache):
                 return {
                     'image': image,
                     'path': str(image_path),
-                    'dataset': metadata.get('dataset', None),
+                    'dataset': metadata.get('dataset', str(Path(image_path).parent.name),),
                     'index': metadata.get('index', None),
                     'mask_center': metadata.get('mask_center', None)
                 }

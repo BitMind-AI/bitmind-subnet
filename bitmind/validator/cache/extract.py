@@ -71,6 +71,7 @@ q
 
                     video_info = zip_file.getinfo(video)
                     metadata = {
+                        'dataset': str(Path(zip_path).parent.name),
                         'source_zip': str(zip_path),
                         'path_in_zip': video,
                         'extraction_date': datetime.now().isoformat(),
@@ -164,6 +165,7 @@ def extract_images_from_parquet(
             img.save(img_path)
 
             metadata = {
+                'dataset': str(Path(parquet_path).parent.name),
                 'source_parquet': str(parquet_path),
                 'original_index': str(idx),
                 'image_format': image_format,
