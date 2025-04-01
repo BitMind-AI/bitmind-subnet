@@ -18,11 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 
-<<<<<<< HEAD
 __version__ = "2.2.8"
-=======
-__version__ = "2.2.7"
->>>>>>> main
 version_split = __version__.split(".")
 __spec_version__ = (
     (1000 * int(version_split[0]))
