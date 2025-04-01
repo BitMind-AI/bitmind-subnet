@@ -102,6 +102,7 @@ def clean_wandb_cache_except_current():
 
 def run_auto_update_self_heal(neuron_type, auto_update, self_heal, clean_wandb):
     if clean_wandb:
+        print("Pruning wanbd cache")
         clean_wandb_cache_except_current()
 
     last_restart_time = time.time()
