@@ -58,7 +58,7 @@ fi
 
 WANDB_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/wandb"
 echo "Pruning $WANDB_DIR"
-python3 bitmind/validator/scripts/prune_wandb_cache --dir $WANDB_DIR
+python3 bitmind/validator/scripts/prune_wandb_cache.py --dir $WANDB_DIR
 
 echo "Verifying access to synthetic image generation models. This may take a few minutes."
 if ! python3 bitmind/validator/verify_models.py; then
