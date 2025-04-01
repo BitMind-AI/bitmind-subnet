@@ -236,7 +236,7 @@ class BaseMinerNeuron(BaseNeuron):
 
         if self.config.blacklist.force_validator_permit:
             # If the config is set to force validator permit, then we should only allow requests from validators.
-            if not self.metagraph.validator_permit[uid]:
+            if not self.metagraph.validator_permit[uid] or self.metagraph.S[uid] < 30000:
                 bt.logging.warning(
                     f"Blacklisting a request from non-validator hotkey {synapse.dendrite.hotkey}"
                 )
