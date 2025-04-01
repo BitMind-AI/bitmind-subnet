@@ -371,7 +371,7 @@ class BaseValidatorNeuron(BaseNeuron):
         vali_uids = [
             uid for uid in range(len(scattered_rewards)) if
             self.metagraph.validator_permit[uid] and 
-            self.metagraph.S[uid] > 4096
+            self.metagraph.S[uid] > self.config.neuron.vpermit_tao_limit
         ]
         no_response_uids = [
             uid for uid in range(len(scattered_rewards)) if all([
