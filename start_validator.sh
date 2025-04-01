@@ -55,6 +55,11 @@ if pm2 list | grep -q "$DATA_GEN_PROCESS_NAME"; then
   pm2 delete $DATA_GEN_PROCESS_NAME
 fi
 
+
+WANDB_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/wandb"
+echo "Pruning $WANDB_DIR"
+python3 bitmind/validator/scripts/prune_wandb_cache --dir $WANDB_DIR
+
 echo "Verifying access to synthetic image generation models. This may take a few minutes."
 if ! python3 bitmind/validator/verify_models.py; then
   echo "Failed to verify diffusion models. Please check the configurations or model access permissions."
