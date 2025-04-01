@@ -38,13 +38,13 @@ def clean_wandb_cache_except_current():
         print("No W&B runs found in cache.")
         return
 
-    one_hour_ago = time.time() - 3600
-    recent_runs = []  # [d for d in run_dirs if os.path.getmtime(d) > one_hour_ago]
+    # Determine which runs to keep: anything modified in the last hour
+    recent_runs = (
+        []
+    )  # [d for d in run_dirs if os.path.getmtime(d) > time.time() - 3600]
 
-    # check if there's a latest-run symlink and make sure we preserve its target
     latest_run_link = os.path.join(wandb_dir, "latest-run")
     latest_run_target = None
-
     if os.path.exists(latest_run_link) and os.path.isdir(latest_run_link):
         try:
             latest_run_target = os.path.realpath(latest_run_link)
@@ -61,10 +61,8 @@ def clean_wandb_cache_except_current():
         run_time = datetime.fromtimestamp(os.path.getmtime(run))
         print(f"  - {os.path.basename(run)} (from {run_time})")
 
-    # Remove all other run directories
     runs_removed = 0
     space_freed = 0
-
     for run_dir in run_dirs:
         if run_dir not in recent_runs:
             try:
@@ -79,22 +77,6 @@ def clean_wandb_cache_except_current():
             except Exception as e:
                 print(f"Error removing {run_dir}: {e}")
 
-    # Don't delete artifacts directory, just report on its size
-    artifacts_dir = os.path.join(wandb_dir, "artifacts")
-    if os.path.exists(artifacts_dir) and os.path.isdir(artifacts_dir):
-        try:
-            artifacts_size = sum(
-                os.path.getsize(os.path.join(dirpath, filename))
-                for dirpath, _, filenames in os.walk(artifacts_dir)
-                for filename in filenames
-            )
-            print(
-                f"W&B artifacts directory size: {artifacts_size / (1024*1024):.2f} MB"
-            )
-        except Exception as e:
-            print(f"Error calculating artifacts directory size: {e}")
-
-    # Don't delete log files
     print(
         f"Cleaned {runs_removed} W&B runs, freed approximately {space_freed / (1024*1024):.2f} MB"
     )
@@ -102,12 +84,15 @@ def clean_wandb_cache_except_current():
 
 def run_auto_update_self_heal(neuron_type, auto_update, self_heal, clean_wandb):
     if clean_wandb:
-        print("Pruning wanbd cache")
         clean_wandb_cache_except_current()
 
     last_restart_time = time.time()
+    last_cache_clean_time = time.time()
+
     while True:
         time.sleep(60)
+        current_time = time.time()
+
         if auto_update:
             current_branch = subprocess.getoutput("git rev-parse --abbrev-ref HEAD")
             local_commit = subprocess.getoutput("git rev-parse HEAD")
@@ -128,22 +113,43 @@ def run_auto_update_self_heal(neuron_type, auto_update, self_heal, clean_wandb):
                         format(remote_commit),
                     )
 
+                    # Clean wandb cache before auto-update if enabled
+                    if clean_wandb:
+                        clean_wandb_cache_except_current()
+
                     print("Running the autoupdate steps...")
-                    # Trigger shell script. Make sure this file path starts from root
+
                     os.system(f"./autoupdate_{neuron_type}_steps.sh")
                     time.sleep(20)
                     print("Finished running the autoupdate steps 😎")
                     print("Restarting neuron")
                     os.system(f"./start_{neuron_type}.sh")
+                    last_restart_time = current_time
+                    last_cache_clean_time = current_time
             else:
                 print("Repo is up-to-date.")
-        if self_heal:
-            # Check if it's time to restart the PM2 process
-            if time.time() - last_restart_time >= RESTART_INTERVAL_HOURS * 3600:
-                if clean_wandb:
-                    clean_wandb_cache_except_current()
-                os.system(f"./start_{neuron_type}.sh")
-                last_restart_time = time.time()  # Reset the timer after the restart
+
+        if (
+            self_heal
+            and current_time - last_restart_time >= RESTART_INTERVAL_HOURS * 3600
+        ):
+            if clean_wandb:
+                clean_wandb_cache_except_current()
+
+            print(f"Performing scheduled restart after {RESTART_INTERVAL_HOURS} hours")
+            os.system(f"./start_{neuron_type}.sh")
+            last_restart_time = current_time
+            last_cache_clean_time = current_time
+
+        # If both auto-update and self-heal are disabled but clean_wandb is enabled,
+        # still periodically clean the cache based on the restart interval
+        elif clean_wandb and not auto_update and not self_heal:
+            if current_time - last_cache_clean_time >= RESTART_INTERVAL_HOURS * 3600:
+                print(
+                    f"Performing scheduled wandb cache cleanup after {RESTART_INTERVAL_HOURS} hours"
+                )
+                clean_wandb_cache_except_current()
+                last_cache_clean_time = current_time
 
 
 if __name__ == "__main__":
