@@ -11,10 +11,10 @@ from bitmind.validator.config import TARGET_IMAGE_SIZE
 
 
 def center_crop():
-    def fn(img):
+    def crop(img):
         m = min(img.size)
         return transforms.CenterCrop(m)(img)
-    return fn
+    return crop
 
 
 class RandomResizedCropWithParams(transforms.RandomResizedCrop):
@@ -275,6 +275,7 @@ class ApplyDeeperForensicsDistortion:
         self.distortion_type = distortion_type
         self.level_min = level_min
         self.level_max = level_max
+        self.params = {}
 
     def __call__(self, img, level=None):
         if level is None:
@@ -297,6 +298,7 @@ class ApplyDeeperForensicsDistortion:
             img = img.permute(1, 2, 0).cpu().numpy()
             img = (img * 255).astype(np.uint8)
 
+        self.params = {'level': self.level}
         img = self.distortion_func(img, self.distortion_param)
 
         if isinstance(img, np.ndarray):

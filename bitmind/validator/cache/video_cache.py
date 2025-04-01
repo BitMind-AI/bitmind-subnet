@@ -215,7 +215,7 @@ class VideoCache(BaseCache):
             'fps': frame_rate,
             'num_frames': num_frames,
             'path': str(video_path),
-            'dataset': str(Path(video_path).name.split('_')[0]),
+            'dataset': str(Path(video_path).parent.name),
             'total_duration': duration,
             'sampled_length': sample_duration
         }
