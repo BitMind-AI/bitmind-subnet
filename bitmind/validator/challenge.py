@@ -13,7 +13,7 @@ from bitmind.utils.image_transforms import apply_augmentation_by_level
 from bitmind.utils.uids import get_random_uids
 from bitmind.validator.reward import get_rewards
 from bitmind.validator.config import (
-    TARGET_IMAGE_SIZE, 
+    TARGET_IMAGE_SIZE,
     MIN_FRAMES,
     MAX_FRAMES,
     P_STITCH,
