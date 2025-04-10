@@ -117,7 +117,7 @@ IMAGE_DATASETS = {
         {"path": "bitmind/caltech-256"},
         {"path": "bitmind/caltech-101"},
         {"path": "bitmind/dtd"},
-        {"path": "bitmind/idoc-mugshots"}
+        {"path": "bitmind/idoc-mugshots-images"}
     ],
     "semisynthetic": [
         {"path": "bitmind/face-swap"}
