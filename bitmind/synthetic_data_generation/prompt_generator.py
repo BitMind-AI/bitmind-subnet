@@ -239,36 +239,28 @@ class PromptGenerator:
         """
         Enhance a static image description to make it suitable for video generation
         by adding dynamic elements and motion.
-
+    
         Args:
             description: The static image description to enhance.
             max_new_tokens: Maximum number of new tokens to generate in the enhanced text.
-
+    
         Returns:
-            An enhanced description suitable for video generation, or the original
-            description if enhancement fails.
+            An enhanced description suitable for video generation.
         """
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "[INST]You are an expert at converting static image descriptions "
-                    "into dynamic video prompts. Enhance the given description by "
-                    "adding natural motion and temporal elements while preserving the "
-                    "core scene. Follow these rules:\n"
-                    "1. Maintain the essential elements of the original description\n"
-                    "2. Add EXACTLY ONE camera motion (e.g., 'camera slowly zooming in', "
-                    "'camera gently panning left to right', 'camera smoothly circling')\n"
-                    "3. Add EXACTLY ONE ambient motion based on the scene type:\n"
-                    "   - For portraits: Add subtle facial expressions or micro-movements\n"
-                    "   - For people: Add natural body language or gestures\n"
-                    "   - For landscapes: Add environmental motion (wind, clouds, water)\n"
-                    "   - For urban scenes: Add atmospheric elements (light, shadows)\n"
-                    "   - For objects: Add gentle environmental interaction\n"
-                    "4. Keep the total description under 75 words\n"
-                    "5. Format: '{original description}, {camera motion}, {ambient motion}'\n"
-                    "6. Use smooth, gradual terms like 'gently', 'slowly', 'subtly'\n"
-                    "7. NEVER add new subjects or major scene changes\n"
+                    "[INST]You are an expert at converting image descriptions into video prompts. "
+                    "Analyze the existing motion in the scene and enhance it naturally:\n"
+                    "1. If motion exists in the image (falling, throwing, running, etc.):\n"
+                    "   - Maintain and emphasize that existing motion\n"
+                    "   - Add smooth continuation of the movement\n"
+                    "2. If the subject is static (sitting, standing, placed):\n"
+                    "   - Keep it stable\n"
+                    "   - Add minimal environmental motion if appropriate\n"
+                    "3. Add ONE subtle camera motion that complements the scene\n"
+                    "4. Keep the description concise and natural\n"
                     "Only respond with the enhanced description.[/INST]"
                 )
             },
