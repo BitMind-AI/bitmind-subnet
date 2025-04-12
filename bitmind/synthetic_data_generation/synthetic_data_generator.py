@@ -24,6 +24,7 @@ from bitmind.validator.config import (
     T2V_MODEL_NAMES,
     T2I_MODEL_NAMES,
     I2I_MODEL_NAMES,
+    I2V_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_model,
     get_task,
