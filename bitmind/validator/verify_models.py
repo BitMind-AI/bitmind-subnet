@@ -23,10 +23,10 @@ def is_model_cached(model_name):
 
     # Check if the model directory exists
     if os.path.isdir(model_path):
-        bt.logging.info(f"{model_name} is in HF cache. Skipping....")
+        print(f"{model_name} is in HF cache. Skipping....")
         return True
     else:
-        bt.logging.info(f"{model_name} is not cached. Downloading....")
+        print(f"{model_name} is not cached. Downloading....")
         return False
 
 
