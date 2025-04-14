@@ -17,7 +17,9 @@ from diffusers import (
     EulerDiscreteScheduler,
     DEISMultistepScheduler,
     AutoPipelineForInpainting,
-    StableDiffusionInpaintPipeline
+    StableDiffusionInpaintPipeline,
+    CogView4Pipeline,
+    CogVideoXImageToVideoPipeline
 )
 
 from .model_utils import (
@@ -114,7 +116,8 @@ IMAGE_DATASETS = {
         {"path": "bitmind/lfw"},
         {"path": "bitmind/caltech-256"},
         {"path": "bitmind/caltech-101"},
-        {"path": "bitmind/dtd"}
+        {"path": "bitmind/dtd"},
+        {"path": "bitmind/idoc-mugshots-images"}
     ],
     "semisynthetic": [
         {"path": "bitmind/face-swap"}
@@ -143,6 +146,21 @@ TEXT_MODERATION_MODEL: str = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
 
 # Text-to-image model configurations
 T2I_MODELS: Dict[str, Dict[str, Any]] = {
+    "THUDM/CogView4-6B": {
+        "pipeline_cls": CogView4Pipeline,
+        "from_pretrained_args": {
+            "torch_dtype": torch.bfloat16,
+            "use_safetensors": True
+        },
+        "generate_args": {
+            "guidance_scale": 3.5,
+            "num_images_per_prompt": 1,
+            "num_inference_steps": 50,
+            "width": 512,
+            "height": 512
+        },
+        "use_autocast": False
+    },
     "stabilityai/stable-diffusion-xl-base-1.0": {
         "pipeline_cls": StableDiffusionXLPipeline,
         "from_pretrained_args": {
@@ -304,12 +322,6 @@ I2I_MODELS: Dict[str, Dict[str, Any]] = {
         "scheduler": {
             "cls": DEISMultistepScheduler
         }
-    },
-    "stable-diffusion-v1-5/stable-diffusion-inpainting": {
-        "pipeline_cls": StableDiffusionInpaintPipeline,
-        "generate_args": {
-            "num_inference_steps": {"min": 40, "max": 60},
-        }
     }
 }
 I2I_MODEL_NAMES: List[str] = list(I2I_MODELS.keys())
@@ -407,13 +419,16 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
 }
 T2V_MODEL_NAMES: List[str] = list(T2V_MODELS.keys())
 
+# Image-to-video model configurations
+I2V_MODELS: Dict[str, Dict[str, Any]] = {}
+I2V_MODEL_NAMES: List[str] = list(I2V_MODELS.keys())
+
 # Combined model configurations
-MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **I2I_MODELS, **T2V_MODELS}
+MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **I2I_MODELS, **T2V_MODELS, **I2V_MODELS}
 MODEL_NAMES: List[str] = list(MODELS.keys())
 
-
 def get_modality(model_name):
-     if model_name in T2V_MODEL_NAMES:
+     if model_name in T2V_MODEL_NAMES + I2V_MODEL_NAMES:
         return Modality.VIDEO
      elif model_name in T2I_MODEL_NAMES + I2I_MODEL_NAMES:
         return Modality.IMAGE
@@ -421,7 +436,7 @@ def get_modality(model_name):
 def get_output_media_type(model_name):
      if model_name in I2I_MODEL_NAMES:
         return MediaType.SEMISYNTHETIC
-     elif model_name in T2I_MODEL_NAMES + T2V_MODEL_NAMES:
+     elif model_name in T2I_MODEL_NAMES + T2V_MODEL_NAMES + I2V_MODEL_NAMES:
         return MediaType.SYNTHETIC
 
 def get_task(model_name):
@@ -431,15 +446,17 @@ def get_task(model_name):
         return 't2i'
     elif model_name in I2I_MODEL_NAMES:
         return 'i2i'
+    elif model_name in I2V_MODEL_NAMES:
+        return 'i2v'
 
 
 def select_random_model(task: Optional[str] = None) -> str:
     """
-    Select a random text-to-image or text-to-video model based on the specified
+    Select a random text-to-image, text-to-video, image-to-image, or image-to-video model based on the specified
     modality.
 
     Args:
-        modality: The type of model to select ('t2v', 't2i', 'i2i', or 'random').
+        modality: The type of model to select ('t2v', 't2i', 'i2i', 'i2v', or 'random').
             If None or 'random', randomly chooses between the valid options
 
     Returns:
@@ -457,5 +474,9 @@ def select_random_model(task: Optional[str] = None) -> str:
         return np.random.choice(T2V_MODEL_NAMES)
     elif task == 'i2i':
         return np.random.choice(I2I_MODEL_NAMES)
+    elif task == 'i2v':
+        if not I2V_MODEL_NAMES:
+            raise NotImplementedError("I2V models are not currently configured")
+        return np.random.choice(I2V_MODEL_NAMES)
     else:
         raise NotImplementedError(f"Unsupported task: {task}")
