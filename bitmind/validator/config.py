@@ -433,7 +433,6 @@ I2V_MODEL_NAMES: List[str] = list(I2V_MODELS.keys())
 MODELS: Dict[str, Dict[str, Any]] = {**T2I_MODELS, **I2I_MODELS, **T2V_MODELS, **I2V_MODELS}
 MODEL_NAMES: List[str] = list(MODELS.keys())
 
-
 def get_modality(model_name):
      if model_name in T2V_MODEL_NAMES + I2V_MODEL_NAMES:
         return Modality.VIDEO
@@ -473,7 +472,7 @@ def select_random_model(task: Optional[str] = None) -> str:
         NotImplementedError: If the specified modality is not supported.
     """
     if task is None or task == 'random':
-        task = np.random.choice(['t2i', 'i2i', 't2v', 'i2v'])
+        task = np.random.choice(['t2i', 'i2i', 't2v'])
 
     if task == 't2i':
         return np.random.choice(T2I_MODEL_NAMES)
@@ -482,6 +481,8 @@ def select_random_model(task: Optional[str] = None) -> str:
     elif task == 'i2i':
         return np.random.choice(I2I_MODEL_NAMES)
     elif task == 'i2v':
+        if not I2V_MODEL_NAMES:
+            raise NotImplementedError("I2V models are not currently configured")
         return np.random.choice(I2V_MODEL_NAMES)
     else:
         raise NotImplementedError(f"Unsupported task: {task}")
