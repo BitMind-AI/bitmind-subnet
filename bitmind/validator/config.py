@@ -322,6 +322,12 @@ I2I_MODELS: Dict[str, Dict[str, Any]] = {
         "scheduler": {
             "cls": DEISMultistepScheduler
         }
+    },
+    "stable-diffusion-v1-5/stable-diffusion-inpainting": {
+        "pipeline_cls": StableDiffusionInpaintPipeline,
+        "generate_args": {
+            "num_inference_steps": {"min": 40, "max": 60},
+        }
     }
 }
 I2I_MODEL_NAMES: List[str] = list(I2I_MODELS.keys())
