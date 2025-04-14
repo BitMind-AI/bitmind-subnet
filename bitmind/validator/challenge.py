@@ -136,7 +136,7 @@ class Challenge:
             sample['video'] = sample_A['video'] + sample_B['video']
 
         return sample
-      
+    
     def process_metadata(self, sample) -> bool:
         """Prepare challenge metadata and media for logging to Weights & Biases """
         self.metadata = {

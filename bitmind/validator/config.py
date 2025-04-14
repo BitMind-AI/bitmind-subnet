@@ -426,27 +426,7 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
 T2V_MODEL_NAMES: List[str] = list(T2V_MODELS.keys())
 
 # Image-to-video model configurations
-I2V_MODELS: Dict[str, Dict[str, Any]] = {
-    "THUDM/CogVideoX1.5-5B-I2V": {
-        "pipeline_cls": CogVideoXImageToVideoPipeline,
-        "from_pretrained_args": {
-            "use_safetensors": True,
-            "torch_dtype": torch.bfloat16
-        },
-        "generate_args": {
-            "guidance_scale": 2,
-            "num_videos_per_prompt": 1,
-            "num_inference_steps": {"min": 50, "max": 125},
-            "num_frames": 49,
-            "height": 768,
-            "width": 768,
-        },
-        "save_args": {"fps": 8},
-        "enable_model_cpu_offload": True,
-        "vae_enable_slicing": True,
-        "vae_enable_tiling": True
-    }
-}
+I2V_MODELS: Dict[str, Dict[str, Any]] = {}
 I2V_MODEL_NAMES: List[str] = list(I2V_MODELS.keys())
 
 # Combined model configurations
