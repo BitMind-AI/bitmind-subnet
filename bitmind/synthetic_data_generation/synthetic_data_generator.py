@@ -24,6 +24,7 @@ from bitmind.validator.config import (
     T2V_MODEL_NAMES,
     T2I_MODEL_NAMES,
     I2I_MODEL_NAMES,
+    I2V_MODEL_NAMES,
     TARGET_IMAGE_SIZE,
     select_random_model,
     get_task,
@@ -152,7 +153,12 @@ class SyntheticDataGenerator:
             image_sample = self.image_cache.sample()
             images.append(image_sample['image'])
             bt.logging.info(f"Sampled image {i+1}/{batch_size} for captioning: {image_sample['path']}")
-            prompts.append(self.generate_prompt(image=image_sample['image'], clear_gpu=i==batch_size-1))
+            task = get_task(self.model_name) if self.model_name else None
+            prompts.append(self.generate_prompt(
+                image=image_sample['image'], 
+                clear_gpu=i==batch_size-1,
+                task=task
+            ))
             bt.logging.info(f"Caption {i+1}/{batch_size} generated: {prompts[-1]}")
             
         # If specific model is set, use only that model
@@ -163,9 +169,12 @@ class SyntheticDataGenerator:
             i2i_model_names = random.sample(I2I_MODEL_NAMES, len(I2I_MODEL_NAMES))
             t2i_model_names = random.sample(T2I_MODEL_NAMES, len(T2I_MODEL_NAMES))
             t2v_model_names = random.sample(T2V_MODEL_NAMES, len(T2V_MODEL_NAMES))
+            i2v_model_names = random.sample(I2V_MODEL_NAMES, len(I2V_MODEL_NAMES))
+            
             model_names = [
-                m for triple in zip_longest(t2v_model_names, t2i_model_names, i2i_model_names) 
-                for m in triple if m is not None
+                m for quad in zip_longest(t2v_model_names, t2i_model_names, 
+                                        i2i_model_names, i2v_model_names) 
+                for m in quad if m is not None
             ]
 
         # Generate for each model/prompt combination
@@ -222,7 +231,7 @@ class SyntheticDataGenerator:
             ValueError: If real_image is None when using annotation prompt type.
             NotImplementedError: If prompt type is not supported.
         """
-        prompt = self.generate_prompt(image, clear_gpu=True)
+        prompt = self.generate_prompt(image, clear_gpu=True, task=task)
         bt.logging.info("Generating synthetic data...")
         gen_data = self._run_generation(prompt, task, model_name, image)
         self.clear_gpu()
@@ -231,7 +240,8 @@ class SyntheticDataGenerator:
     def generate_prompt(
         self, 
         image: Optional[Image.Image] = None,
-        clear_gpu: bool = True
+        clear_gpu: bool = True,
+        task: Optional[str] = None
     ) -> str:
         """Generate a prompt based on the specified strategy."""
         bt.logging.info("Generating prompt")
@@ -241,7 +251,7 @@ class SyntheticDataGenerator:
                     "image can't be None if self.prompt_type is 'annotation'"
                 )
             self.prompt_generator.load_models()
-            prompt = self.prompt_generator.generate(image)
+            prompt = self.prompt_generator.generate(image, task=task)
             if clear_gpu:
                 self.prompt_generator.clear_gpu()
         else:
@@ -261,9 +271,9 @@ class SyntheticDataGenerator:
 
         Args:
             prompt: The text prompt used to inspire the generation.
-            task: The generation task type ('t2i', 't2v', 'i2i', or None).
+            task: The generation task type ('t2i', 't2v', 'i2i', 'i2v', or None).
             model_name: Optional model name to use for generation.
-            image: Optional input image for image-to-image generation.
+            image: Optional input image for image-to-image or image-to-video generation.
             generate_at_target_size: If True, generate at TARGET_IMAGE_SIZE dimensions.
 
         Returns:
@@ -272,6 +282,10 @@ class SyntheticDataGenerator:
         Raises:
             RuntimeError: If generation fails.
         """
+        # Clear CUDA cache before loading model
+        torch.cuda.empty_cache()
+        gc.collect()
+        
         self.load_model(model_name)
         model_config = MODELS[self.model_name]
         task = get_task(model_name) if task is None else task      
@@ -289,14 +303,38 @@ class SyntheticDataGenerator:
 
             gen_args['mask_image'], mask_center = create_random_mask(image.size)
             gen_args['image'] = image
+        # prep image-to-video generation args
+        elif task == 'i2v':
+            if image is None:
+                raise ValueError("image cannot be None for image-to-video generation")
+            # Get target size from gen_args if specified, otherwise use default
+            target_size = (
+                gen_args.get('height', 768),
+                gen_args.get('width', 768)
+            )
+            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+            gen_args['image'] = image
 
         # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
                 if "min" in v and "max" in v:
-                    gen_args[k] = np.random.randint(v['min'], v['max'])
+                    # For i2v, use minimum values to save memory
+                    if task == 'i2v':
+                        gen_args[k] = v['min']
+                    else:
+                        gen_args[k] = np.random.randint(v['min'], v['max'])
                 if "options" in v:
                     gen_args[k] = random.choice(v['options'])
+            # Ensure num_frames is always an integer
+            if k == 'num_frames' and isinstance(v, dict):
+                if "min" in v:
+                    gen_args[k] = v['min']
+                elif "max" in v:
+                    gen_args[k] = v['max']
+                else:
+                    gen_args[k] = 24  # Default value
 
         try:
             if generate_at_target_size:
@@ -306,6 +344,10 @@ class SyntheticDataGenerator:
                 gen_args['height'] = gen_args['resolution'][0]
                 gen_args['width'] = gen_args['resolution'][1]
                 del gen_args['resolution']
+
+            # Ensure num_frames is an integer before generation
+            if 'num_frames' in gen_args:
+                gen_args['num_frames'] = int(gen_args['num_frames'])
 
             truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
             bt.logging.info(f"Generating media from prompt: {truncated_prompt}")
@@ -321,8 +363,14 @@ class SyntheticDataGenerator:
                 pretrained_args = model_config.get('from_pretrained_args', {})
                 torch_dtype = pretrained_args.get('torch_dtype', torch.bfloat16)
                 with torch.autocast(self.device, torch_dtype, cache_enabled=False):
+                    # Clear CUDA cache before generation
+                    torch.cuda.empty_cache()
+                    gc.collect()
                     gen_output = generate(truncated_prompt, **gen_args)
             else:
+                # Clear CUDA cache before generation
+                torch.cuda.empty_cache()
+                gc.collect()
                 gen_output = generate(truncated_prompt, **gen_args)
                 
             gen_time = time.time() - start_time
@@ -334,6 +382,8 @@ class SyntheticDataGenerator:
                     f"default dimensions. Error: {e}"
                 )
                 try:
+                    # Clear CUDA cache before retry
+                    torch.cuda.empty_cache()
                     gen_output = self.model(prompt=truncated_prompt)
                     gen_time = time.time() - start_time
                 except Exception as fallback_error:
@@ -462,4 +512,3 @@ class SyntheticDataGenerator:
             self.model = None
             gc.collect()
             torch.cuda.empty_cache()
-
