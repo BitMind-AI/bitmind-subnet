@@ -154,10 +154,7 @@ class ImageSynapse(MediaSynapse):
 
 class VideoSynapse(MediaSynapse):
     """
-    Naive initial VideoSynapse
-    Better option would be to modify the Dendrite interface to allow multipart/form-data here:
-    https://github.com/opentensor/bittensor/blob/master/bittensor/core/dendrite.py#L533
-    Another higher lift option would be to look into Epistula or Fiber
+    Naive initial VideoSynapse (Epistula version coming soon I promise)
     """
 
     # Required request input, filled by sending dendrite caller.
