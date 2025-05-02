@@ -55,16 +55,8 @@ class PromptGenerator:
 
     def are_models_loaded(self) -> bool:
         return (self.vlm is not None) and (self.llm_pipeline is not None)
-
-    def load_models(self) -> None:
-        """
-        Load the necessary models for image annotation and text moderation onto
-        the specified device.
-        """
-        if self.are_models_loaded():
-            bt.logging.warning(f"Models already loaded")
-            return
-
+    
+    def load_vlm(self) -> None:
         bt.logging.info(f"Loading caption generation model {self.vlm_name}")
         self.vlm_processor = Blip2Processor.from_pretrained(
             self.vlm_name,
@@ -77,7 +69,8 @@ class PromptGenerator:
         )
         self.vlm.to(self.device)
         bt.logging.info(f"Loaded image annotation model {self.vlm_name}")
-
+        
+    def load_llm(self) -> None:
         bt.logging.info(f"Loading caption moderation model {self.llm_name}")
         llm = AutoModelForCausalLM.from_pretrained(
             self.llm_name,
@@ -95,6 +88,17 @@ class PromptGenerator:
             tokenizer=tokenizer
         )
         bt.logging.info(f"Loaded caption moderation model {self.llm_name}")
+        
+    def load_models(self) -> None:
+        """
+        Load the necessary models for image annotation and text moderation onto
+        the specified device.
+        """
+        if self.are_models_loaded():
+            bt.logging.warning(f"Models already loaded")
+            return
+        self.load_vlm()
+        self.load_llm()
 
     def clear_gpu(self) -> None:
         """
@@ -282,3 +286,34 @@ class PromptGenerator:
         except Exception as e:
             bt.logging.error(f"An error occurred during motion enhancement: {e}")
             return description
+
+    def sanitize_prompt(self, prompt: str, max_new_tokens: int = 80) -> str:
+        """
+        Use the LLM to make the prompt more SFW (less NSFW).
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "[INST]You are an expert at making prompts safe for work (SFW). "
+                    "Rephrase the following prompt to remove or neutralize any NSFW, sexual, or explicit content. "
+                    "Keep the prompt as close as possible to the original intent, but ensure it is SFW. "
+                    "Only respond with the sanitized prompt.[/INST]"
+                )
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+        try:
+            sanitized = self.llm_pipeline(
+                messages,
+                max_new_tokens=max_new_tokens,
+                pad_token_id=self.llm_pipeline.tokenizer.eos_token_id,
+                return_full_text=False
+            )
+            return sanitized[0]['generated_text']
+        except Exception as e:
+            bt.logging.error(f"An error occurred during prompt sanitization: {e}")
+            return prompt
