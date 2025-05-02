@@ -420,7 +420,27 @@ T2V_MODELS: Dict[str, Dict[str, Any]] = {
 T2V_MODEL_NAMES: List[str] = list(T2V_MODELS.keys())
 
 # Image-to-video model configurations
-I2V_MODELS: Dict[str, Dict[str, Any]] = {}
+I2V_MODELS: Dict[str, Dict[str, Any]] = {
+    "THUDM/CogVideoX1.5-5B-I2V": {
+        "pipeline_cls": CogVideoXImageToVideoPipeline,
+        "from_pretrained_args": {
+            "use_safetensors": True,
+            "torch_dtype": torch.bfloat16
+        },
+        "generate_args": {
+            "guidance_scale": 2,
+            "num_videos_per_prompt": 1,
+            "num_inference_steps": {"min": 50, "max": 125},
+            "num_frames": 49,
+            "height": 768,
+            "width": 768,
+        },
+        "save_args": {"fps": 8},
+        "enable_model_cpu_offload": True,
+        "vae_enable_slicing": True,
+        "vae_enable_tiling": True
+    }
+}
 I2V_MODEL_NAMES: List[str] = list(I2V_MODELS.keys())
 
 # Combined model configurations
@@ -466,7 +486,7 @@ def select_random_model(task: Optional[str] = None) -> str:
         NotImplementedError: If the specified modality is not supported.
     """
     if task is None or task == 'random':
-        task = np.random.choice(['t2i', 'i2i', 't2v'])
+        task = np.random.choice(['t2i', 'i2i', 't2v', 'i2v'])
 
     if task == 't2i':
         return np.random.choice(T2I_MODEL_NAMES)
@@ -475,8 +495,6 @@ def select_random_model(task: Optional[str] = None) -> str:
     elif task == 'i2i':
         return np.random.choice(I2I_MODEL_NAMES)
     elif task == 'i2v':
-        if not I2V_MODEL_NAMES:
-            raise NotImplementedError("I2V models are not currently configured")
         return np.random.choice(I2V_MODEL_NAMES)
     else:
         raise NotImplementedError(f"Unsupported task: {task}")

@@ -107,3 +107,10 @@ def create_random_mask(size: Tuple[int, int]) -> Image.Image:
             )
 
     return mask, (x, y)
+
+def is_black_image(img: Image.Image, threshold: int = 10) -> bool:
+    """
+    Returns True if the image is (almost) completely black.
+    """
+    arr = np.array(img)
+    return np.mean(arr) < threshold
