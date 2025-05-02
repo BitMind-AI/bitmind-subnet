@@ -32,7 +32,7 @@ from bitmind.validator.config import (
     MediaType,
     Modality
 )
-from bitmind.synthetic_data_generation.image_utils import create_random_mask
+from bitmind.synthetic_data_generation.image_utils import create_random_mask, is_black_image
 from bitmind.synthetic_data_generation.prompt_utils import truncate_prompt_if_too_long
 from bitmind.synthetic_data_generation.prompt_generator import PromptGenerator
 from bitmind.validator.cache import ImageCache
@@ -306,7 +306,7 @@ class SyntheticDataGenerator:
         else:
             raise NotImplementedError(f"Unsupported prompt type: {self.prompt_type}")
         return prompt
-
+    
     def _run_generation(
         self,
         prompt: str,
@@ -446,6 +446,29 @@ class SyntheticDataGenerator:
             else:
                 bt.logging.error(f"Image generation error: {e}")
                 raise RuntimeError(f"Failed to generate image: {e}")
+
+        if self.model_name == "DeepFloyd/IF":
+            max_retries = 3
+            attempt = 0
+            while attempt < max_retries:
+                img = gen_output.images[0]
+                if is_black_image(img):
+                    bt.logging.warning("DeepFloyd/IF returned a black image (likely NSFW). Attempting to sanitize prompt and retry.")
+                    # Ensure prompt generator models are loaded
+                    self.prompt_generator.load_llm()
+                    # Sanitize the prompt
+                    prompt = self.prompt_generator.sanitize_prompt(prompt)
+                    truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
+                    bt.logging.info(f"Sanitized prompt: {truncated_prompt}")
+                    self.prompt_generator.clear_gpu()
+                    try:
+                        gen_output = generate(truncated_prompt, **gen_args)
+                    except Exception as e:
+                        bt.logging.error(f"Sanitized prompt generation failed: {e}")
+                        break
+                    attempt += 1
+                else:
+                    break
 
         print(f"Finished generation in {gen_time/60} minutes")
         return {
