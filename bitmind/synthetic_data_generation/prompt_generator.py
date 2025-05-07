@@ -71,17 +71,22 @@ class PromptGenerator:
         bt.logging.info(f"Loaded image annotation model {self.vlm_name}")
         
     def load_llm(self) -> None:
+        import re
         bt.logging.info(f"Loading caption moderation model {self.llm_name}")
+        # Always use device_map for quantized models
+        m = re.match(r"cuda:(\d+)", self.device)
+        gpu_id = int(m.group(1)) if m else 0
         llm = AutoModelForCausalLM.from_pretrained(
             self.llm_name,
             torch_dtype=torch.bfloat16,
-            cache_dir=HUGGINGFACE_CACHE_DIR
+            cache_dir=HUGGINGFACE_CACHE_DIR,
+            device_map={"": gpu_id}
         )
         tokenizer = AutoTokenizer.from_pretrained(
             self.llm_name,
             cache_dir=HUGGINGFACE_CACHE_DIR
         )
-        llm = llm.to(self.device)
+        # Do NOT call .to(self.device) for quantized models
         self.llm_pipeline = pipeline(
             "text-generation",
             model=llm,
