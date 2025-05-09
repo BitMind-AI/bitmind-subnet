@@ -168,7 +168,25 @@ def get_text_to_image_models() -> List[ModelConfig]:
             enable_model_cpu_offload=False,
             tags=["llm-based", "multimodal"],
         ),
+        ModelConfig(
+            path="runwayml/stable-diffusion-v1-5-midjourney-v6",
+            task=ModelTask.TEXT_TO_IMAGE,
+            pipeline_cls=StableDiffusionPipeline,
+            pretrained_args={
+                "model_id": "runwayml/stable-diffusion-v1-5",
+                "torch_dtype": torch.float16,
+                "use_safetensors": True,
+            },
+            lora_model_id="Kvikontent/midjourney-v6",
+            lora_loading_args={
+                "use_peft_backend": True
+            },
+            use_autocast=False,
+            enable_model_cpu_offload=False,
+            tags=["stable-diffusion"],
+        ),
     ]
+
 
 
 def get_image_to_image_models() -> List[ModelConfig]:
