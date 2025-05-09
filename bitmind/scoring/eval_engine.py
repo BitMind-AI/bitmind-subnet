@@ -101,7 +101,7 @@ class EvalEngine:
         # Compute forward pass rewards, assumes uids are mutually exclusive.
         # shape: [ metagraph.n ]
         self.maybe_extend_scores(np.max(uids) + 1)
-        scattered_rewards: np.ndarray = self.scores.copy()
+        scattered_rewards: np.ndarray = np.full_like(self.scores, 0.5)
         vali_uids = [
             uid
             for uid in range(len(scattered_rewards))
