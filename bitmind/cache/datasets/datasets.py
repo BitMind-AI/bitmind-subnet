@@ -81,6 +81,12 @@ def get_image_datasets() -> List[DatasetConfig]:
             media_type=MediaType.REAL,
             tags=["textures"],
         ),
+        DatasetConfig(
+            path="bitmind/idoc-mugshots-images",
+            type=Modality.IMAGE,
+            media_type=MediaType.REAL,
+            tags=["faces"],
+        ),
         # Synthetic image datasets
         DatasetConfig(
             path="bitmind/JourneyDB",
