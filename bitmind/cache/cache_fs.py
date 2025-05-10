@@ -216,7 +216,7 @@ class CacheFS:
             max_gb = self.config.max_media_gb
 
         max_bytes = scale_size(max_gb, "GB", "B")
-        current_bytes = self.cache_size(cache_type, file_extensions, unit='B')
+        current_bytes = self.cache_size(cache_type, file_extensions, unit="B")
         num_files = self.num_files(cache_type, file_extensions)
         self._log_info(
             f"Pruning Check | {cache_type} cache | {num_files} files | {format_size(current_bytes, 'B', 'GB')}"

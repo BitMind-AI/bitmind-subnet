@@ -31,9 +31,7 @@ class Detector:
         self.device = (
             self.config.device
             if hasattr(self.config, "device")
-            else "cuda"
-            if torch.cuda.is_available()
-            else "cpu"
+            else "cuda" if torch.cuda.is_available() else "cpu"
         )
         self.load_model()
 
