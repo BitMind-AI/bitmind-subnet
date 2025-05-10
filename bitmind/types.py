@@ -136,6 +136,8 @@ class ModelConfig:
         save_args: Dict[str, Any] = None,
         pipeline_stages: List[Dict[str, Any]] = None,
         clear_memory_on_stage_end: bool = False,
+        lora_model_id: str = None,
+        lora_loading_args: Dict[str, Any] = None,
     ):
         self.path = path
         self.task = task
@@ -161,6 +163,8 @@ class ModelConfig:
         self.save_args = save_args or {}
         self.pipeline_stages = pipeline_stages
         self.clear_memory_on_stage_end = clear_memory_on_stage_end
+        self.lora_model_id = lora_model_id
+        self.lora_loading_args = lora_loading_args
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary format"""

@@ -262,6 +262,16 @@ class GenerationPipeline:
                     add_watermarker=False,
                 )
 
+                # Load LoRA weights if specified
+                if "lora_model_id" in model_config:
+                    bt.logging.info(
+                        f"Loading LoRA weights from {model_config['lora_model_id']}"
+                    )
+                    lora_loading_args = model_config.get("lora_loading_args", {})
+                    self.model.load_lora_weights(
+                        model_config["lora_model_id"], **lora_loading_args
+                    )
+
                 # Load scheduler if specified
                 scheduler_config = model_config.get("scheduler", {})
                 if scheduler_config:

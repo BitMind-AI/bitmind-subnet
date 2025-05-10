@@ -60,8 +60,8 @@ class CacheSystem:
                         cache_config=cache_config,
                     )
 
-                    # only need updaters for real + semisynthetic
-                    if media_type != MediaType.SYNTHETIC:
+                    # synthetic video updater not currently used, only generate locally
+                    if not (modality == Modality.VIDEO and media_type == MediaType.SYNTHETIC):
                         updater_config = CacheUpdaterConfig(
                             num_sources_per_dataset=1,  # one compressed source per dataset for initialization
                             num_items_per_source=media_files_per_source,

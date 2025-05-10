@@ -81,6 +81,19 @@ def get_image_datasets() -> List[DatasetConfig]:
             media_type=MediaType.REAL,
             tags=["textures"],
         ),
+        # Synthetic image datasets
+        DatasetConfig(
+            path="bitmind/JourneyDB",
+            type=Modality.IMAGE,
+            media_type=MediaType.SYNTHETIC,
+            tags=["midjourney"],
+        ),
+        DatasetConfig(
+            path="bitmind/GenImage_MidJourney",
+            type=Modality.IMAGE,
+            media_type=MediaType.SYNTHETIC,
+            tags=["midjourney"],
+        ),
         # Semisynthetic image datasets
         DatasetConfig(
             path="bitmind/face-swap",
