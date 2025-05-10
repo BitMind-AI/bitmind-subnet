@@ -227,15 +227,6 @@ def get_image_to_image_models() -> List[ModelConfig]:
             scheduler={"cls": DEISMultistepScheduler},
             tags=["stable-diffusion", "inpainting", "dreamshaper"],
         ),
-        ModelConfig(
-            path="stable-diffusion-v1-5/stable-diffusion-inpainting",
-            task=ModelTask.IMAGE_TO_IMAGE,
-            pipeline_cls=StableDiffusionInpaintPipeline,
-            generate_args={
-                "num_inference_steps": {"min": 40, "max": 60},
-            },
-            tags=["stable-diffusion", "inpainting"],
-        ),
     ]
 
 
