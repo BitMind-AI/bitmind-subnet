@@ -1,3 +1,0 @@
-# NPR Generalist Configuration
-hf_repo: 'bitmind/npr'  # Hugging Face repository for downloading model files
-weights: 'npr.pth'
