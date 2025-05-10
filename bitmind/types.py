@@ -98,6 +98,7 @@ class ModelTask(str, Enum):
     TEXT_TO_IMAGE = "t2i"
     TEXT_TO_VIDEO = "t2v"
     IMAGE_TO_IMAGE = "i2i"
+    IMAGE_TO_VIDEO = "i2v"
 
 
 class ModelConfig:

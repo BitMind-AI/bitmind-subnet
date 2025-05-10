@@ -54,6 +54,10 @@ class ModelRegistry:
         return self.get_models_by_task(ModelTask.IMAGE_TO_IMAGE)
 
     @property
+    def i2v_models(self) -> List[str]:
+        return self.get_models_by_task(ModelTask.IMAGE_TO_VIDEO)
+
+    @property
     def t2i_model_names(self) -> List[str]:
         return list(self.t2i_models.keys())
 
@@ -64,6 +68,10 @@ class ModelRegistry:
     @property
     def i2i_model_names(self) -> List[str]:
         return list(self.i2i_models.keys())
+
+    @property
+    def i2v_model_names(self) -> List[str]:
+        return list(self.i2v_models.keys())
 
     @property
     def model_names(self) -> List[str]:
@@ -96,8 +104,9 @@ class ModelRegistry:
         if tasks is None:
             model_names = [
                 self.t2i_model_names,
-                self.i2i_model_names,
                 self.t2v_model_names,
+                self.i2i_model_names,
+                self.i2v_model_names,
             ]
         else:
             for task in tasks:
@@ -108,8 +117,8 @@ class ModelRegistry:
         )
         return [
             m
-            for triple in zip_longest(*shuffled_model_names)
-            for m in triple
+            for quad in zip_longest(*shuffled_model_names)
+            for m in quad
             if m is not None
         ]
 
