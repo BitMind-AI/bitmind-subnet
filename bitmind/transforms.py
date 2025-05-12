@@ -75,8 +75,8 @@ def get_base_transforms(target_image_size):
     return ComposeWithParams(
         [
             CenterCrop(),
-            lambda img: cv2.resize(img, target_image_size),
-        ]  # , ToRgbFloat32()]
+            Resize(),
+        ]
     )
 
 
@@ -103,9 +103,7 @@ def get_random_augmentations_medium(target_image_size, mask_point=None):
         ApplyDeeperForensicsDistortion("JPEG", level_min=0, level_max=1),
     ]
 
-    return ComposeWithParams(
-        base_augmentations.transforms + distortions
-    )
+    return ComposeWithParams(base_augmentations.transforms + distortions)
 
 
 def get_random_augmentations_hard(target_image_size, mask_point=None):
@@ -120,9 +118,7 @@ def get_random_augmentations_hard(target_image_size, mask_point=None):
         ApplyDeeperForensicsDistortion("GB", level_min=0, level_max=2),
     ]
 
-    return ComposeWithParams(
-        base_augmentations.transforms + distortions
-    )
+    return ComposeWithParams(base_augmentations.transforms + distortions)
 
 
 class ComposeWithParams:
@@ -158,31 +154,38 @@ class ApplyDeeperForensicsDistortion:
     """Wrapper for applying DeeperForensics distortions."""
 
     def __init__(self, distortion_type, level_min=0, level_max=3):
+        self.__name__ = distortion_type
         self.distortion_type = distortion_type
+        self.level = None
         self.level_min = level_min
         self.level_max = level_max
-        self.params = {}
+        self.params = {}  # level
+        self.distortion_params = {}  # distortion_type specific
 
     def __call__(self, img, level=None):
-        if level is None:
+        if level is None and self.level is None:
             self.level = random.randint(self.level_min, self.level_max)
-        else:
+            self.params = {"level": self.level}
+        elif self.level is None:
             self.level = level
+            self.params = {"level": self.level}
 
         if self.level > 0:
-            self.distortion_param = get_distortion_parameter(
-                self.distortion_type, self.level
-            )
             self.distortion_func = get_distortion_function(self.distortion_type)
+            if len(self.distortion_params) == 0:
+                self.distortion_param = get_distortion_parameter(
+                    self.distortion_type, self.level
+                )
+                self.distortion_params = {"param": self.distortion_param}
         else:
-            self.distortion_func = None
-            self.distortion_param = None
-
-        if not self.distortion_func:
             return img
 
-        self.params = {"level": self.level}
-        return self.distortion_func(img, self.distortion_param)
+        output = self.distortion_func(img, **self.distortion_params)
+        if isinstance(output, tuple):
+            self.distortion_params.update(output[1])
+            return output[0]
+        else:
+            return output
 
 
 # DeeperForensics Distortion Functions
@@ -256,6 +259,13 @@ def get_distortion_function(distortion_type):
     return func_dict[distortion_type]
 
 
+def Resize():
+    def resize(img):
+        return cv2.resize(img, (256, 256))
+
+    return resize
+
+
 def rgb2ycbcr(img_rgb):
     """Convert RGB image to YCbCr color space.
 
@@ -324,6 +334,8 @@ def color_contrast(img, param):
 def block_wise(img, param):
     """Apply block-wise distortion by adding random gray blocks.
 
+    NOTE: CURRENTLY NOT USED
+
     Args:
         img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (int): Number of blocks to add, scaled by image dimensions
@@ -341,7 +353,7 @@ def block_wise(img, param):
     return img
 
 
-def gaussian_noise_color(img, param):
+def gaussian_noise_color(img, param, b=None):
     """Apply colored Gaussian noise in YCbCr color space.
 
     Args:
@@ -353,11 +365,12 @@ def gaussian_noise_color(img, param):
     """
     ycbcr = rgb2ycbcr(img) / 255
     size_a = ycbcr.shape
-    b = (
-        ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
-    ) * 255
-    b = ycbcr2rgb(b)
-    return np.clip(b, 0, 255).astype(np.uint8)
+    if b is None:
+        b = (
+            ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
+        ) * 255
+        b = ycbcr2rgb(b)
+    return np.clip(b, 0, 255).astype(np.uint8), {"b": b}
 
 
 def gaussian_blur(img, param):
@@ -498,7 +511,7 @@ class RandomHorizontalFlipWithParams:
         if flip is not None:
             self.params = {"flip": flip}
             return np.fliplr(img) if flip else img
-        elif not hasattr(self, "params"):
+        elif not hasattr(self, "params") or len(self.params) == 0:
             flip = np.random.random() < self.p
             self.params = {"flip": flip}
             return np.fliplr(img) if flip else img
@@ -530,7 +543,7 @@ class RandomVerticalFlipWithParams:
         if flip is not None:
             self.params = {"flip": flip}
             return np.flipud(img) if flip else img
-        elif not hasattr(self, "params"):
+        elif not hasattr(self, "params") or len(self.params) == 0:
             flip = np.random.random() < self.p
             self.params = {"flip": flip}
             return np.flipud(img) if flip else img
