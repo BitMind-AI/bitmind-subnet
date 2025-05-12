@@ -3,36 +3,49 @@ import cv2
 import ffmpeg
 import os
 import tempfile
+import io
+from PIL import Image
 
 
 def image_to_bytes(img):
-    """Convert image array to bytes using JPEG encoding.
-
+    """Convert image array to bytes using JPEG encoding with PIL.
     Args:
-        img (np.ndarray): Image array of shape (C, H, W)
+        img (np.ndarray): Image array of shape (C, H, W) or (H, W, C)
             Can be float32 [0,1] or uint8 [0,255]
-
     Returns:
         bytes: JPEG encoded image bytes
         str: Content type 'image/jpeg'
     """
-
     # Convert float32 [0,1] to uint8 [0,255] if needed
     if img.dtype == np.float32:
         img = (img * 255).astype(np.uint8)
     elif img.dtype != np.uint8:
         raise ValueError(f"Image must be float32 or uint8, got {img.dtype}")
 
-    if img.shape[0] < img.shape[2]:
+    if img.shape[0] == 3 and len(img.shape) == 3:  # If in CHW format
         img = np.transpose(img, (1, 2, 0))  # CHW to HWC
 
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)  # BGR for cv2
+    # Ensure we have a 3-channel image (H,W,3)
+    if len(img.shape) == 2:
+        # Convert grayscale to RGB
+        img = np.stack([img, img, img], axis=2)
+    elif img.shape[2] == 1:
+        # Convert single channel to RGB
+        img = np.concatenate([img, img, img], axis=2)
+    elif img.shape[2] == 4:
+        # Drop alpha channel
+        img = img[:, :, :3]
+    elif img.shape[2] != 3:
+        raise ValueError(f"Expected 1, 3 or 4 channels, got {img.shape[2]}")
 
-    success, buffer = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 75])
-    if not success:
-        raise RuntimeError("Failed to encode image to JPEG")
+    pil_img = Image.fromarray(img)
+    pil_img = pil_img.convert("RGB")
 
-    return buffer.tobytes(), "image/jpeg"
+    buffer = io.BytesIO()
+    pil_img.save(buffer, format="JPEG", quality=75)
+    buffer.seek(0)
+
+    return buffer.getvalue(), "image/jpeg"
 
 
 def video_to_bytes(video, fps=None):
