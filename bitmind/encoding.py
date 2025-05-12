@@ -39,8 +39,8 @@ def image_to_bytes(img):
         raise ValueError(f"Expected 1, 3 or 4 channels, got {img.shape[2]}")
 
     pil_img = Image.fromarray(img)
-    if pil_img.mode != 'RGB':
-        pil_img = pil_img.convert('RGB')
+    if pil_img.mode != "RGB":
+        pil_img = pil_img.convert("RGB")
 
     buffer = io.BytesIO()
     pil_img.save(buffer, format="JPEG", quality=75)
@@ -70,9 +70,6 @@ def video_to_bytes(video, fps=None):
     for i, frame in enumerate(video):
         if frame.shape != (H, W, C):
             raise ValueError(f"Inconsistent shape at frame {i}: {frame.shape}")
-
-    if C == 3:
-        video = np.array([cv2.cvtColor(f, cv2.COLOR_BGR2RGB) for f in video])
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
