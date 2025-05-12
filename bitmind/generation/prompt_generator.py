@@ -41,21 +41,13 @@ class PromptGenerator:
         self.llm_name = llm_name
         self.vlm_processor = None
         self.vlm = None
-        self.llm_pipeline = None
+        self.llm = None
         self.device = device
 
-    def are_models_loaded(self) -> bool:
-        return (self.vlm is not None) and (self.llm_pipeline is not None)
-
-    def load_models(self) -> None:
+    def load_vlm(self) -> None:
         """
-        Load the necessary models for image annotation and text moderation onto
-        the specified device.
+        Load the vision-language model for image annotation.
         """
-        if self.are_models_loaded():
-            bt.logging.warning(f"Models already loaded")
-            return
-
         bt.logging.debug(f"Loading caption generation model {self.vlm_name}")
         self.vlm_processor = Blip2Processor.from_pretrained(
             self.vlm_name, torch_dtype=torch.float32
@@ -66,14 +58,33 @@ class PromptGenerator:
         self.vlm.to(self.device)
         bt.logging.info(f"Loaded image annotation model {self.vlm_name}")
 
+    def load_llm(self) -> None:
+        """
+        Load the language model for text moderation.
+        """
         bt.logging.debug(f"Loading caption moderation model {self.llm_name}")
         llm = AutoModelForCausalLM.from_pretrained(
             self.llm_name, torch_dtype=torch.bfloat16
         )
         tokenizer = AutoTokenizer.from_pretrained(self.llm_name)
         llm = llm.to(self.device)
-        self.llm_pipeline = pipeline("text-generation", model=llm, tokenizer=tokenizer)
+        self.llm = pipeline("text-generation", model=llm, tokenizer=tokenizer)
         bt.logging.info(f"Loaded caption moderation model {self.llm_name}")
+
+    def load_models(self) -> None:
+        """
+        Load the necessary models for image annotation and text moderation onto
+        the specified device.
+        """
+        if self.vlm is None:
+            self.load_vlm()
+        else:
+            bt.logging.warning(f"vlm already loaded")
+
+        if self.llm is None:
+            self.load_llm()
+        else:
+            bt.logging.warning(f"llm already loaded")
 
     def clear_gpu(self) -> None:
         """
@@ -85,10 +96,9 @@ class PromptGenerator:
             del self.vlm
             self.vlm = None
 
-        if self.llm_pipeline:
-            # self.llm_pipeline.model.to("cpu")
-            del self.llm_pipeline
-            self.llm_pipeline = None
+        if self.llm:
+            del self.llm
+            self.llm = None
 
         gc.collect()
         torch.cuda.empty_cache()
@@ -110,6 +120,9 @@ class PromptGenerator:
         Returns:
             A generated description of the image.
         """
+        if self.vlm is None or self.vlm_processor is None:
+            self.load_vlm()
+
         description = ""
         prompts = [
             "An image of",
@@ -167,6 +180,9 @@ class PromptGenerator:
             The moderated description text, or the original description if
             moderation fails.
         """
+        if self.llm is None:
+            self.load_llm()
+
         messages = [
             {
                 "role": "system",
@@ -180,10 +196,10 @@ class PromptGenerator:
             {"role": "user", "content": description},
         ]
         try:
-            moderated_text = self.llm_pipeline(
+            moderated_text = self.llm(
                 messages,
                 max_new_tokens=max_new_tokens,
-                pad_token_id=self.llm_pipeline.tokenizer.eos_token_id,
+                pad_token_id=self.llm.tokenizer.eos_token_id,
                 return_full_text=False,
             )
             return moderated_text[0]["generated_text"]
@@ -205,6 +221,9 @@ class PromptGenerator:
             An enhanced description suitable for video generation, or the original
             description if enhancement fails.
         """
+        if self.llm is None:
+            self.load_llm()
+
         messages = [
             {
                 "role": "system",
@@ -226,10 +245,10 @@ class PromptGenerator:
         ]
 
         try:
-            enhanced_text = self.llm_pipeline(
+            enhanced_text = self.llm(
                 messages,
                 max_new_tokens=max_new_tokens,
-                pad_token_id=self.llm_pipeline.tokenizer.eos_token_id,
+                pad_token_id=self.llm.tokenizer.eos_token_id,
                 return_full_text=False,
             )
             return enhanced_text[0]["generated_text"]
@@ -237,3 +256,35 @@ class PromptGenerator:
         except Exception as e:
             bt.logging.error(f"An error occurred during motion enhancement: {e}")
             return description
+
+    def sanitize(self, prompt: str, max_new_tokens: int = 80) -> str:
+        """
+        Use the LLM to make the prompt more SFW (less NSFW).
+        """
+
+        if self.llm is None:
+            self.load_llm()
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "[INST]You are an expert at making prompts safe for work (SFW). "
+                    "Rephrase the following prompt to remove or neutralize any NSFW, sexual, or explicit content. "
+                    "Keep the prompt as close as possible to the original intent, but ensure it is SFW. "
+                    "Only respond with the sanitized prompt.[/INST]"
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        try:
+            sanitized = self.llm(
+                messages,
+                max_new_tokens=max_new_tokens,
+                pad_token_id=self.llm.tokenizer.eos_token_id,
+                return_full_text=False,
+            )
+            return sanitized[0]["generated_text"]
+        except Exception as e:
+            bt.logging.error(f"An error occurred during prompt sanitization: {e}")
+            return prompt

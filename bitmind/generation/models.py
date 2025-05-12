@@ -366,6 +366,30 @@ def get_text_to_video_models() -> List[ModelConfig]:
     ]
 
 
+def get_image_to_video_models() -> List[ModelConfig]:
+
+    return [
+        ModelConfig(
+            path="THUDM/CogVideoX1.5-5B-I2V",
+            task=ModelTask.IMAGE_TO_VIDEO,
+            pipeline_cls=CogVideoXImageToVideoPipeline,
+            pretrained_args={"use_safetensors": True, "torch_dtype": torch.bfloat16},
+            generate_args={
+                "guidance_scale": 2,
+                "num_videos_per_prompt": 1,
+                "num_inference_steps": {"min": 50, "max": 125},
+                "num_frames": 49,
+                "height": 768,
+                "width": 768,
+            },
+            save_args={"fps": 8},
+            enable_model_cpu_offload=True,
+            vae_enable_slicing=True,
+            vae_enable_tiling=True,
+        )
+    ]
+
+
 def initialize_model_registry() -> ModelRegistry:
     """
     Initialize and populate the model registry.
@@ -378,5 +402,6 @@ def initialize_model_registry() -> ModelRegistry:
     registry.register_all(get_text_to_image_models())
     registry.register_all(get_image_to_image_models())
     registry.register_all(get_text_to_video_models())
+    registry.register_all(get_image_to_video_models())
 
     return registry

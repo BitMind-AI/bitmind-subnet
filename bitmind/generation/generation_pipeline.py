@@ -14,7 +14,7 @@ from diffusers.utils import export_to_video
 from PIL import Image
 
 from bitmind.types import CacheConfig, ModelTask
-from bitmind.generation.util.image import create_random_mask
+from bitmind.generation.util.image import create_random_mask, is_black_output
 from bitmind.generation.util.prompt import truncate_prompt_if_too_long
 from bitmind.generation.prompt_generator import PromptGenerator
 from bitmind.generation.util.model import (
@@ -212,9 +212,22 @@ class GenerationPipeline:
 
                 try:
                     image = None if images is None else images[prompt_idx]
-                    gen_output = self._generate_media_with_model(
-                        model_name, prompts[prompt_idx], image
-                    )
+                    # 1 retry for black (NSFW filtered) output
+                    for _ in range(1):
+                        gen_output = self._generate_media_with_model(
+                            model_name, prompts[prompt_idx], image
+                        )
+                        if is_black_output(modality, gen_output):
+                            # sanitize and retry
+                            self.clear_gpu()
+                            self.prompt_generator.load_llm()
+                            prompts[prompt_idx] = self.prompt_generator.sanitize(
+                                prompts[prompt_idx]
+                            )
+                            self.prompt_generator.clear_gpu()
+                        else:
+                            break
+
                     bt.logging.info(
                         {k: v for k, v in gen_output.items() if k != modality}
                     )
@@ -353,36 +366,33 @@ class GenerationPipeline:
         if task == "i2i":
             gen_args["mask_image"], mask_center = create_random_mask(image.size)
             gen_args["image"] = image
-        elif task == 'i2v':
+        elif task == "i2v":
             if image is None:
                 raise ValueError("image cannot be None for image-to-video generation")
             # Get target size from gen_args if specified, otherwise use default
-            target_size = (
-                gen_args.get('height', 768),
-                gen_args.get('width', 768)
-            )
+            target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
                 image = image.resize(target_size, Image.Resampling.LANCZOS)
-            gen_args['image'] = image
+            gen_args["image"] = image
 
         # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
                 if "min" in v and "max" in v:
                     # For i2v, use minimum values to save memory
-                    if task == 'i2v':
-                        gen_args[k] = v['min']
+                    if task == "i2v":
+                        gen_args[k] = v["min"]
                     else:
-                        gen_args[k] = np.random.randint(v['min'], v['max'])
+                        gen_args[k] = np.random.randint(v["min"], v["max"])
                 if "options" in v:
                     gen_args[k] = random.choice(v["options"])
 
             # Ensure num_frames is always an integer
-            if k == 'num_frames' and isinstance(v, dict):
+            if k == "num_frames" and isinstance(v, dict):
                 if "min" in v:
-                    gen_args[k] = int(v['min'])
+                    gen_args[k] = int(v["min"])
                 elif "max" in v:
-                    gen_args[k] = int(v['max'])
+                    gen_args[k] = int(v["max"])
                 else:
                     gen_args[k] = 24  # Default value
 
@@ -397,9 +407,13 @@ class GenerationPipeline:
 
         generate_fn = create_pipeline_generator(model_config, self.model)
 
+        torch.cuda.empty_cache()
+        gc.collect()
+
         start_time = time.time()
 
         bt.logging.debug("Generating media")
+
         if model_config.get("use_autocast", True):
             pretrained_args = model_config.get("from_pretrained_args", {})
             torch_dtype = pretrained_args.get("torch_dtype", torch.bfloat16)
@@ -496,10 +510,7 @@ class GenerationPipeline:
         bt.logging.info(f"Wrote to {save_path}")
         return save_path
 
-    def shutdown(self):
-        """
-        Perform a graceful shutdown by clearing all models from GPU memory.
-        """
+    def clear_gpu(self):
         if hasattr(self, "model") and self.model is not None:
             bt.logging.trace("Deleting model")
             if isinstance(self.model, dict):
@@ -516,3 +527,6 @@ class GenerationPipeline:
         if torch.cuda.is_available():
             bt.logging.trace("Clearing CUDA cache")
             torch.cuda.empty_cache()
+
+    def shutdown(self):
+        self.clear_gpu()

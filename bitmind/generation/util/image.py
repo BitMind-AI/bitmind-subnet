@@ -2,7 +2,7 @@ import numpy as np
 import PIL
 import os
 from PIL import Image, ImageDraw
-from typing import Tuple
+from typing import Tuple, Union, List
 
 
 def resize_image(
@@ -112,3 +112,16 @@ def create_random_mask(size: Tuple[int, int]) -> Image.Image:
             draw.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, opacity))
 
     return mask, (x, y)
+
+
+def is_black_output(
+    modality: str, output: Union[List[Image.Image], Image.Image], threshold: int = 10
+) -> bool:
+    """
+    Returns True if the image or frames are (almost) completely black.
+    """
+    if modality == "image":
+        arr = np.array(output.images[0])
+        return np.mean(arr) < threshold
+    elif modality == "video":
+        return np.all([np.mean(np.array(arr)) < threshold for arr in output.frames[0]])
