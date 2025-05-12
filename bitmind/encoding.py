@@ -7,7 +7,7 @@ import io
 from PIL import Image
 
 
-def image_to_bytes(img):
+def image_to_bytes(img, input_color_order="BGR"):
     """Convert image array to bytes using JPEG encoding with PIL.
     Args:
         img (np.ndarray): Image array of shape (C, H, W) or (H, W, C)
@@ -38,8 +38,12 @@ def image_to_bytes(img):
     elif img.shape[2] != 3:
         raise ValueError(f"Expected 1, 3 or 4 channels, got {img.shape[2]}")
 
+    if input_color_order.upper() == 'BGR':
+        img = img[:, :, ::-1]
+
     pil_img = Image.fromarray(img)
-    pil_img = pil_img.convert("RGB")
+    if pil_img.mode != 'RGB':
+        pil_img = pil_img.convert('RGB')
 
     buffer = io.BytesIO()
     pil_img.save(buffer, format="JPEG", quality=75)
