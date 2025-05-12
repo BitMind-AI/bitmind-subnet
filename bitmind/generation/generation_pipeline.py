@@ -349,18 +349,42 @@ class GenerationPipeline:
         gen_args = model_config.get("generate_args", {}).copy()
         mask_center = None
 
-        # prep inpainting-specific generation args
+        # prep inptask-specific generation args
         if task == "i2i":
             gen_args["mask_image"], mask_center = create_random_mask(image.size)
             gen_args["image"] = image
+        elif task == 'i2v':
+            if image is None:
+                raise ValueError("image cannot be None for image-to-video generation")
+            # Get target size from gen_args if specified, otherwise use default
+            target_size = (
+                gen_args.get('height', 768),
+                gen_args.get('width', 768)
+            )
+            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+            gen_args['image'] = image
 
         # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
                 if "min" in v and "max" in v:
-                    gen_args[k] = np.random.randint(v["min"], v["max"])
+                    # For i2v, use minimum values to save memory
+                    if task == 'i2v':
+                        gen_args[k] = v['min']
+                    else:
+                        gen_args[k] = np.random.randint(v['min'], v['max'])
                 if "options" in v:
                     gen_args[k] = random.choice(v["options"])
+
+            # Ensure num_frames is always an integer
+            if k == 'num_frames' and isinstance(v, dict):
+                if "min" in v:
+                    gen_args[k] = int(v['min'])
+                elif "max" in v:
+                    gen_args[k] = int(v['max'])
+                else:
+                    gen_args[k] = 24  # Default value
 
         if "resolution" in gen_args:
             gen_args["height"] = gen_args["resolution"][0]
