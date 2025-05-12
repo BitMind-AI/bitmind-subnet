@@ -33,7 +33,7 @@ class ImageSampler(BaseSampler):
         remove_from_cache: bool = False,
         as_float32: bool = False,
         channels_first: bool = False,
-        as_rgb: bool = False,
+        as_rgb: bool = True,
     ) -> Dict[str, Any]:
         """
         Sample random images and their metadata from the cache.
@@ -85,13 +85,13 @@ class ImageSampler(BaseSampler):
                     raise ValueError(f"Failed to load image {image_path}")
 
                 if as_float32:  # else np.uint8
-                    frames = frames.astype(np.float32) / 255.0
+                    image = image.astype(np.float32) / 255.0
 
                 if as_rgb:  # else bgr
-                    frames = frames[:, :, :, [2, 1, 0]]
+                    image = image[:, :, [2, 1, 0]]
 
                 if channels_first:  # else channels last
-                    frames = np.transpose(frames, (0, 3, 1, 2))
+                    image = np.transpose(image, (2, 0, 1))
 
                 metadata = {}
                 metadata_path = image_path.with_suffix(".json")

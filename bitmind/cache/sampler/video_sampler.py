@@ -83,7 +83,7 @@ class VideoSampler(BaseSampler):
         remove_from_cache: bool = False,
         as_float32: bool = False,
         channels_first: bool = False,
-        as_rgb: bool = False,
+        as_rgb: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
         Sample a random video segment and return it as a numpy array.
