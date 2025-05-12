@@ -131,7 +131,7 @@ class VideoSampler(BaseSampler):
                     str(video_path), ss=str(start_time), t=str(duration)
                 )
                 stream = ffmpeg.output(
-                    stream, "pipe:", format="rawvideo", pix_fmt="bgr24"
+                    stream, "pipe:", format="rawvideo", pix_fmt="rgb24"
                 )
                 stream = stream.global_args("-loglevel", "error", "-y")
                 out, _ = stream.run(capture_stdout=True, capture_stderr=True)
@@ -147,7 +147,7 @@ class VideoSampler(BaseSampler):
                 if as_float32:  # else np.uint8
                     frames = frames.astype(np.float32) / 255.0
 
-                if as_rgb:  # else bgr
+                if not as_rgb:
                     frames = frames[:, :, :, [2, 1, 0]]
 
                 if channels_first:  # else channels last
