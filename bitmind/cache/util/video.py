@@ -56,14 +56,18 @@ def get_video_metadata(video_path: str, max_fps: float = 30.0) -> Dict[str, Any]
         Dictionary containing metadata with sanity-checked values
     """
     try:
-        # Use direct ffprobe call instead of python-ffmpeg for consistency
+        ffprobe_fields = (
+            "format=duration,size,bit_rate,format_name:"
+            "stream=width,height,codec_name,codec_type,"
+            "r_frame_rate,avg_frame_rate,pix_fmt,sample_rate,channels"
+        )
         result = subprocess.run(
             [
                 "ffprobe",
                 "-v",
                 "error",
                 "-show_entries",
-                "format=duration,size,bit_rate,format_name:stream=width,height,codec_name,codec_type,r_frame_rate,avg_frame_rate,pix_fmt,sample_rate,channels",
+                ffprobe_fields,
                 "-of",
                 "json",
                 video_path,
