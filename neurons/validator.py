@@ -19,8 +19,6 @@ from substrateinterface import SubstrateInterface
 from bitmind import __spec_version__ as spec_version
 from bitmind.autoupdater import autoupdate
 from bitmind.cache import CacheSystem
-from bitmind.cache.sampler import ImageSampler, VideoSampler
-from bitmind.cache.updater import ImageUpdater, VideoUpdater
 from bitmind.config import MAINNET_UID
 from bitmind.encoding import media_to_bytes
 from bitmind.epistula import query_miner
@@ -32,8 +30,6 @@ from bitmind.metagraph import (
 from bitmind.scoring import EvalEngine
 from bitmind.transforms import apply_random_augmentations
 from bitmind.types import (
-    CacheConfig,
-    CacheUpdaterConfig,
     MediaType,
     Modality,
     NeuronType,
