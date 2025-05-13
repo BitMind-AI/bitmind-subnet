@@ -16,7 +16,7 @@ git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
 ```
 
 We recommend using a Conda virtual environment to install the necessary Python packages.
-- You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install). 
+- You can set up Conda with this [quick command-line install](https://www.anaconda.com/docs/getting-started/miniconda/install#linux). 
 - Note that after you run the last commands in the miniconda setup process, you'll be prompted to start a new shell session to complete the initialization. 
 
 With miniconda installed, you can create your virtual environment with this command:
@@ -32,8 +32,8 @@ Install the remaining necessary requirements with the following chained command.
 ```bash
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
-chmod +x setup_env.sh 
-./setup_env.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
 Before you register, you should first fill out all the necessary fields in `.env.validator`. Make a copy of the template, and fill in your wallet information. 
