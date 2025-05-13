@@ -213,7 +213,7 @@ class GenerationPipeline:
 
                 try:
                     image = None
-                    if image_samples is not None and isinstance(image_samples, dict):
+                    if image_samples is not None and len(image_samples) > prompt_idx:
                         image = image_samples[prompt_idx].get('image')
 
                     # 3 retries for black (NSFW filtered) output
