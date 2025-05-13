@@ -13,11 +13,16 @@ import torch
 import uvicorn
 from bittensor.core.axon import FastAPIThreadedServer
 from bittensor.core.extrinsics.serving import serve_extrinsic
+from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from PIL import Image
 from torchvision import models
+from substrateinterface import SubstrateInterface
 
 from bitmind.epistula import verify_signature, EPISTULA_VERSION
+from bitmind.metagraph import (
+    run_block_callback_thread,
+)
 from bitmind.types import NeuronType
 from bitmind.utils import print_info
 from neurons.base import BaseNeuron
@@ -375,10 +380,24 @@ class Miner(BaseNeuron):
         try:
             while not self.exit_context.isExiting:
                 time.sleep(1)
+
+                # Make sure our substrate thread is alive
+                if not self.substrate_thread.is_alive():
+                    bt.logging.info("Restarting substrate interface due to killed node")
+                    self.substrate = SubstrateInterface(
+                        ss58_format=SS58_FORMAT,
+                        use_remote_preset=True,
+                        url=self.config.subtensor.chain_endpoint,
+                        type_registry=TYPE_REGISTRY,
+                    )
+                    self.substrate_thread = run_block_callback_thread(
+                        self.substrate, self.run_callbacks
+                    )
         except Exception as e:
             bt.logging.error(str(e))
             bt.logging.error(traceback.format_exc())
-        self.shutdown()
+        finally:
+            self.shutdown()
 
 
 def ping():
