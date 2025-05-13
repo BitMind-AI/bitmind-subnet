@@ -7,12 +7,19 @@
 # Update system
 sudo apt update -y
 
+# Remove old nodejs and npm if present
+sudo apt-get remove --purge -y nodejs npm
+
+# Install Node.js 20.x (LTS) from NodeSource for stability and universal standard
+# NOTE: Update the version here when a new LTS is released
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
 # Install core dependencies
 sudo apt install -y \
     python3-pip \
     nano \
     libgl1 \
-    npm \
     ffmpeg \
     unzip
 
@@ -25,7 +32,7 @@ sudo apt install -y \
     libx11-dev \
     libgtk-3-dev
 
-# Install process manager
+# Install process manager (pm2) globally
 sudo npm install -g pm2@latest
 
 ############################
