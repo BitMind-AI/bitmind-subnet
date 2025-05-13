@@ -42,7 +42,6 @@ from neurons.base import BaseNeuron
 class Validator(BaseNeuron):
     neuron_type = NeuronType.VALIDATOR
     cache_system: Optional[CacheSystem] = None
-    skip_next_weightset = False
     heartbeat_thread: Thread
     lock_waiting = False
     lock_halt = False
@@ -123,12 +122,6 @@ class Validator(BaseNeuron):
         bt.logging.success(
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}"
         )
-
-        try:
-            await self.set_weights_on_interval(0)
-            self.skip_next_weightset = True
-        except Exception as e:
-            bt.logging.error(f"Failed setting weights on startup: {str(e)}")
 
         while not self.exit_context.isExiting:
             self.step += 1
@@ -313,11 +306,6 @@ class Validator(BaseNeuron):
 
     @on_block_interval("epoch_length")
     async def set_weights_on_interval(self, block):
-        if self.skip_next_weightset:
-            self.skip_next_weightset = False
-            bt.logging.info("Skipping weightset due to startup config")
-            return
-
         try:
             bt.logging.info(
                 f"Waiting to safely set weights at block {block} (epoch length = {self.config.epoch_length})"
