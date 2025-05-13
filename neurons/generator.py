@@ -183,6 +183,9 @@ class Generator:
 
             model_registry = initialize_model_registry()
             model_names = model_registry.get_interleaved_model_names(self.config.tasks)
+            bt.logging.info(f"Starting generator")
+            bt.logging.info(f"Tasks: {self.config.tasks}")
+            bt.logging.info(f"Models: {model_names}")
 
             self.generation_pipeline = GenerationPipeline(
                 output_dir=cache_dir,
@@ -196,16 +199,15 @@ class Generator:
                     break
 
                 try:
-                    samples = await self.sample_images(batch_size)
-                    images = [sample.get("image", None) for sample in samples]
+                    image_samples = await self.sample_images(batch_size)
                     bt.logging.info(
-                        f"Starting batch generation | Batch Size: {len(images)} | Batch Count: {gen_count}"
+                        f"Starting batch generation | Batch Size: {len(image_samples)} | Batch Count: {gen_count}"
                     )
 
                     start_time = time.time()
 
                     filepaths = self.generation_pipeline.generate(
-                        images, model_names=model_names
+                        image_samples, model_names=model_names
                     )
                     await asyncio.sleep(1)
 
@@ -217,8 +219,6 @@ class Generator:
                     )
 
                     if not self.config.wandb.off:
-                        bt.logging.info("Logging media to wandb")
-                        self.log_wandb_media(filepaths)
                         if gen_count >= self.config.wandb.media_files_per_run:
                             gen_count = 0
                             self.wandb_run.finish()
@@ -234,6 +234,7 @@ class Generator:
                     break
                 except Exception as e:
                     bt.logging.error(f"Error in batch processing: {e}")
+                    bt.logging.error(traceback.format_exc())
                     await asyncio.sleep(10)
         except Exception as e:
             bt.logging.error(f"Unhandled exception in main task: {e}")

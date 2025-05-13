@@ -121,7 +121,7 @@ def is_black_output(
     Returns True if the image or frames are (almost) completely black.
     """
     if modality == "image":
-        arr = np.array(output.images[0])
+        arr = np.array(output[modality].images[0])
         return np.mean(arr) < threshold
     elif modality == "video":
-        return np.all([np.mean(np.array(arr)) < threshold for arr in output.frames[0]])
+        return np.all([np.mean(np.array(arr)) < threshold for arr in output[modality].frames[0]])

@@ -229,7 +229,7 @@ def get_image_to_image_models() -> List[ModelConfig]:
                 "strength": 0.99,
                 "generator": torch.Generator(
                     "cuda" if torch.cuda.is_available() else "cpu"
-                ),
+                )
             },
             tags=["stable-diffusion", "xl", "inpainting"],
         ),
