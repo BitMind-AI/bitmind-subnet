@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional
 
 import ffmpeg
 import numpy as np
+from PIL import Image
 
 from bitmind.cache.sampler.base import BaseSampler
 from bitmind.cache.cache_fs import CacheConfig
