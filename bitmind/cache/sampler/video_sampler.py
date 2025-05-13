@@ -133,9 +133,16 @@ class VideoSampler(BaseSampler):
                 max_start = total_duration - duration
                 start_time = random.uniform(0, max_start)
 
-                width = int(video_info.get("width", 0))
-                height = int(video_info.get("height", 0))
-                fps = float(video_info.get("fps", 0))
+                width = int(video_info.get("width", 256))
+                height = int(video_info.get("height", 256))
+                reported_fps = float(video_info.get("fps", 30.0))
+                if reported_fps > max_fps or reported_fps <= 0 or not math.isfinite(reported_fps):
+                    self.cache_fs._log_warning(
+                        f"Unreasonable FPS ({reported_fps}) detected in {video_path}, capping at {max_fps}"
+                    )
+                    fps = max_fps
+                else:
+                    fps = reported_fps
 
                 temp_dir = tempfile.mkdtemp()
                 try:
