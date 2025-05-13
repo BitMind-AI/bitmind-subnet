@@ -15,7 +15,6 @@ black==25.1.0
 pre-commit==4.2.0
 diffusers==0.33.1
 transformers==4.50.0
-janus @ git+https://github.com/deepseek-ai/Janus.git
 scikit-learn==1.6.1
 av==14.2.0
 opencv-python==4.11.0.86
