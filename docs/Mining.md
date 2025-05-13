@@ -33,7 +33,7 @@ Install the remaining necessary requirements with the following chained command.
 ```bash
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
-chmod +x setup_env.sh 
+chmod +x setup.sh
 ./setup.sh
 ```
 
