@@ -124,20 +124,17 @@ class Validator(BaseNeuron):
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}"
         )
 
-        """
-        # TODO check state before set weights on start
         try:
             await self.set_weights_on_interval(0)
             self.skip_next_weightset = True
         except Exception as e:
             bt.logging.error(f"Failed setting weights on startup: {str(e)}")
-        """
 
         while not self.exit_context.isExiting:
             self.step += 1
-            if self.config.autoupdate:
-                bt.logging.info("Checking autoupdate")
-                autoupdate(branch="main")
+            if self.config.autoupdate and (self.step == 0 or not self.step % 30):
+                bt.logging.debug("Checking autoupdate")
+                autoupdate(branch="v3")
 
             # Make sure our substrate thread is alive
             if not self.substrate_thread.is_alive():
