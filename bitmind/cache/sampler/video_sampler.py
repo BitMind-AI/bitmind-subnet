@@ -89,16 +89,19 @@ class VideoSampler(BaseSampler):
         Sample a random video segment and return it as a numpy array.
 
         Args:
-            duration: Duration of video segment to extract in seconds
+            min_duration: Minimum duration of video segment to extract in seconds
+            max_duration: Maximum duration of video segment to extract in seconds
             remove_from_cache: Whether to remove the source video from cache
+            as_float32: Whether to return frames as float32 (0-1) instead of uint8 (0-255)
+            channels_first: Whether to return frames with channels first (TCHW) instead of channels last (THWC)
+            as_rgb: Whether to return frames in RGB format (True) or BGR format (False)
 
         Returns:
             Dictionary containing:
                 - frames: Video frames as numpy array with shape (T,H,W,C)
                 - metadata: Video metadata
                 - source: Source information
-                - duration: Duration of the segment
-                - format: Video format
+                - segment: Information about the extracted segment
             Or None if sampling fails
         """
         for _ in range(5):
@@ -124,33 +127,65 @@ class VideoSampler(BaseSampler):
                 total_duration = video_info.get("duration", 0)
                 duration = min(total_duration, duration)
 
+                duration = min(duration, min_duration)
+
                 max_start = total_duration - duration
                 start_time = random.uniform(0, max_start)
-
-                stream = ffmpeg.input(
-                    str(video_path), ss=str(start_time), t=str(duration)
-                )
-                stream = ffmpeg.output(
-                    stream, "pipe:", format="rawvideo", pix_fmt="rgb24"
-                )
-                stream = stream.global_args("-loglevel", "error", "-y")
-                out, _ = stream.run(capture_stdout=True, capture_stderr=True)
 
                 width = int(video_info.get("width", 0))
                 height = int(video_info.get("height", 0))
                 fps = float(video_info.get("fps", 0))
-                num_frames = int(duration * fps)
 
-                frames = np.frombuffer(out, np.uint8)
-                frames = frames.reshape(-1, height, width, 3)
+                temp_dir = tempfile.mkdtemp()
+                try:
+                    # Extract frames as PNGs for v2 parity
+                    temp_frame_dir = os.path.join(temp_dir, "frame%04d.png")
+                    ffmpeg.input(
+                        str(video_path), ss=str(start_time), t=str(duration)
+                    ).output(temp_frame_dir, format="image2", vcodec="png").global_args(
+                        "-loglevel", "error"
+                    ).global_args(
+                        "-r", str(fps)
+                    ).run()
 
-                if as_float32:  # else np.uint8
+                    frame_files = sorted(
+                        [f for f in os.listdir(temp_dir) if f.endswith(".png")]
+                    )
+
+                    if not frame_files:
+                        self.cache_fs._log_warning(
+                            f"No frames extracted from {video_path}"
+                        )
+                        files[source].remove(video_path)
+                        continue
+
+                    frames = []
+                    for frame_file in frame_files:
+                        img = Image.open(os.path.join(temp_dir, frame_file))
+                        frames.append(np.array(img))
+
+                    frames = np.stack(frames, axis=0)
+                    num_frames = len(frames)
+
+                finally:
+                    # Clean up temp directory and files
+                    for file in os.listdir(temp_dir):
+                        try:
+                            os.remove(os.path.join(temp_dir, file))
+                        except:
+                            pass
+                    try:
+                        os.rmdir(temp_dir)
+                    except:
+                        pass
+
+                if as_float32:
                     frames = frames.astype(np.float32) / 255.0
 
                 if not as_rgb:
-                    frames = frames[:, :, :, [2, 1, 0]]
+                    frames = frames[:, :, :, [2, 1, 0]]  # RGB to BGR
 
-                if channels_first:  # else channels last
+                if channels_first:
                     frames = np.transpose(frames, (0, 3, 1, 2))
 
                 metadata = {}
@@ -190,7 +225,7 @@ class VideoSampler(BaseSampler):
                         )
 
                 self.cache_fs._log_info(
-                    f"Successfully sampled {duration}s segment from {video_path}"
+                    f"Successfully sampled {duration}s segment from {video_path} ({num_frames} frames)"
                 )
                 return result
 
