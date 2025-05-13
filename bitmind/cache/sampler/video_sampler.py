@@ -1,12 +1,16 @@
 import json
 import os
+import math
 import random
 import tempfile
+
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+from io import BytesIO
 
 import ffmpeg
 import numpy as np
+from PIL import Image
 
 from bitmind.cache.sampler.base import BaseSampler
 from bitmind.cache.cache_fs import CacheConfig
@@ -80,25 +84,29 @@ class VideoSampler(BaseSampler):
         files,
         min_duration: float = 1.0,
         max_duration: float = 6.0,
+        max_fps: float = 30.0,
         remove_from_cache: bool = False,
         as_float32: bool = False,
         channels_first: bool = False,
-        as_rgb: bool = False,
+        as_rgb: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
         Sample a random video segment and return it as a numpy array.
 
         Args:
-            duration: Duration of video segment to extract in seconds
+            min_duration: Minimum duration of video segment to extract in seconds
+            max_duration: Maximum duration of video segment to extract in seconds
             remove_from_cache: Whether to remove the source video from cache
+            as_float32: Whether to return frames as float32 (0-1) instead of uint8 (0-255)
+            channels_first: Whether to return frames with channels first (TCHW) instead of channels last (THWC)
+            as_rgb: Whether to return frames in RGB format (True) or BGR format (False)
 
         Returns:
             Dictionary containing:
                 - frames: Video frames as numpy array with shape (T,H,W,C)
                 - metadata: Video metadata
                 - source: Source information
-                - duration: Duration of the segment
-                - format: Video format
+                - segment: Information about the extracted segment
             Or None if sampling fails
         """
         for _ in range(5):
@@ -113,44 +121,108 @@ class VideoSampler(BaseSampler):
 
             video_path = random.choice(files[source])
 
-            duration = random.uniform(min_duration, max_duration)
-
             try:
                 if not video_path.exists():
                     files[source].remove(video_path)
                     continue
 
-                video_info = get_video_metadata(str(video_path))
-                total_duration = video_info.get("duration", 0)
-                duration = min(total_duration, duration)
+                try:
+                    video_info = get_video_metadata(str(video_path))
+                    total_duration = video_info.get("duration", 0)
+                    width = int(video_info.get("width", 256))
+                    height = int(video_info.get("height", 256))
+                    reported_fps = float(video_info.get("fps", max_fps))
+                except Exception as e:
+                    self.cache_fs._log_error(
+                        f"Unable to extract video metadata from {str(video_path)}: {e}"
+                    )
+                    files[source].remove(video_path)
+                    continue
 
-                max_start = total_duration - duration
+                if (
+                    reported_fps > max_fps
+                    or reported_fps <= 0
+                    or not math.isfinite(reported_fps)
+                ):
+                    self.cache_fs._log_warning(
+                        f"Unreasonable FPS ({reported_fps}) detected in {video_path}, capping at {max_fps}"
+                    )
+                    frame_rate = max_fps
+                else:
+                    frame_rate = reported_fps
+
+                target_duration = random.uniform(min_duration, max_duration)
+                target_duration = min(target_duration, total_duration)
+
+                num_frames = int(target_duration * frame_rate) + 1
+
+                actual_duration = (num_frames - 1) / frame_rate
+
+                max_start = max(0, total_duration - actual_duration)
                 start_time = random.uniform(0, max_start)
 
-                stream = ffmpeg.input(
-                    str(video_path), ss=str(start_time), t=str(duration)
-                )
-                stream = ffmpeg.output(
-                    stream, "pipe:", format="rawvideo", pix_fmt="bgr24"
-                )
-                stream = stream.global_args("-loglevel", "error", "-y")
-                out, _ = stream.run(capture_stdout=True, capture_stderr=True)
+                frames = []
+                no_data = []
 
-                width = int(video_info.get("width", 0))
-                height = int(video_info.get("height", 0))
-                fps = float(video_info.get("fps", 0))
-                num_frames = int(duration * fps)
+                for i in range(num_frames):
+                    timestamp = start_time + (i / frame_rate)
 
-                frames = np.frombuffer(out, np.uint8)
-                frames = frames.reshape(-1, height, width, 3)
+                    try:
+                        out_bytes, err = (
+                            ffmpeg.input(str(video_path), ss=str(timestamp))
+                            .filter("select", "eq(n,0)")
+                            .output(
+                                "pipe:",
+                                vframes=1,
+                                format="image2",
+                                vcodec="png",
+                                loglevel="error",
+                            )
+                            .run(capture_stdout=True, capture_stderr=True)
+                        )
 
-                if as_float32:  # else np.uint8
+                        if not out_bytes:
+                            no_data.append(timestamp)
+                            continue
+
+                        try:
+                            frame = Image.open(BytesIO(out_bytes))
+                            frame.load()  # Verify image can be loaded
+                            frames.append(np.array(frame))
+                        except Exception as e:
+                            self.cache_fs._log_error(
+                                f"Failed to process frame at {timestamp}s: {e}"
+                            )
+                            continue
+
+                    except ffmpeg.Error as e:
+                        self.cache_fs._log_error(
+                            f"FFmpeg error at {timestamp}s: {e.stderr.decode()}"
+                        )
+                        continue
+
+                if len(no_data) > 0:
+                    tmin, tmax = min(no_data), max(no_data)
+                    self.cache_fs._log_warning(
+                        f"No data received for {len(no_data)} frames between {tmin} and {tmax}"
+                    )
+
+                if not frames:
+                    self.cache_fs._log_warning(
+                        f"No frames successfully extracted from {video_path}"
+                    )
+                    files[source].remove(video_path)
+                    continue
+
+                frames = np.stack(frames, axis=0)
+
+                if as_float32:
                     frames = frames.astype(np.float32) / 255.0
 
-                if as_rgb:  # else bgr
-                    frames = frames[:, :, :, [2, 1, 0]]
+                if not as_rgb:
+                    frames = frames[:, :, :, [2, 1, 0]]  # RGB to BGR
 
-                if channels_first:  # else channels last
+                if channels_first:
                     frames = np.transpose(frames, (0, 3, 1, 2))
 
                 metadata = {}
@@ -171,11 +243,11 @@ class VideoSampler(BaseSampler):
                     "metadata": metadata,
                     "segment": {
                         "start_time": start_time,
-                        "duration": duration,
-                        "fps": fps,
+                        "duration": actual_duration,
+                        "fps": frame_rate,
                         "width": width,
                         "height": height,
-                        "num_frames": num_frames,
+                        "num_frames": len(frames),
                     },
                 }
 
@@ -190,7 +262,7 @@ class VideoSampler(BaseSampler):
                         )
 
                 self.cache_fs._log_info(
-                    f"Successfully sampled {duration}s segment from {video_path}"
+                    f"Successfully sampled {actual_duration}s segment from {video_path} ({len(frames)} frames)"
                 )
                 return result
 

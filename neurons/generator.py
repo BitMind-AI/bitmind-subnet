@@ -183,6 +183,9 @@ class Generator:
 
             model_registry = initialize_model_registry()
             model_names = model_registry.get_interleaved_model_names(self.config.tasks)
+            bt.logging.info(f"Starting generator")
+            bt.logging.info(f"Tasks: {self.config.tasks}")
+            bt.logging.info(f"Models: {model_names}")
 
             self.generation_pipeline = GenerationPipeline(
                 output_dir=cache_dir,
@@ -217,8 +220,6 @@ class Generator:
                     )
 
                     if not self.config.wandb.off:
-                        bt.logging.info("Logging media to wandb")
-                        self.log_wandb_media(filepaths)
                         if gen_count >= self.config.wandb.media_files_per_run:
                             gen_count = 0
                             self.wandb_run.finish()

@@ -216,7 +216,11 @@ class GenerationPipeline:
                         model_name, prompts[prompt_idx], image
                     )
                     bt.logging.info(
-                        {k: v for k, v in gen_output.items() if k != modality}
+                        {
+                            k: v
+                            for k, v in gen_output.items()
+                            if k not in (modality, "source_image", "mask_image")
+                        }
                     )
                     save_paths.append(self._save_media_and_metadata(gen_output))
                     stats[model_name]["success"] += 1
@@ -224,6 +228,7 @@ class GenerationPipeline:
                     bt.logging.error(f"Failed to either generate or save media: {e}")
                     bt.logging.error(f"  Model: {model_name}")
                     bt.logging.error(f"  Prompt: {prompts[prompt_idx]}")
+                    bt.logging.error(traceback.format_exc())
 
         return save_paths, stats
 
@@ -351,6 +356,11 @@ class GenerationPipeline:
 
         # prep inptask-specific generation args
         if task == "i2i":
+            image = Image.fromarray(image)
+            target_size = (1024, 1024)
+            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+
             gen_args["mask_image"], mask_center = create_random_mask(image.size)
             gen_args["image"] = image
         elif task == 'i2v':
@@ -393,7 +403,6 @@ class GenerationPipeline:
 
         truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
         bt.logging.debug(f"Generating media from prompt: {truncated_prompt}")
-        bt.logging.debug(f"Generation args: {gen_args}")
 
         generate_fn = create_pipeline_generator(model_config, self.model)
 
@@ -483,7 +492,11 @@ class GenerationPipeline:
         base_path = ouptput_dir / str(media_sample["time"])
         bt.logging.debug(f"[{modality}:{media_type}] Writing to cache")
 
-        metadata = {k: v for k, v in media_sample.items() if k != modality}
+        metadata = {
+            k: v
+            for k, v in media_sample.items()
+            if k not in (modality, "source_image", "mask_image")
+        }
         base_path.with_suffix(".json").write_text(json.dumps(metadata))
 
         if modality == "image":
