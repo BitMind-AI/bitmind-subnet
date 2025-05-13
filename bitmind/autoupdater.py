@@ -24,7 +24,7 @@ import bittensor as bt
 import bitmind
 
 
-def autoupdate(branch: str = "main", force=False):
+def autoupdate(branch: str = "v3", force=False):
     """
     Automatically updates the codebase to the latest version available on the specified branch.
 
@@ -43,8 +43,10 @@ def autoupdate(branch: str = "main", force=False):
     """
     bt.logging.info("Checking for updates...")
     try:
+        github_url = f"https://raw.githubusercontent.com/BitMind-AI/bitmind-subnet/{branch}/VERSION?ts={time.time()}"
+        bt.logging.info(github_url)
         response = requests.get(
-            f"https://raw.githubusercontent.com/BitMind-AI/sn34-epistula/{branch}/VERSION?ts={time.time()}",
+            github_url,
             headers={"Cache-Control": "no-cache"},
         )
         response.raise_for_status()
@@ -56,13 +58,12 @@ def autoupdate(branch: str = "main", force=False):
         bt.logging.info(f"Latest version: {repo_version}")
 
         if latest_version > local_version or force:
-            bt.logging.info("A newer version is available. Updating...")
+            bt.logging.info(f"A newer version is available. Updating...")
             base_path = os.path.abspath(__file__)
             while os.path.basename(base_path) != "bitmind-subnet":
                 base_path = os.path.dirname(base_path)
-            base_path = os.path.dirname(base_path)
 
-            os.system(f"cd {base_path} && git pull && pip install -r requirements.txt")
+            os.system(f"cd {base_path} && git pull && chmod +x setup.sh && ./setup.sh")
 
             with open(os.path.join(base_path, "VERSION")) as f:
                 new_version = f.read().strip()
