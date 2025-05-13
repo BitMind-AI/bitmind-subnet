@@ -34,7 +34,7 @@ Install the remaining necessary requirements with the following chained command.
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
 chmod +x setup_env.sh 
-./setup_env.sh
+./setup.sh
 ```
 
 Before you register a miner on testnet or mainnet, you must first fill out all the necessary fields in `.env.miner`. Make a copy of the template, and fill in your wallet and axon information. 
