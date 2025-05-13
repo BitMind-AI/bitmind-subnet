@@ -373,6 +373,8 @@ class GenerationPipeline:
 
         # prep inptask-specific generation args
         if task == "i2i":
+            if image is None:
+                raise ValueError("image cannot be None for image-to-image generation")
             image = Image.fromarray(image)
             target_size = (1024, 1024)
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
@@ -384,6 +386,7 @@ class GenerationPipeline:
         elif task == "i2v":
             if image is None:
                 raise ValueError("image cannot be None for image-to-video generation")
+            image = Image.fromarray(image)
             # Get target size from gen_args if specified, otherwise use default
             target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
