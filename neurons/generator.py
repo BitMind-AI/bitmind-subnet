@@ -219,8 +219,8 @@ class Generator:
                     )
 
                     if not self.config.wandb.off:
-                        if gen_count >= self.config.wandb.media_files_per_run:
-                            gen_count = 0
+                        if batch_count >= self.config.wandb.num_batches_per_run:
+                            batch_count = 0
                             self.wandb_run.finish()
                             self.wandb_run = init_wandb(
                                 self.config.wandb.process_name,

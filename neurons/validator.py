@@ -332,6 +332,13 @@ class Validator(BaseNeuron):
         finally:
             self.lock_halt = False
 
+    @on_block_interval("wandb_restart_interval")
+    async def start_new_wanbd_run(self, block):
+        try:
+            self.wandb_logger.start_new_run()
+        except Exception as e:
+            bt.logging.warning("Not able to start new W&B run")
+
     async def _sample_media(self) -> Optional[Dict[str, Any]]:
         """
         Sample a media item from the cache system.
