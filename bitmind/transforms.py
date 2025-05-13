@@ -75,8 +75,8 @@ def get_base_transforms(target_image_size):
     return ComposeWithParams(
         [
             CenterCrop(),
-            lambda img: cv2.resize(img, target_image_size),
-        ]  # , ToRgbFloat32()]
+            Resize(),
+        ]
     )
 
 
@@ -90,7 +90,7 @@ def get_random_augmentations(target_image_size, mask_point=None):
         RandomHorizontalFlipWithParams(),
         RandomVerticalFlipWithParams(),
     ]
-    return ComposeWithParams(base_augmentations)  # + [ToRgbFloat32()])
+    return ComposeWithParams(base_augmentations)
 
 
 def get_random_augmentations_medium(target_image_size, mask_point=None):
@@ -103,9 +103,7 @@ def get_random_augmentations_medium(target_image_size, mask_point=None):
         ApplyDeeperForensicsDistortion("JPEG", level_min=0, level_max=1),
     ]
 
-    return ComposeWithParams(
-        base_augmentations.transforms + distortions
-    )  # + [ToRgbFloat32()])
+    return ComposeWithParams(base_augmentations.transforms + distortions)
 
 
 def get_random_augmentations_hard(target_image_size, mask_point=None):
@@ -120,9 +118,7 @@ def get_random_augmentations_hard(target_image_size, mask_point=None):
         ApplyDeeperForensicsDistortion("GB", level_min=0, level_max=2),
     ]
 
-    return ComposeWithParams(
-        base_augmentations.transforms + distortions
-    )  # + [ToRgbFloat32()])
+    return ComposeWithParams(base_augmentations.transforms + distortions)
 
 
 class ComposeWithParams:
@@ -154,53 +150,42 @@ class ComposeWithParams:
         return output[0] if is_single_image else output
 
 
-def ToRgbFloat32():
-    def to_rgb_float32(img):
-        """Convert BGR uint8 image to RGB float32 format.
-
-        Args:
-            img (np.ndarray): BGR image array in uint8 format
-
-        Returns:
-            np.ndarray: RGB image array in float32 format with values in [0,1]
-        """
-        img = img.astype(np.float32) / 255.0
-        img = np.transpose(img, (2, 0, 1))  # Convert to channels-first
-        img = img[::-1]  # BGR to RGB
-        return img
-
-    return to_rgb_float32
-
-
 class ApplyDeeperForensicsDistortion:
     """Wrapper for applying DeeperForensics distortions."""
 
     def __init__(self, distortion_type, level_min=0, level_max=3):
+        self.__name__ = distortion_type
         self.distortion_type = distortion_type
+        self.level = None
         self.level_min = level_min
         self.level_max = level_max
-        self.params = {}
+        self.params = {}  # level
+        self.distortion_params = {}  # distortion_type specific
 
     def __call__(self, img, level=None):
-        if level is None:
+        if level is None and self.level is None:
             self.level = random.randint(self.level_min, self.level_max)
-        else:
+            self.params = {"level": self.level}
+        elif self.level is None:
             self.level = level
+            self.params = {"level": self.level}
 
         if self.level > 0:
-            self.distortion_param = get_distortion_parameter(
-                self.distortion_type, self.level
-            )
             self.distortion_func = get_distortion_function(self.distortion_type)
+            if len(self.distortion_params) == 0:
+                self.distortion_param = get_distortion_parameter(
+                    self.distortion_type, self.level
+                )
+                self.distortion_params = {"param": self.distortion_param}
         else:
-            self.distortion_func = None
-            self.distortion_param = None
-
-        if not self.distortion_func:
             return img
 
-        self.params = {"level": self.level}
-        return self.distortion_func(img, self.distortion_param)
+        output = self.distortion_func(img, **self.distortion_params)
+        if isinstance(output, tuple):
+            self.distortion_params.update(output[1])
+            return output[0]
+        else:
+            return output
 
 
 # DeeperForensics Distortion Functions
@@ -274,80 +259,61 @@ def get_distortion_function(distortion_type):
     return func_dict[distortion_type]
 
 
-def rgb_to_bgr(img):
-    """
-    Args:
-        img (np.ndarray): Tensor image in format (C, H, W)
+def Resize():
+    def resize(img):
+        return cv2.resize(img, (256, 256))
 
-    Returns:
-        torch.Tensor: BGR tensor image in format (C, H, W)
-    """
-    if img.shape[0] == 3:
-        img = img[[2, 1, 0], ...]
-    return img
+    return resize
 
 
-def bgr_to_rgb(img):
-    """
-    Args:
-        tensor_img (torch.Tensor): Tensor image in format (C, H, W)
-
-    Returns:
-        torch.Tensor: RGB tensor image in format (C, H, W)
-    """
-    if img.shape[0] == 3:
-        img = img[[2, 1, 0], ...]
-    return img
-
-
-def bgr2ycbcr(img_bgr):
-    """Convert BGR image to YCbCr color space.
+def rgb2ycbcr(img_rgb):
+    """Convert RGB image to YCbCr color space.
 
     Args:
-        img_bgr (np.ndarray): BGR image array of shape (H, W, 3)
+        img_rgb (np.ndarray): RGB image array of shape (H, W, 3)
 
     Returns:
         np.ndarray: YCbCr image array of shape (H, W, 3) with values normalized to [0,1]
     """
-    img_bgr = img_bgr.astype(np.float32)
-    img_ycrcb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2YCR_CB)
+    img_rgb = img_rgb.astype(np.float32)
+    img_ycrcb = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2YCR_CB)
     img_ycbcr = img_ycrcb[:, :, (0, 2, 1)].astype(np.float32)
     img_ycbcr[:, :, 0] = (img_ycbcr[:, :, 0] * (235 - 16) + 16) / 255.0
     img_ycbcr[:, :, 1:] = (img_ycbcr[:, :, 1:] * (240 - 16) + 16) / 255.0
     return img_ycbcr
 
 
-def ycbcr2bgr(img_ycbcr):
-    """Convert YCbCr image to BGR color space.
+def ycbcr2rgb(img_ycbcr):
+    """Convert YCbCr image to RGB color space.
 
     Args:
         img_ycbcr (np.ndarray): YCbCr image array of shape (H, W, 3)
 
     Returns:
-        np.ndarray: BGR image array of shape (H, W, 3) with values in [0,255]
+        np.ndarray: RGB image array of shape (H, W, 3) with values in [0,255]
     """
     img_ycbcr = img_ycbcr.astype(np.float32)
     img_ycbcr[:, :, 0] = (img_ycbcr[:, :, 0] * 255.0 - 16) / (235 - 16)
     img_ycbcr[:, :, 1:] = (img_ycbcr[:, :, 1:] * 255.0 - 16) / (240 - 16)
     img_ycrcb = img_ycbcr[:, :, (0, 2, 1)].astype(np.float32)
-    img_bgr = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCR_CB2BGR)
-    return img_bgr
+    img_rgb = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCR_CB2RGB)
+    return img_rgb
 
 
 def color_saturation(img, param):
     """Apply color saturation distortion.
 
     Args:
-        img (np.ndarray): Input BGR image array of shape (H, W, 3)
+        img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (float): Saturation multiplier parameter
 
     Returns:
-        np.ndarray: Distorted BGR image array with modified saturation
+        np.ndarray: Distorted RGB image array with modified saturation
     """
-    ycbcr = bgr2ycbcr(img)
+    ycbcr = rgb2ycbcr(img)
     ycbcr[:, :, 1] = 0.5 + (ycbcr[:, :, 1] - 0.5) * param
     ycbcr[:, :, 2] = 0.5 + (ycbcr[:, :, 2] - 0.5) * param
-    img = ycbcr2bgr(ycbcr).astype(np.uint8)
+    img = ycbcr2rgb(ycbcr).astype(np.uint8)
     return img
 
 
@@ -355,11 +321,11 @@ def color_contrast(img, param):
     """Apply color contrast distortion.
 
     Args:
-        img (np.ndarray): Input BGR image array of shape (H, W, 3)
+        img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (float): Contrast multiplier parameter
 
     Returns:
-        np.ndarray: Distorted BGR image array with modified contrast
+        np.ndarray: Distorted RGB image array with modified contrast
     """
     img = img.astype(np.float32) * param
     return img.astype(np.uint8)
@@ -368,12 +334,14 @@ def color_contrast(img, param):
 def block_wise(img, param):
     """Apply block-wise distortion by adding random gray blocks.
 
+    NOTE: CURRENTLY NOT USED
+
     Args:
-        img (np.ndarray): Input BGR image array of shape (H, W, 3)
+        img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (int): Number of blocks to add, scaled by image dimensions
 
     Returns:
-        np.ndarray: Distorted BGR image array with added gray blocks
+        np.ndarray: Distorted RGB image array with added gray blocks
     """
     width = 8
     block = np.ones((width, width, 3)).astype(int) * 128
@@ -385,34 +353,35 @@ def block_wise(img, param):
     return img
 
 
-def gaussian_noise_color(img, param):
+def gaussian_noise_color(img, param, b=None):
     """Apply colored Gaussian noise in YCbCr color space.
 
     Args:
-        img (np.ndarray): Input BGR image array of shape (H, W, 3)
+        img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (float): Variance of the Gaussian noise
 
     Returns:
-        np.ndarray: Distorted BGR image array with added color noise
+        np.ndarray: Distorted RGB image array with added color noise
     """
-    ycbcr = bgr2ycbcr(img) / 255
+    ycbcr = rgb2ycbcr(img) / 255
     size_a = ycbcr.shape
-    b = (
-        ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
-    ) * 255
-    b = ycbcr2bgr(b)
-    return np.clip(b, 0, 255).astype(np.uint8)
+    if b is None:
+        b = (
+            ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
+        ) * 255
+        b = ycbcr2rgb(b)
+    return np.clip(b, 0, 255).astype(np.uint8), {"b": b}
 
 
 def gaussian_blur(img, param):
     """Apply Gaussian blur with specified kernel size.
 
-    Args:
-        img (np.ndarray): Input BGR image array of shape (H, W, 3)
+    Args
+        img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (int): Gaussian kernel size (must be odd)
 
     Returns:
-        np.ndarray: Blurred BGR image array
+        np.ndarray: Blurred RGB image array
     """
     return cv2.GaussianBlur(img, (param, param), param * 1.0 / 6)
 
@@ -421,11 +390,11 @@ def jpeg_compression(img, param):
     """Apply JPEG compression-like distortion through downsampling.
 
     Args:
-        img (np.ndarray): Input BGR image array of shape (H, W, 3)
+        img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (int): Downsampling factor
 
     Returns:
-        np.ndarray: Distorted BGR image array with compression artifacts
+        np.ndarray: Distorted RGB image array with compression artifacts
     """
     h, w, _ = img.shape
     s_h = h // param
@@ -438,10 +407,10 @@ def CenterCrop():
     """Center crop an image to a square.
 
     Args:
-        img (np.ndarray): Input BGR image array of shape (H, W, 3)
+        img (np.ndarray): Input RGB image array of shape (H, W, 3)
 
     Returns:
-        np.ndarray: Center cropped BGR image array with equal height and width
+        np.ndarray: Center cropped RGB image array with equal height and width
     """
 
     def crop(img):
@@ -473,12 +442,12 @@ class RandomResizedCropWithParams:
         """Perform random resized crop transform.
 
         Args:
-            img (np.ndarray): Input BGR image array of shape (H, W, C)
+            img (np.ndarray): Input RGB image array of shape (H, W, C)
             crop_params (tuple, optional): Pre-computed crop parameters (i, j, h, w)
                 where image will be cropped to [i:i+h, j:j+w] before resizing
 
         Returns:
-            np.ndarray: Randomly cropped and resized BGR image array
+            np.ndarray: Randomly cropped and resized RGB image array
         """
         # Convert numpy array to shape expected by parent class
         height, width = img.shape[:2]
@@ -533,16 +502,16 @@ class RandomHorizontalFlipWithParams:
         """Perform horizontal flip transform.
 
         Args:
-            img (np.ndarray): Input BGR image array of shape (H, W, C)
+            img (np.ndarray): Input RGB image array of shape (H, W, C)
             flip (bool, optional): Pre-computed flip decision
 
         Returns:
-            np.ndarray: Horizontally flipped BGR image array if flip is True
+            np.ndarray: Horizontally flipped RGB image array if flip is True
         """
         if flip is not None:
             self.params = {"flip": flip}
             return np.fliplr(img) if flip else img
-        elif not hasattr(self, "params"):
+        elif not hasattr(self, "params") or len(self.params) == 0:
             flip = np.random.random() < self.p
             self.params = {"flip": flip}
             return np.fliplr(img) if flip else img
@@ -565,16 +534,16 @@ class RandomVerticalFlipWithParams:
         """Perform vertical flip transform.
 
         Args:
-            img (np.ndarray): Input BGR image array of shape (H, W, C)
+            img (np.ndarray): Input RGB image array of shape (H, W, C)
             flip (bool, optional): Pre-computed flip decision
 
         Returns:
-            np.ndarray: Vertically flipped BGR image array if flip is True
+            np.ndarray: Vertically flipped RGB image array if flip is True
         """
         if flip is not None:
             self.params = {"flip": flip}
             return np.flipud(img) if flip else img
-        elif not hasattr(self, "params"):
+        elif not hasattr(self, "params") or len(self.params) == 0:
             flip = np.random.random() < self.p
             self.params = {"flip": flip}
             return np.flipud(img) if flip else img
@@ -608,18 +577,19 @@ class RandomRotationWithParams:
         """Perform rotation transform.
 
         Args:
-            img (np.ndarray): Input BGR image array of shape (H, W, C)
+            img (np.ndarray): Input RGB image array of shape (H, W, C)
             rotate (bool, optional): Pre-computed rotation decision
             angle (float, optional): Pre-computed rotation angle
             order (int, optional): Pre-computed interpolation order
 
         Returns:
-            np.ndarray: Rotated BGR image array
+            np.ndarray: Rotated RGB image array
         """
         if rotate is None:
             rotate = np.random.random() < self.p
             self.params = {"rotate": rotate}
-        elif not rotate:
+
+        if not rotate:
             return img
 
         order = self.order if order is None else order
