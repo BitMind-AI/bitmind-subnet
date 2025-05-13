@@ -14,7 +14,7 @@ from diffusers.utils import export_to_video
 from PIL import Image
 
 from bitmind.types import CacheConfig, ModelTask
-from bitmind.generation.util.image import create_random_mask
+from bitmind.generation.util.image import create_random_mask, is_black_output
 from bitmind.generation.util.prompt import truncate_prompt_if_too_long
 from bitmind.generation.prompt_generator import PromptGenerator
 from bitmind.generation.util.model import (
@@ -74,7 +74,7 @@ class GenerationPipeline:
 
     def generate(
         self,
-        images: Union[List[Image.Image], Image.Image],
+        image_samples: List[dict],
         tasks: Optional[Union[str, List[str]]] = None,
         model_names: Optional[Union[str, List[str]]] = None,
     ) -> Dict[str, Any]:
@@ -82,7 +82,7 @@ class GenerationPipeline:
         Generate synthetic data based on input parameters.
 
         Args:
-            image: Input image for annotation-based generation.
+            image_samples: Image samples returned by ImageSampler
             task: Optional task type.
             model_name: Optional model name.
 
@@ -93,8 +93,8 @@ class GenerationPipeline:
             ValueError: If image is None and cannot be sampled.
         """
         bt.logging.info(f"---------- Starting Generation ----------")
-        prompts = self.generate_prompts(images, downstream_tasks=tasks, clear_gpu=True)
-        paths, stats = self.generate_media(prompts, model_names, images, tasks)
+        prompts = self.generate_prompts(image_samples, downstream_tasks=tasks, clear_gpu=True)
+        paths, stats = self.generate_media(prompts, model_names, image_samples, tasks)
 
         def log_stats(stats):
             model_names = list(stats.keys())
@@ -102,7 +102,7 @@ class GenerationPipeline:
 
             if total_successes == 0:
                 log_fn = bt.logging.error
-            elif total_successes == len(images) * len(model_names):
+            elif total_successes == len(image_samples) * len(model_names):
                 log_fn = bt.logging.success
             else:
                 log_fn = bt.logging.warning
@@ -115,16 +115,13 @@ class GenerationPipeline:
 
     def generate_prompts(
         self,
-        images: Union[List[Image.Image], Image.Image],
+        image_samples: List[dict],
         downstream_tasks: Optional[List[str]] = None,
         clear_gpu: bool = True,
     ) -> str:
         """
         Generate a prompts based on input images and downstream tasks.
         """
-        if isinstance(images, Image.Image):
-            images = [images]
-
         if downstream_tasks is None:
             downstream_tasks = [
                 ModelTask.TEXT_TO_IMAGE.value,
@@ -133,7 +130,7 @@ class GenerationPipeline:
                 ModelTask.IMAGE_TO_VIDEO.value,
             ]
 
-        k = len(images)
+        k = len(image_samples)
         bt.logging.info(f"Generating {k} prompt{'s' if k > 1 else ''}")
 
         self.prompt_generator.load_models()
@@ -141,15 +138,18 @@ class GenerationPipeline:
         # organize prompts in a dict to avoid failed prompt generations causing misaligned images/prompts
         prompts = {task: {} for task in downstream_tasks}
         for i in range(k):
+            image_path = image_samples[i].get('path')
+            image = image_samples[i].get('image')
             for task in downstream_tasks:
                 try:
                     prompts[task][i] = self.prompt_generator.generate(
-                        images[i], downstream_task=task
+                        image, downstream_task=task
                     )
-                    bt.logging.info(f"Generated prompt {i+1}/{k}: {prompts[task][i]}")
+
+                    bt.logging.info(f"Generated prompt {i+1}/{k}: {prompts[task][i]} from {image_path}")
                 except Exception as e:
                     prompts[task][i] = None
-                    bt.logging.error(f"Error generating prompt for image {i+1}: {e}")
+                    bt.logging.error(f"Error generating prompt for image {i+1}: {e} from {image_path}")
                     bt.logging.error(traceback.format_exc())
                     continue
 
@@ -162,7 +162,7 @@ class GenerationPipeline:
         self,
         prompts: Union[dict, str],
         model_names: Optional[Union[str, List[str]]] = None,
-        images: Union[List[Image.Image], Image.Image, Dict[int, Image.Image]] = None,
+        image_samples: List[dict] = None,
         tasks: Optional[Union[str, List[str]]] = None,
     ) -> Dict[str, Any]:
         """
@@ -212,10 +212,26 @@ class GenerationPipeline:
                 bt.logging.info(f"  Prompt: {task_prompts[prompt_idx]}")
 
                 try:
-                    image = None if images is None else images[prompt_idx]
-                    gen_output = self._generate_media_with_model(
-                        model_name, task_prompts[prompt_idx], image
-                    )
+                    image = None
+                    if image_samples is not None and isinstance(image_samples, dict):
+                        image = image_samples[prompt_idx].get('image')
+
+                    # 3 retries for black (NSFW filtered) output
+                    for _ in range(3):
+                        gen_output = self._generate_media_with_model(
+                            model_name, task_prompts[prompt_idx], image
+                        )
+                        if is_black_output(modality, gen_output):
+                            # sanitize and retry
+                            self.clear_gpu()
+                            self.prompt_generator.load_llm()
+                            task_prompts[prompt_idx] = self.prompt_generator.sanitize(
+                                task_prompts[prompt_idx]
+                            )
+                            self.prompt_generator.clear_gpu()
+                        else:
+                            break
+
                     bt.logging.info(
                         {
                             k: v
@@ -364,38 +380,28 @@ class GenerationPipeline:
 
             gen_args["mask_image"], mask_center = create_random_mask(image.size)
             gen_args["image"] = image
-        elif task == 'i2v':
+
+        elif task == "i2v":
             if image is None:
                 raise ValueError("image cannot be None for image-to-video generation")
             # Get target size from gen_args if specified, otherwise use default
-            target_size = (
-                gen_args.get('height', 768),
-                gen_args.get('width', 768)
-            )
+            target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
                 image = image.resize(target_size, Image.Resampling.LANCZOS)
-            gen_args['image'] = image
+            gen_args["image"] = image
 
         # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
                 if "min" in v and "max" in v:
                     # For i2v, use minimum values to save memory
-                    if task == 'i2v':
-                        gen_args[k] = v['min']
+                    if task == "i2v":
+                        gen_args[k] = v["min"]
                     else:
-                        gen_args[k] = np.random.randint(v['min'], v['max'])
+                        gen_args[k] = np.random.randint(v["min"], v["max"])
+
                 if "options" in v:
                     gen_args[k] = random.choice(v["options"])
-
-            # Ensure num_frames is always an integer
-            if k == 'num_frames' and isinstance(v, dict):
-                if "min" in v:
-                    gen_args[k] = int(v['min'])
-                elif "max" in v:
-                    gen_args[k] = int(v['max'])
-                else:
-                    gen_args[k] = 24  # Default value
 
         if "resolution" in gen_args:
             gen_args["height"] = gen_args["resolution"][0]
@@ -407,9 +413,13 @@ class GenerationPipeline:
 
         generate_fn = create_pipeline_generator(model_config, self.model)
 
+        torch.cuda.empty_cache()
+        gc.collect()
+
         start_time = time.time()
 
         bt.logging.debug("Generating media")
+
         if model_config.get("use_autocast", True):
             pretrained_args = model_config.get("from_pretrained_args", {})
             torch_dtype = pretrained_args.get("torch_dtype", torch.bfloat16)
@@ -510,10 +520,7 @@ class GenerationPipeline:
         bt.logging.info(f"Wrote to {save_path}")
         return save_path
 
-    def shutdown(self):
-        """
-        Perform a graceful shutdown by clearing all models from GPU memory.
-        """
+    def clear_gpu(self):
         if hasattr(self, "model") and self.model is not None:
             bt.logging.trace("Deleting model")
             if isinstance(self.model, dict):
@@ -530,3 +537,6 @@ class GenerationPipeline:
         if torch.cuda.is_available():
             bt.logging.trace("Clearing CUDA cache")
             torch.cuda.empty_cache()
+
+    def shutdown(self):
+        self.clear_gpu()

@@ -309,9 +309,9 @@ def add_data_generator_args(parser):
     parser.add_argument(
         "--tasks",
         nargs="+",
-        choices=["t2v", "t2i", "i2i"],
-        default=["t2v", "t2i", "i2i"],
-        help="List of tasks to run (t2v, t2i, i2i). Defaults to all.",
+        choices=["t2v", "t2i", "i2i", "i2v"],
+        default=["t2v", "t2i", "i2i", "i2v"],
+        help="List of tasks to run (t2v, t2i, i2i, i2v). Defaults to all.",
     )
 
     parser.add_argument(
