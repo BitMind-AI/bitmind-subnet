@@ -223,8 +223,8 @@ class Generator:
                             batch_count = 0
                             self.wandb_run.finish()
                             self.wandb_run = init_wandb(
-                                self.config.wandb.process_name,
                                 self.config.copy(),
+                                self.config.wandb.process_name,
                                 self.uid,
                                 self.wallet.hotkey,
                             )

@@ -87,6 +87,7 @@ class Validator(BaseNeuron):
                 self.send_challenge_to_miners_on_interval,
                 self.update_compressed_cache_on_interval,
                 self.update_media_cache_on_interval,
+                self.start_new_wanbd_run
             ]
         )
 
