@@ -338,7 +338,7 @@ class Validator(BaseNeuron):
         try:
             self.wandb_logger.start_new_run()
         except Exception as e:
-            bt.logging.warning("Not able to start new W&B run")
+            bt.logging.error(f"Not able to start new W&B run: {e}")
 
     async def _sample_media(self) -> Optional[Dict[str, Any]]:
         """
