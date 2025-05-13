@@ -39,6 +39,7 @@ dependencies = [
     "uvicorn==0.27.1",
     "python-multipart==0.0.20",
     "peft==0.15.0",
+    "hf_xet==1.1.1"
 ]
 
 [tool.setuptools]
