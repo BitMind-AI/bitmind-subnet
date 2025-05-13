@@ -30,6 +30,25 @@ class WandbLogger:
 
         clean_wandb_cache(self.wandb_dir)
 
+    def start_new_run(self):
+        """
+        Ensure validator run is active and return it.
+
+        Returns:
+            wandb.Run: The active wandb run
+        """
+        clean_wandb_cache(self.wandb_dir)
+        if self.run is None or not wandb.run:
+            self.run = init_wandb(
+                self.config, "validator", self.uid, self.hotkey, self.wandb_dir
+            )
+        else:
+            self.run.finish()
+            self.run = init_wandb(
+                self.config, "validator", self.uid, self.hotkey, self.wandb_dir
+            )
+        return self.run
+
     def _ensure_run(self):
         """
         Ensure validator run is active and return it.

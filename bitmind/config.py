@@ -112,6 +112,13 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--wandb-restart-interval",
+        type=int,
+        help="How often we restart wandb run to avoid log truncation",
+        default=2000,
+    )
+
+    parser.add_argument(
         "--cache.base-dir",
         type=str,
         default=os.path.expanduser("~/.cache/sn34"),
@@ -322,10 +329,10 @@ def add_data_generator_args(parser):
     )
 
     parser.add_argument(
-        "--wandb.media-files-per-run",
+        "--wandb.num-batches-per-run",
         type=int,
-        default=100,
-        help="Number of media files to include in each W&B run",
+        default=50,
+        help="Number of batches to generate before starting new W&B run (avoids log truncation)",
     )
 
     parser.add_argument("--wandb.process-name", type=str, default="generator")

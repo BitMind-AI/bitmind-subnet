@@ -87,6 +87,7 @@ class Validator(BaseNeuron):
                 self.send_challenge_to_miners_on_interval,
                 self.update_compressed_cache_on_interval,
                 self.update_media_cache_on_interval,
+                self.start_new_wanbd_run
             ]
         )
 
@@ -331,6 +332,13 @@ class Validator(BaseNeuron):
             bt.logging.error(traceback.format_exc())
         finally:
             self.lock_halt = False
+
+    @on_block_interval("wandb_restart_interval")
+    async def start_new_wanbd_run(self, block):
+        try:
+            self.wandb_logger.start_new_run()
+        except Exception as e:
+            bt.logging.error(f"Not able to start new W&B run: {e}")
 
     async def _sample_media(self) -> Optional[Dict[str, Any]]:
         """
