@@ -588,7 +588,8 @@ class RandomRotationWithParams:
         if rotate is None:
             rotate = np.random.random() < self.p
             self.params = {"rotate": rotate}
-        elif not rotate:
+
+        if not rotate:
             return img
 
         order = self.order if order is None else order
