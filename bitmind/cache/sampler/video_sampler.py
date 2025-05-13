@@ -1,5 +1,6 @@
 import json
 import os
+import math
 import random
 import tempfile
 from pathlib import Path
@@ -81,6 +82,7 @@ class VideoSampler(BaseSampler):
         files,
         min_duration: float = 1.0,
         max_duration: float = 6.0,
+        max_fps: float = 30.0,
         remove_from_cache: bool = False,
         as_float32: bool = False,
         channels_first: bool = False,
@@ -128,14 +130,12 @@ class VideoSampler(BaseSampler):
                 total_duration = video_info.get("duration", 0)
                 duration = min(total_duration, duration)
 
-                duration = min(duration, min_duration)
-
                 max_start = total_duration - duration
                 start_time = random.uniform(0, max_start)
 
                 width = int(video_info.get("width", 256))
                 height = int(video_info.get("height", 256))
-                reported_fps = float(video_info.get("fps", 30.0))
+                reported_fps = float(video_info.get("fps", max_fps))
                 if reported_fps > max_fps or reported_fps <= 0 or not math.isfinite(reported_fps):
                     self.cache_fs._log_warning(
                         f"Unreasonable FPS ({reported_fps}) detected in {video_path}, capping at {max_fps}"
