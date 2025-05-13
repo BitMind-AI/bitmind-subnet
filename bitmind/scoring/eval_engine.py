@@ -22,9 +22,8 @@ class EvalEngine:
     ):
         assert config.neuron.full_path
         assert (
-            abs(config.scoring.image_weight + config.scoring.video_weight - 1.0) < 1e-6,
-            "Modality weights must sum to 1.0",
-        )
+            abs(config.scoring.image_weight + config.scoring.video_weight - 1.0) < 1e-6
+        ), "Modality weights must sum to 1.0"
         assert (
             abs(config.scoring.binary_weight + config.scoring.multiclass_weight - 1.0)
             < 1e-6
