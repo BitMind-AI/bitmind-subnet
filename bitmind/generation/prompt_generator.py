@@ -93,13 +93,17 @@ class PromptGenerator:
         gc.collect()
         torch.cuda.empty_cache()
 
-    def generate(self, image: Image.Image, max_new_tokens: int = 20) -> str:
+    def generate(
+        self, image: Image.Image, downstream_task: str = None, max_new_tokens: int = 20
+    ) -> str:
         """
         Generate a string description for a given image using prompt-based
         captioning and building conversational context.
 
         Args:
             image: The image for which the description is to be generated.
+            task: The generation task ('t2i', 't2v', 'i2i', 'i2v'). If video task,
+                motion descriptions will be added.
             max_new_tokens: The maximum number of tokens to generate for each
                 prompt.
 
@@ -144,7 +148,10 @@ class PromptGenerator:
             description += "."
 
         moderated_description = self.moderate(description)
-        return self.enhance(moderated_description)
+
+        if downstream_task in ["t2v", "i2v"]:
+            return self.enhance(moderated_description)
+        return moderated_description
 
     def moderate(self, description: str, max_new_tokens: int = 80) -> str:
         """
@@ -202,21 +209,16 @@ class PromptGenerator:
             {
                 "role": "system",
                 "content": (
-                    "[INST]You are an expert at converting static image descriptions "
-                    "into dynamic video prompts. Enhance the given description by "
-                    "adding natural motion and temporal elements while preserving the "
-                    "core scene. Follow these rules:\n"
-                    "1. Maintain the essential elements of the original description\n"
-                    "2. Add smooth, continuous motions that work well in video\n"
-                    "3. For portraits: Add natural facial movements or expressions\n"
-                    "4. For non-portrait images with people: Add contextually appropriate "
-                    "actions (e.g., for a beach scene, people might be walking along "
-                    "the shoreline or playing in the waves; for a cafe scene, people "
-                    "might be sipping drinks or engaging in conversation)\n"
-                    "5. For landscapes: Add environmental motion like wind or water\n"
-                    "6. For urban scenes: Add dynamic elements like people or traffic\n"
-                    "7. Keep the description concise but descriptive\n"
-                    "8. Focus on gradual, natural transitions\n"
+                    "[INST]You are an expert at converting image descriptions into video prompts. "
+                    "Analyze the existing motion in the scene and enhance it naturally:\n"
+                    "1. If motion exists in the image (falling, throwing, running, etc.):\n"
+                    "   - Maintain and emphasize that existing motion\n"
+                    "   - Add smooth continuation of the movement\n"
+                    "2. If the subject is static (sitting, standing, placed):\n"
+                    "   - Keep it stable\n"
+                    "   - Add minimal environmental motion if appropriate\n"
+                    "3. Add ONE subtle camera motion that complements the scene\n"
+                    "4. Keep the description concise and natural\n"
                     "Only respond with the enhanced description.[/INST]"
                 ),
             },
@@ -233,5 +235,5 @@ class PromptGenerator:
             return enhanced_text[0]["generated_text"]
 
         except Exception as e:
-            print(f"An error occurred during motion enhancement: {e}")
+            bt.logging.error(f"An error occurred during motion enhancement: {e}")
             return description

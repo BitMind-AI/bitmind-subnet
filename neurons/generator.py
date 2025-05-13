@@ -131,16 +131,6 @@ class Generator:
         except Exception as e:
             pass
 
-    def log_wandb_media(self, filepaths):
-        for filepath in filepaths:
-            try:
-                metadata = get_metadata(filepath)
-                self.current_run.log(
-                    {metadata["modality"]: create_wandb_media(filepath), **metadata}
-                )
-            except Exception as e:
-                bt.logging.error(f"Failed to log media file {filepath}: {e}")
-
     async def wait_for_cache(self, timeout: int = 300):
         """Wait for the cache to be populated with images for prompt generation"""
         start = time.time()
@@ -245,6 +235,7 @@ class Generator:
                     break
                 except Exception as e:
                     bt.logging.error(f"Error in batch processing: {e}")
+                    bt.logging.error(traceback.format_exc())
                     await asyncio.sleep(10)
         except Exception as e:
             bt.logging.error(f"Unhandled exception in main task: {e}")

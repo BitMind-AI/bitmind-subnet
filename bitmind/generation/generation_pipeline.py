@@ -13,7 +13,7 @@ import torch
 from diffusers.utils import export_to_video
 from PIL import Image
 
-from bitmind.types import CacheConfig
+from bitmind.types import CacheConfig, ModelTask
 from bitmind.generation.util.image import create_random_mask
 from bitmind.generation.util.prompt import truncate_prompt_if_too_long
 from bitmind.generation.prompt_generator import PromptGenerator
@@ -93,7 +93,7 @@ class GenerationPipeline:
             ValueError: If image is None and cannot be sampled.
         """
         bt.logging.info(f"---------- Starting Generation ----------")
-        prompts = self.generate_prompts(images, clear_gpu=True)
+        prompts = self.generate_prompts(images, downstream_tasks=tasks, clear_gpu=True)
         paths, stats = self.generate_media(prompts, model_names, images, tasks)
 
         def log_stats(stats):
@@ -114,28 +114,44 @@ class GenerationPipeline:
         return paths
 
     def generate_prompts(
-        self, images: Union[List[Image.Image], Image.Image], clear_gpu: bool = True
+        self,
+        images: Union[List[Image.Image], Image.Image],
+        downstream_tasks: Optional[List[str]] = None,
+        clear_gpu: bool = True,
     ) -> str:
         """
-        Generate a prompts based on input images
+        Generate a prompts based on input images and downstream tasks.
         """
         if isinstance(images, Image.Image):
             images = [images]
+
+        if downstream_tasks is None:
+            downstream_tasks = [
+                ModelTask.TEXT_TO_IMAGE.value,
+                ModelTask.TEXT_TO_VIDEO.value,
+                ModelTask.IMAGE_TO_IMAGE.value,
+                ModelTask.IMAGE_TO_VIDEO.value,
+            ]
 
         k = len(images)
         bt.logging.info(f"Generating {k} prompt{'s' if k > 1 else ''}")
 
         self.prompt_generator.load_models()
 
-        prompts = {}
+        # organize prompts in a dict to avoid failed prompt generations causing misaligned images/prompts
+        prompts = {task: {} for task in downstream_tasks}
         for i in range(k):
-            try:
-                prompts[i] = self.prompt_generator.generate(images[i])
-                bt.logging.info(f"Generated prompt {i+1}/{k}: {prompts[i]}")
-            except Exception as e:
-                prompts[i] = None
-                bt.logging.error(f"Error generating prompt for image {i+1}: {e}")
-                continue
+            for task in downstream_tasks:
+                try:
+                    prompts[task][i] = self.prompt_generator.generate(
+                        images[i], downstream_task=task
+                    )
+                    bt.logging.info(f"Generated prompt {i+1}/{k}: {prompts[task][i]}")
+                except Exception as e:
+                    prompts[task][i] = None
+                    bt.logging.error(f"Error generating prompt for image {i+1}: {e}")
+                    bt.logging.error(traceback.format_exc())
+                    continue
 
         if clear_gpu:
             self.prompt_generator.clear_gpu()
@@ -153,7 +169,9 @@ class GenerationPipeline:
         Generate synthetic data based on a text prompt.
 
         Args:
-            prompt: The text prompt used to inspire the generation.
+            prompt: The text prompt used for generation, or a dictionary with
+                the outer key of generation task type, inner key of the image index,
+                and value of the prompt
             task: The generation task type ('t2i', 't2v', 'i2i', or None).
             model_name: Optional model name to use for generation.
             image: Optional input image for image-to-image generation.
@@ -171,22 +189,33 @@ class GenerationPipeline:
 
         n_models = len(model_names)
         n_prompts = len(prompts)
+
         stats = {model_name: {"total": 0, "success": 0} for model_name in model_names}
         save_paths = []
+
         for model_idx, model_name in enumerate(model_names):
-            for prompt_idx in prompts:
+            modality = self.model_registry.get_modality(model_name)
+            task = self.model_registry.get_task(model_name)
+
+            if isinstance(prompts, list):
+                task_prompts = {i: p for i, p in enumerate(prompts)}
+            else:
+                # task-specific prompts (motion enhancement for video)
+                task_prompts = prompts[task]
+
+            for prompt_idx in task_prompts:
                 stats[model_name]["total"] += 1
                 bt.logging.info(
                     f"Starting batch | Model {model_idx+1}/{n_models} | Prompt {prompt_idx+1}/{n_prompts}"
                 )
                 bt.logging.info(f"  Model: {model_name}")
-                bt.logging.info(f"  Prompt: {prompts[prompt_idx]}")
+                bt.logging.info(f"  Prompt: {task_prompts[prompt_idx]}")
 
                 try:
+                    image = None if images is None else images[prompt_idx]
                     gen_output = self._generate_media_with_model(
-                        model_name, prompts[prompt_idx], images[prompt_idx]
+                        model_name, task_prompts[prompt_idx], image
                     )
-                    modality = self.model_registry.get_modality(model_name)
                     bt.logging.info(
                         {
                             k: v
@@ -199,7 +228,7 @@ class GenerationPipeline:
                 except Exception as e:
                     bt.logging.error(f"Failed to either generate or save media: {e}")
                     bt.logging.error(f"  Model: {model_name}")
-                    bt.logging.error(f"  Prompt: {prompts[prompt_idx]}")
+                    bt.logging.error(f"  Prompt: {task_prompts[prompt_idx]}")
                     bt.logging.error(traceback.format_exc())
 
         return save_paths, stats
@@ -326,7 +355,7 @@ class GenerationPipeline:
         gen_args = model_config.get("generate_args", {}).copy()
         mask_center = None
 
-        # prep inpainting-specific generation args
+        # prep inptask-specific generation args
         if task == "i2i":
             image = Image.fromarray(image)
             target_size = (1024, 1024)
@@ -335,14 +364,38 @@ class GenerationPipeline:
 
             gen_args["mask_image"], mask_center = create_random_mask(image.size)
             gen_args["image"] = image
+        elif task == 'i2v':
+            if image is None:
+                raise ValueError("image cannot be None for image-to-video generation")
+            # Get target size from gen_args if specified, otherwise use default
+            target_size = (
+                gen_args.get('height', 768),
+                gen_args.get('width', 768)
+            )
+            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+            gen_args['image'] = image
 
         # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
                 if "min" in v and "max" in v:
-                    gen_args[k] = np.random.randint(v["min"], v["max"])
+                    # For i2v, use minimum values to save memory
+                    if task == 'i2v':
+                        gen_args[k] = v['min']
+                    else:
+                        gen_args[k] = np.random.randint(v['min'], v['max'])
                 if "options" in v:
                     gen_args[k] = random.choice(v["options"])
+
+            # Ensure num_frames is always an integer
+            if k == 'num_frames' and isinstance(v, dict):
+                if "min" in v:
+                    gen_args[k] = int(v['min'])
+                elif "max" in v:
+                    gen_args[k] = int(v['max'])
+                else:
+                    gen_args[k] = 24  # Default value
 
         if "resolution" in gen_args:
             gen_args["height"] = gen_args["resolution"][0]

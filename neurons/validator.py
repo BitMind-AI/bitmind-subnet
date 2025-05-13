@@ -196,9 +196,7 @@ class Validator(BaseNeuron):
         )
         if len(miner_uids) > self.config.neuron.sample_size:
             miner_uids = np.random.choice(
-                miner_uids,
-                size=self.config.neuron.sample_size,
-                replace=False
+                miner_uids, size=self.config.neuron.sample_size, replace=False
             ).tolist()
 
         media_sample = await self._sample_media()

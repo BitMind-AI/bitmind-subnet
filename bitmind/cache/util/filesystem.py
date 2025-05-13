@@ -314,9 +314,7 @@ def filter_ready_files(
 
 
 async def wait_for_downloads_to_complete(
-    files: List[Path],
-    min_age_seconds: float = 2.0,
-    timeout_seconds: int = 180
+    files: List[Path], min_age_seconds: float = 2.0, timeout_seconds: int = 180
 ) -> bool:
     if not files:
         return True

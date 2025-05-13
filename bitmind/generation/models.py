@@ -15,6 +15,8 @@ from diffusers import (
     CogVideoXPipeline,
     AnimateDiffPipeline,
     AutoPipelineForInpainting,
+    CogView4Pipeline,
+    CogVideoXImageToVideoPipeline,
 )
 
 from bitmind.generation.model_registry import ModelRegistry
@@ -178,15 +180,30 @@ def get_text_to_image_models() -> List[ModelConfig]:
                 "use_safetensors": True,
             },
             lora_model_id="Kvikontent/midjourney-v6",
-            lora_loading_args={
-                "use_peft_backend": True
-            },
+            lora_loading_args={"use_peft_backend": True},
             use_autocast=False,
             enable_model_cpu_offload=False,
             tags=["stable-diffusion"],
         ),
+        ModelConfig(
+            path="THUDM/CogView4-6B",
+            task=ModelTask.TEXT_TO_IMAGE,
+            pipeline_cls=CogView4Pipeline,
+            pretrained_args={
+                "torch_dtype": torch.bfloat16,
+                "use_safetensors": True,
+            },
+            generate_args={
+                "guidance_scale": 3.5,
+                "num_images_per_prompt": 1,
+                "num_inference_steps": 50,
+                "width": 512,
+                "height": 512,
+            },
+            use_autocast=False,
+            tags=[],
+        ),
     ]
-
 
 
 def get_image_to_image_models() -> List[ModelConfig]:

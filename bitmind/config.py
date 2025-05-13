@@ -3,6 +3,7 @@ import bittensor as bt
 
 MAINNET_UID = 34
 
+
 def validate_config_and_neuron_path(config):
     r"""Checks/validates the config namespace object."""
     full_path = os.path.expanduser(
