@@ -410,6 +410,7 @@ class GenerationPipeline:
 
         truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
         bt.logging.debug(f"Generating media from prompt: {truncated_prompt}")
+        bt.logging.debug(f"Generation args: {gen_args}")
 
         generate_fn = create_pipeline_generator(model_config, self.model)
 

@@ -1,3 +1,4 @@
+import re
 import gc
 import bittensor as bt
 import torch
@@ -63,11 +64,14 @@ class PromptGenerator:
         Load the language model for text moderation.
         """
         bt.logging.debug(f"Loading caption moderation model {self.llm_name}")
+        m = re.match(r"cuda:(\d+)", self.device)
+        gpu_id = int(m.group(1)) if m else 0
         llm = AutoModelForCausalLM.from_pretrained(
-            self.llm_name, torch_dtype=torch.bfloat16
+            self.llm_name, 
+            torch_dtype=torch.bfloat16,
+            device_map={"": gpu_id}
         )
         tokenizer = AutoTokenizer.from_pretrained(self.llm_name)
-        llm = llm.to(self.device)
         self.llm = pipeline("text-generation", model=llm, tokenizer=tokenizer)
         bt.logging.info(f"Loaded caption moderation model {self.llm_name}")
 

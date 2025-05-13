@@ -8,6 +8,21 @@ If you are new to Bittensor (you're probably not if you're reading the validator
 
 **Understand the minimum compute requirements to run a validator**. Validator neurons on SN34 run a suite of generative (text-to-image, text-to-video, etc.) models that require an **80GB VRAM GPU**. They also maintain a large cache of real and synthetic media to ensure diverse, locally available data for challenging miners. We recommend **1TB of storage**. For more details, please see our [minimum compute documentation](../min_compute.yml)
 
+## Required Hugging Face Model Access
+
+To properly validate, you must gain access to several Hugging Face models used by the subnet. This requires logging in to your Hugging Face account and accepting the terms for each model below:
+
+- [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev)
+- [DeepFloyd IF-II-L-v1.0](https://huggingface.co/DeepFloyd/IF-II-L-v1.0)
+- [DeepFloyd IF-I-XL-v1.0](https://huggingface.co/DeepFloyd/IF-I-XL-v1.0)
+
+> **Note:** Accepting the terms for any one of the DeepFloyd IF models (e.g., IF-II-L or IF-I-XL) will grant you access to all DeepFloyd IF models.
+
+To do this:
+1. Log in to your Hugging Face account.
+2. Visit each model page above.
+3. Click the "Access repository" or "Agree and access repository" button to accept the terms.
+
 ## Installation
 
 Download the repository and navigate to the folder.
