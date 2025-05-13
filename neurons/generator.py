@@ -230,8 +230,6 @@ class Generator:
                     )
 
                     if not self.config.wandb.off:
-                        bt.logging.info("Logging media to wandb")
-                        self.log_wandb_media(filepaths)
                         if gen_count >= self.config.wandb.media_files_per_run:
                             gen_count = 0
                             self.wandb_run.finish()
