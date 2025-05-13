@@ -3,8 +3,10 @@ import os
 import math
 import random
 import tempfile
+
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+from io import BytesIO
 
 import ffmpeg
 import numpy as np
@@ -119,73 +121,100 @@ class VideoSampler(BaseSampler):
 
             video_path = random.choice(files[source])
 
-            duration = random.uniform(min_duration, max_duration)
-
             try:
                 if not video_path.exists():
                     files[source].remove(video_path)
                     continue
 
-                video_info = get_video_metadata(str(video_path))
-                total_duration = video_info.get("duration", 0)
-                duration = min(total_duration, duration)
+                try:
+                    video_info = get_video_metadata(str(video_path))
+                    total_duration = video_info.get("duration", 0)
+                    width = int(video_info.get("width", 256))
+                    height = int(video_info.get("height", 256))
+                    reported_fps = float(video_info.get("fps", max_fps))
+                except Exception as e:
+                    self.cache_fs._log_error(
+                        f"Unable to extract video metadata from {str(video_path)}: {e}"
+                    )
+                    files[source].remove(video_path)
+                    continue
 
-                max_start = total_duration - duration
-                start_time = random.uniform(0, max_start)
-
-                width = int(video_info.get("width", 256))
-                height = int(video_info.get("height", 256))
-                reported_fps = float(video_info.get("fps", max_fps))
-                if reported_fps > max_fps or reported_fps <= 0 or not math.isfinite(reported_fps):
+                if (
+                    reported_fps > max_fps
+                    or reported_fps <= 0
+                    or not math.isfinite(reported_fps)
+                ):
                     self.cache_fs._log_warning(
                         f"Unreasonable FPS ({reported_fps}) detected in {video_path}, capping at {max_fps}"
                     )
-                    fps = max_fps
+                    frame_rate = max_fps
                 else:
-                    fps = reported_fps
+                    frame_rate = reported_fps
 
-                temp_dir = tempfile.mkdtemp()
-                try:
-                    # Extract frames as PNGs for v2 parity
-                    temp_frame_dir = os.path.join(temp_dir, "frame%04d.png")
-                    ffmpeg.input(
-                        str(video_path), ss=str(start_time), t=str(duration)
-                    ).output(temp_frame_dir, format="image2", vcodec="png").global_args(
-                        "-loglevel", "error"
-                    ).global_args(
-                        "-r", str(fps)
-                    ).run()
+                target_duration = random.uniform(min_duration, max_duration)
+                target_duration = min(target_duration, total_duration)
 
-                    frame_files = sorted(
-                        [f for f in os.listdir(temp_dir) if f.endswith(".png")]
-                    )
+                num_frames = int(target_duration * frame_rate) + 1
 
-                    if not frame_files:
-                        self.cache_fs._log_warning(
-                            f"No frames extracted from {video_path}"
+                actual_duration = (num_frames - 1) / frame_rate
+
+                max_start = max(0, total_duration - actual_duration)
+                start_time = random.uniform(0, max_start)
+
+                frames = []
+                no_data = []
+
+                for i in range(num_frames):
+                    timestamp = start_time + (i / frame_rate)
+
+                    try:
+                        out_bytes, err = (
+                            ffmpeg.input(str(video_path), ss=str(timestamp))
+                            .filter("select", "eq(n,0)")
+                            .output(
+                                "pipe:",
+                                vframes=1,
+                                format="image2",
+                                vcodec="png",
+                                loglevel="error",
+                            )
+                            .run(capture_stdout=True, capture_stderr=True)
                         )
-                        files[source].remove(video_path)
+
+                        if not out_bytes:
+                            no_data.append(timestamp)
+                            continue
+
+                        try:
+                            frame = Image.open(BytesIO(out_bytes))
+                            frame.load()  # Verify image can be loaded
+                            frames.append(np.array(frame))
+                        except Exception as e:
+                            self.cache_fs._log_error(
+                                f"Failed to process frame at {timestamp}s: {e}"
+                            )
+                            continue
+
+                    except ffmpeg.Error as e:
+                        self.cache_fs._log_error(
+                            f"FFmpeg error at {timestamp}s: {e.stderr.decode()}"
+                        )
                         continue
 
-                    frames = []
-                    for frame_file in frame_files:
-                        img = Image.open(os.path.join(temp_dir, frame_file))
-                        frames.append(np.array(img))
+                if len(no_data) > 0:
+                    tmin, tmax = min(no_data), max(no_data)
+                    self.cache_fs._log_warning(
+                        f"No data received for {len(no_data)} frames between {tmin} and {tmax}"
+                    )
 
-                    frames = np.stack(frames, axis=0)
-                    num_frames = len(frames)
+                if not frames:
+                    self.cache_fs._log_warning(
+                        f"No frames successfully extracted from {video_path}"
+                    )
+                    files[source].remove(video_path)
+                    continue
 
-                finally:
-                    # Clean up temp directory and files
-                    for file in os.listdir(temp_dir):
-                        try:
-                            os.remove(os.path.join(temp_dir, file))
-                        except:
-                            pass
-                    try:
-                        os.rmdir(temp_dir)
-                    except:
-                        pass
+                frames = np.stack(frames, axis=0)
 
                 if as_float32:
                     frames = frames.astype(np.float32) / 255.0
@@ -214,11 +243,11 @@ class VideoSampler(BaseSampler):
                     "metadata": metadata,
                     "segment": {
                         "start_time": start_time,
-                        "duration": duration,
-                        "fps": fps,
+                        "duration": actual_duration,
+                        "fps": frame_rate,
                         "width": width,
                         "height": height,
-                        "num_frames": num_frames,
+                        "num_frames": len(frames),
                     },
                 }
 
@@ -233,7 +262,7 @@ class VideoSampler(BaseSampler):
                         )
 
                 self.cache_fs._log_info(
-                    f"Successfully sampled {duration}s segment from {video_path} ({num_frames} frames)"
+                    f"Successfully sampled {actual_duration}s segment from {video_path} ({len(frames)} frames)"
                 )
                 return result
 
