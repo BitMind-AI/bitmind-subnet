@@ -213,7 +213,7 @@ class GenerationPipeline:
 
                 try:
                     image = None
-                    if image_samples is not None and isinstance(image_samples, dict):
+                    if image_samples is not None and len(image_samples) > prompt_idx:
                         image = image_samples[prompt_idx].get('image')
 
                     # 3 retries for black (NSFW filtered) output
@@ -373,6 +373,8 @@ class GenerationPipeline:
 
         # prep inptask-specific generation args
         if task == "i2i":
+            if image is None:
+                raise ValueError("image cannot be None for image-to-image generation")
             image = Image.fromarray(image)
             target_size = (1024, 1024)
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
@@ -384,6 +386,7 @@ class GenerationPipeline:
         elif task == "i2v":
             if image is None:
                 raise ValueError("image cannot be None for image-to-video generation")
+            image = Image.fromarray(image)
             # Get target size from gen_args if specified, otherwise use default
             target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
@@ -410,6 +413,7 @@ class GenerationPipeline:
 
         truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
         bt.logging.debug(f"Generating media from prompt: {truncated_prompt}")
+        bt.logging.debug(f"Generation args: {gen_args}")
 
         generate_fn = create_pipeline_generator(model_config, self.model)
 
