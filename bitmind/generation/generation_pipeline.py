@@ -209,12 +209,12 @@ class GenerationPipeline:
                     f"Starting batch | Model {model_idx+1}/{n_models} | Prompt {prompt_idx+1}/{n_prompts}"
                 )
                 bt.logging.info(f"  Model: {model_name}")
-                bt.logging.info(f"  Prompt: {prompts[prompt_idx]}")
+                bt.logging.info(f"  Prompt: {task_prompts[prompt_idx]}")
 
                 try:
                     image = None if images is None else images[prompt_idx]
                     gen_output = self._generate_media_with_model(
-                        model_name, prompts[prompt_idx], image
+                        model_name, task_prompts[prompt_idx], image
                     )
                     bt.logging.info(
                         {
@@ -228,7 +228,7 @@ class GenerationPipeline:
                 except Exception as e:
                     bt.logging.error(f"Failed to either generate or save media: {e}")
                     bt.logging.error(f"  Model: {model_name}")
-                    bt.logging.error(f"  Prompt: {prompts[prompt_idx]}")
+                    bt.logging.error(f"  Prompt: {task_prompts[prompt_idx]}")
                     bt.logging.error(traceback.format_exc())
 
         return save_paths, stats

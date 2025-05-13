@@ -235,6 +235,7 @@ class Generator:
                     break
                 except Exception as e:
                     bt.logging.error(f"Error in batch processing: {e}")
+                    bt.logging.error(traceback.format_exc())
                     await asyncio.sleep(10)
         except Exception as e:
             bt.logging.error(f"Unhandled exception in main task: {e}")
