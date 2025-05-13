@@ -212,8 +212,8 @@ class GenerationPipeline:
 
                 try:
                     image = None if images is None else images[prompt_idx]
-                    # 1 retry for black (NSFW filtered) output
-                    for _ in range(1):
+                    # 3 retries for black (NSFW filtered) output
+                    for _ in range(3):
                         gen_output = self._generate_media_with_model(
                             model_name, prompts[prompt_idx], image
                         )
