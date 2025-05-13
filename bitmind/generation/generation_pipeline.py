@@ -146,10 +146,11 @@ class GenerationPipeline:
                     prompts[task][i] = self.prompt_generator.generate(
                         images[i], downstream_task=task
                     )
-                    bt.logging.info(f"Generated prompt {i+1}/{k}: {prompts[i]}")
+                    bt.logging.info(f"Generated prompt {i+1}/{k}: {prompts[task][i]}")
                 except Exception as e:
                     prompts[task][i] = None
                     bt.logging.error(f"Error generating prompt for image {i+1}: {e}")
+                    bt.logging.error(traceback.format_exc())
                     continue
 
         if clear_gpu:
