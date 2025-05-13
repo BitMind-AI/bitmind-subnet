@@ -130,7 +130,6 @@ pm2 start neurons/validator.py \
   $LOG_PARAM \
   $AUTO_UPDATE_PARAM \
   $HEARTBEAT_PARAM
-  --wandb.off
 
 # Run validator proxy
 pm2 start neurons/proxy.py \
