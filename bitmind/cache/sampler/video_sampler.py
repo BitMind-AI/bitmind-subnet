@@ -261,8 +261,8 @@ class VideoSampler(BaseSampler):
                             f"Failed to remove {video_path}: {e}"
                         )
 
-                self.cache_fs._log_info(
-                    f"Successfully sampled {actual_duration}s segment from {video_path} ({len(frames)} frames)"
+                self.cache_fs._log_debug(
+                    f"Successfully sampled {actual_duration}s segment ({len(frames)} frames)"
                 )
                 return result
 
