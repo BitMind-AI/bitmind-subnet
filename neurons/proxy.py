@@ -144,6 +144,7 @@ class ValidatorProxy(BaseNeuron):
         self.block_callbacks.append(self.log_on_block)
 
         self.port = self.config.proxy.port
+        self.external_port = self.config.proxy.external_port
         self.host = self.config.proxy.host
         self.media_processor = MediaProcessor()
         self.auth_verifier = self._setup_auth()
@@ -168,7 +169,7 @@ class ValidatorProxy(BaseNeuron):
             with httpx.Client() as client:
                 response = client.post(
                     f"{self.config.proxy.client_url}/get-credentials",
-                    json={"postfix": f":{self.port}", "uid": self.uid},
+                    json={"postfix": f":{self.external_port}", "uid": self.uid},
                     timeout=DEFAULT_TIMEOUT,
                 )
                 creds = response.json()

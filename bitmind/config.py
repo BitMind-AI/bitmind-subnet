@@ -366,3 +366,10 @@ def add_proxy_args(parser):
         default=10913,
         help="Port for the proxy server",
     )
+
+    parser.add_argument(
+        "--proxy.external_port",
+        type=int,
+        default=10913,
+        help="Port for the proxy server",
+    )
