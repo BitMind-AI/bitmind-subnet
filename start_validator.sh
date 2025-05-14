@@ -28,6 +28,7 @@ echo "Logged into W&B with token provided in .env.validator"
 # PREPARE CLI ARGS
 ###################################
 : ${PROXY_PORT:=10913}
+: ${PROXY_EXTERNAL_PORT:=$PROXY_PORT}
 : ${DEVICE:=cuda}
 
 if [[ "$CHAIN_ENDPOINT" == *"test"* ]]; then
@@ -142,4 +143,5 @@ pm2 start neurons/proxy.py \
   --netuid $NETUID \
   --subtensor.chain_endpoint $CHAIN_ENDPOINT \
   --proxy.port $PROXY_PORT \
+  --proxy.external_port $PROXY_EXTERNAL_PORT \
   $LOG_PARAM
