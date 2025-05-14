@@ -76,7 +76,7 @@ class MediaProcessor:
         Returns:
             Processed video frames as numpy array
         """
-        bt.logging.dbug(f"Starting video processing with {len(video_data)} bytes")
+        bt.logging.debug(f"Starting video processing with {len(video_data)} bytes")
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as temp_file:
             temp_file.write(video_data)
             temp_file.flush()
