@@ -34,7 +34,6 @@ class EvalEngine:
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
         self.tracker = MinerHistory()
         self.miner_metrics = {}
-        self.load_state(save_dir=self.config.neuron.full_path)
 
     def get_weights(self):
         """Returns an L1 normalized vector of scores (rewards EMA)."""
