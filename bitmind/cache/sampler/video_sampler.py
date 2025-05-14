@@ -262,7 +262,7 @@ class VideoSampler(BaseSampler):
                         )
 
                 self.cache_fs._log_debug(
-                    f"Successfully sampled {actual_duration}s segment from ({len(frames)} frames)"
+                    f"Successfully sampled {actual_duration}s segment ({len(frames)} frames)"
                 )
                 return result
 
