@@ -1,17 +1,29 @@
 # Validator Guide
 
-## Table of Contents
-
-1. [Installation 🔧](#installation)
-   - [Data 📊](#data)
-   - [Registration ✍️](#registration)
-2. [Validating ✅](#validating)
-
 ## Before you proceed ⚠️
 
-**Ensure you are running Subtensor locally** to minimize outages and improve performance. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary).
+If you are new to Bittensor (you're probably not if you're reading the validator guide 😎), we recommend familiarizing yourself with the basics in the [Bittensor Docs](https://docs.bittensor.com/) before proceeding.
 
-**Be aware of the minimum compute requirements** for our subnet, detailed in [Minimum compute YAML configuration](../min_compute.yml). 
+**Run your own local subtensor** to avoid rate limits set on public endpoints. See [Run a Subtensor Node Locally](https://github.com/opentensor/subtensor/blob/main/docs/running-subtensor-locally.md#compiling-your-own-binary) for setup instructions.
+
+**Understand the minimum compute requirements to run a validator**. Validator neurons on SN34 run a suite of generative (text-to-image, text-to-video, etc.) models that require an **80GB VRAM GPU**. They also maintain a large cache of real and synthetic media to ensure diverse, locally available data for challenging miners. We recommend **1TB of storage**. For more details, please see our [minimum compute documentation](../min_compute.yml)
+
+## Required Hugging Face Model Access
+
+To properly validate, you must gain access to several Hugging Face models used by the subnet. This requires logging in to your Hugging Face account and accepting the terms for each model below:
+
+- [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev)
+- [DeepFloyd IF-II-L-v1.0](https://huggingface.co/DeepFloyd/IF-II-L-v1.0)
+- [DeepFloyd IF-I-XL-v1.0](https://huggingface.co/DeepFloyd/IF-I-XL-v1.0)
+
+> **Note:** Accepting the terms for any one of the DeepFloyd IF models (e.g., IF-II-L or IF-I-XL) will grant you access to all DeepFloyd IF models.
+>
+> **If you've been validating with us for a while (prior to V3), you've likely already gotten access to these models and can disregard this step.**
+
+To do this:
+1. Log in to your Hugging Face account.
+2. Visit each model page above.
+3. Click the "Access repository" or "Agree and access repository" button to accept the terms.
 
 ## Installation
 
@@ -20,22 +32,31 @@ Download the repository and navigate to the folder.
 git clone https://github.com/bitmind-ai/bitmind-subnet.git && cd bitmind-subnet
 ```
 
-We recommend using a Conda virtual environment to install the necessary Python packages.<br>
-You can set up Conda with this [quick command-line install](https://docs.anaconda.com/free/miniconda/#quick-command-line-install), and create a virtual environment with this command:
+We recommend using a Conda virtual environment to install the necessary Python packages.
+- You can set up Conda with this [quick command-line install](https://www.anaconda.com/docs/getting-started/miniconda/install#linux). 
+- Note that after you run the last commands in the miniconda setup process, you'll be prompted to start a new shell session to complete the initialization. 
+
+With miniconda installed, you can create your virtual environment with this command:
 
 ```bash
 conda create -y -n bitmind python=3.10
 ```
 
-To activate your virtual environment, run `conda activate bitmind`. To deactivate, `conda deactivate`.
+- Activating your virtual environment: `conda activate bitmind`
+- Deactivating your virtual environment `conda deactivate`
 
-Install the remaining necessary requirements with the following chained command.
-
+Install the remaining necessary requirements with the following chained command. 
 ```bash
 conda activate bitmind
 export PIP_NO_CACHE_DIR=1
-chmod +x setup_env.sh 
-./setup_env.sh
+chmod +x setup.sh
+./setup.sh
+```
+
+Before you register, you should first fill out all the necessary fields in `.env.validator`. Make a copy of the template, and fill in your wallet information. 
+
+```
+cp .env.validator.template .env.validator
 ```
 
 ## Registration
@@ -57,31 +78,11 @@ btcli s register --netuid 168 --wallet.name [wallet_name] --wallet.hotkey [walle
 
 ## Validating
 
-You can launch your validator with `run_neuron.py`.
+Before starting your validator, please ensure you've populated the empty fields in `.env.validator`, including `WANDB_API_KEY` and `HUGGING_FACE_TOKEN`.
 
-First, make sure to update `validator.env` with your **wallet**, **hotkey**, and **validator port**. This file was created for you during setup, and is not tracked by git.
-
-```bash
-NETUID=34                                      # Network User ID options: 34, 168
-SUBTENSOR_NETWORK=finney                       # Networks: finney, test, local
-SUBTENSOR_CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
-                                                # Endpoints:
-                                                # - wss://entrypoint-finney.opentensor.ai:443
-                                                # - wss://test.finney.opentensor.ai:443/
-
-# Wallet Configuration:
-WALLET_NAME=default
-WALLET_HOTKEY=default
-
-# Note: If you're using RunPod, you must select a port >= 70000 for symmetric mapping
-# Validator Port Setting:
-VALIDATOR_AXON_PORT=8092
-VALIDATOR_PROXY_PORT=10913
-DEVICE=cuda
-
-# API Keys:
-WANDB_API_KEY=your_wandb_api_key_here
-HUGGING_FACE_TOKEN=your_hugging_face_token_here
+If you haven't already, you can start by copying the template,
+```
+cp .env.validator.template .env.validator
 ```
 
 If you don't have a W&B API key, please reach out to the BitMind team via Discord and we can provide one. 
@@ -90,24 +91,23 @@ Now you're ready to run your validator!
 
 ```bash
 conda activate bitmind
-pm2 start run_neuron.py -- --validator 
+./start_validator.sh
 ```
+
 - Auto updates are enabled by default. To disable, run with `--no-auto-updates`.
 - Self-healing restarts are enabled by default (every 6 hours). To disable, run with `--no-self-heal`.
 
 
-The above command will kick off 4 `pm2` processes
+The above command will kick off 3 `pm2` processes
 ```
-┌────┬───────────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
-│ id │ name                      │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
-├────┼───────────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
-│ 2  │ bitmind_cache_updater     │ default     │ N/A     │ fork    │ 1601308  │ 2h     │ 0    │ online    │ 0%       │ 843.6mb  │ user     │ disabled │
-│ 3  │ bitmind_data_generator    │ default     │ N/A     │ fork    │ 1601426  │ 2h     │ 0    │ online    │ 0%       │ 11.3gb   │ user     │ disabled │
-│ 1  │ bitmind_validator         │ default     │ N/A     │ fork    │ 1601246  │ 2h     │ 0    │ online    │ 0%       │ 867.8mb  │ user     │ disabled │
-│ 0  │ run_neuron                │ default     │ N/A     │ fork    │ 223218   │ 41h    │ 0    │ online    │ 0%       │ 8.9mb    │ user     │ disabled │
-└────┴───────────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+┌────┬───────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name              │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼───────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 0  │ sn34-generator    │ default     │ N/A     │ fork    │ 2397505  │ 38m    │ 2    │ online    │ 100%     │ 3.0gb    │ user     │ disabled │
+│ 2  │ sn34-proxy        │ default     │ N/A     │ fork    │ 2398000  │ 27m    │ 1    │ online    │ 0%       │ 695.2mb  │ user     │ disabled │
+│ 1  │ sn34-validator    │ default     │ N/A     │ fork    │ 2394939  │ 108m   │ 0    │ online    │ 0%       │ 5.8gb    │ user     │ disabled │
+└────┴───────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
 ```
-- `run_neuron` manages self heals and auto updates
-- `bitmind_validator` is the validator process, whose hotkey, port, etc. are configured in `validator.env`
-- `bitmind_data_generator` runs our data generation pipeline to produce **synthetic images and videos** (stored in `~/.cache/sn34/synthetic`)
-- `bitmind_cache_updater` manages the cache of **real images and videos**  (stored in `~/.cache/sn34/real`) 
+- `sn34-validator` is the validator process
+- `sn34-generator` runs our data generation pipeline to produce **synthetic images and videos** (stored in `~/.cache/sn34`)
+- `sn34-proxy`routes organic traffic from our applications to miners. 

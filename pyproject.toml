@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "pip>=21.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitmind"
+dynamic = ["version"]
+description = "SN34 on bittensor"
+authors = [
+    {name = "BitMind", email = "intern@bitmind.ai"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = ""}
+urls = {homepage = "http://bitmind.ai"}
+
+dependencies = [
+    "bittensor==9.3.0",
+    "bittensor-cli==9.4.1",
+    "pillow==10.4.0",
+    "substrate-interface==1.7.11",
+    "numpy==2.0.1",
+    "pandas==2.2.3",
+    "torch==2.5.1",
+    "asyncpg==0.29.0",
+    "httpcore==1.0.7",
+    "httpx==0.28.1",
+    "pyarrow==19.0.1",
+    "ffmpeg-python==0.2.0",
+    "bitsandbytes==0.45.4",
+    "black==25.1.0",
+    "pre-commit==4.2.0",
+    "diffusers==0.33.1",
+    "transformers==4.50.0",
+    "scikit-learn==1.6.1",
+    "av==14.2.0",
+    "opencv-python==4.11.0.86",
+    "wandb==0.19.9",
+    "uvicorn==0.27.1",
+    "python-multipart==0.0.20",
+    "peft==0.15.0",
+    "hf_xet==1.1.1"
+]
+
+[tool.setuptools]
+packages = {find = {where = ["."], exclude = ["docs*", "wandb*", "*.egg-info"]}}
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
