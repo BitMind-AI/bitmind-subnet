@@ -76,7 +76,7 @@ class MediaProcessor:
         Returns:
             Processed video frames as numpy array
         """
-        bt.logging.debug(f"Starting video processing with {len(video_data)} bytes")
+        bt.logging.dbug(f"Starting video processing with {len(video_data)} bytes")
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as temp_file:
             temp_file.write(video_data)
             temp_file.flush()
@@ -96,7 +96,7 @@ class MediaProcessor:
                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     frames.append(rgb_frame)
 
-                bt.logging.trace(f"Extracted {len(frames)} frames")
+                bt.logging.info(f"Extracted {len(frames)} frames")
 
                 if not frames:
                     bt.logging.error("No frames extracted from video")
@@ -457,7 +457,6 @@ class ValidatorProxy(BaseNeuron):
             miner_uids, size=min(num_miners, len(miner_uids)), replace=False
         )
 
-        bt.logging.debug(f"Sampled {len(miner_uids)} miners for {modality} request")
         total_timeout = self.config.neuron.miner_total_timeout
         connect_timeout = self.config.neuron.miner_connect_timeout
         sock_timeout = self.config.neuron.miner_sock_connect_timeout
@@ -500,6 +499,7 @@ class ValidatorProxy(BaseNeuron):
                         responses.append(response)
                     except Exception as e:
                         bt.logging.warning(f"Miner query error: {str(e)}")
+                        bt.logging.error(traceback.format_exc())
 
                 filtered_responses = []
                 for i, response in enumerate(responses):
@@ -559,22 +559,16 @@ class ValidatorProxy(BaseNeuron):
 
         if not valid_responses:
             bt.logging.warning("No valid responses received from miners")
-            return np.array([0.5, 0.25, 0.25]), []  # Default probabilities
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No valid predictions received",
+            )
 
         predictions = np.array([r["prediction"] for r in valid_responses])
         uids = [r["uid"] for r in valid_responses]
 
-        # Backward compatibility: format predictions
-        # Convert from [p_real, p_syn, p_semisyn] to probabilities that add to 1
-        if predictions.shape[1] == 3:
-            normalized = predictions / np.sum(predictions, axis=1, keepdims=True)
-        else:
-            bt.logging.warning(f"Unexpected prediction shape: {predictions.shape}")
-            # Default to equal probabilities
-            normalized = np.tile([0.5, 0.25, 0.25], (len(valid_responses), 1))
-
-        avg_pred = np.mean(normalized, axis=0)
-        return avg_pred, uids
+        predictions = [p[1] + p[2] for p in predictions]
+        return predictions, uids
 
     async def start(self):
         """Start the FastAPI threaded server and initialize connection pooling."""
