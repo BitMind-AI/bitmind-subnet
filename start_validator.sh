@@ -125,7 +125,7 @@ pm2 start neurons/validator.py \
   --wallet.hotkey $WALLET_HOTKEY \
   --netuid $NETUID \
   --subtensor.chain_endpoint $CHAIN_ENDPOINT \
-  --epoch-length 101 \
+  --epoch-length 360 \
   --cache-dir $SN34_CACHE_DIR \
   --proxy.port $PROXY_PORT \
   $LOG_PARAM \
