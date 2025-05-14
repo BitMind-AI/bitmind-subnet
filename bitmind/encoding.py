@@ -3,7 +3,8 @@ import cv2
 import ffmpeg
 import os
 import tempfile
-import io
+from typing import List
+from io import BytesIO
 from PIL import Image
 
 
@@ -42,21 +43,30 @@ def image_to_bytes(img):
     if pil_img.mode != "RGB":
         pil_img = pil_img.convert("RGB")
 
-    buffer = io.BytesIO()
+    buffer = BytesIO()
     pil_img.save(buffer, format="JPEG", quality=75)
     buffer.seek(0)
 
     return buffer.getvalue(), "image/jpeg"
 
 
-def video_to_bytes(video, fps=None):
-    """Convert video to in-memory AVI (PNG-compressed) bytes."""
+def video_to_bytes(video: np.ndarray, fps: int | None = None) -> tuple[bytes, str]:
+    """
+    Convert a (T, H, W, C) uint8/float32 video to MP4, but *first* pass each frame
+    through Pillow JPEG → adds normal JPEG artefacts, then encodes losslessly.
+
+    Returns:
+        bytes: In‑memory MP4 file.
+        str: MIME‑type ("video/mp4").
+    """
+    # ------------- 0. validation / normalisation -------------------------------
     if video.dtype == np.float32:
+        assert video.max() <= 1.0, video.max()
         video = (video * 255).clip(0, 255).astype(np.uint8)
     elif video.dtype != np.uint8:
         raise ValueError(f"Unsupported dtype: {video.dtype}")
 
-    fps = fps if fps is not None else 30
+    fps = fps or 30
 
     # TCHW → THWC
     if video.shape[1] <= 4 and video.shape[3] > 4:
@@ -67,46 +77,63 @@ def video_to_bytes(video, fps=None):
 
     T, H, W, C = video.shape
 
-    for i, frame in enumerate(video):
-        if frame.shape != (H, W, C):
-            raise ValueError(f"Inconsistent shape at frame {i}: {frame.shape}")
+    # ------------- 1. apply Pillow JPEG to every frame -------------------------
+    jpeg_degraded_frames: List[np.ndarray] = []
+    for idx, frame in enumerate(video):
+        buf = BytesIO()
+        Image.fromarray(frame).save(
+            buf,
+            format="JPEG",
+            quality=75,
+            subsampling=2,  # 0=4:4:4, 1=4:2:2, 2=4:2:0  (Pillow default = 2)
+            optimize=False,
+            progressive=False,
+        )
+        buf.seek(0)
+        # decode back to RGB so FFmpeg sees the artefact‑laden pixels
+        degraded = np.array(Image.open(buf).convert("RGB"), dtype=np.uint8)
+        if degraded.shape != (H, W, 3):
+            raise ValueError(f"Decoded shape mismatch at frame {idx}: {degraded.shape}")
+        jpeg_degraded_frames.append(degraded)
 
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            raw_path = os.path.join(tmpdir, "input.raw")
-            video_path = os.path.join(tmpdir, "output.mp4")
-            with open(raw_path, "wb") as f:
-                for i, frame in enumerate(video):
-                    if frame.shape != (H, W, C):
-                        raise ValueError(f"Frame {i} shape mismatch: {frame.shape}")
-                    if frame.dtype != np.uint8:
-                        raise ValueError(f"Frame {i} has dtype {frame.dtype}")
-                    f.write(frame.tobytes())
+    degraded_video = np.stack(jpeg_degraded_frames, axis=0)  # (T,H,W,3)
 
-            try:
-                (
-                    ffmpeg.input(
-                        raw_path,
-                        format="rawvideo",
-                        pix_fmt="rgb24",
-                        s=f"{W}x{H}",
-                        r=fps,
-                    )
-                    .output(video_path, vcodec="mjpeg", q=7)
-                    .global_args("-y", "-hide_banner", "-loglevel", "error")
-                    .run()
+    # ------------- 2. write raw RGB + encode losslessly ------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        raw_path = os.path.join(tmpdir, "input.raw")
+        video_path = os.path.join(tmpdir, "output.mp4")
+
+        degraded_video.tofile(raw_path)  # write as one big rawvideo blob
+
+        try:
+            (
+                ffmpeg.input(
+                    raw_path,
+                    format="rawvideo",
+                    pix_fmt="rgb24",
+                    s=f"{W}x{H}",
+                    r=fps,
                 )
-            except ffmpeg.Error as e:
-                raise RuntimeError(
-                    f"FFmpeg encoding failed:\n{e.stderr.decode(errors='ignore')}"
-                ) from e
+                .output(
+                    video_path,
+                    vcodec="libx264rgb",
+                    crf=0,  # mathematically lossless
+                    preset="veryfast",
+                    pix_fmt="rgb24",
+                    movflags="+faststart",
+                )
+                .global_args("-y", "-hide_banner", "-loglevel", "error")
+                .run()
+            )
+        except ffmpeg.Error as e:
+            raise RuntimeError(
+                f"FFmpeg encoding failed:\n{e.stderr.decode(errors='ignore')}"
+            ) from e
 
-            with open(video_path, "rb") as f:
-                video_bytes = f.read()
+        with open(video_path, "rb") as f:
+            video_bytes = f.read()
 
-        return video_bytes, "video/mp4"
-    except Exception as e:
-        raise RuntimeError(f"Video encoding failed: {e}") from e
+    return video_bytes, "video/mp4"
 
 
 def media_to_bytes(media, fps=30):
