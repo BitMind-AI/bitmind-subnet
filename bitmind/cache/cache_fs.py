@@ -21,7 +21,7 @@ class CacheFS:
         self.compressed_dir = self.cache_dir / "sources"
         self.compressed_dir.mkdir(exist_ok=True, parents=True)
 
-        self._log_prefix = f"[{config.modality}:{config.media_type}]"
+        self._log_prefix = f"[{config.modality}]"
 
         self._file_index = {}
         self._index_timestamp = {}
