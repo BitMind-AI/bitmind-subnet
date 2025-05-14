@@ -198,7 +198,7 @@ class Validator(BaseNeuron):
             media, fps=media_sample.get("fps", None)
         )
 
-        bt.logging.info(f"---------- Staring Challenge at Block {block} ----------")
+        bt.logging.info(f"---------- Starting Challenge at Block {block} ----------")
         bt.logging.info(f"Sampled from {modality} cache")
 
         challenge_tasks = []
