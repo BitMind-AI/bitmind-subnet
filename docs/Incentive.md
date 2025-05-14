@@ -12,13 +12,6 @@ This document covers the current state of SN34's incentive mechanism.
 Miner rewards are a weighted combination of their performance on video and image detection challenges. Validators keep track of miner performance using a score vector, which is updated using an exponential moving average. These scores are used by validators to set weights for miners, which determine their reward distribution, incentivizing high-quality predictions and consistent performance.
 
 
-<p align="center">
-  <img src="../static/incentive.gif" alt="Incentive Mechanism">
-</p>
-<p align="center"><em>Simulation applying our latest iteration of our incentive mechanism on historical subnet data. Note that this graphic shows incentive changes at a much more granular timescale (one timestep per challenge) than that of actual weight setting (once per 360 blocks)<br><a href=https://github.com/BitMind-AI/incentive-simulator>incentive-simulator repository</a>
-</em></p>
-
-
 ## Rewards
 >A miner's total reward $C$ combines their performance across both image and video challenges, weighted by configurable parameters $p$ that controls the emphasis placed on each modality.
 
