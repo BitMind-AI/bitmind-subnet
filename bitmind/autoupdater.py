@@ -24,7 +24,7 @@ import bittensor as bt
 import bitmind
 
 
-def autoupdate(branch: str = "v3", force=False):
+def autoupdate(branch: str = "main", force=False):
     """
     Automatically updates the codebase to the latest version available on the specified branch.
 
@@ -44,10 +44,13 @@ def autoupdate(branch: str = "v3", force=False):
     bt.logging.info("Checking for updates...")
     try:
         github_url = f"https://raw.githubusercontent.com/BitMind-AI/bitmind-subnet/{branch}/VERSION?ts={time.time()}"
-        bt.logging.info(github_url)
         response = requests.get(
             github_url,
-            headers={"Cache-Control": "no-cache"},
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            },
         )
         response.raise_for_status()
         repo_version = response.content.decode()
