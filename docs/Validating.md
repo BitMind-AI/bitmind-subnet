@@ -17,6 +17,8 @@ To properly validate, you must gain access to several Hugging Face models used b
 - [DeepFloyd IF-I-XL-v1.0](https://huggingface.co/DeepFloyd/IF-I-XL-v1.0)
 
 > **Note:** Accepting the terms for any one of the DeepFloyd IF models (e.g., IF-II-L or IF-I-XL) will grant you access to all DeepFloyd IF models.
+>
+> **If you've been validating with us for a while (prior to V3), you've likely already gotten access to these models and can disregard this step.**
 
 To do this:
 1. Log in to your Hugging Face account.
