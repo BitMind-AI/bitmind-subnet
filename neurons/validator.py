@@ -87,7 +87,7 @@ class Validator(BaseNeuron):
                 self.send_challenge_to_miners_on_interval,
                 self.update_compressed_cache_on_interval,
                 self.update_media_cache_on_interval,
-                self.start_new_wanbd_run
+                self.start_new_wanbd_run_on_interval
             ]
         )
 
@@ -334,7 +334,7 @@ class Validator(BaseNeuron):
             self.lock_halt = False
 
     @on_block_interval("wandb_restart_interval")
-    async def start_new_wanbd_run(self, block):
+    async def start_new_wanbd_run_on_interval(self, block):
         try:
             self.wandb_logger.start_new_run()
         except Exception as e:
