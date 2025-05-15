@@ -36,7 +36,7 @@ transformers.logging.set_verbosity_error()
 import bittensor as bt
 from bitmind.config import add_args, add_data_generator_args
 from bitmind.utils import ExitContext, get_metadata
-from bitmind.wandb_utils import init_wandb
+from bitmind.wandb_utils import init_wandb, clean_wandb_cache
 from bitmind.types import CacheConfig, MediaType, Modality
 from bitmind.cache.sampler import ImageSampler
 from bitmind.generation import (
@@ -86,6 +86,8 @@ class Generator:
                     .metagraph(self.config.netuid)
                     .hotkeys.index(self.wallet.hotkey.ss58_address)
                 )
+                self.wandb_dir = str(Path(__file__).parent.parent)
+                clean_wandb_cache(self.wandb_dir)
                 self.wandb_run = init_wandb(
                     self.config.copy(),
                     self.config.wandb.process_name,
@@ -222,6 +224,7 @@ class Generator:
                         if batch_count >= self.config.wandb.num_batches_per_run:
                             batch_count = 0
                             self.wandb_run.finish()
+                            clean_wandb_cache(self.wandb_dir)
                             self.wandb_run = init_wandb(
                                 self.config.copy(),
                                 self.config.wandb.process_name,

@@ -267,10 +267,14 @@ def clean_wandb_cache(wandb_dir, hours=1):
         wandb_dir: Directory containing wandb run files
         hours: Number of hours to keep runs for (default: 1)
     """
+    if not wandb_dir.endswith("wandb"):
+        wandb_dir = os.path.join(wandb_dir, "wandb")
+
     if not os.path.exists(wandb_dir):
         bt.logging.warning(f"W&B directory not found: {wandb_dir}")
         return
 
+    bt.logging.info(f"Attempting to clean wandb cache at {wandb_dir}")
     run_dirs = [
         d for d in glob.glob(os.path.join(wandb_dir, "run-*")) if os.path.isdir(d)
     ]
