@@ -240,7 +240,11 @@ def init_wandb(
         run = wandb.init(
             name=run_name,
             project=project,
+<<<<<<< HEAD
             entity=config.entity,
+=======
+            entity=config.wandb.entity,
+>>>>>>> main
             config=config,
             dir=wandb_dir if wandb_dir else config.full_path,
             reinit=True,
