@@ -87,7 +87,7 @@ class Validator(BaseNeuron):
                 self.send_challenge_to_miners_on_interval,
                 self.update_compressed_cache_on_interval,
                 self.update_media_cache_on_interval,
-                self.start_new_wanbd_run_on_interval
+                self.start_new_wanbd_run_on_interval,
             ]
         )
 
@@ -218,6 +218,11 @@ class Validator(BaseNeuron):
                         self.config.neuron.miner_total_timeout,
                         self.config.neuron.miner_connect_timeout,
                         self.config.neuron.miner_sock_connect_timeout,
+                        testnet_metadata=(
+                            media_sample["metadata"]
+                            if self.config.netuid != MAINNET_UID
+                            else {}
+                        ),
                     )
                 )
             if len(challenge_tasks) != 0:

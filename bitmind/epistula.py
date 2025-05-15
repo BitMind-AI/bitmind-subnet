@@ -101,6 +101,7 @@ async def query_miner(
     total_timeout: float,
     connect_timeout: Optional[float] = None,
     sock_connect_timeout: Optional[float] = None,
+    testnet_metadata: dict = None,
 ) -> Dict[str, Any]:
     """
     Query a miner with media data.
@@ -130,16 +131,22 @@ async def query_miner(
 
     try:
 
-        headers = generate_header(hotkey, media, axon_info.hotkey)
         url = f"http://{axon_info.ip}:{axon_info.port}/detect_{modality}"
+        headers = generate_header(hotkey, media, axon_info.hotkey)
+
+        headers = {
+            "Content-Type": content_type,
+            "X-Media-Type": modality,
+            **headers,
+        }
+
+        if testnet_metadata:
+            testnet_headers = {f"X-Testnet-{k}": str(v) for k, v in testnet_metadata.items()}
+            headers.update(testnet_headers)
 
         async with session.post(
             url,
-            headers={
-                "Content-Type": content_type,
-                "X-Media-Type": modality,
-                **headers,
-            },
+            headers=headers,
             data=media,
             timeout=aiohttp.ClientTimeout(
                 total=total_timeout,
