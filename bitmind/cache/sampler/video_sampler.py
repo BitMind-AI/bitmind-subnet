@@ -161,7 +161,7 @@ class VideoSampler(BaseSampler):
                 target_duration = min(target_duration, total_duration)
 
                 num_frames = int(target_duration * frame_rate) + 1
-                num_frames = max(num_frames, max_frames)
+                num_frames = min(num_frames, max_frames)
 
                 actual_duration = (num_frames - 1) / frame_rate
 
