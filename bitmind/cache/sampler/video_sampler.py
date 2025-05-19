@@ -97,8 +97,11 @@ class VideoSampler(BaseSampler):
         Sample a random video segment and return it as a numpy array.
 
         Args:
+            files: Dict mapping source names to lists of video file paths
             min_duration: Minimum duration of video segment to extract in seconds
             max_duration: Maximum duration of video segment to extract in seconds
+            max_fps: Maximum frame rate to use when sampling frames
+            max_frames: Maximum number of frames to extract
             remove_from_cache: Whether to remove the source video from cache
             as_float32: Whether to return frames as float32 (0-1) instead of uint8 (0-255)
             channels_first: Whether to return frames with channels first (TCHW) instead of channels last (THWC)
