@@ -357,6 +357,7 @@ class Validator(BaseNeuron):
             kwargs = {
                 "min_duration": self.config.challenge.min_clip_duration,
                 "max_duration": self.config.challenge.max_clip_duration,
+                "max_frames": self.config.challenge.max_frames,
             }
 
         try:
