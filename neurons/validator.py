@@ -219,7 +219,7 @@ class Validator(BaseNeuron):
                         self.config.neuron.miner_connect_timeout,
                         self.config.neuron.miner_sock_connect_timeout,
                         testnet_metadata=(
-                            media_sample["metadata"]
+                            {k: v for k, v in media_sample.items() if k != modality}
                             if self.config.netuid != MAINNET_UID
                             else {}
                         ),
@@ -412,6 +412,7 @@ class Validator(BaseNeuron):
                     "modality": modality,
                     "media_type": media_type,
                     "label": MediaType(media_type).int_value,
+                    "metadata": sample.get("metadata", {}),
                 }
             )
             return sample
