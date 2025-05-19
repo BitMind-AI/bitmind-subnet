@@ -300,6 +300,13 @@ def add_validator_args(parser):
         default=6.0,
     )
 
+    parser.add_argument(
+        "--challenge.max-frames",
+        type=int,
+        help="Maximum number of video frames to sample for a challenge",
+        default=144,
+    )
+
 
 def add_data_generator_args(parser):
     parser.add_argument(
