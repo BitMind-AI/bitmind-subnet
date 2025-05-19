@@ -140,6 +140,16 @@ class Detector:
         return probs
 
 
+def extract_testnet_metadata(headers):
+    headers = dict(headers)
+    testnet_metadata = {}
+    for key, value in headers.items():
+        if key.lower().startswith("x-testnet-"):
+            metadata_key = key[len("x-testnet-") :].lower()
+            testnet_metadata[metadata_key] = value
+    return testnet_metadata
+
+
 class Miner(BaseNeuron):
     neuron_type = NeuronType.MINER
     fast_api: FastAPIThreadedServer
@@ -189,6 +199,10 @@ class Miner(BaseNeuron):
                 f"Unexpected content type: {content_type}, expected image/jpeg"
             )
 
+        testnet_metdata = extract_testnet_metadata(request.headers)
+        if len(testnet_metdata) > 0:
+            bt.logging.info(json.dumps(testnet_metdata, indent=2))
+
         try:
             image_array = np.array(Image.open(io.BytesIO(image_data)))
             image_tensor = torch.from_numpy(image_array).permute(2, 0, 1)
@@ -213,6 +227,11 @@ class Miner(BaseNeuron):
             bt.logging.warning(
                 f"Unexpected content type: {content_type}, expected video/mp4 or video/mpeg"
             )
+
+        testnet_metdata = extract_testnet_metadata(request.headers)
+        if len(testnet_metdata) > 0:
+            bt.logging.info(json.dumps(testnet_metdata, indent=2))
+
         try:
             with tempfile.NamedTemporaryFile(suffix=".mp4") as temp_file:
                 temp_path = temp_file.name

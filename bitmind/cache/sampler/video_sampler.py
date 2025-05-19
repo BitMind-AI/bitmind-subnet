@@ -39,6 +39,7 @@ class VideoSampler(BaseSampler):
         remove_from_cache: bool = False,
         min_duration: float = 1.0,
         max_duration: float = 6.0,
+        max_frames: int = 144,
     ) -> Dict[str, Any]:
         """
         Sample random video segments from the cache.
@@ -71,6 +72,7 @@ class VideoSampler(BaseSampler):
                 files=cached_files,
                 min_duration=min_duration,
                 max_duration=max_duration,
+                max_frames=max_frames,
                 remove_from_cache=remove_from_cache,
             )
 
@@ -85,6 +87,7 @@ class VideoSampler(BaseSampler):
         min_duration: float = 1.0,
         max_duration: float = 6.0,
         max_fps: float = 30.0,
+        max_frames: int = 144,
         remove_from_cache: bool = False,
         as_float32: bool = False,
         channels_first: bool = False,
@@ -94,8 +97,11 @@ class VideoSampler(BaseSampler):
         Sample a random video segment and return it as a numpy array.
 
         Args:
+            files: Dict mapping source names to lists of video file paths
             min_duration: Minimum duration of video segment to extract in seconds
             max_duration: Maximum duration of video segment to extract in seconds
+            max_fps: Maximum frame rate to use when sampling frames
+            max_frames: Maximum number of frames to extract
             remove_from_cache: Whether to remove the source video from cache
             as_float32: Whether to return frames as float32 (0-1) instead of uint8 (0-255)
             channels_first: Whether to return frames with channels first (TCHW) instead of channels last (THWC)
@@ -155,6 +161,7 @@ class VideoSampler(BaseSampler):
                 target_duration = min(target_duration, total_duration)
 
                 num_frames = int(target_duration * frame_rate) + 1
+                num_frames = min(num_frames, max_frames)
 
                 actual_duration = (num_frames - 1) / frame_rate
 

@@ -87,7 +87,7 @@ class Validator(BaseNeuron):
                 self.send_challenge_to_miners_on_interval,
                 self.update_compressed_cache_on_interval,
                 self.update_media_cache_on_interval,
-                self.start_new_wanbd_run_on_interval
+                self.start_new_wanbd_run_on_interval,
             ]
         )
 
@@ -218,6 +218,11 @@ class Validator(BaseNeuron):
                         self.config.neuron.miner_total_timeout,
                         self.config.neuron.miner_connect_timeout,
                         self.config.neuron.miner_sock_connect_timeout,
+                        testnet_metadata=(
+                            {k: v for k, v in media_sample.items() if k != modality}
+                            if self.config.netuid != MAINNET_UID
+                            else {}
+                        ),
                     )
                 )
             if len(challenge_tasks) != 0:
@@ -357,6 +362,7 @@ class Validator(BaseNeuron):
             kwargs = {
                 "min_duration": self.config.challenge.min_clip_duration,
                 "max_duration": self.config.challenge.max_clip_duration,
+                "max_frames": self.config.challenge.max_frames,
             }
 
         try:
@@ -396,7 +402,7 @@ class Validator(BaseNeuron):
 
         if sample and sample.get(modality) is not None:
             bt.logging.debug("Augmenting Media")
-            augmented_media, _, _ = apply_random_augmentations(
+            augmented_media, aug_level, aug_params = apply_random_augmentations(
                 sample.get(modality),
                 (256, 256),
                 sample.get("mask_center", None),
@@ -407,6 +413,9 @@ class Validator(BaseNeuron):
                     "modality": modality,
                     "media_type": media_type,
                     "label": MediaType(media_type).int_value,
+                    "metadata": sample.get("metadata", {}),
+                    "augmentation_level": aug_level,
+                    "augmentation_params": aug_params
                 }
             )
             return sample
