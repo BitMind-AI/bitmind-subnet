@@ -402,7 +402,7 @@ class Validator(BaseNeuron):
 
         if sample and sample.get(modality) is not None:
             bt.logging.debug("Augmenting Media")
-            augmented_media, _, _ = apply_random_augmentations(
+            augmented_media, aug_level, aug_params = apply_random_augmentations(
                 sample.get(modality),
                 (256, 256),
                 sample.get("mask_center", None),
@@ -414,6 +414,8 @@ class Validator(BaseNeuron):
                     "media_type": media_type,
                     "label": MediaType(media_type).int_value,
                     "metadata": sample.get("metadata", {}),
+                    "augmentation_level": aug_level,
+                    "augmentation_params": aug_params
                 }
             )
             return sample
