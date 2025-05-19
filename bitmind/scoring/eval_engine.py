@@ -126,7 +126,7 @@ class EvalEngine:
         scattered_rewards[vali_uids] = 0.0
         scattered_rewards[no_response_uids] = 0.0
         scattered_rewards[uids_array] = rewards
-        bt.logging.debug(f"Scattered rewards: {rewards}")
+        bt.logging.debug(f"Scattered rewards: {scattered_rewards}")
 
         # Update scores with rewards produced by this step.
         # shape: [ metagraph.n ]
@@ -288,7 +288,7 @@ class EvalEngine:
         handles clearing predictio history in `update` when a new hotkey
         is detected"""
         hotkeys = self.tracker.miner_hotkeys
-        for uid, hotkey in enumerate(hotkeys):
+        for uid, hotkey in hotkeys.items():
             if hotkey != self.metagraph.hotkeys[uid]:
                 self.scores[uid] = 0  # hotkey has been replaced
         self.maybe_extend_scores(self.metagraph.n)
