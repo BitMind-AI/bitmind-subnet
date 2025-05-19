@@ -389,7 +389,6 @@ class Miner(BaseNeuron):
             port=self.config.axon.port,
             log_level="info",
             loop="asyncio",
-            http_max_size=50 * 1024 * 1024,
         )
         self.fast_api = FastAPIThreadedServer(config=fast_config)
         self.fast_api.start()
