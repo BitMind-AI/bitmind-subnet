@@ -157,7 +157,7 @@ def add_validator_args(parser):
         "--neuron.miner-total-timeout",
         type=float,
         help="Total timeout for miner requests in seconds",
-        default=9.0,
+        default=11.0,
     )
 
     parser.add_argument(
@@ -298,6 +298,13 @@ def add_validator_args(parser):
         type=float,
         help="Maximum video clip duration in seconds",
         default=6.0,
+    )
+
+    parser.add_argument(
+        "--challenge.max-frames",
+        type=int,
+        help="Maximum number of video frames to sample for a challenge",
+        default=144,
     )
 
 
