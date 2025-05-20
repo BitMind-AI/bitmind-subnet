@@ -373,7 +373,7 @@ class Miner(BaseNeuron):
         app = FastAPI()
         router = APIRouter()
         router.add_api_route("/", ping, methods=["GET"])
-        router.add_api_route("/health", self.healthcheck, methods=["GET"])
+        router.add_api_route("/healthcheck", self.healthcheck, methods=["GET"])
 
         router.add_api_route(
             "/detect_image",

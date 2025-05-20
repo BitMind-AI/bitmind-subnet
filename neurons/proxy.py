@@ -152,8 +152,6 @@ class ValidatorProxy(BaseNeuron):
         self.auth_verifier = self._setup_auth()
 
         self.miner_health = {}
-        self.health_check_interval = 300
-        self.healthcheck_task = None
 
         self.session = None
         self.max_connections = 50
