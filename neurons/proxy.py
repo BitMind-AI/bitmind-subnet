@@ -162,9 +162,6 @@ class ValidatorProxy(BaseNeuron):
         }
         self.max_request_history = 100
 
-        # Add metagraph lock
-        self.metagraph_lock = asyncio.Lock()
-
         self.setup_app()
 
         bt.logging.info(f"Initialized proxy server on {self.host}:{self.port}")
@@ -339,7 +336,7 @@ class ValidatorProxy(BaseNeuron):
 
             # Add rich data if requested
             if payload.get("rich", "").lower() == "true":
-                response.update(await self.get_rich_data(uids))
+                response.update(self.get_rich_data(uids))
 
             total_time = time.time() - start_time
             bt.logging.debug(
@@ -419,7 +416,7 @@ class ValidatorProxy(BaseNeuron):
 
             # Add rich data if requested
             if rich_param == "true":
-                response.update(await self.get_rich_data(uids))
+                response.update(self.get_rich_data(uids))
 
             total_time = time.time() - start_time
             bt.logging.debug(
@@ -540,8 +537,7 @@ class ValidatorProxy(BaseNeuron):
 
         if len(miner_uids) == 0:
             bt.logging.warning("Miner health not available, defaulting to random selection")
-            async with self.metagraph_lock:
-                miner_uids = get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit)
+            miner_uids = get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit)
 
         num_miners = min(self.config.proxy.sample_size, len(miner_uids))
         return np.random.choice(
@@ -595,12 +591,11 @@ class ValidatorProxy(BaseNeuron):
             connector=aiohttp.TCPConnector(limit=50),
         ) as session:
             health_tasks = []
-            async with self.metagraph_lock:
-                all_miner_uids = get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit)
-                bt.logging.info(f"Running health check for {len(all_miner_uids)} miners at block {self.subtensor.block}")
-                for uid in all_miner_uids:
-                    axon_info = self.metagraph.axons[uid]
-                    health_tasks.append(self.check_miner_health(uid, axon_info, session))
+            all_miner_uids = get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit)
+            bt.logging.info(f"Running health check for {len(all_miner_uids)} miners at block {self.subtensor.block}")
+            for uid in all_miner_uids:
+                axon_info = self.metagraph.axons[uid]
+                health_tasks.append(self.check_miner_health(uid, axon_info, session))
 
             results = await asyncio.gather(*health_tasks, return_exceptions=True)
             healthy_count = 0
@@ -653,17 +648,16 @@ class ValidatorProxy(BaseNeuron):
                 bt.logging.warning(f"Health check failed for miner {uid}: {str(e)}")
             return False
 
-    async def get_rich_data(self, uids: List[int]) -> Dict[str, List]:
+    def get_rich_data(self, uids: List[int]) -> Dict[str, List]:
         """Get additional miner metadata."""
-        async with self.metagraph_lock:
-            return {
-                "uids": [int(uid) for uid in uids],
-                "ranks": [float(self.metagraph.R[uid]) for uid in uids],
-                "incentives": [float(self.metagraph.I[uid]) for uid in uids],
-                "emissions": [float(self.metagraph.E[uid]) for uid in uids],
-                "hotkeys": [str(self.metagraph.hotkeys[uid]) for uid in uids],
-                "coldkeys": [str(self.metagraph.coldkeys[uid]) for uid in uids],
-            }
+        return {
+            "uids": [int(uid) for uid in uids],
+            "ranks": [float(self.metagraph.R[uid]) for uid in uids],
+            "incentives": [float(self.metagraph.I[uid]) for uid in uids],
+            "emissions": [float(self.metagraph.E[uid]) for uid in uids],
+            "hotkeys": [str(self.metagraph.hotkeys[uid]) for uid in uids],
+            "coldkeys": [str(self.metagraph.coldkeys[uid]) for uid in uids],
+        }
 
     async def run(self):
         await self.start()
