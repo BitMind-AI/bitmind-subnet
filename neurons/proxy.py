@@ -38,6 +38,7 @@ from bitmind.utils import on_block_interval
 from neurons.base import BaseNeuron
 
 AUTH_HEADER = APIKeyHeader(name="Authorization")
+DEFAULT_TIMEOUT = 9
 
 
 class MediaProcessor:
@@ -172,7 +173,7 @@ class ValidatorProxy(BaseNeuron):
                 response = client.post(
                     f"{self.config.proxy.client_url}/get-credentials",
                     json={"postfix": f":{self.external_port}", "uid": self.uid},
-                    timeout=9,
+                    timeout=DEFAULT_TIMEOUT,
                 )
                 creds = response.json()
 
@@ -583,7 +584,7 @@ class ValidatorProxy(BaseNeuron):
         start_time = time.time()
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(
-                total=9,
+                total=DEFAULT_TIMEOUT,
                 connect=3,
                 sock_connect=3,
                 sock_read=5,
@@ -638,7 +639,7 @@ class ValidatorProxy(BaseNeuron):
             ip = axon_info.ip
             port = axon_info.port
             url = f"http://{ip}:{port}/healthcheck"
-            async with session.get(url, timeout=5) as response:
+            async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
                 if response.status == 200:
                     response_json = await response.json()
                     return response_json.get("status") == "healthy"
