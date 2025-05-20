@@ -226,6 +226,13 @@ class ValidatorProxy(BaseNeuron):
             block: Current block number
         """
         log_items = [f"Forward Block: {self.subtensor.block}"]
+
+        healthy_count = len([
+            k for k, v in self.miner_health.items() 
+            if v['status'] == 'healthy'
+        ])
+        log_items.append(f"{healthy_count} healthy miner{'s' if healthy_count > 0 else ''}")
+
         if self.request_times.get("image"):
             avg_image_time = sum(self.request_times["image"]) / len(
                 self.request_times["image"]
@@ -239,7 +246,7 @@ class ValidatorProxy(BaseNeuron):
             log_items.append(f"Avg video request: {avg_video_time:.2f}s")
 
         bt.logging.info(" | ".join(log_items))
-        bt.logging.info({k:v for k, v in self.miner_health.items() if v['status'] == 'healthy'})
+
 
     def setup_app(self):
         app = FastAPI(title="BitMind Proxy Server")
