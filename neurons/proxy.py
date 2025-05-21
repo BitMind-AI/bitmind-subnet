@@ -29,16 +29,17 @@ from fastapi.security import APIKeyHeader
 from PIL import Image
 from bittensor.core.axon import FastAPIThreadedServer
 
+from bitmind.config import MAINNET_UID
 from bitmind.encoding import media_to_bytes
 from bitmind.epistula import query_miner
 from bitmind.metagraph import get_miner_uids
 from bitmind.transforms import get_base_transforms
 from bitmind.types import Modality, NeuronType
+from bitmind.utils import on_block_interval
 from neurons.base import BaseNeuron
 
 AUTH_HEADER = APIKeyHeader(name="Authorization")
-DEFAULT_TIMEOUT = 9
-DEFAULT_SAMPLE_SIZE = 50
+DEFAULT_TIMEOUT = 6
 
 
 class MediaProcessor:
@@ -76,7 +77,7 @@ class MediaProcessor:
         Returns:
             Processed video frames as numpy array
         """
-        bt.logging.debug(f"Starting video processing with {len(video_data)} bytes")
+        bt.logging.trace(f"Starting video processing with {len(video_data)} bytes")
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as temp_file:
             temp_file.write(video_data)
             temp_file.flush()
@@ -96,7 +97,7 @@ class MediaProcessor:
                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     frames.append(rgb_frame)
 
-                bt.logging.info(f"Extracted {len(frames)} frames")
+                bt.logging.trace(f"Extracted {len(frames)} frames")
 
                 if not frames:
                     bt.logging.error("No frames extracted from video")
@@ -141,7 +142,10 @@ class ValidatorProxy(BaseNeuron):
                 "Missing proxy configuration - cannot initialize ValidatorProxy"
             )
 
-        self.block_callbacks.append(self.log_on_block)
+        self.block_callbacks.extend([
+            self.log_on_block,
+            self.check_miners_health_on_interval
+        ])
 
         self.port = self.config.proxy.port
         self.external_port = self.config.proxy.external_port
@@ -149,9 +153,9 @@ class ValidatorProxy(BaseNeuron):
         self.media_processor = MediaProcessor()
         self.auth_verifier = self._setup_auth()
 
-        self.session = None
+        self.miner_health = {}
+
         self.max_connections = 50
-        self.connector = None
         self.fast_api = None
 
         self.request_times = {
@@ -207,6 +211,10 @@ class ValidatorProxy(BaseNeuron):
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
+    async def healthcheck(self, request: Request) -> Dict[str, str]:
+        """Health check endpoint."""
+        return {"status": "healthy"}
+
     async def log_on_block(self, block):
         """
         Log avg request times
@@ -215,6 +223,21 @@ class ValidatorProxy(BaseNeuron):
             block: Current block number
         """
         log_items = [f"Forward Block: {self.subtensor.block}"]
+
+        healthy = len([
+            k for k, v in self.miner_health.items()
+            if v['status'] == 'healthy'
+        ])
+        down = len([
+            k for k, v in self.miner_health.items()
+            if v['status'] == 'down'
+        ])
+        blacklisted = len([
+            k for k, v in self.miner_health.items()
+            if v['status'] == 'blacklisted'
+        ])
+        log_items.append(f"Healthy/Down/Blacklisted: {healthy}/{down}/{blacklisted}")
+
         if self.request_times.get("image"):
             avg_image_time = sum(self.request_times["image"]) / len(
                 self.request_times["image"]
@@ -228,6 +251,7 @@ class ValidatorProxy(BaseNeuron):
             log_items.append(f"Avg video request: {avg_video_time:.2f}s")
 
         bt.logging.info(" | ".join(log_items))
+
 
     def setup_app(self):
         app = FastAPI(title="BitMind Proxy Server")
@@ -245,13 +269,13 @@ class ValidatorProxy(BaseNeuron):
             "/forward_image",
             self.handle_image_request,
             methods=["POST"],
-            dependencies=[Depends(self.verify_auth)],
+            #dependencies=[Depends(self.verify_auth)],
         )
         router.add_api_route(
             "/forward_video",
             self.handle_video_request,
             methods=["POST"],
-            dependencies=[Depends(self.verify_auth)],
+            #dependencies=[Depends(self.verify_auth)],
         )
         router.add_api_route(
             "/healthcheck",
@@ -284,7 +308,7 @@ class ValidatorProxy(BaseNeuron):
         """
         start_time = time.time()
         request_id = str(uuid.uuid4())[:8]
-        bt.logging.debug(f"[{request_id}] Starting image request processing")
+        bt.logging.trace(f"[{request_id}] Starting image request processing")
 
         try:
             payload = await request.json()
@@ -310,11 +334,11 @@ class ValidatorProxy(BaseNeuron):
                 modality=Modality.IMAGE,
                 request_id=request_id,
             )
-            bt.logging.trace(
+            bt.logging.debug(
                 f"[{request_id}] Miners queried in {time.time() - query_start:.2f}s"
             )
 
-            predictions, uids = self.aggregate_responses(results)
+            predictions, uids = self.process_query_results(results)
             response = {
                 "preds": [float(p) for p in predictions],
                 "fqdn": socket.getfqdn(),
@@ -322,7 +346,7 @@ class ValidatorProxy(BaseNeuron):
 
             # Add rich data if requested
             if payload.get("rich", "").lower() == "true":
-                response.update(self._get_rich_data(uids))
+                response.update(self.get_rich_data(uids))
 
             total_time = time.time() - start_time
             bt.logging.debug(
@@ -355,7 +379,7 @@ class ValidatorProxy(BaseNeuron):
         """
         start_time = time.time()
         request_id = str(uuid.uuid4())[:8]
-        bt.logging.debug(f"[{request_id}] Starting video request processing")
+        bt.logging.trace(f"[{request_id}] Starting video request processing")
 
         try:
             form = await request.form()
@@ -390,11 +414,11 @@ class ValidatorProxy(BaseNeuron):
                 modality=Modality.VIDEO,
                 request_id=request_id,
             )
-            bt.logging.trace(
+            bt.logging.debug(
                 f"[{request_id}] Miners queried in {time.time() - query_start:.2f}s"
             )
 
-            predictions, uids = self.aggregate_responses(results)
+            predictions, uids = self.process_query_results(results)
             response = {
                 "preds": [float(p) for p in predictions],
                 "fqdn": socket.getfqdn(),
@@ -402,7 +426,7 @@ class ValidatorProxy(BaseNeuron):
 
             # Add rich data if requested
             if rich_param == "true":
-                response.update(self._get_rich_data(uids))
+                response.update(self.get_rich_data(uids))
 
             total_time = time.time() - start_time
             bt.logging.debug(
@@ -422,16 +446,11 @@ class ValidatorProxy(BaseNeuron):
                 detail=f"Error processing request: {str(e)}",
             )
 
-    async def healthcheck(self, request: Request) -> Dict[str, str]:
-        """Health check endpoint."""
-        return {"status": "healthy"}
-
     async def query_miners(
         self,
         media_bytes: bytes,
         content_type: str,
         modality: Modality,
-        num_miners: int = DEFAULT_SAMPLE_SIZE,
         request_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -448,30 +467,19 @@ class ValidatorProxy(BaseNeuron):
         """
         query_start = time.time()
 
-        miner_uids = get_miner_uids(
-            self.metagraph,
-            self.uid,
-            self.config.vpermit_tao_limit,
-        )
-        miner_uids = np.random.choice(
-            miner_uids, size=min(num_miners, len(miner_uids)), replace=False
-        )
+        miner_uids = await self.get_miner_uids_to_query()
+        bt.logging.trace(f"Querying {len(miner_uids)} miners")
 
-        total_timeout = self.config.neuron.miner_total_timeout
-        connect_timeout = self.config.neuron.miner_connect_timeout
-        sock_timeout = self.config.neuron.miner_sock_connect_timeout
-        read_timeout = self.config.neuron.miner_total_timeout
-
+        challenge_tasks = []
         async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(
-                total=total_timeout,
-                connect=connect_timeout,
-                sock_connect=sock_timeout,
-                sock_read=read_timeout,
-            ),
-            connector=aiohttp.TCPConnector(limit=100),
+            connector=aiohttp.TCPConnector(
+                limit=self.max_connections,
+                limit_per_host=5,
+                enable_cleanup_closed=True,
+                force_close=False,
+                ttl_dns_cache=300,
+            )
         ) as session:
-            challenge_tasks = []
             for uid in miner_uids:
                 axon_info = self.metagraph.axons[uid]
                 challenge_tasks.append(
@@ -483,16 +491,16 @@ class ValidatorProxy(BaseNeuron):
                         axon_info,
                         session,
                         self.wallet.hotkey,
-                        total_timeout,
-                        connect_timeout,
-                        sock_timeout,
+                        self.config.neuron.miner_total_timeout,
+                        self.config.neuron.miner_connect_timeout,
+                        self.config.neuron.miner_sock_connect_timeout,
                     )
                 )
 
             try:
                 responses = []
                 for future in asyncio.as_completed(
-                    challenge_tasks, timeout=total_timeout
+                    challenge_tasks, timeout=self.config.neuron.miner_total_timeout,
                 ):
                     try:
                         response = await future
@@ -501,47 +509,35 @@ class ValidatorProxy(BaseNeuron):
                         bt.logging.warning(f"Miner query error: {str(e)}")
                         bt.logging.error(traceback.format_exc())
 
-                filtered_responses = []
-                for i, response in enumerate(responses):
-                    if isinstance(response, Exception):
-                        bt.logging.warning(
-                            f"Miner {miner_uids[i]} failed: {str(response)}"
-                        )
-                        filtered_responses.append(
-                            {"uid": miner_uids[i], "error": True, "prediction": None}
-                        )
-                    else:
-                        filtered_responses.append(response)
-
-                responses = filtered_responses
+                query_time = time.time() - query_start
+                bt.logging.info(
+                    f"Received {len(responses)} responses for {modality} request in {query_time}s."
+                )
 
             except asyncio.TimeoutError:
                 bt.logging.warning(
                     f"Timed out waiting for miner responses after {total_timeout}s"
                 )
-                responses = [
-                    {"uid": uid, "error": True, "prediction": None}
-                    for uid in miner_uids
-                ]
+                return []
 
-        query_time = time.time() - query_start
-        bt.logging.info(
-            f"Received {len([r for r in responses if not r.get('error', False)])} valid miner responses for {modality} request in {query_time:.2f}s"
-        )
         return responses
 
-    def _get_rich_data(self, uids: List[int]) -> Dict[str, List]:
-        """Get additional miner metadata."""
-        return {
-            "uids": [int(uid) for uid in uids],
-            "ranks": [float(self.metagraph.R[uid]) for uid in uids],
-            "incentives": [float(self.metagraph.I[uid]) for uid in uids],
-            "emissions": [float(self.metagraph.E[uid]) for uid in uids],
-            "hotkeys": [str(self.metagraph.hotkeys[uid]) for uid in uids],
-            "coldkeys": [str(self.metagraph.coldkeys[uid]) for uid in uids],
-        }
+    async def get_miner_uids_to_query(self):
+        miner_uids = [
+            k for k, v in self.miner_health.items()
+            if v['status'] == 'healthy'
+        ]
 
-    def aggregate_responses(
+        if len(miner_uids) == 0:
+            bt.logging.warning("Miner health not available, defaulting to random selection")
+            miner_uids = get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit)
+
+        num_miners = min(self.config.proxy.sample_size, len(miner_uids))
+        return np.random.choice(
+            miner_uids, size=num_miners, replace=False
+        )
+
+    def process_query_results(
         self, results: List[Dict[str, Any]]
     ) -> Tuple[np.ndarray, List[int]]:
         """
@@ -553,9 +549,21 @@ class ValidatorProxy(BaseNeuron):
         Returns:
             Tuple of (aggregated predictions, responding miner UIDs)
         """
-        valid_responses = [
-            r for r in results if not r["error"] and r["prediction"] is not None
-        ]
+        valid_responses = []
+        for r in results:
+            uid = int(r['uid'])
+            error = r["error"]
+            pred = r["prediction"]
+
+            # blacklist miners who have responded >= 3 times with an invalid response 
+            if not isinstance(pred, (list, np.ndarray)) or abs(sum(pred) - 1.0) > 1e-6:
+                self.miner_health[uid]["invalid_responses"] += 1
+                if self.miner_health[uid]["invalid_responses"] >= 3:
+                    self.miner_health[uid]["status"] = "blacklisted"
+                    if self.config.netuid == MAINNET_UID:
+                        bt.logging.warning(f"Blacklisted {uid} (error={error} | pred={pred}, type={type(pred)})")
+            else:
+                valid_responses.append(r)
 
         if not valid_responses:
             bt.logging.warning("No valid responses received from miners")
@@ -570,37 +578,139 @@ class ValidatorProxy(BaseNeuron):
         predictions = [p[1] + p[2] for p in predictions]
         return predictions, uids
 
-    async def start(self):
-        """Start the FastAPI threaded server and initialize connection pooling."""
-        bt.logging.info(f"Starting proxy server on {self.host}:{self.port}")
+    @on_block_interval('miner_healthcheck_interval')
+    async def check_miners_health_on_interval(self, block):
+        """
+        Periodically check the health status of all miners
+        """
+        bt.logging.info("Starting periodic miner health checks")
 
-        if self.connector is None:
-            self.connector = aiohttp.TCPConnector(
-                limit=self.max_connections,
-                limit_per_host=5,
-                enable_cleanup_closed=True,
-                force_close=False,
-                ttl_dns_cache=300,
-            )
+        start_time = time.time()
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(
+                total=DEFAULT_TIMEOUT,
+                connect=3,
+                sock_connect=3,
+                sock_read=5,
+            ),
+            connector=aiohttp.TCPConnector(limit=50),
+        ) as session:
+            health_tasks = []
+            miner_uids_to_check = []
 
-        if self.session is None:
-            self.session = aiohttp.ClientSession(
-                connector=self.connector,
-                timeout=aiohttp.ClientTimeout(
-                    total=self.config.neuron.miner_total_timeout,
-                    connect=self.config.neuron.miner_connect_timeout,
-                    sock_connect=self.config.neuron.miner_sock_connect_timeout,
-                    sock_read=self.config.neuron.miner_total_timeout,
-                ),
-            )
+            healthy_count = 0
+            blacklisted_count = 0
+            unhealthy_count = 0
 
-        if self.fast_api:
-            self.fast_api.start()
-        else:
-            bt.logging.error("FastAPI server not initialized")
+            for uid in get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit):
+                # re-check blacklisted miners after 360 blocks
+                if self.miner_health.get(uid, {}).get("status") == "blacklisted":
+                    if self.miner_health[uid]["last_checked_block"] - block > 360:
+                        miner_uids_to_check.append(uid)
+                    else:
+                        blacklisted_count += 1
+                else:
+                    miner_uids_to_check.append(uid)
+
+            bt.logging.info(f"Running health check for {len(miner_uids_to_check)} miners at block {self.subtensor.block}")
+            for uid in miner_uids_to_check:
+                axon_info = self.metagraph.axons[uid]
+                health_tasks.append(self.check_miner_health(uid, axon_info, session))
+
+            results = await asyncio.gather(*health_tasks, return_exceptions=True)
+            for uid, result in zip(miner_uids_to_check, results):
+                uid = int(uid)
+                hotkey = self.metagraph.hotkeys[uid]
+                if uid not in self.miner_health or self.miner_health[uid]['hotkey'] != hotkey:
+                     self.miner_health[uid] = {
+                        'hotkey': hotkey,
+                        'last_checked_block': block,
+                        'invalid_responses': 0,
+                        'status': '',
+                        'error': '',
+                    }
+
+                if isinstance(result, Exception):
+                    unhealthy_count += 1
+                    self.miner_health[uid]["status"] = "down"
+                    self.miner_health[uid]["error"] = str(result)
+                elif result is True:
+                    healthy_count += 1
+                    self.miner_health[uid]['status'] = 'healthy'
+                else:
+                    unhealthy_count += 1
+                    self.miner_health[uid]['status'] = 'down'
+
+            check_duration = time.time() - start_time
+
+            log_items = [
+                f"Health check completed in {check_duration:.2f}s",
+                f"Healthy: {healthy_count}",
+                f"Blacklisted: {blacklisted_count}",
+                f"Unhealthy: {unhealthy_count}",
+            ]
+            bt.logging.info(" | ".join(log_items))
+
+    async def check_miner_health(self, uid, axon_info, session):
+        """
+        Check the health of a single miner by hitting its /healthcheck endpoint.
+        If that fails, try /detect_image as a fallback to verify the miner is running.
+
+        To handle miners that haven't added the healthcheck endpoint, we fall back to 
+        querying the detect_image endpoint with a GET and checking for a 405 response
+
+        Args:
+            uid: Miner UID
+            axon_info: Axon information for the miner
+            session: aiohttp ClientSession to use
+
+        Returns:
+            bool: True if miner is healthy, False otherwise
+        """
+        try:
+            ip = axon_info.ip
+            port = axon_info.port
+
+            url = f"http://{ip}:{port}/healthcheck"
+            try:
+                async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
+                    if response.status == 200:
+                        response_json = await response.json()
+                        if response_json.get("status") == "healthy":
+                            return True
+            except Exception:
+                pass
+
+            url = f"http://{ip}:{port}/detect_image"
+            try:
+                async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
+                    # If we get a 405 Method Not Allowed, the endpoint exists but requires POST
+                    if response.status == 405:
+                        return True
+            except Exception:
+                pass
+
+            return False
+
+        except Exception as e:
+            if self.config.netuid == MAINNET_UID:
+                bt.logging.warning(f"Health check failed for miner {uid}: {str(e)}")
+            return False
+
+    def get_rich_data(self, uids: List[int]) -> Dict[str, List]:
+        """Get additional miner metadata."""
+        return {
+            "uids": [int(uid) for uid in uids],
+            "ranks": [float(self.metagraph.R[uid]) for uid in uids],
+            "incentives": [float(self.metagraph.I[uid]) for uid in uids],
+            "emissions": [float(self.metagraph.E[uid]) for uid in uids],
+            "hotkeys": [str(self.metagraph.hotkeys[uid]) for uid in uids],
+            "coldkeys": [str(self.metagraph.coldkeys[uid]) for uid in uids],
+        }
 
     async def run(self):
         await self.start()
+
         while not self.exit_context.isExiting:
             # Make sure our substrate thread is alive
             if not self.substrate_thread.is_alive():
@@ -619,17 +729,20 @@ class ValidatorProxy(BaseNeuron):
 
         await self.shutdown()
 
+    async def start(self):
+        """Start the FastAPI threaded server and initialize connection pooling."""
+        bt.logging.info(f"Starting proxy server on {self.host}:{self.port}")
+
+        await self.check_miners_health_on_interval(block=0)
+
+        if self.fast_api:
+            self.fast_api.start()
+        else:
+            bt.logging.error("FastAPI server not initialized")
+
     async def shutdown(self):
         """Shutdown the server and clean up resources."""
         bt.logging.info("Shutting down proxy server")
-
-        if self.session:
-            await self.session.close()
-            self.session = None
-
-        if self.connector:
-            await self.connector.close()
-            self.connector = None
 
         if self.fast_api:
             self.fast_api.stop()

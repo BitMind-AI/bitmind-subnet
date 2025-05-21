@@ -282,6 +282,10 @@ class Miner(BaseNeuron):
             bt.logging.error(traceback.format_exc())
             return {"status": "error", "message": str(e)}
 
+    async def healthcheck(self):
+        """Check if miner is healthy and ready to process requests"""
+        return {"status": "healthy"}
+
     async def determine_epistula_version_and_verify(self, request: Request):
         version = request.headers.get("Epistula-Version")
         if version == EPISTULA_VERSION:
@@ -369,6 +373,7 @@ class Miner(BaseNeuron):
         app = FastAPI()
         router = APIRouter()
         router.add_api_route("/", ping, methods=["GET"])
+        router.add_api_route("/healthcheck", self.healthcheck, methods=["GET"])
 
         router.add_api_route(
             "/detect_image",

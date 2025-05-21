@@ -380,3 +380,18 @@ def add_proxy_args(parser):
         default=10913,
         help="Port for the proxy server",
     )
+
+    parser.add_argument(
+        "--proxy.sample_size",
+        type=int,
+        default=50,
+        help="Number of miners to query for organics",
+    )
+
+    parser.add_argument(
+        "--miner-healthcheck-interval",
+        type=int,
+        default=10,
+        help="How frequently to check miner health (in blocks)",
+    )
+

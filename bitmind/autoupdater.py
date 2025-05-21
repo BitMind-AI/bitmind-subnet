@@ -74,7 +74,15 @@ def autoupdate(branch: str = "main", force=False):
                 new_version = int("".join(new_version.split(".")))
 
                 if new_version == latest_version:
-                    bt.logging.info("Updated successfully. Restarting...")
+                    bt.logging.info("Updated successfully.")
+
+                    bt.logging.info("Restarting generator...")
+                    subprocess.run(["pm2", "reload", "sn34-generator"], check=True)
+
+                    bt.logging.info("Restarting proxy...")
+                    subprocess.run(["pm2", "reload", "sn34-proxy"], check=True)
+
+                    bt.logging.info(f"Restarting validator")
                     os.kill(os.getpid(), signal.SIGINT)
                 else:
                     bt.logging.error("Update failed. Manual update required.")
