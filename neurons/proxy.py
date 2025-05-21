@@ -555,6 +555,7 @@ class ValidatorProxy(BaseNeuron):
             error = r["error"]
             pred = r["prediction"]
 
+            # blacklist miners who have responded >= 3 times with an invalid response 
             if not isinstance(pred, (list, np.ndarray)) or abs(sum(pred) - 1.0) > 1e-6:
                 self.miner_health[uid]["invalid_responses"] += 1
                 if self.miner_health[uid]["invalid_responses"] >= 3:
@@ -602,6 +603,7 @@ class ValidatorProxy(BaseNeuron):
             unhealthy_count = 0
 
             for uid in get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit):
+                # re-check blacklisted miners after 360 blocks
                 if self.miner_health.get(uid, {}).get("status") == "blacklisted":
                     if self.miner_health[uid]["last_checked_block"] - block > 360:
                         miner_uids_to_check.append(uid)
