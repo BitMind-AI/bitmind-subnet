@@ -39,7 +39,7 @@ from bitmind.utils import on_block_interval
 from neurons.base import BaseNeuron
 
 AUTH_HEADER = APIKeyHeader(name="Authorization")
-DEFAULT_TIMEOUT = 9
+DEFAULT_TIMEOUT = 6
 
 
 class MediaProcessor:
@@ -468,6 +468,7 @@ class ValidatorProxy(BaseNeuron):
         query_start = time.time()
 
         miner_uids = await self.get_miner_uids_to_query()
+        bt.logging.trace(f"Querying {len(miner_uids)} miners")
 
         challenge_tasks = []
         async with aiohttp.ClientSession(
@@ -528,7 +529,6 @@ class ValidatorProxy(BaseNeuron):
         ]
 
         if len(miner_uids) == 0:
-            bt.logging.warning(self.miner_health)
             bt.logging.warning("Miner health not available, defaulting to random selection")
             miner_uids = get_miner_uids(self.metagraph, self.uid, self.config.vpermit_tao_limit)
 
@@ -555,15 +555,12 @@ class ValidatorProxy(BaseNeuron):
             error = r["error"]
             pred = r["prediction"]
 
-            if (
-                r["error"]
-                or not isinstance(pred, (list, np.ndarray))
-                or abs(sum(pred) - 1.0) >= 1e-6
-            ):
-                bt.logging.warning(f"Blacklisting {uid} (error={error} | pred={pred} {type(pred)})")
+            if not isinstance(pred, (list, np.ndarray)) or abs(sum(pred) - 1.0) > 1e-6:
                 self.miner_health[uid]["invalid_responses"] += 1
                 if self.miner_health[uid]["invalid_responses"] >= 3:
                     self.miner_health[uid]["status"] = "blacklisted"
+                    if self.config.netuid == MAINNET_UID:
+                        bt.logging.warning(f"Blacklisted {uid} (error={error} | pred={pred}, type={type(pred)})")
             else:
                 valid_responses.append(r)
 
@@ -655,6 +652,10 @@ class ValidatorProxy(BaseNeuron):
     async def check_miner_health(self, uid, axon_info, session):
         """
         Check the health of a single miner by hitting its /healthcheck endpoint.
+        If that fails, try /detect_image as a fallback to verify the miner is running.
+
+        To handle miners that haven't added the healthcheck endpoint, we fall back to 
+        querying the detect_image endpoint with a GET and checking for a 405 response
 
         Args:
             uid: Miner UID
@@ -667,12 +668,28 @@ class ValidatorProxy(BaseNeuron):
         try:
             ip = axon_info.ip
             port = axon_info.port
+
             url = f"http://{ip}:{port}/healthcheck"
-            async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
-                if response.status == 200:
-                    response_json = await response.json()
-                    return response_json.get("status") == "healthy"
-                return False
+            try:
+                async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
+                    if response.status == 200:
+                        response_json = await response.json()
+                        if response_json.get("status") == "healthy":
+                            return True
+            except Exception:
+                pass
+
+            url = f"http://{ip}:{port}/detect_image"
+            try:
+                async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
+                    # If we get a 405 Method Not Allowed, the endpoint exists but requires POST
+                    if response.status == 405:
+                        return True
+            except Exception:
+                pass
+
+            return False
+
         except Exception as e:
             if self.config.netuid == MAINNET_UID:
                 bt.logging.warning(f"Health check failed for miner {uid}: {str(e)}")
