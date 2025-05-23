@@ -56,18 +56,17 @@ class EvalEngine:
 
     def score_challenge(
         self,
-        challenge_results: dict,
+        uids: list,
+        hotkeys: list,
+        predictions: list,
+        errors: list,
         label: int,
         challenge_modality: Modality,
     ) -> Tuple[np.ndarray, List[Dict[Modality, Dict[str, float]]]]:
         """Update miner prediction history, compute instantaneous rewards, update score EMA"""
 
-        predictions = [np.array(r["prediction"]) for r in challenge_results]
-        hotkeys = [r["hotkey"] for r in challenge_results]
-        uids = [r["uid"] for r in challenge_results]
-
         rewards = self._get_rewards_for_challenge(
-            label, predictions, uids, hotkeys, challenge_modality
+            label, predictions, errors, uids, hotkeys, challenge_modality
         )
         self._update_scores(rewards)
         return rewards
@@ -137,7 +136,8 @@ class EvalEngine:
     def _get_rewards_for_challenge(
         self,
         label: int,
-        responses: List[np.ndarray],
+        predictions: List[np.ndarray],
+        errors: List[str],
         uids: List[int],
         hotkeys: List[bt.axon],
         challenge_modality: Modality,
@@ -147,7 +147,7 @@ class EvalEngine:
 
         Args:
             label: The true label (0 for real, 1 for synthetic, 2 for semi-synthetic)
-            responses: List of probability vectors from miners, each shape (3,)
+            predictions: List of probability vectors from miners, each shape (3,)
             uids: List of miner UIDs
             axons: List of miner axons
             challenge_modality: Type of challenge (Modality.VIDEO or Modality.IMAGE)
@@ -158,11 +158,11 @@ class EvalEngine:
                 - List[Dict]: List of performance metrics for each miner
         """
         miner_rewards = {}
-        for hotkey, uid, pred_probs in zip(hotkeys, uids, responses):
+        for hotkey, uid, pred_probs, error in zip(hotkeys, uids, predictions, errors):
             miner_modality_rewards = {}
             miner_modality_metrics = {}
 
-            self.tracker.update(uid, pred_probs, label, challenge_modality, hotkey)
+            self.tracker.update(uid, pred_probs, error, label, challenge_modality, hotkey)
 
             for modality in Modality:
                 try:
@@ -320,21 +320,6 @@ class EvalEngine:
         except Exception as e:
             bt.logging.error(f"Error deserializing scores: {str(e)}")
             return False
-
-    @staticmethod
-    def compute_penalty_multiplier(y_pred: np.ndarray) -> float:
-        """
-        Compute penalty for predictions outside valid range.
-
-        Args:
-            y_pred: Predicted probabilities for each class, shape (3,)
-
-        Returns:
-            float: 0.0 if prediction is invalid, 1.0 if valid
-        """
-        sum_check = np.abs(np.sum(y_pred) - 1.0) < 1e-6
-        range_check = np.all((y_pred >= 0.0) & (y_pred <= 1.0))
-        return 1.0 if (sum_check and range_check) else 0.0
 
     @staticmethod
     def transform_reward(reward: float, pole: float = 1.01) -> float:
