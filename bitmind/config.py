@@ -389,9 +389,9 @@ def add_proxy_args(parser):
     )
 
     parser.add_argument(
-        "--miner-healthcheck-interval",
+        "--miner-health-sync-interval",
         type=int,
-        default=10,
+        default=2,
         help="How frequently to check miner health (in blocks)",
     )
 
