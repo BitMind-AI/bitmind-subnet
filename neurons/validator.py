@@ -231,7 +231,6 @@ class Validator(BaseNeuron):
                 challenge_tasks = []
 
         valid_responses = [r for r in challenge_results if not r["error"]]
-
         n_valid = len(valid_responses)
         n_failures = len(challenge_results) - len(valid_responses)
         bt.logging.info(
@@ -239,14 +238,14 @@ class Validator(BaseNeuron):
         )
 
         bt.logging.info(f"Scoring {modality} challenge")
-        rewards = {}
-        if n_valid > 0:
-            bt.logging.success(valid_responses)
-            rewards = self.eval_engine.score_challenge(
-                valid_responses,
-                media_sample["label"],
-                modality,
-            )
+        rewards = self.eval_engine.score_challenge(
+            uids=[r["uid"] for r in challenge_results],
+            hotkeys=[r["hotkey"] for r in challenge_results],
+            predictions=[r["prediction"] for r in challenge_results],
+            errors=[r["error"] for r in challenge_results],
+            label=media_sample["label"],
+            challenge_modality=modality
+        )
 
         self.log_challenge_results(media_sample, challenge_results, rewards)
 

@@ -10,7 +10,8 @@ from bitmind.types import Modality
 
 
 class MinerHistory:
-    """Tracks all recent miner performance to facilitate reward computation."""
+    """Tracks all recent miner performance to facilitate reward computation.
+    Will be replaced with Redis in a future release """
 
     VERSION = 2
 
@@ -18,6 +19,7 @@ class MinerHistory:
         self.predictions: Dict[int, Dict[Modality, deque]] = {}
         self.labels: Dict[int, Dict[Modality, deque]] = {}
         self.miner_hotkeys: Dict[int, str] = {}
+        self.health: Dict[int: int] = {}
         self.store_last_n_predictions = store_last_n_predictions
         self.version = self.VERSION
 
@@ -25,6 +27,7 @@ class MinerHistory:
         self,
         uid: int,
         prediction: np.ndarray,
+        error: str,
         label: int,
         modality: Modality,
         miner_hotkey: str,
@@ -42,6 +45,7 @@ class MinerHistory:
 
         self.predictions[uid][modality].append(np.array(prediction))
         self.labels[uid][modality].append(label)
+        self.health[uid] = 1 if not error else 0
 
     def _reset_predictions(self, uid: int):
         self.predictions[uid] = {
@@ -56,7 +60,9 @@ class MinerHistory:
         }
 
     def reset_miner_history(self, uid: int, miner_hotkey: str):
-        """Reset the history for a miner."""
+        """
+        Reset the history for a miner. 
+        """
         self._reset_predictions(uid)
         self._reset_labels(uid)
         self.miner_hotkeys[uid] = miner_hotkey
@@ -71,6 +77,12 @@ class MinerHistory:
                 counts[modality] = len(self.predictions[uid][modality])
         return counts
 
+    def get_healthy_miner_uids(self) -> list:
+        return [uid for uid, healthy in self.health.items() if healthy]
+
+    def get_unhealthy_miner_uids(self) -> list:
+        return [uid for uid, healthy in self.health.items() if not healthy]
+
     def save_state(self, save_dir):
         path = os.path.join(save_dir, "history.pkl")
         state = {
@@ -79,6 +91,7 @@ class MinerHistory:
             "miner_hotkeys": self.miner_hotkeys,
             "predictions": self.predictions,
             "labels": self.labels,
+            "health": self.health
         }
         joblib.dump(state, path)
 
@@ -100,6 +113,8 @@ class MinerHistory:
             self.miner_hotkeys = state["miner_hotkeys"]
             self.predictions = state["predictions"]
             self.labels = state["labels"]
+            self.health = state["health"]
+
             bt.logging.debug(
                 f"Successfully loaded history for {len(self.miner_hotkeys)} miners"
             )
