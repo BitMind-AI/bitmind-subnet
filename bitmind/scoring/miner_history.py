@@ -77,6 +77,12 @@ class MinerHistory:
                 counts[modality] = len(self.predictions[uid][modality])
         return counts
 
+    def get_healthy_miner_uids(self) -> list:
+        return [uid for uid, healthy in self.health.items() if healthy]
+
+    def get_unhealthy_miner_uids(self) -> list:
+        return [uid for uid, healthy in self.health.items() if not healthy]
+
     def save_state(self, save_dir):
         path = os.path.join(save_dir, "history.pkl")
         state = {
