@@ -49,8 +49,8 @@ class EvalEngine:
 
         # burn .9 for now, gradually return to normal after v3 launch
         normed_weights = self.scores / norm
-        normed_weights = np.array([v * 0.2 for v in normed_weights])
-        normed_weights[135] = 0.8
+        normed_weights = np.array([v * 0.33 for v in normed_weights])
+        normed_weights[135] = 0.67
         bt.logging.debug(normed_weights)
         return normed_weights
 
