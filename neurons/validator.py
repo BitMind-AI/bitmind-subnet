@@ -28,6 +28,7 @@ from bitmind.metagraph import (
     run_block_callback_thread,
 )
 from bitmind.scoring import EvalEngine
+from bitmind.scraping import MultiSiteScraper, GoogleScraper
 from bitmind.transforms import apply_random_augmentations
 from bitmind.types import (
     MediaType,
@@ -79,6 +80,18 @@ class Validator(BaseNeuron):
 
         self.eval_engine = EvalEngine(self.metagraph, self.config)
 
+        self.scraper = MultiSiteScraper(
+            output_dir=self.config.cache_dir,
+            scrapers=[
+                GoogleScraper(
+                    min_width=128,
+                    min_height=128,
+                    headless=True,
+                    media_type=MediaType.REAL
+                )
+            ],
+        )
+
         ## REGISTER BLOCK CALLBACKS
         self.block_callbacks.extend(
             [
@@ -87,6 +100,7 @@ class Validator(BaseNeuron):
                 self.send_challenge_to_miners_on_interval,
                 self.update_compressed_cache_on_interval,
                 self.update_media_cache_on_interval,
+                self.scrape_new_media_on_interval,
                 self.start_new_wanbd_run_on_interval,
             ]
         )
@@ -308,6 +322,11 @@ class Validator(BaseNeuron):
             target=update_media_cache, daemon=True
         )
         self._media_cache_thread.start()
+
+    @on_block_interval("media_cache_update_interval")
+    async def scrape_new_media_on_interval(self, block):
+        prompt = "cats"
+        self.scraper.download_images(prompt, limit_per_scraper=50)
 
     @on_block_interval("epoch_length")
     async def set_weights_on_interval(self, block):
