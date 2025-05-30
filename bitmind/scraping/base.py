@@ -25,8 +25,8 @@ class BaseScraper(ABC):
     def __init__(self, min_width=128, min_height=128, media_type=None):
         self.min_width = min_width
         self.min_height = min_height
-        self.media_type = media_type     # for reference when determining save location
-        self.modality = Modality.IMAGE   # does not support video yet
+        self.media_type = media_type.value     # for reference when determining save location
+        self.modality = Modality.IMAGE.value   # does not support video yet
     
     def _check_image_size(self, url):
         """
