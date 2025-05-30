@@ -105,6 +105,13 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--media-scraping-interval",
+        type=int,
+        help="How often to unpack random media files, measured in 12 second blocks",
+        default=5,
+    )
+
+    parser.add_argument(
         "--challenge-interval",
         type=int,
         help="How often we set challenge miners, measured in 12 second blocks.",
