@@ -325,8 +325,9 @@ class Validator(BaseNeuron):
 
     @on_block_interval("media_cache_update_interval")
     async def scrape_new_media_on_interval(self, block):
-        prompt = "cats"
-        self.scraper.download_images(prompt, limit_per_scraper=50)
+        sample = await self.cache_system.sample("synthetic_image_sampler", 1)["items"][0]
+        search_query = sample["prompt"].split(".")[0]
+        self.scraper.download_images(search_query, limit_per_scraper=50)
 
     @on_block_interval("epoch_length")
     async def set_weights_on_interval(self, block):

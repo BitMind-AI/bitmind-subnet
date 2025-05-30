@@ -58,7 +58,7 @@ class CacheConfig:
     max_media_gb: float = 10.0
 
     def get_path(self):
-        media_cache_path = Path(self.base_dir) / self.modality / self.media_type
+        media_cache_path = Path(self.base_dir) / self.modality.value / self.media_type.value
         media_cache_path.mkdir(exist_ok=True, parents=True)
         return media_cache_path
 
