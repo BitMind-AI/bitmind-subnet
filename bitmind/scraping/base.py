@@ -1,9 +1,11 @@
 import os
 import requests
+import time
 from abc import ABC, abstractmethod
 from PIL import Image
 from io import BytesIO
 import bittensor as bt
+import json
 
 from bitmind.types import Modality
 
@@ -110,29 +112,43 @@ class BaseScraper(ABC):
         """
         pass
     
-    def download_images(self, queries, output_dir, limit=5):
+    def download_images(self, queries=None, urls=None, source_image_paths=None, output_dir="downloads", limit=5):
         """
         Download images based on queries with size constraints
         
         Parameters:
         -----------
         queries : str or list
-            Search query or list of queries
+            Search query or list of queries (set if not using source_images or urls)
+        urls: str or list
+            Pre-fetched image urls (set if not using source_images or queries)
+        source_image_paths: str or list
+            Local path to image(s) with which to perform reverse image search
+        output_dir : str
+            Directory to save images
         limit : int
             Maximum number of images to download per query
-        directory : str
-            Directory to save images
+        pre_fetched_urls : dict, optional
+            Pre-fetched image URLs to use instead of searching
             
         Returns:
         --------
         dict
             Dictionary with query keys and lists of downloaded image info
         """
+        if sum(x is not None for x in [queries, urls, source_image_paths]) != 1:
+            raise ValueError("Either queries, urls, or source_image must be provided (mutually exclusive)")
+
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
-        # Get more URLs than needed to account for size filtering
-        image_urls = self.get_image_urls(queries, limit * 3)
+        if urls is None:
+            # Get more URLs than needed to account for size filtering
+            image_urls = self.get_image_urls(
+                queries=queries,
+                source_image_paths=source_image_paths,
+                limit=limit * 3
+            )
         
         results = {}
         
@@ -146,30 +162,33 @@ class BaseScraper(ABC):
                 
                 url = img_data['url']
                 
-                # Check image size before downloading
                 meets_size_req, width, height = self._check_image_size(url)
                 
                 if not meets_size_req:
-                    bt.logging.info(f"Skipping image {url} - size {width}x{height} below minimum {self.min_width}x{self.min_height}")
+                    bt.logging.trace(f"Skipping image {url} - size {width}x{height} below minimum {self.min_width}x{self.min_height}")
                     continue
                 
                 extension = self._get_file_extension(url)
-                file_name = f"{query_key}_{downloaded_count + 1}_{width}x{height}{extension}"
+                file_name = f"{time.time()}_{width}x{height}{extension}"
                 file_path = os.path.join(output_dir, file_name)
                 
                 if self._download_single_image(url, file_path, width, height):
                     downloaded_count += 1
-                    downloaded_images.append({
+                    metadata = {
                         'url': url,
                         'file_path': file_path,
                         'width': width,
                         'height': height,
-                        'query': img_data.get('query', query_key)
-                    })
+                        'query': img_data.get('query', query_key),
+                        'source_url': img_data.get('source_url'),
+                        'title': img_data.get('title', ''),
+                        'source': img_data.get('source', 'unknown')
+                    }
+                    downloaded_images.append(metadata)
+                    with open(file_path.replace(extension, '.json'), 'w') as fout:
+                        json.dump(metadata, fout)
             
             results[query_key] = downloaded_images
-            bt.logging.info(f"Downloaded {downloaded_count} images meeting size requirements to {output_dir}")
+            bt.logging.debug(f"Downloaded {downloaded_count} images meeting size requirements to {output_dir}")
         
         return results
-
-
