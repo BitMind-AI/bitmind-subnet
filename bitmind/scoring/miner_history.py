@@ -43,9 +43,12 @@ class MinerHistory:
             self.reset_miner_history(uid, miner_hotkey)
             bt.logging.info(f"Reset history for {uid} {miner_hotkey}")
 
-        self.predictions[uid][modality].append(np.array(prediction))
-        self.labels[uid][modality].append(label)
-        self.health[uid] = 1 if not error else 0
+        if not error:
+            self.predictions[uid][modality].append(np.array(prediction))
+            self.labels[uid][modality].append(label)
+            self.health[uid] = 1 
+        else:
+            self.health[uid] = 0
 
     def _reset_predictions(self, uid: int):
         self.predictions[uid] = {
@@ -71,11 +74,23 @@ class MinerHistory:
         """Get the number of predictions made by a specific miner."""
         counts = {}
         for modality in [Modality.IMAGE, Modality.VIDEO]:
-            if uid not in self.predictions or modality not in self.predictions[uid]:
-                counts[modality] = 0
-            else:
-                counts[modality] = len(self.predictions[uid][modality])
+            counts[modality] = len(self.get_recent_predictions_and_labels(uid, modality)[0])
         return counts
+
+    def get_recent_predictions_and_labels(self, uid, modality):
+        if uid not in self.predictions or modality not in self.predictions[uid]:
+            return [], []
+        valid_indices = [
+            i for i, p in enumerate(self.predictions[uid][modality])
+            if p is not None and (not isinstance(p, (list, np.ndarray) or not np.any(p == None)))
+        ]
+        valid_preds = np.array([
+            p for i, p in enumerate(self.predictions[uid][modality]) if i in valid_indices
+        ])
+        labels_with_valid_preds = np.array([
+            p for i, p in enumerate(self.labels[uid][modality]) if i in valid_indices
+        ])
+        return valid_preds, labels_with_valid_preds
 
     def get_healthy_miner_uids(self) -> list:
         return [uid for uid, healthy in self.health.items() if healthy]
