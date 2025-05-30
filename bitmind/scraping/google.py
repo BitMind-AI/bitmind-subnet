@@ -50,15 +50,13 @@ class GoogleScraper(BaseScraper):
             current_year = time.localtime().tm_year
             if max_year < current_year:
                 tbs["cdr"] = "1"  # enable custom date range
-                tbs["cd_max"] = f"12/31/{max_year}"  # Try MM/DD/YYYY format
-                # Or try:
-                # tbs["cd_max"] = f"{max_year}-12-31"  # ISO format
+                tbs["cd_max"] = f"12/31/{max_year}" 
 
         if min_width is not None and min_height is not None:
             if min_width >= 400 and min_height >= 300:
-                tbs["isz"] = "l"  # Large images (400x300+)
-            elif min_width >= 128:  # Lowered threshold
-                tbs["isz"] = "m"  # Medium images - gives you variety!
+                tbs["isz"] = "l" 
+            elif min_width >= 128:
+                tbs["isz"] = "m"
 
         self.tbs = self._parse_request_parameters(tbs)
 
