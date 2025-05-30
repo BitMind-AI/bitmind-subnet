@@ -50,11 +50,11 @@ class GoogleScraper(BaseScraper):
             current_year = time.localtime().tm_year
             if max_year < current_year:
                 tbs["cdr"] = "1"  # enable custom date range
-                tbs["cd_max"] = f"12/31/{max_year}" 
+                tbs["cd_max"] = f"12/31/{max_year}"
 
         if min_width is not None and min_height is not None:
             if min_width >= 400 and min_height >= 300:
-                tbs["isz"] = "l" 
+                tbs["isz"] = "l"
             elif min_width >= 128:
                 tbs["isz"] = "m"
 
