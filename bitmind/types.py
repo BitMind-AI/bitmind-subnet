@@ -182,6 +182,8 @@ class ModelConfig:
             "save_args": self.save_args,
             "pipeline_stages": self.pipeline_stages,
             "clear_memory_on_stage_end": self.clear_memory_on_stage_end,
+            "lora_model_id": self.lora_model_id,
+            "lora_loading_args": self.lora_loading_args
         }
 
 
