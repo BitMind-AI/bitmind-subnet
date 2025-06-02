@@ -47,10 +47,10 @@ class EvalEngine:
         if np.any(norm == 0) or np.isnan(norm).any():
             norm = np.ones_like(norm)  # Avoid division by zero or NaN
 
-        # burn .9 for now, gradually return to normal after v3 launch
         normed_weights = self.scores / norm
-        normed_weights = np.array([v * 0.6 for v in normed_weights])
-        normed_weights[135] = 0.4
+        # uncomment to burn emissions 
+        #normed_weights = np.array([v * 0.6 for v in normed_weights])
+        #normed_weights[135] = 0.4
         bt.logging.debug(normed_weights)
         return normed_weights
 
