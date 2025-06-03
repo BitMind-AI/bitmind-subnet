@@ -181,10 +181,6 @@ class EvalEngine:
                         binary_weight * metrics["binary_mcc"]
                         + multiclass_weight * metrics["multi_class_mcc"]
                     )
-
-                    if modality == challenge_modality:
-                        reward *= self.compute_penalty_multiplier(pred_probs)
-
                     miner_modality_rewards[modality] = reward
                     miner_modality_metrics[modality] = metrics
 
@@ -230,8 +226,7 @@ class EvalEngine:
         ):
             return self._empty_metrics()
 
-        recent_preds = list(self.tracker.predictions[uid][modality])
-        recent_labels = list(self.tracker.labels[uid][modality])
+        recent_preds, recent_labels = self.tracker.get_recent_predictions_and_labels(uid, modality)
 
         if len(recent_labels) != len(recent_preds):
             bt.logging.critical(
@@ -248,20 +243,11 @@ class EvalEngine:
             recent_preds = recent_preds[-window:]
             recent_labels = recent_labels[-window:]
 
-        pred_probs = np.array([p for p in recent_preds if not np.array_equal(p, -1)])
-        labels = np.array(
-            [
-                l
-                for i, l in enumerate(recent_labels)
-                if not np.array_equal(recent_preds[i], -1)
-            ]
-        )
-
-        if len(labels) == 0 or len(pred_probs) == 0:
+        if len(labels) == 0 or len(preds) == 0:
             return self._empty_metrics()
 
         try:
-            predictions = np.argmax(pred_probs, axis=1)
+            predictions = np.argmax(recent_preds, axis=1)
 
             # Multi-class MCC (real vs synthetic vs semi-synthetic)
             multi_class_mcc = matthews_corrcoef(labels, predictions)
