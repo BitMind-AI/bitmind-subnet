@@ -22,4 +22,3 @@ wandb==0.19.9
 uvicorn==0.27.1
 python-multipart==0.0.20
 peft==0.15.0
-selenium==4.33.0
