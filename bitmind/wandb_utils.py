@@ -142,6 +142,10 @@ class WandbLogger:
         extension = os.path.splitext(media_path)[1]
         media_artifact.add_file(media_path, f"media{extension}")
 
+        mask_path = metadata.get("mask_path")
+        if mask_path and os.path.exists(mask_path):
+            media_artifact.add_file(mask_path, f"mask.npy")
+
         run.log_artifact(media_artifact)
 
         if "media_uuids" not in list(run.summary.keys()):

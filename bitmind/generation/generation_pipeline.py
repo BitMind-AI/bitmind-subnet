@@ -512,14 +512,19 @@ class GenerationPipeline:
             for k, v in media_sample.items()
             if k not in (modality, "source_image", "mask_image")
         }
-        base_path.with_suffix(".json").write_text(json.dumps(metadata))
 
         if modality == "image":
             save_path = str(base_path.with_suffix(".png"))
             media_sample[modality].images[0].save(save_path)
+            if "mask_image" in media_sample:
+                mask_path = str(save_path).replace(".png", "_mask.npy")
+                metadata["mask_path"] = mask_path
+                np.save(mask_path, np.array(media_sample["mask_image"]))
         elif modality == "video":
             save_path = str(base_path.with_suffix(".mp4"))
             export_to_video(media_sample[modality].frames[0], save_path, fps=30)
+
+        base_path.with_suffix(".json").write_text(json.dumps(metadata))
 
         bt.logging.info(f"Wrote to {save_path}")
         return save_path
