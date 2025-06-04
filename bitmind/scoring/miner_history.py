@@ -63,15 +63,11 @@ class MinerHistory:
         }
 
     def reset_miner_history(self, uid: int, miner_hotkey: str):
-        """
-        Reset the history for a miner. 
-        """
         self._reset_predictions(uid)
         self._reset_labels(uid)
         self.miner_hotkeys[uid] = miner_hotkey
 
     def get_prediction_count(self, uid: int) -> int:
-        """Get the number of predictions made by a specific miner."""
         counts = {}
         for modality in [Modality.IMAGE, Modality.VIDEO]:
             counts[modality] = len(self.get_recent_predictions_and_labels(uid, modality)[0])
@@ -123,12 +119,21 @@ class MinerHistory:
                     f"Loading state from different version: {state['version']} != {self.VERSION}"
                 )
 
-            self.version = state["version"]
-            self.store_last_n_predictions = state["store_last_n_predictions"]
-            self.miner_hotkeys = state["miner_hotkeys"]
-            self.predictions = state["predictions"]
-            self.labels = state["labels"]
-            self.health = state["health"]
+            self.version = state.get("version", self.VERSION)
+            self.store_last_n_predictions = state.get("store_last_n_predictions", self.store_last_n_predictions)
+            self.miner_hotkeys = state.get("miner_hotkeys", self.miner_hotkeys)
+            self.predictions = state.get("predictions", self.predictions)
+            self.labels = state.get("labels", self.labels)
+            self.health = state.get("health", self.health)
+
+            if len(self.miner_hotkeys) == 0:
+                bt.logging.warning("Loaded state has no miner hotkeys")
+            if len(self.predictions) == 0:
+                bt.logging.warning("Loaded state has no predictions")
+            if len(self.labels) == 0:
+                bt.logging.warning("Loaded state has no labels")
+            if len(self.health) == 0:
+                bt.logging.warning("Loaded state has no health records")
 
             bt.logging.debug(
                 f"Successfully loaded history for {len(self.miner_hotkeys)} miners"
