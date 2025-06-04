@@ -78,7 +78,7 @@ class MinerHistory:
             return [], []
         valid_indices = [
             i for i, p in enumerate(self.predictions[uid][modality])
-            if p is not None and (not isinstance(p, (list, np.ndarray) or not np.any(p == None)))
+            if p is not None and (isinstance(p, (list, np.ndarray)) and not np.any(p == None))
         ]
         valid_preds = np.array([
             p for i, p in enumerate(self.predictions[uid][modality]) if i in valid_indices
