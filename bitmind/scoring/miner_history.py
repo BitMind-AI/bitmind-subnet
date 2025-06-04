@@ -10,7 +10,8 @@ from bitmind.types import Modality
 
 
 class MinerHistory:
-    """Tracks all recent miner performance to facilitate reward computation."""
+    """Tracks all recent miner performance to facilitate reward computation.
+    Will be replaced with Redis in a future release """
 
     VERSION = 2
 
@@ -18,6 +19,7 @@ class MinerHistory:
         self.predictions: Dict[int, Dict[Modality, deque]] = {}
         self.labels: Dict[int, Dict[Modality, deque]] = {}
         self.miner_hotkeys: Dict[int, str] = {}
+        self.health: Dict[int: int] = {}
         self.store_last_n_predictions = store_last_n_predictions
         self.version = self.VERSION
 
@@ -25,6 +27,7 @@ class MinerHistory:
         self,
         uid: int,
         prediction: np.ndarray,
+        error: str,
         label: int,
         modality: Modality,
         miner_hotkey: str,
@@ -40,8 +43,12 @@ class MinerHistory:
             self.reset_miner_history(uid, miner_hotkey)
             bt.logging.info(f"Reset history for {uid} {miner_hotkey}")
 
-        self.predictions[uid][modality].append(np.array(prediction))
-        self.labels[uid][modality].append(label)
+        if not error:
+            self.predictions[uid][modality].append(np.array(prediction))
+            self.labels[uid][modality].append(label)
+            self.health[uid] = 1 
+        else:
+            self.health[uid] = 0
 
     def _reset_predictions(self, uid: int):
         self.predictions[uid] = {
@@ -56,20 +63,36 @@ class MinerHistory:
         }
 
     def reset_miner_history(self, uid: int, miner_hotkey: str):
-        """Reset the history for a miner."""
         self._reset_predictions(uid)
         self._reset_labels(uid)
         self.miner_hotkeys[uid] = miner_hotkey
 
     def get_prediction_count(self, uid: int) -> int:
-        """Get the number of predictions made by a specific miner."""
         counts = {}
         for modality in [Modality.IMAGE, Modality.VIDEO]:
-            if uid not in self.predictions or modality not in self.predictions[uid]:
-                counts[modality] = 0
-            else:
-                counts[modality] = len(self.predictions[uid][modality])
+            counts[modality] = len(self.get_recent_predictions_and_labels(uid, modality)[0])
         return counts
+
+    def get_recent_predictions_and_labels(self, uid, modality):
+        if uid not in self.predictions or modality not in self.predictions[uid]:
+            return [], []
+        valid_indices = [
+            i for i, p in enumerate(self.predictions[uid][modality])
+            if p is not None and (isinstance(p, (list, np.ndarray)) and not np.any(p == None))
+        ]
+        valid_preds = np.array([
+            p for i, p in enumerate(self.predictions[uid][modality]) if i in valid_indices
+        ])
+        labels_with_valid_preds = np.array([
+            p for i, p in enumerate(self.labels[uid][modality]) if i in valid_indices
+        ])
+        return valid_preds, labels_with_valid_preds
+
+    def get_healthy_miner_uids(self) -> list:
+        return [uid for uid, healthy in self.health.items() if healthy]
+
+    def get_unhealthy_miner_uids(self) -> list:
+        return [uid for uid, healthy in self.health.items() if not healthy]
 
     def save_state(self, save_dir):
         path = os.path.join(save_dir, "history.pkl")
@@ -79,6 +102,7 @@ class MinerHistory:
             "miner_hotkeys": self.miner_hotkeys,
             "predictions": self.predictions,
             "labels": self.labels,
+            "health": self.health
         }
         joblib.dump(state, path)
 
@@ -95,11 +119,22 @@ class MinerHistory:
                     f"Loading state from different version: {state['version']} != {self.VERSION}"
                 )
 
-            self.version = state["version"]
-            self.store_last_n_predictions = state["store_last_n_predictions"]
-            self.miner_hotkeys = state["miner_hotkeys"]
-            self.predictions = state["predictions"]
-            self.labels = state["labels"]
+            self.version = state.get("version", self.VERSION)
+            self.store_last_n_predictions = state.get("store_last_n_predictions", self.store_last_n_predictions)
+            self.miner_hotkeys = state.get("miner_hotkeys", self.miner_hotkeys)
+            self.predictions = state.get("predictions", self.predictions)
+            self.labels = state.get("labels", self.labels)
+            self.health = state.get("health", self.health)
+
+            if len(self.miner_hotkeys) == 0:
+                bt.logging.warning("Loaded state has no miner hotkeys")
+            if len(self.predictions) == 0:
+                bt.logging.warning("Loaded state has no predictions")
+            if len(self.labels) == 0:
+                bt.logging.warning("Loaded state has no labels")
+            if len(self.health) == 0:
+                bt.logging.warning("Loaded state has no health records")
+
             bt.logging.debug(
                 f"Successfully loaded history for {len(self.miner_hotkeys)} miners"
             )

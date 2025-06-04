@@ -101,7 +101,7 @@ def add_validator_args(parser):
         "--media-cache-update-interval",
         type=int,
         help="How often to unpack random media files, measured in 12 second blocks",
-        default=60,
+        default=300,
     )
 
     parser.add_argument(
@@ -380,3 +380,18 @@ def add_proxy_args(parser):
         default=10913,
         help="Port for the proxy server",
     )
+
+    parser.add_argument(
+        "--proxy.sample_size",
+        type=int,
+        default=50,
+        help="Number of miners to query for organics",
+    )
+
+    parser.add_argument(
+        "--miner-health-sync-interval",
+        type=int,
+        default=2,
+        help="How frequently to check miner health (in blocks)",
+    )
+

@@ -100,6 +100,12 @@ def get_image_datasets() -> List[DatasetConfig]:
             media_type=MediaType.SYNTHETIC,
             tags=["midjourney"],
         ),
+        DatasetConfig(
+            path="bitmind/bm-aura-imagegen",
+            type=Modality.IMAGE,
+            media_type=MediaType.SYNTHETIC,
+            tags=["sora"],
+        ),
         # Semisynthetic image datasets
         DatasetConfig(
             path="bitmind/face-swap",

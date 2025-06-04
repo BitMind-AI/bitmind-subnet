@@ -119,7 +119,9 @@ async def query_miner(
         sock_connect_timeout: Socket connection timeout
 
     Returns:
-        Dictionary containing the response
+        Dictionary containing the response.
+        prediction field will be None if any error is encountered, including
+        if the response contains a prediction that doesn't sum to ~1.
     """
     response = {
         "uid": uid,
@@ -165,16 +167,27 @@ async def query_miner(
                     return response
 
                 pred = [float(p) for p in data["prediction"]]
-                response["prediction"] = np.array(pred)
+
+                # handle binary predictions, assume [real, fake]
+                if len(pred) == 2:
+                    pred = pred + [0.0]
+
+                pred = np.array(pred)
+
+                # error on predictions that don't sum to ~1 or contain values outside of [0., 1.]
+                if abs(sum(pred) - 1.0) > 1e-6 or np.any((pred < 0.0) | (pred > 1.0)):
+                    raise ValueError
+
+                response["prediction"] = pred
                 return response
 
             except json.JSONDecodeError:
                 response["error"] = "Failed to decode JSON response"
                 return response
 
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
                 response["error"] = (
-                    f"Invalid prediction value: {data.get('prediction')}"
+                    f"Invalid prediction value {data.get('prediction')}"
                 )
                 return response
 
