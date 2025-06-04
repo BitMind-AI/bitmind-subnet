@@ -243,17 +243,17 @@ class EvalEngine:
             recent_preds = recent_preds[-window:]
             recent_labels = recent_labels[-window:]
 
-        if len(labels) == 0 or len(preds) == 0:
+        if len(recent_labels) == 0 or len(recent_preds) == 0:
             return self._empty_metrics()
 
         try:
             predictions = np.argmax(recent_preds, axis=1)
 
             # Multi-class MCC (real vs synthetic vs semi-synthetic)
-            multi_class_mcc = matthews_corrcoef(labels, predictions)
+            multi_class_mcc = matthews_corrcoef(recent_labels, predictions)
 
             # Binary MCC (real vs any synthetic)
-            binary_labels = (labels > 0).astype(int)
+            binary_labels = (recent_labels > 0).astype(int)
             binary_preds = (predictions > 0).astype(int)
             binary_mcc = matthews_corrcoef(binary_labels, binary_preds)
 
