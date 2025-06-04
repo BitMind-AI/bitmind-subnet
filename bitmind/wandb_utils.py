@@ -143,7 +143,7 @@ class WandbLogger:
         media_artifact.add_file(media_path, f"media{extension}")
 
         mask_path = metadata.get("mask_path")
-        if mask_path and  os.path.exists(mask_path):
+        if mask_path and os.path.exists(mask_path):
             media_artifact.add_file(mask_path, f"mask.npy")
 
         run.log_artifact(media_artifact)
