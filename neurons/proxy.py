@@ -267,6 +267,12 @@ class ValidatorProxy(BaseNeuron):
             dependencies=[Depends(self.verify_auth)],
         )
         router.add_api_route(
+            "/forward_image_binary",
+            self.handle_binary_image_request,
+            methods=["POST"],
+            dependencies=[Depends(self.verify_auth)],
+        )
+        router.add_api_route(
             "/forward_video",
             self.handle_video_request,
             methods=["POST"],
@@ -290,6 +296,69 @@ class ValidatorProxy(BaseNeuron):
             workers=9,
         )
         self.fast_api = FastAPIThreadedServer(config=fast_config)
+
+    async def handle_binary_image_request(self, request: Request) -> Dict[str, Any]:
+        """
+        Handle raw JPEG image processing requests.
+
+        Args:
+            request: FastAPI request object with binary JPEG image data
+
+        Returns:
+            Dictionary with prediction results
+        """
+        start_time = time.time()
+        request_id = str(uuid.uuid4())[:8]
+        bt.logging.trace(f"[{request_id}] Starting binary image request processing")
+
+        try:
+            image_data = await request.body()
+            if not image_data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Empty image data",
+                )
+
+            query_start = time.time()
+            results = await self.query_miners(
+                media_bytes=image_data,
+                content_type="image/jpeg",
+                modality=Modality.IMAGE,
+                request_id=request_id,
+            )
+            bt.logging.debug(
+                f"[{request_id}] Miners queried in {time.time() - query_start:.2f}s"
+            )
+
+            predictions, uids = self.process_query_results(results)
+            response = {
+                "preds": [float(p) for p in predictions],
+                "fqdn": socket.getfqdn(),
+            }
+
+            # Add rich data if requested
+            rich_param = request.query_params.get("rich", "").lower()
+            if rich_param == "true":
+                response.update(self.get_rich_data(uids))
+
+            total_time = time.time() - start_time
+            bt.logging.debug(
+                f"[{request_id}] Binary image request processed in {total_time:.2f}s"
+            )
+
+            if len(self.request_times["image"]) >= self.max_request_history:
+                self.request_times["image"].pop(0)
+            self.request_times["image"].append(total_time)
+
+            return response
+
+        except Exception as e:
+            bt.logging.error(f"[{request_id}] Error processing binary image request: {e}")
+            bt.logging.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing request: {str(e)}",
+            )
 
     async def handle_image_request(self, request: Request) -> Dict[str, Any]:
         """
