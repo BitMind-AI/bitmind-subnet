@@ -47,10 +47,10 @@ class EvalEngine:
         if np.any(norm == 0) or np.isnan(norm).any():
             norm = np.ones_like(norm)  # Avoid division by zero or NaN
 
-        # burn .9 for now, gradually return to normal after v3 launch
         normed_weights = self.scores / norm
-        normed_weights = np.array([v * 0.33 for v in normed_weights])
-        normed_weights[135] = 0.67
+        # uncomment to burn emissions 
+        #normed_weights = np.array([v * 0.6 for v in normed_weights])
+        #normed_weights[135] = 0.4
         bt.logging.debug(normed_weights)
         return normed_weights
 
@@ -168,7 +168,7 @@ class EvalEngine:
                 try:
                     modality = modality.value
                     pred_count = self.tracker.get_prediction_count(uid).get(modality, 0)
-                    if pred_count < 5:
+                    if (modality == challenge_modality and error) or pred_count < 5:
                         miner_modality_rewards[modality] = 0.0
                         miner_modality_metrics[modality] = self._empty_metrics()
                         continue
@@ -243,17 +243,17 @@ class EvalEngine:
             recent_preds = recent_preds[-window:]
             recent_labels = recent_labels[-window:]
 
-        if len(labels) == 0 or len(preds) == 0:
+        if len(recent_labels) == 0 or len(recent_preds) == 0:
             return self._empty_metrics()
 
         try:
             predictions = np.argmax(recent_preds, axis=1)
 
             # Multi-class MCC (real vs synthetic vs semi-synthetic)
-            multi_class_mcc = matthews_corrcoef(labels, predictions)
+            multi_class_mcc = matthews_corrcoef(recent_labels, predictions)
 
             # Binary MCC (real vs any synthetic)
-            binary_labels = (labels > 0).astype(int)
+            binary_labels = (recent_labels > 0).astype(int)
             binary_preds = (predictions > 0).astype(int)
             binary_mcc = matthews_corrcoef(binary_labels, binary_preds)
 
