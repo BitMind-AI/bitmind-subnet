@@ -29,11 +29,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from PIL import Image
 from bittensor.core.axon import FastAPIThreadedServer
+from substrateinterface import SubstrateInterface
 
 from bitmind.config import MAINNET_UID
 from bitmind.encoding import media_to_bytes
 from bitmind.epistula import query_miner
-from bitmind.metagraph import get_miner_uids
+from bitmind.metagraph import get_miner_uids, run_block_callback_thread
 from bitmind.scoring.miner_history import MinerHistory
 from bitmind.transforms import get_base_transforms
 from bitmind.types import Modality, NeuronType
@@ -105,10 +106,10 @@ class MediaProcessor:
                     bt.logging.error("No frames extracted from video")
                     raise ValueError("No frames extracted from video")
 
+                frames = np.stack(frames)
                 if transform_frames:
-                    frames = get_base_transforms(self.target_size)(
-                        np.stack(frames)
-                    )
+                    frames = get_base_transforms(self.target_size)(frames)
+ 
                 video_bytes, content_type = media_to_bytes(frames)
                 return video_bytes, content_type
 
