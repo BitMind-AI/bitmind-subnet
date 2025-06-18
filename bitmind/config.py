@@ -102,7 +102,6 @@ def add_validator_args(parser):
         type=int,
         help="How often to unpack random media files, measured in 12 second blocks",
         default=300,
-
     )
 
     parser.add_argument(

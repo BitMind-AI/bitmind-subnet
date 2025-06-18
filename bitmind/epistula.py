@@ -204,5 +204,3 @@ async def query_miner(
         response["error"] = f"Unknown error: {str(e)}"
 
     return response
-
-
