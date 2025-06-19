@@ -15,13 +15,6 @@ from typing import Any, Dict, Optional
 
 
 def load_vae(vae_cls, model_id, subfolder, torch_dtype=torch.float32):
-    return vae_cls.from_pretrained(
-        model_id, 
-        subfolder=subfolder, 
-        torch_dtype=torch_dtype
-    )
-
-def load_vae(**kwargs):
     """
     Load a VAE model.
 
@@ -33,11 +26,12 @@ def load_vae(**kwargs):
     Returns:
         A loaded VAE model
     """
-    return kwargs["vae_cls"].from_pretrained(
-        kwargs["model_id"],
-        subfolder=kwargs.get("subfolder"),
-        torch_dtype=kwargs.get("torch_dtype", torch.float32)
+    return vae_cls.from_pretrained(
+        model_id, 
+        subfolder=subfolder, 
+        torch_dtype=torch_dtype
     )
+
 
 def load_hunyuanvideo_transformer(
     model_id: str = "tencent/HunyuanVideo",
