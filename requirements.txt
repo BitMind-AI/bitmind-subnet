@@ -22,3 +22,4 @@ wandb==0.19.9
 uvicorn==0.27.1
 python-multipart==0.0.20
 peft==0.15.0
+ftfy==6.3.1
