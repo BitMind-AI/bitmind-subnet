@@ -318,7 +318,7 @@ def add_validator_args(parser):
 
 def add_data_generator_args(parser):
     parser.add_argument(
-        "--cache-dir",
+        "--cache.base-dir",
         type=str,
         default=os.path.expanduser("~/.cache/sn34"),
         help="Directory for caching data",
@@ -348,6 +348,18 @@ def add_data_generator_args(parser):
         type=int,
         default=50,
         help="Number of batches to generate before starting new W&B run (avoids log truncation)",
+    )
+
+    parser.add_argument(
+        "--scraping.num-queries-per-batch",
+        type=int,
+        default=50,
+    )
+
+    parser.add_argument(
+        "--scraping.num-images-per-query",
+        type=int,
+        default=10,
     )
 
     parser.add_argument("--wandb.process-name", type=str, default="generator")

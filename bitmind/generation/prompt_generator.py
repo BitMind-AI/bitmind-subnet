@@ -1,5 +1,6 @@
 import re
 import gc
+import random
 import bittensor as bt
 import torch
 from PIL import Image
@@ -292,3 +293,68 @@ class PromptGenerator:
         except Exception as e:
             bt.logging.error(f"An error occurred during prompt sanitization: {e}")
             return prompt
+
+    def generate_search_query(self, max_tokens: int = 30) -> str:
+        """
+        Generate a random Google search query for image retrieval.
+        The queries vary in specificity and cover diverse topics.
+        """
+        if self.llm is None:
+            self.load_llm()
+
+        # Extensive list of possible search subjects
+        subjects = [
+            "wild animals", "domestic pets", "rural landscapes", "urban cities",
+            "outdoor sports", "tourist destinations", "medical professionals",
+            "household items", "family portraits", "mountain ranges",
+            "tropical forests", "traditional dishes", "regional cuisine",
+            "modern paintings", "ancient artifacts", "day and night scenes",
+            "bridges and roads", "laboratory research", "musical instruments",
+            "medieval castles", "cultural ceremonies", "government buildings",
+            "folk traditions", "famous novels", "office environments",
+            "ocean wildlife", "garden plants", "street food", "dance performances",
+            "industrial sites", "weather patterns", "religious buildings",
+            "transportation vehicles", "art galleries", "farming equipment",
+            "school activities", "natural wonders", "fashion styles",
+            "technology devices", "historical monuments", "public spaces",
+            "renewable energy", "social movements", "space exploration",
+            "artificial intelligence", "virtual reality", "climate change",
+            "digital art", "remote work", "sustainable living",
+            "mental health", "electric vehicles", "blockchain technology",
+            "drone photography", "viral trends", "streaming entertainment",
+            "indie games", "plant-based food", "smart homes",
+            "cybersecurity", "genetic research", "quantum computing",
+            "3D printing", "robotics innovations", "augmented reality",
+            "professional headshots", "graduation portraits", "wedding photos",
+            "corporate portraits", "actor headshots", "model portfolios",
+            "business profile photos", "personal branding portraits",
+            "social media profile pictures", "executive portraits",
+            "casual portraits", "lifestyle photography", "candid moments",
+            "group portraits", "team photos", "student portraits"
+        ]
+
+        search_query = random.choice(subjects)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"[INST]Generate ONE creative and realistic Google image search query related to: {search_query}. "
+                    "Make it sound natural, as if a real person was searching. "
+                    "Only respond with the search query.[/INST]"
+                ),
+            },
+            {"role": "user", "content": "Generate a random image search query"},
+        ]
+
+        try:
+            query = self.llm(
+                messages,
+                max_new_tokens=max_tokens,
+                pad_token_id=self.llm.tokenizer.eos_token_id,
+                return_full_text=False,
+            )
+            return query[0]["generated_text"].strip()
+        except Exception as e:
+            bt.logging.error(f"An error occurred generating search query: {e}")
+            return "beautiful landscape photography"
