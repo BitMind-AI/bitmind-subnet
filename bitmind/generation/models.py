@@ -269,7 +269,7 @@ def get_text_to_video_models() -> List[ModelConfig]:
                         "vae_cls": AutoencoderKLWan,
                         "model_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
                         "subfolder": "vae",
-                        "torch_dtype": torch.bfloat32
+                        "torch_dtype": torch.float32
                     }
                 ),
                 "torch_dtype": torch.bfloat16
