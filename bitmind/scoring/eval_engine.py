@@ -173,7 +173,7 @@ class EvalEngine:
                         miner_modality_metrics[modality] = self._empty_metrics()
                         continue
 
-                    metrics = self._get_metrics(uid, modality, window=100)
+                    metrics = self._get_metrics(uid, modality, window=200)
 
                     binary_weight = self.config.scoring.binary_weight
                     multiclass_weight = self.config.scoring.multiclass_weight

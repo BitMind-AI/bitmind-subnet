@@ -15,7 +15,7 @@ class MinerHistory:
 
     VERSION = 2
 
-    def __init__(self, store_last_n_predictions: int = 100):
+    def __init__(self, store_last_n_predictions: int = 200):
         self.predictions: Dict[int, Dict[Modality, deque]] = {}
         self.labels: Dict[int, Dict[Modality, deque]] = {}
         self.miner_hotkeys: Dict[int, str] = {}
