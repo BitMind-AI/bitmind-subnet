@@ -216,37 +216,40 @@ class Generator:
 
                 try:
                     ### Image scraping
-                    queries = [
-                        self.generation_pipeline.prompt_generator.generate_search_query(
-                            max_tokens=30)
-                        for _ in range(self.config.scraping.num_queries_per_batch)
-                    ]
+                    if not self.config.scraper.off:
+                        queries = [
+                            self.generation_pipeline.prompt_generator.generate_search_query(
+                                max_tokens=30)
+                            for _ in range(self.config.scraper.num_queries_per_batch)
+                        ]
 
-                    for query in queries: 
-                        self.scraper.download_images(
-                            query, 
-                            limit_per_scraper=self.config.scraping.num_images_per_query
-                        )
+                        for query in queries: 
+                            self.scraper.download_images(
+                                query, 
+                                limit_per_scraper=self.config.scraper.num_images_per_query
+                            )
 
                     ### Image/video generation
-                    image_samples = await self.sample_images(batch_size)
-                    bt.logging.info(
-                        f"Starting batch generation | Batch Size: {len(image_samples)} | Batch Count: {gen_count}"
-                    )
+                    if not self.config.gen.off:
+                        image_samples = await self.sample_images(batch_size)
+                        bt.logging.info(
+                            f"Starting batch generation | Batch Size: {len(image_samples)} | Batch Count: {gen_count}"
+                        )
 
-                    start_time = time.time()
-                    filepaths = self.generation_pipeline.generate(
-                        image_samples, model_names=model_names
-                    )
-                    await asyncio.sleep(1)
+                        start_time = time.time()
+                        filepaths = self.generation_pipeline.generate(
+                            image_samples, model_names=model_names
+                        )
+                        await asyncio.sleep(1)
 
-                    duration = time.time() - start_time
-                    gen_count += len(filepaths)
-                    batch_count += 1
-                    bt.logging.info(
-                        f"Generated {len(filepaths)} files in batch #{batch_count} in {duration:.2f} seconds"
-                    )
+                        duration = time.time() - start_time
+                        gen_count += len(filepaths)
+                        batch_count += 1
+                        bt.logging.info(
+                            f"Generated {len(filepaths)} files in batch #{batch_count} in {duration:.2f} seconds"
+                        )
 
+                    ### Wandb run management
                     if not self.config.wandb.off:
                         if batch_count >= self.config.wandb.num_batches_per_run:
                             batch_count = 0
