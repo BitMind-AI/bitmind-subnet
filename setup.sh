@@ -41,3 +41,12 @@ sudo npm install -g pm2@latest
 ############################
 
 pip install --use-pep517 -e . -r requirements-git.txt
+
+emergency_restart() {
+    echo "Performing emergency restart of PM2 processes..."
+    pm2 reload sn34-generator 2>/dev/null || echo "Failed to reload sn34-generator"
+    pm2 reload sn34-proxy 2>/dev/null || echo "Failed to reload sn34-proxy"
+    pm2 reload sn34-validator 2>/dev/null || echo "Failed to reload sn34-validator"
+}
+
+trap emergency_restart EXIT
