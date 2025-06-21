@@ -3,6 +3,8 @@ import random
 import time
 import urllib.parse
 from urllib.parse import quote_plus
+import json
+import re
 
 import bittensor as bt
 from selenium import webdriver
@@ -10,6 +12,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
 
 from bitmind.scraping.base import BaseScraper
 
@@ -54,9 +57,9 @@ class GoogleScraper(BaseScraper):
 
         if min_width is not None and min_height is not None:
             if min_width >= 400 and min_height >= 300:
-                tbs["isz"] = "l"
+                tbs["isz"] = "l"  # large
             elif min_width >= 128:
-                tbs["isz"] = "m"
+                tbs["isz"] = "m"  # medium
 
         self.tbs = self._parse_request_parameters(tbs)
 
@@ -95,7 +98,7 @@ class GoogleScraper(BaseScraper):
 
     def image_search(self, queries, limit=5):
         """
-        Perform Google image search with text queries.
+        Perform Google image search with text queries and extract full-size image URLs.
 
         Parameters:
         -----------
@@ -110,14 +113,17 @@ class GoogleScraper(BaseScraper):
             Dictionary mapping query keys to lists of image data dictionaries
             Each image dict contains:
             - query: Original search query
-            - url: Image URL
+            - url: Full-size image URL
             - source: Always "google"
+            - thumbnail_url: Thumbnail URL (optional)
         """
         user_agent = (
             random.choice(self.user_agents)
             if isinstance(self.user_agents, list)
             else self.user_agents
         )
+
+        browser = None
         try:
             chrome_options = Options()
             if self.headless:
@@ -126,53 +132,179 @@ class GoogleScraper(BaseScraper):
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_experimental_option(
+                "excludeSwitches", ["enable-automation"]
+            )
+            chrome_options.add_experimental_option("useAutomationExtension", False)
 
             browser = webdriver.Chrome(options=chrome_options)
+            browser.execute_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            )
+
             results = {}
 
             if not isinstance(queries, list):
                 queries = [queries]
 
             for query in queries:
+                bt.logging.info(f"Searching for: {query}")
                 page_url = f"https://www.google.com/search?&safe=active&source=lnms&tbs={self.tbs}&tbm=isch&q={self._parse_request_queries(query)}"
                 browser.get(page_url)
 
+                # Wait for page to load
+                time.sleep(2)
+
                 # Scroll to load more images
-                for _ in range(10):
+                for i in range(5):  # Reduced scrolling for faster execution
                     browser.execute_script("window.scrollBy(0, window.innerHeight)")
                     time.sleep(self.scroll_delay / 1000)
 
-                WebDriverWait(browser, 10).until(
-                    EC.presence_of_all_elements_located((By.TAG_NAME, "img"))
-                )
+                # Method 1: Click on images to get full-size URLs
+                image_urls = self._extract_full_size_urls_by_clicking(browser, limit)
 
-                image_elements = (
-                    browser.find_elements(By.TAG_NAME, "img")
-                    + browser.find_elements(By.CSS_SELECTOR, "img[data-src]")
-                    + browser.find_elements(By.CSS_SELECTOR, "img[src^='http']")
-                )
-
-                image_urls = []
-                for img in image_elements:
-                    for attr in ["src", "data-src"]:
-                        src = img.get_attribute(attr)
-                        if src and src.startswith("http") and "google" not in src:
-                            image_urls.append(src)
-                            break
+                # Method 2: If clicking method fails, try extracting from page source
+                if len(image_urls) < limit:
+                    bt.logging.info("Trying alternative extraction method...")
+                    additional_urls = self._extract_urls_from_page_source(
+                        browser, limit - len(image_urls)
+                    )
+                    image_urls.extend(additional_urls)
 
                 query_key = query.replace(" ", "")
                 results[query_key] = [
                     {"query": query, "url": url, "source": "google"}
                     for url in image_urls[:limit]
                 ]
-            browser.quit()
+
+                bt.logging.info(
+                    f"Found {len(results[query_key])} images for query: {query}"
+                )
+
             return results
 
         except Exception as e:
             bt.logging.error(f"Google scraper error: {str(e)}")
-            if "browser" in locals() and browser:
-                browser.quit()
             return {}
+        finally:
+            if browser:
+                browser.quit()
+
+    def _extract_full_size_urls_by_clicking(self, browser, limit):
+        """Extract full-size image URLs by clicking on thumbnails"""
+        image_urls = []
+
+        try:
+            # Find clickable image containers
+            image_containers = browser.find_elements(By.CSS_SELECTOR, "[data-ri]")
+
+            for i, container in enumerate(
+                image_containers[: limit * 2]
+            ):  # Get more than needed
+                if len(image_urls) >= limit:
+                    break
+
+                try:
+                    # Scroll element into view
+                    browser.execute_script(
+                        "arguments[0].scrollIntoView(true);", container
+                    )
+                    time.sleep(0.5)
+
+                    # Click on the image
+                    ActionChains(browser).move_to_element(container).click().perform()
+                    time.sleep(1)
+
+                    # Look for the full-size image in the preview pane
+                    full_size_img = None
+
+                    # Try different selectors for the full-size image
+                    selectors = [
+                        "img[src*='https://'][style*='max-width']",
+                        ".irc_mi img",
+                        ".v4dQwb img",
+                        "img[jsname]",
+                    ]
+
+                    for selector in selectors:
+                        try:
+                            elements = browser.find_elements(By.CSS_SELECTOR, selector)
+                            for elem in elements:
+                                src = elem.get_attribute("src")
+                                if (
+                                    src
+                                    and src.startswith("http")
+                                    and "google" not in src
+                                    and "gstatic" not in src
+                                    and len(src) > 50
+                                ):  # Longer URLs are usually full-size
+                                    full_size_img = src
+                                    break
+                            if full_size_img:
+                                break
+                        except:
+                            continue
+
+                    if full_size_img and full_size_img not in image_urls:
+                        image_urls.append(full_size_img)
+                        bt.logging.debug(
+                            f"Found full-size image: {full_size_img[:100]}..."
+                        )
+
+                    # Close the preview if it opened
+                    try:
+                        close_button = browser.find_element(
+                            By.CSS_SELECTOR, "[aria-label='Close']"
+                        )
+                        close_button.click()
+                        time.sleep(0.5)
+                    except:
+                        pass
+
+                except Exception as e:
+                    bt.logging.debug(f"Error clicking image {i}: {str(e)}")
+                    continue
+
+        except Exception as e:
+            bt.logging.error(f"Error in clicking method: {str(e)}")
+
+        return image_urls
+
+    def _extract_urls_from_page_source(self, browser, limit):
+        """Extract image URLs from page source using regex"""
+        image_urls = []
+
+        try:
+            page_source = browser.page_source
+
+            # Look for image URLs in various patterns
+            patterns = [
+                r'"(https://[^"]*\.(?:jpg|jpeg|png|gif|webp)[^"]*)"',
+                r"'(https://[^']*\.(?:jpg|jpeg|png|gif|webp)[^']*)'",
+                r'src="(https://[^"]*\.(?:jpg|jpeg|png|gif|webp)[^"]*)"',
+                r'data-src="(https://[^"]*\.(?:jpg|jpeg|png|gif|webp)[^"]*)"',
+            ]
+
+            for pattern in patterns:
+                matches = re.findall(pattern, page_source, re.IGNORECASE)
+                for match in matches:
+                    if (
+                        match not in image_urls
+                        and "google" not in match
+                        and "gstatic" not in match
+                        and len(match) > 50
+                    ):  # Filter out small/thumbnail URLs
+                        image_urls.append(match)
+                        if len(image_urls) >= limit:
+                            break
+                if len(image_urls) >= limit:
+                    break
+
+        except Exception as e:
+            bt.logging.error(f"Error extracting from page source: {str(e)}")
+
+        return image_urls[:limit]
 
     def _parse_request_parameters(self, tbs):
         """Parse TBS parameters for Google search URL"""
