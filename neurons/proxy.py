@@ -15,6 +15,7 @@ import cv2
 import httpx
 import numpy as np
 import uvicorn
+from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import (
@@ -29,11 +30,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from PIL import Image
 from bittensor.core.axon import FastAPIThreadedServer
+from substrateinterface import SubstrateInterface
 
 from bitmind.config import MAINNET_UID
 from bitmind.encoding import media_to_bytes
 from bitmind.epistula import query_miner
-from bitmind.metagraph import get_miner_uids
+from bitmind.metagraph import get_miner_uids, run_block_callback_thread
 from bitmind.scoring.miner_history import MinerHistory
 from bitmind.transforms import get_base_transforms
 from bitmind.types import Modality, NeuronType
@@ -69,7 +71,7 @@ class MediaProcessor:
             bt.logging.error(f"Error processing image: {e}")
             raise ValueError(f"Failed to process image: {str(e)}")
 
-    def process_video(self, video_data: bytes) -> np.ndarray:
+    def process_video(self, video_data: bytes, transform_frames=True) -> np.ndarray:
         """
         Process raw video bytes into frames and preprocess
 
@@ -105,10 +107,11 @@ class MediaProcessor:
                     bt.logging.error("No frames extracted from video")
                     raise ValueError("No frames extracted from video")
 
-                transformed_frames = get_base_transforms(self.target_size)(
-                    np.stack(frames)
-                )
-                video_bytes, content_type = media_to_bytes(transformed_frames)
+                frames = np.stack(frames)
+                if transform_frames:
+                    frames = get_base_transforms(self.target_size)(frames)
+ 
+                video_bytes, content_type = media_to_bytes(frames)
                 return video_bytes, content_type
 
             except Exception as e:
@@ -267,8 +270,20 @@ class ValidatorProxy(BaseNeuron):
             dependencies=[Depends(self.verify_auth)],
         )
         router.add_api_route(
+            "/forward_image_binary",
+            self.handle_binary_image_request,
+            methods=["POST"],
+            dependencies=[Depends(self.verify_auth)],
+        )
+        router.add_api_route(
             "/forward_video",
             self.handle_video_request,
+            methods=["POST"],
+            dependencies=[Depends(self.verify_auth)],
+        )
+        router.add_api_route(
+            "/forward_video_binary",
+            self.handle_binary_video_request,
             methods=["POST"],
             dependencies=[Depends(self.verify_auth)],
         )
@@ -290,6 +305,69 @@ class ValidatorProxy(BaseNeuron):
             workers=9,
         )
         self.fast_api = FastAPIThreadedServer(config=fast_config)
+
+    async def handle_binary_image_request(self, request: Request) -> Dict[str, Any]:
+        """
+        Handle raw JPEG image processing requests.
+
+        Args:
+            request: FastAPI request object with binary JPEG image data
+
+        Returns:
+            Dictionary with prediction results
+        """
+        start_time = time.time()
+        request_id = str(uuid.uuid4())[:8]
+        bt.logging.trace(f"[{request_id}] Starting binary image request processing")
+
+        try:
+            image_data = await request.body()
+            if not image_data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Empty image data",
+                )
+
+            query_start = time.time()
+            results = await self.query_miners(
+                media_bytes=image_data,
+                content_type="image/jpeg",
+                modality=Modality.IMAGE,
+                request_id=request_id,
+            )
+            bt.logging.debug(
+                f"[{request_id}] Miners queried in {time.time() - query_start:.2f}s"
+            )
+
+            predictions, uids = self.process_query_results(results)
+            response = {
+                "preds": [float(p) for p in predictions],
+                "fqdn": socket.getfqdn(),
+            }
+
+            # Add rich data if requested
+            rich_param = request.query_params.get("rich", "").lower()
+            if rich_param == "true":
+                response.update(self.get_rich_data(uids))
+
+            total_time = time.time() - start_time
+            bt.logging.debug(
+                f"[{request_id}] Binary image request processed in {total_time:.2f}s"
+            )
+
+            if len(self.request_times["image"]) >= self.max_request_history:
+                self.request_times["image"].pop(0)
+            self.request_times["image"].append(total_time)
+
+            return response
+
+        except Exception as e:
+            bt.logging.error(f"[{request_id}] Error processing binary image request: {e}")
+            bt.logging.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing request: {str(e)}",
+            )
 
     async def handle_image_request(self, request: Request) -> Dict[str, Any]:
         """
@@ -440,6 +518,86 @@ class ValidatorProxy(BaseNeuron):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error processing request: {str(e)}",
             )
+
+    async def handle_binary_video_request(self, request: Request) -> Dict[str, Any]:
+        """
+        Handle video processing requests.
+
+        Args:
+            request: FastAPI request object with form data containing video file
+
+        Returns:
+            Dictionary with prediction results
+        """
+        start_time = time.time()
+        request_id = str(uuid.uuid4())[:8]
+        bt.logging.trace(f"[{request_id}] Starting video request processing")
+
+        try:
+            form = await request.form()
+            if "video" not in form:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Missing 'video' field in form data",
+                )
+
+            video_file = form["video"]
+            video_data = await video_file.read()
+
+            if not video_data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="Empty video file"
+                )
+
+            rich_param = form.get("rich", "").lower()
+
+            proc_start = time.time()
+            media_bytes, content_type = await asyncio.to_thread(
+                self.media_processor.process_video, video_data, transform_frames=False
+            )
+            bt.logging.trace(
+                f"[{request_id}] Video processed in {time.time() - proc_start:.2f}s"
+            )
+
+            query_start = time.time()
+            results = await self.query_miners(
+                media_bytes=media_bytes,
+                content_type=content_type,
+                modality=Modality.VIDEO,
+                request_id=request_id,
+            )
+            bt.logging.debug(
+                f"[{request_id}] Miners queried in {time.time() - query_start:.2f}s"
+            )
+
+            predictions, uids = self.process_query_results(results)
+            response = {
+                "preds": [float(p) for p in predictions],
+                "fqdn": socket.getfqdn(),
+            }
+
+            # Add rich data if requested
+            if rich_param == "true":
+                response.update(self.get_rich_data(uids))
+
+            total_time = time.time() - start_time
+            bt.logging.debug(
+                f"[{request_id}] Video request processed in {total_time:.2f}s"
+            )
+
+            if len(self.request_times["video"]) >= self.max_request_history:
+                self.request_times["video"].pop(0)
+            self.request_times["video"].append(total_time)
+            return response
+
+        except Exception as e:
+            bt.logging.error(f"Error processing video request: {e}")
+            bt.logging.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing request: {str(e)}",
+            )
+
 
     async def query_miners(
         self,
