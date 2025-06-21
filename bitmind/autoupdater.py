@@ -21,6 +21,7 @@ import signal
 import time
 import os
 import requests
+import subprocess
 import bittensor as bt
 import bitmind
 
