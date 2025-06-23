@@ -8,6 +8,24 @@ If you are new to Bittensor (you're probably not if you're reading the validator
 
 **Understand the minimum compute requirements to run a validator**. Validator neurons on SN34 run a suite of generative (text-to-image, text-to-video, etc.) models that require an **80GB VRAM GPU**. They also maintain a large cache of real and synthetic media to ensure diverse, locally available data for challenging miners. We recommend **1TB of storage**. For more details, please see our [minimum compute documentation](../min_compute.yml)
 
+## Validator Overview
+
+SN34 validators support two distinct miner types, each requiring different challenge types and scoring mechanisms:
+
+### DETECTOR Miners (Classification)
+- **Challenge Types**: Images and videos (real, synthetic, semi-synthetic)
+- **Response Format**: Multiclass probability vectors [$p_{real}$, $p_{synthetic}$, $p_{semisynthetic}$]
+- **Scoring**: Matthews Correlation Coefficient (MCC) for binary and multiclass classification
+- **Modalities**: Both images and videos
+
+### SEGMENTER Miners (Segmentation)
+- **Challenge Types**: Images only (semi-synthetic with AI-generated regions)
+- **Response Format**: Confidence masks with shape (H, W) and values in [0.0, 1.0]
+- **Scoring**: Intersection over Union (IoU) against ground truth masks
+- **Modalities**: Images only (video segmentation not yet supported)
+
+Validators automatically detect miner types through the `/miner_info` endpoint and send appropriate challenges accordingly.
+
 ## Required Hugging Face Model Access
 
 To properly validate, you must gain access to several Hugging Face models used by the subnet. This requires logging in to your Hugging Face account and accepting the terms for each model below:
@@ -110,4 +128,27 @@ The above command will kick off 3 `pm2` processes
 ```
 - `sn34-validator` is the validator process
 - `sn34-generator` runs our data generation pipeline to produce **synthetic images and videos** (stored in `~/.cache/sn34`)
-- `sn34-proxy`routes organic traffic from our applications to miners. 
+- `sn34-proxy`routes organic traffic from our applications to miners.
+
+## Challenge Generation
+
+### DETECTOR Challenges
+- **Media Types**: Real, synthetic, and semi-synthetic images and videos
+- **Augmentation**: Random transformations applied to test robustness
+- **Scoring**: MCC-based rewards for classification accuracy
+
+### SEGMENTER Challenges  
+- **Media Types**: Semi-synthetic images with AI-generated regions
+- **Augmentation**: Random transformations applied to test robustness and mitigate gaming
+- **Scoring**: IoU-based rewards for segmentation precision
+
+### Miner Type Detection
+Validators automatically query the `/miner_info` endpoint to determine miner types and send appropriate challenges. This ensures:
+- DETECTOR miners receive classification challenges
+- SEGMENTER miners receive segmentation challenges
+- Proper scoring mechanisms are applied to each type
+
+### Performance Tracking
+- Separate score tracking for DETECTOR and SEGMENTER miners
+- Normalized weight distribution within each miner type
+- Weights set based on moving averages of scores
