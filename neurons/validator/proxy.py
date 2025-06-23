@@ -15,6 +15,7 @@ import cv2
 import httpx
 import numpy as np
 import uvicorn
+from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import (
