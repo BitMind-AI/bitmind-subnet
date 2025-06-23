@@ -439,7 +439,7 @@ class Validator(BaseNeuron):
                     sampler_name, 1, max_duration=max_duration
                 )
             except Exception as e:
-                bt.loggstatsing.error(f"Error sampling media with {sampler_name}: {e}")
+                bt.logging.error(f"Error sampling media with {sampler_name}: {e}")
                 return None
 
             if results and results.get("count", 0) > 0:
