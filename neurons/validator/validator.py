@@ -256,29 +256,7 @@ class Validator(BaseNeuron):
             challenge_modality=modality,
             miner_type=miner_type
         )
-        bt.logging.info(f"rewards: {rewards}")
-        if miner_type == MinerType.SEGMENTER:
-            KEEP_LAST_N = 500
-            for i, r in enumerate(responses):
-                if not r["error"] and r["prediction"] is not None:
-                    uid = r['uid']
-                    timestamp = str(int(time.time()))
-                    save_dir = os.path.join("miner_results", timestamp)
-                    os.makedirs(save_dir, exist_ok=True)
 
-                    # Delete oldest directories if we have more than KEEP_LAST_N
-                    all_dirs = [os.path.join("miner_results", d) for d in os.listdir("miner_results")]
-                    all_dirs = [d for d in all_dirs if os.path.isdir(d)]
-                    if len(all_dirs) > KEEP_LAST_N:
-                        all_dirs.sort()
-                        for old_dir in all_dirs[:-KEEP_LAST_N]:
-                            shutil.rmtree(old_dir)
-                            bt.logging.debug(f"Deleted old results directory: {old_dir}")
-
-                    np.save(os.path.join(save_dir, "image.npy"), media_sample["image"])
-                    np.save(os.path.join(save_dir, f"uid_{uid}_iou_{rewards[uid]}.npy"), r["prediction"])
-                    np.save(os.path.join(save_dir, "ground_truth_mask.npy"), media_sample["mask"])
-                    bt.logging.info(f"Logged segmentation results for miner {uid}")
         self.log_challenge_results(media_sample, responses, rewards)
         return rewards
 
