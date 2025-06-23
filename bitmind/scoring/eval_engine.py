@@ -218,7 +218,7 @@ class EvalEngine:
                             miner_type=MinerType.SEGMENTER
                         )
 
-                        avg_iou = np.mean(self.tracker.segmentation_scores[uid][modality])
+                        avg_iou = np.mean(self.tracker.segmentation_scores[uid][modality][:200])
                         miner_modality_rewards[modality] = avg_iou
                         miner_modality_metrics[modality] = {"iou": iou}
                     else:
