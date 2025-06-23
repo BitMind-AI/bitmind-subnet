@@ -11,6 +11,11 @@ class NeuronType(Enum):
     MINER = "MINER"
 
 
+class MinerType(Enum):
+    SEGMENTER = "SEGMENTER"
+    DETECTOR = "DETECTOR"
+
+
 class FileType(Enum):
     PARQUET = auto()
     ZIP = auto()

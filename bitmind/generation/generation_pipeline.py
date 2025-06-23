@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from diffusers.utils import export_to_video
 from PIL import Image
+import cv2
 
 from bitmind.types import CacheConfig, ModelTask
 from bitmind.generation.util.image import create_random_mask, is_black_output
@@ -369,7 +370,6 @@ class GenerationPipeline:
 
         bt.logging.debug("Preparing generation arguments")
         gen_args = model_config.get("generate_args", {}).copy()
-        mask_center = None
 
         # prep inptask-specific generation args
         if task == "i2i":
@@ -380,7 +380,7 @@ class GenerationPipeline:
             if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
                 image = image.resize(target_size, Image.Resampling.LANCZOS)
 
-            gen_args["mask_image"], mask_center = create_random_mask(image.size)
+            gen_args["mask_image"] = create_random_mask(image.size)
             gen_args["image"] = image
 
         elif task == "i2v":
@@ -452,7 +452,6 @@ class GenerationPipeline:
             "model_name": model_name,
             "time": time.time(),
             "gen_duration": gen_time,
-            "mask_center": mask_center,
         }
         for k in ["num_inference_steps", "guidance_scale", "resolution"]:
             output[k] = gen_args.get(k, "")
@@ -462,7 +461,30 @@ class GenerationPipeline:
             output["source_image"] = source_image
 
         mask_image = gen_args.get("mask_image", None)
-        if mask_image is not None:
+        if mask_image is not None and modality == "image":
+            # Get generated image from gen_output
+            generated_img = None
+            if hasattr(gen_output, 'images') and gen_output.images:
+                generated_img = gen_output.images[0]
+            elif isinstance(gen_output, Image.Image):
+                generated_img = gen_output
+            if generated_img is not None:
+                if isinstance(generated_img, Image.Image):
+                    gen_img_np = np.array(generated_img)
+                else:
+                    gen_img_np = generated_img
+                if isinstance(mask_image, Image.Image):
+                    mask_np = np.array(mask_image)
+                else:
+                    mask_np = mask_image
+                # Resize mask to size of generated image
+                mask_resized = cv2.resize(mask_np, (gen_img_np.shape[1], gen_img_np.shape[0]), interpolation=cv2.INTER_NEAREST)
+                # Ensure mask_resized is uint8 and single-channel
+                mask_image = Image.fromarray(mask_resized.astype(np.uint8), mode="L")
+                output["mask_image"] = mask_image
+            else:
+                output["mask_image"] = mask_image
+        elif mask_image is not None:
             output["mask_image"] = mask_image
 
         del self.model
@@ -519,7 +541,10 @@ class GenerationPipeline:
             if "mask_image" in media_sample:
                 mask_path = str(save_path).replace(".png", "_mask.npy")
                 metadata["mask_path"] = mask_path
-                np.save(mask_path, np.array(media_sample["mask_image"]))
+                mask_arr = np.array(media_sample["mask_image"])
+                # Binarize mask for saving (0/1)
+                mask_arr = (mask_arr > 0).astype(np.uint8)
+                np.save(mask_path, mask_arr)
         elif modality == "video":
             save_path = str(base_path.with_suffix(".mp4"))
             export_to_video(media_sample[modality].frames[0], save_path, fps=30)
