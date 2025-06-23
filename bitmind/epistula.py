@@ -133,7 +133,11 @@ async def get_miner_type(
 
         async with session.get(url, headers=headers, timeout=timeout) as res:
             response["status"] = res.status
-            if res.status != 200:
+            if res.status == 404:
+                # backwards compatibility for legacy detectors without miner_info endpoint
+                response["miner_type"] = "detector"
+                return response
+            elif res.status != 200:
                 response["error"] = f"HTTP {res.status}"
                 return response
 
