@@ -8,7 +8,7 @@ import cv2
 
 
 def apply_random_augmentations(
-    inputs, target_image_size, mask_point=None, level_probs=None
+    inputs, target_image_size, mask_point=None, level_probs=None, level=None
 ):
     """
     Apply image transformations based on randomly selected level.
@@ -21,6 +21,7 @@ def apply_random_augmentations(
             - Level 1 (45%): Basic augmentations
             - Level 2 (15%): Medium distortions
             - Level 3 (15%): Hard distortions
+        level: set to override level_probs
 
     Returns:
         tuple: (transformed_image, level, transform_params)
@@ -28,29 +29,30 @@ def apply_random_augmentations(
     Raises:
         ValueError: If probabilities don't sum to 1.0 (within floating point precision)
     """
-    if level_probs is None:
-        level_probs = {  # Difficult level probabilities
-            0: 0.25,  # No augmentations (base transforms)
-            1: 0.25,  # Basic augmentations
-            2: 0.25,  # Medium distortions
-            3: 0.25,  # Hard distortions
-        }
+    if level is None:
+        if level_probs is None:
+            level_probs = { # Difficult level probabilities
+                0: 0.25,  # No augmentations (base transforms)
+                1: 0.25,  # Basic augmentations
+                2: 0.25,  # Medium distortions
+                3: 0.25,  # Hard distortions
+            }
 
-    if not math.isclose(sum(level_probs.values()), 1.0, rel_tol=1e-9):
-        raise ValueError("Probabilities of levels must sum to 1.0")
+        if not math.isclose(sum(level_probs.values()), 1.0, rel_tol=1e-9):
+            raise ValueError("Probabilities of levels must sum to 1.0")
 
-    # get cumulative probs and select augmentation level
-    cumulative_probs = {}
-    cumsum = 0
-    for level, prob in sorted(level_probs.items()):
-        cumsum += prob
-        cumulative_probs[level] = cumsum
+        # get cumulative probs and select augmentation level
+        cumulative_probs = {}
+        cumsum = 0
+        for level, prob in sorted(level_probs.items()):
+            cumsum += prob
+            cumulative_probs[level] = cumsum
 
-    rand_val = np.random.random()
-    for curr_level, cum_prob in cumulative_probs.items():
-        if rand_val <= cum_prob:
-            level = curr_level
-            break
+        rand_val = np.random.random()
+        for curr_level, cum_prob in cumulative_probs.items():
+            if rand_val <= cum_prob:
+                level = curr_level
+                break
 
     if level == 0:
         tforms = get_base_transforms(target_image_size)

@@ -405,6 +405,7 @@ class Validator(BaseNeuron):
                 sample.get(modality),
                 (256, 256),
                 sample.get("mask_center", None),
+                #level_=1
             )
             sample[modality] = augmented_media
             sample.update(
