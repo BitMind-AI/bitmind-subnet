@@ -44,7 +44,17 @@ fi
 ###################################
 # RESTART PROCESSES 
 ###################################
-NAME="bitmind-miner"
+# Set script based on MINER_TYPE
+if [ "${MINER_TYPE,,}" = "detector" ]; then
+    SCRIPT="neurons.miner.detection_miner"
+elif [ "${MINER_TYPE,,}" = "segmenter" ]; then
+    SCRIPT="neurons.miner.segmentation_miner"
+else
+    echo "Invalid MINER_TYPE: $MINER_TYPE. Must be 'detector' or 'segmenter'"
+    exit 1
+fi
+
+NAME="sn34-$MINER_TYPE"
 
 # Stop any existing processes
 if pm2 list | grep -q "$NAME"; then
@@ -55,10 +65,10 @@ fi
 echo "Starting $NAME | chain_endpoint: $CHAIN_ENDPOINT | netuid: $NETUID"
 
 # Run data generator
-pm2 start neurons/miner.py \
-  --interpreter python3 \
+pm2 start python3 \
   --name $NAME \
   -- \
+  -m $SCRIPT \
   --wallet.name $WALLET_NAME \
   --wallet.hotkey $WALLET_HOTKEY \
   --netuid $NETUID \

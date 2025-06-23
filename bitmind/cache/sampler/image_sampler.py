@@ -34,6 +34,7 @@ class ImageSampler(BaseSampler):
         as_float32: bool = False,
         channels_first: bool = False,
         as_rgb: bool = True,
+        require_mask: bool = False,
     ) -> Dict[str, Any]:
         """
         Sample random images and their metadata from the cache.
@@ -103,11 +104,34 @@ class ImageSampler(BaseSampler):
                         self.cache_fs._log_warning(
                             f"Error loading metadata for {image_path}: {e}"
                         )
+                else:
+                    metadata_path = None
+
+                mask = None
+                mask_path = Path(str(image_path).replace(image_path.suffix, "_mask.npy"))
+                if mask_path.exists():
+                    try:
+                        mask = np.load(str(mask_path))
+                    except Exception as e:
+                        self.cache_fs._log_warning(
+                            f"Error loading mask for {image_path}: {e}"
+                        )
+                        mask = None
+                elif require_mask:
+                    self.cache_fs._log_warning(
+                        f"Mask {mask_path} does not exist for {image_path}"
+                    )
+                    mask_path = None
+
+                if mask is None and require_mask:
+                    continue
 
                 item = {
                     "image": image,
+                    "mask": mask,
                     "path": str(image_path),
                     "metadata_path": str(metadata_path),
+                    "mask_path": str(mask_path),
                     "metadata": metadata,
                 }
 
