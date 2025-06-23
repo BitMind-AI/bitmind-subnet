@@ -60,6 +60,19 @@ class EvalEngine:
         # uncomment to burn emissions 
         #normed_weights = np.array([v * 0.6 for v in normed_weights])
         #normed_weights[135] = 0.4
+
+        segmentation_uids = [
+            uid for uid in range(len(normed_weights))
+            if self.tracker.get_miner_type(uid) == MinerType.SEGMENTER
+        ]
+        detector_uids = [
+            uid for uid in range(len(normed_weights))
+            if self.tracker.get_miner_type(uid) == MinerType.DETECTOR
+        ]
+
+        normed_weights[segmentation_uids] *= 0.2
+        normed_weights[detector_uids] *= 0.8
+
         bt.logging.debug(normed_weights)
         return normed_weights
 
