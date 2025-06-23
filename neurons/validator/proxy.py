@@ -15,6 +15,7 @@ import cv2
 import httpx
 import numpy as np
 import uvicorn
+from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import (
@@ -680,7 +681,7 @@ class ValidatorProxy(BaseNeuron):
 
             except asyncio.TimeoutError:
                 bt.logging.warning(
-                    f"Timed out waiting for miner responses after {total_timeout}s"
+                    f"Timed out waiting for miner responses after {self.config.neuron.miner_total_timeout}s"
                 )
                 return []
 
