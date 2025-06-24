@@ -365,11 +365,11 @@ def gaussian_noise_color(img, param, b=None):
     """
     ycbcr = rgb2ycbcr(img) / 255
     size_a = ycbcr.shape
-    if b is None:
-        b = (
-            ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
-        ) * 255
-        b = ycbcr2rgb(b)
+    # if b is None:
+    b = (
+        ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
+    ) * 255
+    b = ycbcr2rgb(b)
     return np.clip(b, 0, 255).astype(np.uint8), {"b": b}
 
 
