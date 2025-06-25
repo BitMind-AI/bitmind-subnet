@@ -32,7 +32,6 @@ def load_vae(vae_cls, model_id, subfolder, torch_dtype=torch.float32):
         torch_dtype=torch_dtype
     )
 
-
 def load_hunyuanvideo_transformer(
     model_id: str = "tencent/HunyuanVideo",
     subfolder: str = "transformer",

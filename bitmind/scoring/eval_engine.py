@@ -4,8 +4,9 @@ import numpy as np
 import json
 from sklearn.metrics import matthews_corrcoef
 import os
+import traceback
 
-from bitmind.types import Modality
+from bitmind.types import Modality, MinerType
 from bitmind.scoring.miner_history import MinerHistory
 
 
@@ -37,41 +38,83 @@ class EvalEngine:
 
     def get_weights(self):
         """Returns an L1 normalized vector of scores (rewards EMA)."""
-
         if np.isnan(self.scores).any():
             bt.logging.warning(
                 f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
             )
 
-        norm = np.linalg.norm(self.scores, ord=1, axis=0, keepdims=True)
-        if np.any(norm == 0) or np.isnan(norm).any():
-            norm = np.ones_like(norm)  # Avoid division by zero or NaN
+        # Normalize scores for each miner type separately
+        normed_weights = np.zeros_like(self.scores)
+        for miner_type in MinerType:
+            type_mask = np.array([self.tracker.get_miner_type(i) == miner_type for i in range(len(self.scores))])
+            if not np.any(type_mask):
+                continue
 
-        normed_weights = self.scores / norm
+            type_scores = self.scores[type_mask]
+            type_norm = np.linalg.norm(type_scores, ord=1)
+            if type_norm == 0 or np.isnan(type_norm):
+                type_norm = 1.0
+
+            normed_weights[type_mask] = type_scores / type_norm
+
         # uncomment to burn emissions 
         #normed_weights = np.array([v * 0.6 for v in normed_weights])
         #normed_weights[135] = 0.4
+
+        segmentation_uids = [
+            uid for uid in range(len(normed_weights))
+            if self.tracker.get_miner_type(uid) == MinerType.SEGMENTER
+        ]
+        detector_uids = [
+            uid for uid in range(len(normed_weights))
+            if self.tracker.get_miner_type(uid) == MinerType.DETECTOR
+        ]
+
+        if len(segmentation_uids) > 0 and len(detector_uids) > 0:
+            max_zero_out = int(0.2 * len(normed_weights))
+            num_to_zero = min(len(segmentation_uids), max_zero_out)
+            
+            if num_to_zero > 0:
+                detector_weights = [(uid, normed_weights[uid]) for uid in detector_uids]
+                detector_weights.sort(key=lambda x: x[1])
+                for i in range(num_to_zero):
+                    uid_to_zero = detector_weights[i][0]
+                    normed_weights[uid_to_zero] = 0.0
+                
+                bt.logging.info(f"Penalized out {num_to_zero} lowest performing detector UIDs")
+
+        if len(segmentation_uids) > 0:
+            normed_weights[segmentation_uids] *= 0.2
+            normed_weights[detector_uids] *= 0.8
+
         bt.logging.debug(normed_weights)
         return normed_weights
 
-    def score_challenge(
+    def get_rewards(
         self,
         uids: list,
         hotkeys: list,
         predictions: list,
         errors: list,
         label: int,
+        mask: np.ndarray,
         challenge_modality: Modality,
+        miner_type: MinerType,
     ) -> Tuple[np.ndarray, List[Dict[Modality, Dict[str, float]]]]:
         """Update miner prediction history, compute instantaneous rewards, update score EMA"""
 
-        rewards = self._get_rewards_for_challenge(
-            label, predictions, errors, uids, hotkeys, challenge_modality
-        )
-        self._update_scores(rewards)
-        return rewards
+        if miner_type == MinerType.DETECTOR:
+            bt.logging.info("Scoring detection results")
+            return self._get_detection_rewards(
+                label, predictions, errors, uids, hotkeys, challenge_modality
+            )
+        elif miner_type == MinerType.SEGMENTER:
+            bt.logging.info("Scoring segmentation results")
+            return self._get_segmentation_rewards(
+                mask, predictions, errors, uids, hotkeys, challenge_modality
+            )
 
-    def _update_scores(self, rewards: dict):
+    def update_scores(self, rewards: dict):
         """Performs exponential moving average on the scores based on the rewards received from the miners."""
 
         uids = list(rewards.keys())
@@ -133,7 +176,84 @@ class EvalEngine:
         self.scores: np.ndarray = alpha * scattered_rewards + (1 - alpha) * self.scores
         bt.logging.debug(f"Updated moving avg scores: {self.scores}")
 
-    def _get_rewards_for_challenge(
+    def _get_segmentation_rewards(
+        self,
+        mask: np.ndarray,
+        predictions: List[np.ndarray],
+        errors: List[str],
+        uids: List[int],
+        hotkeys: List[bt.axon],
+        challenge_modality: Modality,
+    ) -> Tuple[np.ndarray, List[Dict[Modality, Dict[str, float]]]]:
+        """
+        Calculate rewards for segmentation challenge
+
+        Args:
+            mask: binary map indicating the location of the AI generated region
+            predictions: list of predicted masks from miners, each shape (H,W)
+            errors: list of errors parallel to predictions 
+            uids: List of miner UIDs
+            hotkeys: List of miner hotkeys
+            challenge_modality: Type of challenge (Modality.VIDEO or Modality.IMAGE)
+                currently we only have image segmentation challenges
+        Returns:
+            Tuple containing:
+                - np.ndarray: Array of rewards for each miner
+                - List[Dict]: List of performance metrics for each miner
+        """
+        rewards = {}
+        for hotkey, uid, mask_pred, error in zip(hotkeys, uids, predictions, errors):
+            miner_modality_rewards = {}
+            miner_modality_metrics = {}
+            if mask_pred is not None and not np.array_equal(mask_pred, mask_pred.astype(np.uint8)):
+                mask_pred = np.round(mask_pred).astype(np.uint8)
+
+            for modality in [Modality.IMAGE]:  # no video segmentation
+                try:
+                    modality_str = modality.value
+                    if modality_str == challenge_modality and error:
+                        miner_modality_rewards[modality_str] = 0.0
+                        miner_modality_metrics[modality_str] =  self._empty_metrics(MinerType.SEGMENTER)
+                        continue
+
+                    if not error:
+                        intersection = np.logical_and(mask_pred, mask)
+                        union = np.logical_or(mask_pred, mask) 
+                        iou = np.sum(intersection) / np.sum(union)
+
+                        self.tracker.update(
+                            uid=uid,
+                            segmentation_score=iou,
+                            prediction=mask_pred,
+                            label=None,
+                            error=error,
+                            modality=modality,
+                            miner_hotkey=hotkey,
+                            miner_type=MinerType.SEGMENTER
+                        )
+
+                        scores = self.tracker.get_segmentation_scores(uid, modality)
+                        recent_scores = scores[-200:] if len(scores) > 200 else scores
+                        avg_iou = np.mean(recent_scores)
+                        
+                        miner_modality_rewards[modality_str] = avg_iou
+                        miner_modality_metrics[modality_str] = {"iou": iou}
+                    else:
+                        miner_modality_rewards[modality_str] = 0.0
+                        miner_modality_metrics[modality_str] = self._empty_metrics(MinerType.SEGMENTER)
+
+                except Exception as e:
+                    bt.logging.error(f"Couldn't compute segmentation rewards for miner {uid}: {str(e)}")
+                    bt.logging.error(traceback.format_exc())
+                    miner_modality_rewards[modality_str] = 0.0
+                    miner_modality_metrics[modality_str] = self._empty_metrics(MinerType.SEGMENTER)
+
+            self.miner_metrics[uid] = miner_modality_metrics
+            rewards[uid] = miner_modality_rewards["image"]  # only image segmentation is supported currently
+
+        return rewards
+
+    def _get_detection_rewards(
         self,
         label: int,
         predictions: List[np.ndarray],
@@ -143,7 +263,7 @@ class EvalEngine:
         challenge_modality: Modality,
     ) -> Tuple[np.ndarray, List[Dict[Modality, Dict[str, float]]]]:
         """
-        Calculate rewards for miner responses based on performance metrics.
+        Calculate rewards for detection challenge
 
         Args:
             label: The true label (0 for real, 1 for synthetic, 2 for semi-synthetic)
@@ -162,7 +282,15 @@ class EvalEngine:
             miner_modality_rewards = {}
             miner_modality_metrics = {}
 
-            self.tracker.update(uid, pred_probs, error, label, challenge_modality, hotkey)
+            self.tracker.update(
+                uid=uid, 
+                segmentation_score=None,
+                prediction=pred_probs, 
+                error=error, 
+                label=label, 
+                modality=challenge_modality, 
+                miner_hotkey=hotkey,
+                miner_type=MinerType.DETECTOR)
 
             for modality in Modality:
                 try:
@@ -170,28 +298,28 @@ class EvalEngine:
                     pred_count = self.tracker.get_prediction_count(uid).get(modality, 0)
                     if (modality == challenge_modality and error) or pred_count < 5:
                         miner_modality_rewards[modality] = 0.0
-                        miner_modality_metrics[modality] = self._empty_metrics()
+                        miner_modality_metrics[modality] = self._empty_metrics(MinerType.DETECTOR)
                         continue
 
-                    metrics = self._get_metrics(uid, modality, window=200)
+                    metrics = self._get_detection_metrics(uid, modality, window=200)
 
                     binary_weight = self.config.scoring.binary_weight
                     multiclass_weight = self.config.scoring.multiclass_weight
                     reward = (
-                        binary_weight * metrics["binary_mcc"]
-                        + multiclass_weight * metrics["multi_class_mcc"]
+                        binary_weight * max(0, metrics["binary_mcc"])
+                        + multiclass_weight * max(0, metrics["multi_class_mcc"])
                     )
                     miner_modality_rewards[modality] = reward
                     miner_modality_metrics[modality] = metrics
 
                 except Exception as e:
                     bt.logging.error(
-                        f"Couldn't calculate reward for miner {uid}, "
+                        f"Couldn't compute detection rewards for miner {uid}, "
                         f"prediction: {pred_probs}, label: {label}, modality: {modality}"
                     )
                     bt.logging.exception(e)
                     miner_modality_rewards[modality] = 0.0
-                    miner_modality_metrics[modality] = self._empty_metrics()
+                    miner_modality_metrics[modality] = self._empty_metrics(MinerType.DETECTOR)
 
             image_weight = self.config.scoring.image_weight
             video_weight = self.config.scoring.video_weight
@@ -206,7 +334,7 @@ class EvalEngine:
 
         return miner_rewards
 
-    def _get_metrics(
+    def _get_detection_metrics(
         self, uid: int, modality: Modality, window: Optional[int] = None
     ) -> Dict[str, float]:
         """
@@ -224,9 +352,9 @@ class EvalEngine:
             uid not in self.tracker.predictions
             or modality not in self.tracker.predictions[uid]
         ):
-            return self._empty_metrics()
+            return self._empty_metrics(MinerType.DETECTOR)
 
-        recent_preds, recent_labels = self.tracker.get_recent_predictions_and_labels(uid, modality)
+        recent_preds, recent_labels = self.tracker.get_predictions_and_labels(uid, modality)
 
         if len(recent_labels) != len(recent_preds):
             bt.logging.critical(
@@ -235,8 +363,8 @@ class EvalEngine:
             bt.logging.critical(
                 f"Clearing miner history for {uid} to allow scoring to resume"
             )
-            self.tracker.reset_miner_history(uid)
-            return self._empty_metrics()
+            self.tracker.clear_miner_predictions(uid)
+            return self._empty_metrics(MinerType.DETECTOR)
 
         if window is not None:
             window = min(window, len(recent_preds))
@@ -244,7 +372,7 @@ class EvalEngine:
             recent_labels = recent_labels[-window:]
 
         if len(recent_labels) == 0 or len(recent_preds) == 0:
-            return self._empty_metrics()
+            return self._empty_metrics(MinerType.DETECTOR)
 
         try:
             predictions = np.argmax(recent_preds, axis=1)
@@ -260,18 +388,23 @@ class EvalEngine:
             return {"multi_class_mcc": multi_class_mcc, "binary_mcc": binary_mcc}
         except Exception as e:
             bt.logging.warning(f"Error in reward computation: {e}")
-            return self._empty_metrics()
+            return self._empty_metrics(MinerType.DETECTOR)
 
     def get_miner_metrics(self, uid):
-        return self.miner_metrics.get(uid, self._empty_metrics())
+        return self.miner_metrics.get(uid, self._empty_metrics(self.tracker.get_miner_type(uid)))
 
-    def _empty_metrics(self):
+    def _empty_metrics(self, miner_type):
         """Return a dictionary of empty metrics."""
-        return {"multi_class_mcc": 0, "binary_mcc": 0}
+        if miner_type == MinerType.DETECTOR:
+            return {"multi_class_mcc": 0, "binary_mcc": 0}
+        elif miner_type == MinerType.SEGMENTER:
+            return {"iou": 0}
+        else:
+            return {}
 
     def sync_to_metagraph(self):
         """Just zeros out scores for dereg'd miners. MinerHistory class
-        handles clearing predictio history in `update` when a new hotkey
+        handles clearing prediction history in `update` when a new hotkey
         is detected"""
         hotkeys = self.tracker.miner_hotkeys
         for uid, hotkey in hotkeys.items():
@@ -306,19 +439,3 @@ class EvalEngine:
         except Exception as e:
             bt.logging.error(f"Error deserializing scores: {str(e)}")
             return False
-
-    @staticmethod
-    def transform_reward(reward: float, pole: float = 1.01) -> float:
-        """
-        Transform reward using an inverse function.
-
-        Args:
-            reward: Raw reward value
-            pole: Pole parameter for transformation
-
-        Returns:
-            float: Transformed reward
-        """
-        if reward == 0:
-            return 0
-        return 1 / (pole - np.array(reward))

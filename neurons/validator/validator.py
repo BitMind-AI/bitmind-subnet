@@ -8,7 +8,7 @@ import time
 import traceback
 from threading import Thread
 from time import sleep
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List, Tuple
 
 import aiohttp
 import bittensor as bt
@@ -21,7 +21,7 @@ from bitmind.autoupdater import autoupdate
 from bitmind.cache import CacheSystem
 from bitmind.config import MAINNET_UID
 from bitmind.encoding import media_to_bytes
-from bitmind.epistula import query_miner
+from bitmind.epistula import query_miner, get_miner_type
 from bitmind.metagraph import (
     create_set_weights,
     get_miner_uids,
@@ -33,20 +33,15 @@ from bitmind.types import (
     MediaType,
     Modality,
     NeuronType,
+    MinerType
 )
-from bitmind.utils import on_block_interval, print_info
+from bitmind.utils import on_block_interval, print_info, prepare_for_logging
 from bitmind.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
 
 
 class Validator(BaseNeuron):
     neuron_type = NeuronType.VALIDATOR
-    cache_system: Optional[CacheSystem] = None
-    heartbeat_thread: Thread
-    lock_waiting = False
-    lock_halt = False
-    step = 0
-    initialization_complete: bool = False
 
     def __init__(self, config=None, run_init=True):
         super().__init__(config=config)
@@ -65,11 +60,13 @@ class Validator(BaseNeuron):
             self.init()
 
     def init(self):
-        assert self.config.netuid
-        assert self.config.vpermit_tao_limit
-        assert self.config.subtensor
-
         self._validate_challenge_probs()
+
+        self.cache_system: CacheSystem = None
+        self.heartbeat_thread: Thread = None
+        self.lock_waiting = False
+        self.lock_halt = False
+        self.step = 0
 
         if not self.config.wandb_off:
             self.wandb_logger = WandbLogger(self.config, self.uid, self.wallet.hotkey)
@@ -77,6 +74,7 @@ class Validator(BaseNeuron):
         bt.logging.info(self.config)
         bt.logging.info(f"Last updated at block {self.metagraph.last_update[self.uid]}")
 
+        self.recheck_miner_type = set([])
         self.eval_engine = EvalEngine(self.metagraph, self.config)
 
         ## REGISTER BLOCK CALLBACKS
@@ -186,10 +184,22 @@ class Validator(BaseNeuron):
                 miner_uids, size=self.config.neuron.sample_size, replace=False
             ).tolist()
 
-        media_sample = await self._sample_media()
+        await self.update_miner_types(miner_uids)
+
+        rewards = {}
+        for mtype in MinerType:
+            miner_group = [uid for uid in miner_uids if self.eval_engine.tracker.get_miner_type(uid) == mtype]
+            bt.logging.trace(f"Sending {mtype.value} challenge to {len(miner_group)} miners")
+            rewards.update(await self.run_challenge(miner_group, mtype, block))
+
+        self.eval_engine.update_scores(rewards)
+        await self.save_state()
+
+    async def run_challenge(self, miner_uids: list, miner_type: MinerType, block):
+        media_sample = await self._sample_media(miner_type)
         if not media_sample:
             bt.logging.warning("Waiting for cache to populate. Challenge skipped.")
-            return
+            return {}
 
         modality = media_sample["modality"]
         media = media_sample[modality]
@@ -198,59 +208,57 @@ class Validator(BaseNeuron):
             media, fps=media_sample.get("fps", None)
         )
 
-        bt.logging.info(f"---------- Starting Challenge at Block {block} ----------")
+        bt.logging.info(f"----- Starting Challenge at Block {block} -----")
         bt.logging.info(f"Sampled from {modality} cache")
 
-        challenge_tasks = []
-        challenge_results = []
         async with aiohttp.ClientSession() as session:
-            for uid in miner_uids:
-                axon_info = self.metagraph.axons[uid]
-                challenge_tasks.append(
+            responses = await asyncio.gather(
+                *[
                     query_miner(
                         uid,
+                        miner_type,
                         media_bytes,
                         content_type,
                         modality,
-                        axon_info,
+                        self.metagraph.axons[uid],
                         session,
                         self.wallet.hotkey,
                         self.config.neuron.miner_total_timeout,
                         self.config.neuron.miner_connect_timeout,
                         self.config.neuron.miner_sock_connect_timeout,
                         testnet_metadata=(
-                            {k: v for k, v in media_sample.items() if k != modality}
+                            {k: v for k, v in media_sample.items() if k not in(modality, "mask")}
                             if self.config.netuid != MAINNET_UID
                             else {}
                         ),
                     )
-                )
-            if len(challenge_tasks) != 0:
-                responses = await asyncio.gather(*challenge_tasks)
-                challenge_results.extend(responses)
-                challenge_tasks = []
+                    for uid in miner_uids
+                ]
+            )
 
-        valid_responses = [r for r in challenge_results if not r["error"]]
+        self.recheck_miner_type = self.recheck_miner_type.union(
+            set([r["uid"] for r in responses if r["error"]]) #r["status"] == 404])
+        )
+        valid_responses = [r for r in responses if not r["error"]]
         n_valid = len(valid_responses)
-        n_failures = len(challenge_results) - len(valid_responses)
         bt.logging.info(
-            f"Received {n_valid} valid miner responses. ({n_failures} others failed.)"
+            f"Received {n_valid} valid miner responses. ({len(responses) - len(valid_responses)} others failed.)"
         )
 
-        bt.logging.info(f"Scoring {modality} challenge")
-        rewards = self.eval_engine.score_challenge(
-            uids=[r["uid"] for r in challenge_results],
-            hotkeys=[r["hotkey"] for r in challenge_results],
-            predictions=[r["prediction"] for r in challenge_results],
-            errors=[r["error"] for r in challenge_results],
-            label=media_sample["label"],
-            challenge_modality=modality
+        bt.logging.info(f"Scoring {modality} {miner_type} challenge")
+        rewards = self.eval_engine.get_rewards(
+            uids=[r["uid"] for r in responses],
+            hotkeys=[r["hotkey"] for r in responses],
+            predictions=[r["prediction"] for r in responses],
+            errors=[r["error"] for r in responses],
+            label=media_sample["label"] if miner_type == MinerType.DETECTOR else None,
+            mask=media_sample["mask"] if miner_type == MinerType.SEGMENTER else None,
+            challenge_modality=modality,
+            miner_type=miner_type
         )
 
-        self.log_challenge_results(media_sample, challenge_results, rewards)
-
-        await self.save_state()
-        bt.logging.success(f"---------- Challenge Complete ----------")
+        self.log_challenge_results(media_sample, responses, rewards)
+        return rewards
 
     @on_block_interval("compressed_cache_update_interval")
     async def update_compressed_cache_on_interval(self, block):
@@ -344,9 +352,12 @@ class Validator(BaseNeuron):
         except Exception as e:
             bt.logging.error(f"Not able to start new W&B run: {e}")
 
-    async def _sample_media(self) -> Optional[Dict[str, Any]]:
+    async def _sample_media(self, miner_type: MinerType) -> Optional[Dict[str, Any]]:
         """
         Sample a media item from the cache system.
+
+        Args:
+            miner_type: classification or segmentation
 
         Returns:
             Dictionary with media item details or None if sampling fails
@@ -354,15 +365,18 @@ class Validator(BaseNeuron):
         if not self.cache_system:
             return None
 
-        modality, media_type, multi_video = self.determine_challenge_type()
+        modality, media_type, multi_video = self.determine_challenge_type(miner_type)
 
         kwargs = {}
         if modality == Modality.VIDEO:
-            kwargs = {
+            kwargs.update({
                 "min_duration": self.config.challenge.min_clip_duration,
                 "max_duration": self.config.challenge.max_clip_duration,
                 "max_frames": self.config.challenge.max_frames,
-            }
+            })
+
+        if miner_type == MinerType.SEGMENTER:
+            kwargs["require_mask"] = True
 
         try:
             sampler_name = f"{media_type}_{modality}_sampler"
@@ -401,17 +415,20 @@ class Validator(BaseNeuron):
 
         if sample and sample.get(modality) is not None:
             bt.logging.debug("Augmenting Media")
-            augmented_media, aug_level, aug_params = apply_random_augmentations(
+            augmented_media, augmented_mask, aug_level, aug_params = apply_random_augmentations(
                 sample.get(modality),
-                (256, 256),
-                sample.get("mask_center", None),
+                target_image_size=(256, 256),
+                mask=sample.get("mask")
             )
-            sample[modality] = augmented_media
+
             sample.update(
-                {
+                { 
+                    modality: augmented_media,
                     "modality": modality,
+                    "task_type": miner_type,
                     "media_type": media_type,
                     "label": MediaType(media_type).int_value,
+                    "mask": augmented_mask,
                     "metadata": sample.get("metadata", {}),
                     "augmentation_level": aug_level,
                     "augmentation_params": aug_params
@@ -421,33 +438,39 @@ class Validator(BaseNeuron):
 
         return None
 
-    def determine_challenge_type(self):
+    def determine_challenge_type(self, miner_type: MinerType):
         """
         Randomly selects a modality (image, video) and media type (real, synthetic, semisynthetic)
         based on configured probabiltiies
         """
-        modalities = [Modality.IMAGE.value, Modality.VIDEO.value]
-        modality = np.random.choice(
-            modalities,
-            p=[
-                self.config.challenge.image_prob,
-                self.config.challenge.video_prob,
-            ],
-        )
+ 
+        if miner_type == MinerType.SEGMENTER:
+            modality = Modality.IMAGE.value
+            media_type = MediaType.SEMISYNTHETIC.value
 
-        media_types = [
-            MediaType.REAL.value,
-            MediaType.SYNTHETIC.value,
-            MediaType.SEMISYNTHETIC.value,
-        ]
-        media_type = np.random.choice(
-            media_types,
-            p=[
-                self.config.challenge.real_prob,
-                self.config.challenge.synthetic_prob,
-                self.config.challenge.semisynthetic_prob,
-            ],
-        )
+        elif miner_type == MinerType.DETECTOR:
+            modalities = [Modality.IMAGE.value, Modality.VIDEO.value]
+            modality = np.random.choice(
+                modalities,
+                p=[
+                    self.config.challenge.image_prob,
+                    self.config.challenge.video_prob,
+                ],
+            )
+
+            media_types = [
+                MediaType.REAL.value,
+                MediaType.SYNTHETIC.value,
+                MediaType.SEMISYNTHETIC.value,
+            ]
+            media_type = np.random.choice(
+                media_types,
+                p=[
+                    self.config.challenge.real_prob,
+                    self.config.challenge.synthetic_prob,
+                    self.config.challenge.semisynthetic_prob,
+                ],
+            )
 
         multi_video = (
             modality == Modality.VIDEO
@@ -455,6 +478,49 @@ class Validator(BaseNeuron):
         )
 
         return modality, media_type, multi_video
+
+    async def update_miner_types(self, miner_uids: List[int]) -> Tuple[list, list]:
+        # check miner types for unknown miners
+        unk_miners = [
+            uid for i, uid in enumerate(miner_uids)
+            if uid in self.recheck_miner_type 
+            or self.eval_engine.tracker.get_miner_type(uid) is None
+        ]
+        bt.logging.trace(f"Rechecking miner types for {unk_miners}")
+        async with aiohttp.ClientSession() as session:
+            responses = await asyncio.gather(
+                *[
+                    get_miner_type(
+                        uid,
+                        self.metagraph.axons[uid],
+                        session,
+                        self.wallet.hotkey,
+                        self.config.neuron.miner_total_timeout,
+                        self.config.neuron.miner_connect_timeout,
+                        self.config.neuron.miner_sock_connect_timeout,
+                    )
+                    for uid in unk_miners
+                ]
+            )
+
+        # update tracker with responses
+        for uid, response in zip(unk_miners, responses):
+            # remove from recheck queue if this is a recheck (after a type change or failure) 
+            if uid in self.recheck_miner_type:
+                self.recheck_miner_type.remove(uid)
+
+            miner_type = response.get("miner_type", "") or ""
+            if miner_type.lower() == MinerType.DETECTOR.value.lower():
+                self.eval_engine.tracker.miner_types[uid] = MinerType.DETECTOR
+                bt.logging.success(f"UID {uid}: {miner_type.lower()}")
+            elif miner_type.lower() == MinerType.SEGMENTER.value.lower():
+                self.eval_engine.tracker.miner_types[uid] = MinerType.SEGMENTER
+                bt.logging.success(f"UID {uid}: {miner_type.lower()}")
+            else:        
+                if self.config.netuid == MAINNET_UID:
+                    error = response.get("error", "Unknown")
+                    bt.logging.warning(f"Unable to determine miner type for uid {uid}. Error: {error}")
+                self.recheck_miner_type.add(uid)
 
     async def log_on_block(self, block):
         """
@@ -501,7 +567,9 @@ class Validator(BaseNeuron):
             "response_errors": [d["error"] for d in challenge_results],
             "predictions": [d["prediction"] for d in challenge_results],
             "challenge_metadata": {
-                k: v for k, v in media_sample.items() if k != media_sample["modality"]
+                k: prepare_for_logging(v)
+                for k, v in media_sample.items() 
+                if k not in (media_sample["modality"], "mask")
             },
         }
 
@@ -531,14 +599,14 @@ class Validator(BaseNeuron):
             )
             video_metrics = {
                 "video_" + k: f"{v:.4f}"
-                for k, v in results["metrics"][i]["video"].items()
+                for k, v in results["metrics"][i].get("video", {}).items()
             }
             video_metrics = [
                 f"{k.upper()}: {float(v)}" for k, v in video_metrics.items()
             ]
             image_metrics = {
                 "image_" + k: f"{v:.4f}"
-                for k, v in results["metrics"][i]["image"].items()
+                for k, v in results["metrics"][i].get("image", {}).items()
             }
             image_metrics = [
                 f"{k.upper()}: {float(v)}" for k, v in image_metrics.items()

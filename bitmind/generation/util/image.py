@@ -70,48 +70,88 @@ def save_images_to_disk(
             print(f"Failed to save image {i}: {e}")
 
 
-def create_random_mask(size: Tuple[int, int]) -> Image.Image:
+def ensure_mask_3d(mask: np.ndarray) -> np.ndarray:
     """
-    Create a random mask for i2i transformation.
+    Ensure the mask is 3D (H, W, 1) if it's 2D (H, W).
+    """
+    if mask.ndim == 2:
+        return mask[:, :, None]
+    return mask
+
+
+def create_random_mask(
+    size: Tuple[int, int],
+    min_size_ratio: float = 0.15,
+    max_size_ratio: float = 0.5,
+    allow_multiple: bool = True,
+    allowed_shapes: list = ["rectangle", "circle", "ellipse", "triangle"],
+) -> "Image.Image":
+    """
+    Create a random mask (or masks) for i2i/inpainting with more variety.
+    Returns a single-channel ("L" mode) mask image.
     """
     w, h = size
-    mask = Image.new("RGB", size, "black")
-
-    if np.random.rand() < 0.5:
-        # Rectangular mask with smoother edges
-        width = np.random.randint(w // 4, w // 2)
-        height = np.random.randint(h // 4, h // 2)
-
-        # Center the rectangle with some random offset
-        x = (w - width) // 2 + np.random.randint(-width // 4, width // 4)
-        y = (h - height) // 2 + np.random.randint(-height // 4, height // 4)
-
-        # Create mask with PIL draw for smoother edges
+    allowed_shapes = [s for s in allowed_shapes]
+    max_retries = 5
+    for attempt in range(max_retries):
+        mask = Image.new("L", size, 0)
         draw = ImageDraw.Draw(mask)
-        draw.rounded_rectangle(
-            [x, y, x + width, y + height],
-            radius=min(width, height) // 10,  # Smooth corners
-            fill="white",
-        )
-    else:
-        # Circular mask with feathered edges
-        draw = ImageDraw.Draw(mask)
-        x = w // 2
-        y = h // 2
-
-        # Make radius proportional to image size
-        radius = min(w, h) // 4
-
-        # Add small random offset to center
-        x += np.random.randint(-radius // 4, radius // 4)
-        y += np.random.randint(-radius // 4, radius // 4)
-
-        # Draw multiple circles with decreasing opacity for feathered edge
-        for r in range(radius, radius - 10, -1):
-            opacity = int(255 * (r - (radius - 10)) / 10)
-            draw.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, opacity))
-
-    return mask, (x, y)
+        n_masks = np.random.randint(1, 5) if allow_multiple else 1
+        for _ in range(n_masks):
+            shape = np.random.choice(allowed_shapes)
+            min_dim = min(w, h)
+            min_pixel_size = 64
+            min_mask_size = max(int(min_size_ratio * min_dim), min_pixel_size)
+            max_mask_size = max(int(max_size_ratio * min_dim), min_pixel_size)
+            if min_mask_size >= max_mask_size:
+                width = min_mask_size
+                height = min_mask_size
+            else:
+                width = np.random.randint(min_mask_size, max_mask_size)
+                height = np.random.randint(min_mask_size, max_mask_size)
+            width = min(width, w)
+            height = min(height, h)
+            if shape == "circle":
+                r = min(width, height) // 2
+                if r < 1:
+                    r = 1
+                cx = np.random.randint(r, w - r + 1)
+                cy = np.random.randint(r, h - r + 1)
+                draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+            elif shape == "rectangle":
+                x = np.random.randint(0, w - width + 1)
+                y = np.random.randint(0, h - height + 1)
+                draw.rectangle([x, y, x + width, y + height], fill=255)
+            elif shape == "ellipse":
+                x = np.random.randint(0, w - width + 1)
+                y = np.random.randint(0, h - height + 1)
+                x0, y0, x1, y1 = x, y, x + width, y + height
+                draw.ellipse([x0, y0, x1, y1], fill=255)
+            elif shape == "triangle":
+                min_triangle_size = max(96, min_mask_size)
+                max_triangle_size = max(128, max_mask_size)
+                min_triangle_size = min(min_triangle_size, w, h)
+                max_triangle_size = min(max_triangle_size, w, h)
+                if min_triangle_size >= max_triangle_size:
+                    width = max_triangle_size
+                    height = max_triangle_size
+                else:
+                    width = np.random.randint(min_triangle_size, max_triangle_size)
+                    height = np.random.randint(min_triangle_size, max_triangle_size)
+                x = np.random.randint(0, w - width + 1)
+                y = np.random.randint(0, h - height + 1)
+                jitter = lambda v, maxv: max(
+                    0,
+                    min(v + np.random.randint(-width // 10, width // 10 + 1), maxv - 1),
+                )
+                pt1 = (jitter(x, w), jitter(y, h))
+                pt2 = (jitter(x + width - 1, w), jitter(y, h))
+                pt3 = (jitter(x, w), jitter(y + height - 1, h))
+                pts = [pt1, pt2, pt3]
+                draw.polygon(pts, fill=255)
+        if np.array(mask).max() > 0:
+            return mask
+    return mask
 
 
 def is_black_output(
@@ -124,4 +164,6 @@ def is_black_output(
         arr = np.array(output[modality].images[0])
         return np.mean(arr) < threshold
     elif modality == "video":
-        return np.all([np.mean(np.array(arr)) < threshold for arr in output[modality].frames[0]])
+        return np.all(
+            [np.mean(np.array(arr)) < threshold for arr in output[modality].frames[0]]
+        )

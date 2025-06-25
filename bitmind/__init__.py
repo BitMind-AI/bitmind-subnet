@@ -1,4 +1,4 @@
-__version__ = "3.0.11"
+__version__ = "3.1.0"
 
 version_split = __version__.split(".")
 __spec_version__ = (

@@ -13,7 +13,7 @@ import httpx
 import aiohttp
 from substrateinterface import Keypair
 
-from bitmind.types import Modality
+from bitmind.types import Modality, MinerType
 
 
 EPISTULA_VERSION = str(2)
@@ -90,8 +90,88 @@ def create_header_hook(hotkey, axon_hotkey, model):
     return add_headers
 
 
+async def get_miner_type(
+    uid: int,
+    axon_info: bt.AxonInfo,
+    session: aiohttp.ClientSession,
+    hotkey: bt.Keypair,
+    total_timeout: float,
+    connect_timeout: Optional[float] = None,
+    sock_connect_timeout: Optional[float] = None,
+) -> Optional[str]:
+    """
+    Query a miner's type by hitting its miner_info endpoint.
+
+    Args:
+        uid: miner uid
+        axon_info: miner AxonInfo
+        session: aiohttp client session
+        hotkey: validator hotkey Keypair for signing the request
+        total_timeout: Total timeout for the request
+        connect_timeout: Connection timeout
+        sock_connect_timeout: Socket connection timeout
+
+    Returns:
+        The miner's type as a string, or None if the request fails
+    """
+    response = {
+        "status": 500,
+        "error": "",
+        "miner_type": None
+    }
+
+    try:
+        base_url = f"http://{axon_info.ip}:{axon_info.port}"
+        url = f"{base_url}/miner_info"
+
+        headers = generate_header(hotkey, b"", axon_info.hotkey)
+        timeout = aiohttp.ClientTimeout(
+            total=total_timeout,
+            connect=connect_timeout,
+            sock_connect=sock_connect_timeout
+        )
+
+        async with session.get(url, headers=headers, timeout=timeout) as res:
+            response["status"] = res.status
+            if res.status == 404:
+                # backwards compatibility for legacy detectors without miner_info endpoint
+                response["miner_type"] = "detector"
+                return response
+            elif res.status != 200:
+                response["error"] = f"HTTP {res.status}"
+                return response
+
+            try:
+                info = await res.json()
+                if not isinstance(info, dict):
+                    response["error"] = "Response was not a dictionary"
+                    return response
+
+                response["miner_type"] = info.get("miner_type")
+                return response
+
+            except json.JSONDecodeError:
+                response["error"] = "Failed to decode JSON response"
+                return response
+
+    except asyncio.TimeoutError:
+        response["status"] = 408
+        response["error"] = "Request timed out"
+    except aiohttp.ClientConnectorError as e:
+        response["status"] = 503
+        response["error"] = f"Connection error: {str(e)}"
+    except aiohttp.ClientError as e:
+        response["status"] = 400
+        response["error"] = f"Network error: {str(e)}"
+    except Exception as e:
+        response["error"] = f"Unknown error: {str(e)}"
+
+    return response
+
+
 async def query_miner(
     uid: int,
+    miner_type: MinerType,
     media: bytes,
     content_type: str,
     modality: Modality,
@@ -132,14 +212,16 @@ async def query_miner(
     }
 
     try:
-
-        url = f"http://{axon_info.ip}:{axon_info.port}/detect_{modality}"
-        headers = generate_header(hotkey, media, axon_info.hotkey)
+        base_url = f"http://{axon_info.ip}:{axon_info.port}"
+        if miner_type == MinerType.DETECTOR:
+            url = f"{base_url}/detect_{modality}"
+        elif miner_type == MinerType.SEGMENTER:
+            url = f"{base_url}/segment_{modality}"
 
         headers = {
             "Content-Type": content_type,
             "X-Media-Type": modality,
-            **headers,
+            **generate_header(hotkey, media, axon_info.hotkey),
         }
 
         if testnet_metadata:
@@ -161,25 +243,41 @@ async def query_miner(
                 response["error"] = f"HTTP {res.status} error"
                 return response
             try:
-                data = await res.json()
-                if "prediction" not in data:
-                    response["error"] = "Missing prediction in response"
+
+                if miner_type == MinerType.DETECTOR:
+                    data = await res.json()
+                    if "prediction" not in data:
+                        response["error"] = "Missing prediction in response"
+                        return response
+
+                    pred = [float(p) for p in data["prediction"]]
+
+                    # handle binary predictions, assume [real, fake]
+                    if len(pred) == 2:
+                        pred = pred + [0.0]
+
+                    pred = np.array(pred)
+
+                    # error on predictions that don't sum to ~1 or contain values outside of [0., 1.]
+                    if abs(sum(pred) - 1.0) > 1e-6 or np.any((pred < 0.0) | (pred > 1.0)):
+                        raise ValueError
+
+                    response["prediction"] = pred
                     return response
 
-                pred = [float(p) for p in data["prediction"]]
+                elif miner_type == MinerType.SEGMENTER:
+                    pred = await res.read()
+                    if "X-Mask-Shape" not in res.headers:
+                        raise ValueError("Missing X-Mask-Shape header")
+                    mask_shape = [int(x) for x in res.headers["X-Mask-Shape"].split(",")]
+                    bt.logging.info(f'mask_shape: {mask_shape}')
+                    pred = np.frombuffer(pred, dtype=np.float16).reshape(mask_shape)
 
-                # handle binary predictions, assume [real, fake]
-                if len(pred) == 2:
-                    pred = pred + [0.0]
+                    if np.any((pred < 0.0) | (pred > 1.0)):
+                        raise ValueError
 
-                pred = np.array(pred)
-
-                # error on predictions that don't sum to ~1 or contain values outside of [0., 1.]
-                if abs(sum(pred) - 1.0) > 1e-6 or np.any((pred < 0.0) | (pred > 1.0)):
-                    raise ValueError
-
-                response["prediction"] = pred
-                return response
+                    response["prediction"] = pred
+                    return response
 
             except json.JSONDecodeError:
                 response["error"] = "Failed to decode JSON response"
@@ -187,7 +285,7 @@ async def query_miner(
 
             except (TypeError, ValueError) as e:
                 response["error"] = (
-                    f"Invalid prediction value {data.get('prediction')}"
+                    f"Invalid prediction value. {e}"
                 )
                 return response
 
@@ -204,3 +302,5 @@ async def query_miner(
         response["error"] = f"Unknown error: {str(e)}"
 
     return response
+
+

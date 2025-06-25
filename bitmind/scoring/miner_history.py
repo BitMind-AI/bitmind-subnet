@@ -6,31 +6,35 @@ import joblib
 import traceback
 import os
 
-from bitmind.types import Modality
+from bitmind.types import Modality, MinerType
 
 
 class MinerHistory:
     """Tracks all recent miner performance to facilitate reward computation.
     Will be replaced with Redis in a future release """
 
-    VERSION = 2
+    VERSION = 3
 
-    def __init__(self, store_last_n_predictions: int = 200):
+    def __init__(self, store_last_n: int = 200):
+        self.segmentation_scores: Dict[int, Dict[Modality, deque]] = {}
         self.predictions: Dict[int, Dict[Modality, deque]] = {}
         self.labels: Dict[int, Dict[Modality, deque]] = {}
         self.miner_hotkeys: Dict[int, str] = {}
         self.health: Dict[int: int] = {}
-        self.store_last_n_predictions = store_last_n_predictions
+        self.miner_types: Dict[int: MinerType] = {}
+        self.store_last_n = store_last_n
         self.version = self.VERSION
 
     def update(
         self,
         uid: int,
+        segmentation_score: float,
         prediction: np.ndarray,
-        error: str,
         label: int,
+        error: str,
         modality: Modality,
         miner_hotkey: str,
+        miner_type: str,
     ):
         """Update the miner prediction history.
 
@@ -39,41 +43,75 @@ class MinerHistory:
                 [real, synthetic, semi-synthetic]
             label: integer label (0 for real, 1 for synthetic, 2 for semi-synthetic)
         """
-        if uid not in self.miner_hotkeys or self.miner_hotkeys[uid] != miner_hotkey:
-            self.reset_miner_history(uid, miner_hotkey)
+        if (
+            uid not in self.miner_hotkeys
+            or self.miner_hotkeys.get(uid) != miner_hotkey
+            or self.get_miner_type(uid) != miner_type
+            or (miner_type == MinerType.SEGMENTER and uid not in self.segmentation_scores) \
+            or (miner_type == MinerType.DETECTOR and uid not in self.predictions)
+        ):
+            self.reset_miner_history(uid, miner_hotkey, miner_type)
             bt.logging.info(f"Reset history for {uid} {miner_hotkey}")
 
+        if miner_type == MinerType.SEGMENTER and modality != Modality.IMAGE:
+            bt.logging.warning(f"SEGMENTER miner {uid} received unsupported modality {modality}, skipping update")
+            return
+
         if not error:
-            self.predictions[uid][modality].append(np.array(prediction))
-            self.labels[uid][modality].append(label)
             self.health[uid] = 1 
+            if miner_type == MinerType.DETECTOR:
+                self.predictions[uid][modality].append(np.array(prediction))
+                self.labels[uid][modality].append(label)
+            elif miner_type == MinerType.SEGMENTER:
+                self.segmentation_scores[uid][modality].append(segmentation_score)
         else:
             self.health[uid] = 0
 
-    def _reset_predictions(self, uid: int):
-        self.predictions[uid] = {
-            Modality.IMAGE: deque(maxlen=self.store_last_n_predictions),
-            Modality.VIDEO: deque(maxlen=self.store_last_n_predictions),
-        }
+    def reset_miner_history(self, uid: int, miner_hotkey: str, miner_type: str):
 
-    def _reset_labels(self, uid: int):
-        self.labels[uid] = {
-            Modality.IMAGE: deque(maxlen=self.store_last_n_predictions),
-            Modality.VIDEO: deque(maxlen=self.store_last_n_predictions),
-        }
-
-    def reset_miner_history(self, uid: int, miner_hotkey: str):
-        self._reset_predictions(uid)
-        self._reset_labels(uid)
         self.miner_hotkeys[uid] = miner_hotkey
+        self.miner_types[uid] = miner_type
+
+        ## for classification 
+        self.labels[uid] = {
+            Modality.IMAGE: deque(maxlen=self.store_last_n),
+            Modality.VIDEO: deque(maxlen=self.store_last_n),
+        }
+        self.predictions[uid] = {
+            Modality.IMAGE: deque(maxlen=self.store_last_n),
+            Modality.VIDEO: deque(maxlen=self.store_last_n),
+        }
+
+        ## for segmentation
+        self.segmentation_scores[uid] = {
+            Modality.IMAGE: deque(maxlen=self.store_last_n),
+        }
+
+    def get_miner_type(self, uid: int) -> MinerType:
+        return self.miner_types.get(uid)
 
     def get_prediction_count(self, uid: int) -> int:
         counts = {}
-        for modality in [Modality.IMAGE, Modality.VIDEO]:
-            counts[modality] = len(self.get_recent_predictions_and_labels(uid, modality)[0])
+        miner_type = self.get_miner_type(uid)
+        
+        if miner_type == MinerType.DETECTOR:
+            # DETECTOR supports both IMAGE and VIDEO
+            for modality in [Modality.IMAGE, Modality.VIDEO]:
+                counts[modality] = len(self.get_predictions_and_labels(uid, modality)[0])
+        elif miner_type == MinerType.SEGMENTER:
+            # SEGMENTER only supports IMAGE
+            counts[Modality.IMAGE] = len(self.get_segmentation_scores(uid, Modality.IMAGE))
+        
         return counts
 
-    def get_recent_predictions_and_labels(self, uid, modality):
+    def get_segmentation_scores(self, uid, modality):
+        if uid in self.segmentation_scores:
+            return np.array([
+                p for p in self.segmentation_scores[uid].get(modality, []) if p is not None
+            ])
+        return np.array([])
+
+    def get_predictions_and_labels(self, uid, modality):
         if uid not in self.predictions or modality not in self.predictions[uid]:
             return [], []
         valid_indices = [
@@ -98,8 +136,10 @@ class MinerHistory:
         path = os.path.join(save_dir, "history.pkl")
         state = {
             "version": self.version,
-            "store_last_n_predictions": self.store_last_n_predictions,
+            "store_last_n": self.store_last_n,
             "miner_hotkeys": self.miner_hotkeys,
+            "miner_types": self.miner_types,
+            "segmentation_scores": self.segmentation_scores,
             "predictions": self.predictions,
             "labels": self.labels,
             "health": self.health
@@ -119,21 +159,25 @@ class MinerHistory:
                     f"Loading state from different version: {state['version']} != {self.VERSION}"
                 )
 
-            self.version = state.get("version", self.VERSION)
-            self.store_last_n_predictions = state.get("store_last_n_predictions", self.store_last_n_predictions)
-            self.miner_hotkeys = state.get("miner_hotkeys", self.miner_hotkeys)
-            self.predictions = state.get("predictions", self.predictions)
-            self.labels = state.get("labels", self.labels)
-            self.health = state.get("health", self.health)
+            attributes = [
+                'version', 'store_last_n', 'miner_hotkeys', 'miner_types',
+                'segmentation_scores', 'predictions', 'labels', 'health'
+            ]
 
-            if len(self.miner_hotkeys) == 0:
-                bt.logging.warning("Loaded state has no miner hotkeys")
-            if len(self.predictions) == 0:
-                bt.logging.warning("Loaded state has no predictions")
-            if len(self.labels) == 0:
-                bt.logging.warning("Loaded state has no labels")
-            if len(self.health) == 0:
-                bt.logging.warning("Loaded state has no health records")
+            for attr in attributes:
+                default = self.VERSION if attr == 'version' else getattr(self, attr)
+                setattr(self, attr, state.get(attr, default))
+
+            collections = {
+                'miner_hotkeys': 'miner hotkeys',
+                'predictions': 'predictions',
+                'labels': 'labels',
+                'health': 'health records'
+            }
+
+            for attr, desc in collections.items():
+                if len(getattr(self, attr)) == 0:
+                    bt.logging.warning(f"Loaded state has no {desc}")
 
             bt.logging.debug(
                 f"Successfully loaded history for {len(self.miner_hotkeys)} miners"
@@ -144,3 +188,21 @@ class MinerHistory:
             bt.logging.error(f"Error deserializing MinerHistory state: {str(e)}")
             bt.logging.error(traceback.format_exc())
             return False
+
+    def clear_miner_predictions(self, uid: int):
+        """Reset specific miner to recover from inconsistency in validator state"""
+        if uid in self.predictions:
+            self.predictions[uid] = {
+                Modality.IMAGE: deque(maxlen=self.store_last_n),
+                Modality.VIDEO: deque(maxlen=self.store_last_n),
+            }
+        if uid in self.labels:
+            self.labels[uid] = {
+                Modality.IMAGE: deque(maxlen=self.store_last_n),
+                Modality.VIDEO: deque(maxlen=self.store_last_n),
+            }
+        if uid in self.segmentation_scores:
+            self.segmentation_scores[uid] = {
+                Modality.IMAGE: deque(maxlen=self.store_last_n),
+            }
+        bt.logging.info(f"Cleared prediction history for miner {uid} due to data inconsistency")

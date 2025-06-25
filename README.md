@@ -35,14 +35,22 @@ To address this growing challenge, SN34 aims to create the most accurate fully-g
 
 <b><a href="docs/Mining.md">Miners</a></b>
 
+SN34 supports two types of miners:
+
+**DETECTOR Miners** - Classification Tasks:
 - Miners are tasked with running binary classifiers that discern between genuine and AI-generated content, and are rewarded based on their accuracy. 
 - For each challenge, a miner is presented an image or video and is required to respond with a multiclass prediction [$p_{real}$, $p_{synthetic}$, $p_{semisynthetic}$] indicating whether the media is real, fully generated, or partially modified by AI.
 
+**SEGMENTER Miners** - Segmentation Tasks:
+- Miners are tasked with identifying AI-generated regions within images through pixel-level segmentation.
+- For each challenge, a miner receives an image and responds with a confidence mask where each pixel value represents the likelihood that the pixel is AI-generated.
+- Miners are scored using Intersection over Union (IoU) metrics against ground truth masks.
 
 <b><a href="docs/Validating.md">Validators</a></b>
 - Validators challenge miners with a balanced mix of real and synthetic media drawn from a diverse pool of sources.
+- For DETECTOR miners: Validators send classification challenges with real, synthetic, or semi-synthetic media.
+- For SEGMENTER miners: Validators send segmentation challenges with semi-synthetic images containing AI-generated regions.
 - We continually add new datasets and generative models to our validators in order to evolve the subnet's detection capabilities alongside advances in generative AI. 
-
 
 ## Subnet Architecture
 
@@ -56,7 +64,7 @@ Overview of the validator neuron, miner neuron, and other components external to
   <li>The validator first randomly samples an image or video from its local media cache.</li>
   <li>The sampled media can be real, synthetic, or semisynthetic, and was either downloaded from an dataset on Huggingface or generated locally by one of many generative models.</li>
   <li>The sampled media is then augmented by a pipeline of random transformations, adding to the challenge difficulty and mitigating incentive mechanism gaming via lookups.</li>
-  <li>The augmented media is then sent to miners for classification.</li>
+  <li>The augmented media is then sent to miners for classification or segmentation based on their declared miner type.</li>
   <li>The validator scores the miners responses and logs comprehensive challenge results to <a href="https://wandb.ai/bitmindai/bitmind-subnet">Weights and Biases</a>, including the generated media, original prompt, miner responses and rewards, and other challenge metadata.</li>
 </ul>
 </details>
@@ -76,6 +84,14 @@ The blue arrows show how the validator media cache is maintained by two parallel
 <a href="https://www.bitmind.ai/apps">Application</a> requests are distributed to validators by an API server and load balancer in BitMind's cloud. A vector database caches subnet responses to avoid uncessary repetitive calls coming from salient images on the internet. 
 </details>
 
+## Getting Started
+
+### For Miners
+- **New to SN34?** Start with the [Mining Guide](docs/Mining.md)
+- Review the [Incentive Mechanism](docs/Incentive.md) to understand scoring
+
+### For Validators
+- See the [Validator Guide](docs/Validating.md) for setup instructions
 
 
 ## Community

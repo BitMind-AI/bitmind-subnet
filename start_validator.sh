@@ -34,9 +34,11 @@ echo "Logged into W&B with token provided in .env.validator"
 if [[ "$CHAIN_ENDPOINT" == *"test"* ]]; then
   NETUID=168
   NETWORK="test"
+  SAMPLE_SIZE_PARAM="--neuron.sample-size 256"
 elif [[ "$CHAIN_ENDPOINT" == *"finney"* ]]; then
   NETUID=34
   NETWORK="finney"
+  SAMPLE_SIZE_PARAM=""
 fi
 
 case "$LOGLEVEL" in
@@ -103,7 +105,7 @@ SN34_CACHE_DIR=$(eval echo "$SN34_CACHE_DIR")
 echo "Starting validator and generator | chain_endpoint: $CHAIN_ENDPOINT | netuid: $NETUID"
 
 # Run data generator
-pm2 start neurons/generator.py \
+pm2 start neurons/validator/generator.py \
   --interpreter python3 \
   --kill-timeout 2000 \
   --name $GENERATOR \
@@ -116,7 +118,7 @@ pm2 start neurons/generator.py \
   --device $DEVICE
 
 # Run validator
-pm2 start neurons/validator.py \
+pm2 start neurons/validator/validator.py \
   --interpreter python3 \
   --kill-timeout 1000 \
   --name $VALIDATOR \
@@ -128,12 +130,13 @@ pm2 start neurons/validator.py \
   --epoch-length 360 \
   --cache-dir $SN34_CACHE_DIR \
   --proxy.port $PROXY_PORT \
+  $SAMPLE_SIZE_PARAM \
   $LOG_PARAM \
   $AUTO_UPDATE_PARAM \
   $HEARTBEAT_PARAM
 
 # Run validator proxy
-pm2 start neurons/proxy.py \
+pm2 start neurons/validator/proxy.py \
   --interpreter python3 \
   --kill-timeout 1000 \
   --name $PROXY \
