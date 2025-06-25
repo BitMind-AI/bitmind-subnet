@@ -100,7 +100,7 @@ class MinerHistory:
                 counts[modality] = len(self.get_predictions_and_labels(uid, modality)[0])
         elif miner_type == MinerType.SEGMENTER:
             # SEGMENTER only supports IMAGE
-            counts[modality] = len(self.get_segmentation_scores(uid, Modality.IMAGE))
+            counts[Modality.IMAGE] = len(self.get_segmentation_scores(uid, Modality.IMAGE))
         
         return counts
 
