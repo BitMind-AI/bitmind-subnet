@@ -55,12 +55,12 @@ def autoupdate(branch: str = "main", force=False):
             },
         )
         response.raise_for_status()
-        repo_version = response.content.decode()
-        latest_version = int("".join(repo_version.split(".")))
-        local_version = int("".join(bitmind.__version__.split(".")))
+        repo_version = response.content.decode().strip()
+        latest_version = tuple(map(int, repo_version.split(".")))
+        local_version = tuple(map(int, bitmind.__version__.split(".")))
 
-        bt.logging.info(f"Local version: {bitmind.__version__}")
-        bt.logging.info(f"Latest version: {repo_version}")
+        bt.logging.info(f"Local version: {local_version}")
+        bt.logging.info(f"Latest version: {latest_version}")
 
         if latest_version > local_version or force:
             bt.logging.info(f"A newer version is available. Updating...")
