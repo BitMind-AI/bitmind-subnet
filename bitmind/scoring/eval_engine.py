@@ -98,7 +98,7 @@ class EvalEngine:
             bt.logging.info("Scoring segmentation results")
             return self._get_segmentation_rewards(
                 mask, predictions, errors, uids, hotkeys, challenge_modality
-            )  
+            )
 
     def update_scores(self, rewards: dict):
         """Performs exponential moving average on the scores based on the rewards received from the miners."""
@@ -196,10 +196,10 @@ class EvalEngine:
 
             for modality in [Modality.IMAGE]:  # no video segmentation
                 try:
-                    modality = modality.value
-                    if modality == challenge_modality and error:
-                        miner_modality_rewards[modality] = 0.0
-                        miner_modality_metrics[modality] =  self._empty_metrics(MinerType.SEGMENTER)
+                    modality_str = modality.value
+                    if modality_str == challenge_modality and error:
+                        miner_modality_rewards[modality_str] = 0.0
+                        miner_modality_metrics[modality_str] =  self._empty_metrics(MinerType.SEGMENTER)
                         continue
 
                     if not error:
@@ -218,18 +218,21 @@ class EvalEngine:
                             miner_type=MinerType.SEGMENTER
                         )
 
-                        avg_iou = np.mean(self.tracker.segmentation_scores[uid][modality][:200])
-                        miner_modality_rewards[modality] = avg_iou
-                        miner_modality_metrics[modality] = {"iou": iou}
+                        scores = self.tracker.get_segmentation_scores(uid, modality)
+                        recent_scores = scores[-200:] if len(scores) > 200 else scores
+                        avg_iou = np.mean(recent_scores)
+                        
+                        miner_modality_rewards[modality_str] = avg_iou
+                        miner_modality_metrics[modality_str] = {"iou": iou}
                     else:
-                        miner_modality_rewards[modality] = 0.0
-                        miner_modality_metrics[modality] = self._empty_metrics(MinerType.SEGMENTER)
+                        miner_modality_rewards[modality_str] = 0.0
+                        miner_modality_metrics[modality_str] = self._empty_metrics(MinerType.SEGMENTER)
 
                 except Exception as e:
-                    bt.logging.error(f"Couldn't computie segmentation rewards for miner {uid}: {str(e)}")
+                    bt.logging.error(f"Couldn't compute segmentation rewards for miner {uid}: {str(e)}")
                     bt.logging.error(traceback.format_exc())
-                    miner_modality_rewards[modality] = 0.0
-                    miner_modality_metrics[modality] = self._empty_metrics(MinerType.SEGMENTER)
+                    miner_modality_rewards[modality_str] = 0.0
+                    miner_modality_metrics[modality_str] = self._empty_metrics(MinerType.SEGMENTER)
 
             self.miner_metrics[uid] = miner_modality_metrics
             rewards[uid] = miner_modality_rewards["image"]  # only image segmentation is supported currently
@@ -346,7 +349,7 @@ class EvalEngine:
             bt.logging.critical(
                 f"Clearing miner history for {uid} to allow scoring to resume"
             )
-            self.tracker.reset_miner_history(uid)
+            self.tracker.clear_miner_predictions(uid)
             return self._empty_metrics(MinerType.DETECTOR)
 
         if window is not None:

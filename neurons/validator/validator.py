@@ -35,7 +35,7 @@ from bitmind.types import (
     NeuronType,
     MinerType
 )
-from bitmind.utils import on_block_interval, print_info
+from bitmind.utils import on_block_interval, print_info, prepare_for_logging
 from bitmind.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
 
@@ -511,7 +511,7 @@ class Validator(BaseNeuron):
 
             miner_type = response.get("miner_type", "") or ""
             if miner_type.lower() == MinerType.DETECTOR.value.lower():
-                self.eval_engine.tracker.miner_types[uid] = MinerType.DETECTOR  # TODO clear scores?
+                self.eval_engine.tracker.miner_types[uid] = MinerType.DETECTOR
                 bt.logging.success(f"UID {uid}: {miner_type.lower()}")
             elif miner_type.lower() == MinerType.SEGMENTER.value.lower():
                 self.eval_engine.tracker.miner_types[uid] = MinerType.SEGMENTER
@@ -567,7 +567,7 @@ class Validator(BaseNeuron):
             "response_errors": [d["error"] for d in challenge_results],
             "predictions": [d["prediction"] for d in challenge_results],
             "challenge_metadata": {
-                k: v.value if hasattr(v, 'value') else v
+                k: prepare_for_logging(v)
                 for k, v in media_sample.items() 
                 if k not in (media_sample["modality"], "mask")
             },
