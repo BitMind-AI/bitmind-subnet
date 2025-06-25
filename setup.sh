@@ -41,6 +41,7 @@ sudo npm install -g pm2@latest
 ############################
 
 pip install --use-pep517 -e . -r requirements-git.txt
+rm -rf ~/.cache/sn34/image/semisynthetic
 
 emergency_restart() {
     echo "Performing emergency restart of PM2 processes..."
@@ -50,3 +51,4 @@ emergency_restart() {
 }
 
 trap emergency_restart EXIT
+
