@@ -70,8 +70,6 @@ class EvalEngine:
             if self.tracker.get_miner_type(uid) == MinerType.DETECTOR
         ]
 
-        # If there are segmentation miners, we need to make room for them
-        # by setting the lowest performing detector weights to 0 (up to 20% of total uids)
         if len(segmentation_uids) > 0 and len(detector_uids) > 0:
             max_zero_out = int(0.2 * len(normed_weights))
             num_to_zero = min(len(segmentation_uids), max_zero_out)
@@ -83,7 +81,7 @@ class EvalEngine:
                     uid_to_zero = detector_weights[i][0]
                     normed_weights[uid_to_zero] = 0.0
                 
-                bt.logging.info(f"Zeroed out {num_to_zero} lowest performing detector UIDs to make room for {len(segmentation_uids)} segmentation miners")
+                bt.logging.info(f"Penalized out {num_to_zero} lowest performing detector UIDs")
 
         if len(segmentation_uids) > 0:
             normed_weights[segmentation_uids] *= 0.2
