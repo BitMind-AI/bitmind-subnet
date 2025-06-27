@@ -72,7 +72,7 @@ def autoupdate(branch: str = "main", force=False):
 
             with open(os.path.join(base_path, "VERSION")) as f:
                 new_version = f.read().strip()
-                new_version = int("".join(new_version.split(".")))
+                new_version = tuple(map(int, new_version.split(".")))
 
                 if new_version == latest_version:
                     bt.logging.info("Updated successfully.")

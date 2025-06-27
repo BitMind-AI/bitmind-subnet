@@ -70,22 +70,9 @@ class EvalEngine:
             if self.tracker.get_miner_type(uid) == MinerType.DETECTOR
         ]
 
-        if len(segmentation_uids) > 0 and len(detector_uids) > 0:
-            max_zero_out = int(0.2 * len(normed_weights))
-            num_to_zero = min(len(segmentation_uids), max_zero_out)
-            
-            if num_to_zero > 0:
-                detector_weights = [(uid, normed_weights[uid]) for uid in detector_uids]
-                detector_weights.sort(key=lambda x: x[1])
-                for i in range(num_to_zero):
-                    uid_to_zero = detector_weights[i][0]
-                    normed_weights[uid_to_zero] = 0.0
-                
-                bt.logging.info(f"Penalized out {num_to_zero} lowest performing detector UIDs")
-
         if len(segmentation_uids) > 0:
-            normed_weights[segmentation_uids] *= 0.2
-            normed_weights[detector_uids] *= 0.8
+            normed_weights[segmentation_uids] *= 0.1
+            normed_weights[detector_uids] *= 0.9
 
         bt.logging.debug(normed_weights)
         return normed_weights
