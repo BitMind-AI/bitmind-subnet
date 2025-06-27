@@ -47,9 +47,15 @@ class MinerHistory:
             uid not in self.miner_hotkeys
             or self.miner_hotkeys.get(uid) != miner_hotkey
             or self.get_miner_type(uid) != miner_type
+            or (miner_type == MinerType.SEGMENTER and uid not in self.segmentation_scores) \
+            or (miner_type == MinerType.DETECTOR and uid not in self.predictions)
         ):
             self.reset_miner_history(uid, miner_hotkey, miner_type)
             bt.logging.info(f"Reset history for {uid} {miner_hotkey}")
+
+        if miner_type == MinerType.SEGMENTER and modality != Modality.IMAGE:
+            bt.logging.warning(f"SEGMENTER miner {uid} received unsupported modality {modality}, skipping update")
+            return
 
         if not error:
             self.health[uid] = 1 
@@ -86,17 +92,24 @@ class MinerHistory:
 
     def get_prediction_count(self, uid: int) -> int:
         counts = {}
-        for modality in [Modality.IMAGE, Modality.VIDEO]:
-            if self.get_miner_type(uid) == MinerType.DETECTOR:
+        miner_type = self.get_miner_type(uid)
+        
+        if miner_type == MinerType.DETECTOR:
+            # DETECTOR supports both IMAGE and VIDEO
+            for modality in [Modality.IMAGE, Modality.VIDEO]:
                 counts[modality] = len(self.get_predictions_and_labels(uid, modality)[0])
-            elif self.get_miner_type(uid) == MinerType.SEGMENTER:
-                counts[modality] = len(self.get_segmentation_scores(uid, modality))
+        elif miner_type == MinerType.SEGMENTER:
+            # SEGMENTER only supports IMAGE
+            counts[Modality.IMAGE] = len(self.get_segmentation_scores(uid, Modality.IMAGE))
+        
         return counts
 
     def get_segmentation_scores(self, uid, modality):
-        return np.array([
-            p for p in self.segmentation_scores[uid].get(modality, []) if p is not None
-        ])
+        if uid in self.segmentation_scores:
+            return np.array([
+                p for p in self.segmentation_scores[uid].get(modality, []) if p is not None
+            ])
+        return np.array([])
 
     def get_predictions_and_labels(self, uid, modality):
         if uid not in self.predictions or modality not in self.predictions[uid]:
@@ -175,3 +188,21 @@ class MinerHistory:
             bt.logging.error(f"Error deserializing MinerHistory state: {str(e)}")
             bt.logging.error(traceback.format_exc())
             return False
+
+    def clear_miner_predictions(self, uid: int):
+        """Reset specific miner to recover from inconsistency in validator state"""
+        if uid in self.predictions:
+            self.predictions[uid] = {
+                Modality.IMAGE: deque(maxlen=self.store_last_n),
+                Modality.VIDEO: deque(maxlen=self.store_last_n),
+            }
+        if uid in self.labels:
+            self.labels[uid] = {
+                Modality.IMAGE: deque(maxlen=self.store_last_n),
+                Modality.VIDEO: deque(maxlen=self.store_last_n),
+            }
+        if uid in self.segmentation_scores:
+            self.segmentation_scores[uid] = {
+                Modality.IMAGE: deque(maxlen=self.store_last_n),
+            }
+        bt.logging.info(f"Cleared prediction history for miner {uid} due to data inconsistency")
