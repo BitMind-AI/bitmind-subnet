@@ -360,13 +360,13 @@ def add_data_generator_args(parser):
     parser.add_argument(
         "--scraper.num-queries-per-batch",
         type=int,
-        default=50,
+        default=10,
     )
 
     parser.add_argument(
         "--scraper.num-images-per-query",
         type=int,
-        default=10,
+        default=50,
     )
 
     parser.add_argument(

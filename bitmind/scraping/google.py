@@ -13,6 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
+import stamina
 
 from bitmind.scraping.base import BaseScraper
 
@@ -32,6 +33,10 @@ class GoogleScraper(BaseScraper):
         min_width=128,
         min_height=128,
         media_type=None,
+        retry_attempts=3,
+        base_delay=2.0,
+        max_delay=10.0,
+        jitter_factor=0.3,
     ):
         super().__init__(min_width, min_height, media_type)
 
@@ -41,10 +46,19 @@ class GoogleScraper(BaseScraper):
                 "Mozilla/5.0 (X11; Linux i686; rv:64.0) Gecko/20100101 Firefox/64.0",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
             ]
 
         self.scroll_delay = scroll_delay
         self.headless = headless
+
+        # Retry and jitter settings
+        self.retry_attempts = retry_attempts
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.jitter_factor = jitter_factor
 
         if tbs is None:
             tbs = {}
@@ -62,6 +76,66 @@ class GoogleScraper(BaseScraper):
                 tbs["isz"] = "m"  # medium
 
         self.tbs = self._parse_request_parameters(tbs)
+
+    def _random_delay(self, base_delay=None, max_delay=None):
+        """Add random delay with jitter to avoid bot detection"""
+        if base_delay is None:
+            base_delay = self.base_delay
+        if max_delay is None:
+            max_delay = self.max_delay
+
+        # Add jitter to the delay
+        jitter = random.uniform(0, base_delay * self.jitter_factor)
+        delay = min(base_delay + jitter, max_delay)
+
+        # Add some micro-variations
+        delay += random.uniform(0, 0.5)
+
+        time.sleep(delay)
+        return delay
+
+    def _random_scroll_delay(self):
+        """Get a randomized scroll delay"""
+        base_delay = self.scroll_delay / 1000.0
+        jitter = random.uniform(0, base_delay * 0.5)
+        return base_delay + jitter
+
+    def _get_random_user_agent(self):
+        """Get a random user agent with some variation"""
+        user_agent = random.choice(self.user_agents)
+
+        # Sometimes add a small random string to make it more unique
+        if random.random() < 0.3:
+            user_agent += f" {random.randint(1000, 9999)}"
+
+        return user_agent
+
+    def _randomize_chrome_options(self, chrome_options):
+        """Add random Chrome options to avoid fingerprinting"""
+        # Random window size
+        width = random.choice([1366, 1440, 1536, 1920, 2560])
+        height = random.choice([768, 900, 864, 1080, 1440])
+        chrome_options.add_argument(f"--window-size={width},{height}")
+
+        # Random language
+        languages = ["en-US,en;q=0.9", "en-GB,en;q=0.9", "en-CA,en;q=0.9"]
+        chrome_options.add_argument(f"--lang={random.choice(languages)}")
+
+        # Random timezone
+        timezones = [
+            "America/New_York",
+            "Europe/London",
+            "Asia/Tokyo",
+            "Australia/Sydney",
+        ]
+        chrome_options.add_argument(f"--timezone={random.choice(timezones)}")
+
+        # Disable various features that can be used for fingerprinting
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+        chrome_options.add_argument("--disable-ipc-flooding-protection")
+
+        return chrome_options
 
     def get_image_urls(self, queries=None, source_image_paths=None, limit=5):
         """
@@ -117,13 +191,47 @@ class GoogleScraper(BaseScraper):
             - source: Always "google"
             - thumbnail_url: Thumbnail URL (optional)
         """
-        user_agent = (
-            random.choice(self.user_agents)
-            if isinstance(self.user_agents, list)
-            else self.user_agents
-        )
+        results = {}
 
+        if not isinstance(queries, list):
+            queries = [queries]
+
+        for query in queries:
+            bt.logging.info(f"Searching for: {query}")
+
+            # Use stamina for retry logic with exponential backoff and jitter
+            @stamina.retry(
+                on=Exception,
+                attempts=self.retry_attempts,
+                wait_initial=self.base_delay,
+                wait_max=self.max_delay,
+                wait_jitter=self.base_delay * self.jitter_factor,
+            )
+            def search_single_query(query, limit):
+                return self._perform_single_search(query, limit)
+
+            try:
+                query_results = search_single_query(query, limit)
+                query_key = query.replace(" ", "")
+                results[query_key] = query_results
+                bt.logging.info(f"Found {len(query_results)} images for query: {query}")
+
+                # Add random delay between queries
+                if len(queries) > 1:
+                    self._random_delay(base_delay=1.0, max_delay=3.0)
+
+            except Exception as e:
+                bt.logging.error(f"Failed to search for query '{query}': {str(e)}")
+                query_key = query.replace(" ", "")
+                results[query_key] = []
+
+        return results
+
+    def _perform_single_search(self, query, limit):
+        """Perform a single search with randomization and anti-bot measures"""
+        user_agent = self._get_random_user_agent()
         browser = None
+
         try:
             chrome_options = Options()
             if self.headless:
@@ -138,55 +246,66 @@ class GoogleScraper(BaseScraper):
             )
             chrome_options.add_experimental_option("useAutomationExtension", False)
 
+            # Add randomization to Chrome options
+            chrome_options = self._randomize_chrome_options(chrome_options)
+
             browser = webdriver.Chrome(options=chrome_options)
             browser.execute_script(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
 
-            results = {}
+            page_url = f"https://www.google.com/search?&safe=active&source=lnms&tbs={self.tbs}&tbm=isch&q={self._parse_request_queries(query)}"
+            browser.get(page_url)
 
-            if not isinstance(queries, list):
-                queries = [queries]
+            # Wait for page to load with random delay
+            self._random_delay(base_delay=1.5, max_delay=3.0)
 
-            for query in queries:
-                bt.logging.info(f"Searching for: {query}")
-                page_url = f"https://www.google.com/search?&safe=active&source=lnms&tbs={self.tbs}&tbm=isch&q={self._parse_request_queries(query)}"
-                browser.get(page_url)
-
-                # Wait for page to load
-                time.sleep(2)
-
-                # Scroll to load more images
-                for i in range(5):  # Reduced scrolling for faster execution
-                    browser.execute_script("window.scrollBy(0, window.innerHeight)")
-                    time.sleep(self.scroll_delay / 1000)
-
-                # Method 1: Click on images to get full-size URLs
-                image_urls = self._extract_full_size_urls_by_clicking(browser, limit)
-
-                # Method 2: If clicking method fails, try extracting from page source
-                if len(image_urls) < limit:
-                    bt.logging.info("Trying alternative extraction method...")
-                    additional_urls = self._extract_urls_from_page_source(
-                        browser, limit - len(image_urls)
-                    )
-                    image_urls.extend(additional_urls)
-
-                query_key = query.replace(" ", "")
-                results[query_key] = [
-                    {"query": query, "url": url, "source": "google"}
-                    for url in image_urls[:limit]
-                ]
-
-                bt.logging.info(
-                    f"Found {len(results[query_key])} images for query: {query}"
+            # Scroll to load more images with randomized delays
+            scroll_count = random.randint(3, 6)  # Random number of scrolls
+            for i in range(scroll_count):
+                # Random scroll distance
+                scroll_distance = random.randint(
+                    int(browser.execute_script("return window.innerHeight;") * 0.7),
+                    int(browser.execute_script("return window.innerHeight;") * 1.2),
                 )
+                browser.execute_script(f"window.scrollBy(0, {scroll_distance})")
 
-            return results
+                # Random delay between scrolls
+                time.sleep(self._random_scroll_delay())
+
+                # Occasionally add a small pause
+                if random.random() < 0.3:
+                    time.sleep(random.uniform(0.5, 1.5))
+
+                # Add human behavior simulation
+                if random.random() < 0.4:
+                    self._add_human_behavior_simulation(browser)
+
+                # Check for rate limiting
+                if self._handle_rate_limiting(browser):
+                    bt.logging.warning(
+                        "Rate limiting detected, continuing with caution"
+                    )
+
+            # Method 1: Click on images to get full-size URLs
+            image_urls = self._extract_full_size_urls_by_clicking(browser, limit)
+
+            # Method 2: If clicking method fails, try extracting from page source
+            if len(image_urls) < limit:
+                bt.logging.info("Trying alternative extraction method...")
+                additional_urls = self._extract_urls_from_page_source(
+                    browser, limit - len(image_urls)
+                )
+                image_urls.extend(additional_urls)
+
+            return [
+                {"query": query, "url": url, "source": "google"}
+                for url in image_urls[:limit]
+            ]
 
         except Exception as e:
             bt.logging.error(f"Google scraper error: {str(e)}")
-            return {}
+            raise  # Re-raise for stamina retry logic
         finally:
             if browser:
                 browser.quit()
@@ -199,6 +318,9 @@ class GoogleScraper(BaseScraper):
             # Find clickable image containers
             image_containers = browser.find_elements(By.CSS_SELECTOR, "[data-ri]")
 
+            # Randomize the order of containers to click
+            random.shuffle(image_containers)
+
             for i, container in enumerate(
                 image_containers[: limit * 2]
             ):  # Get more than needed
@@ -206,15 +328,26 @@ class GoogleScraper(BaseScraper):
                     break
 
                 try:
-                    # Scroll element into view
+                    # Scroll element into view with random offset
                     browser.execute_script(
-                        "arguments[0].scrollIntoView(true);", container
+                        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                        container,
                     )
-                    time.sleep(0.5)
 
-                    # Click on the image
-                    ActionChains(browser).move_to_element(container).click().perform()
-                    time.sleep(1)
+                    # Random delay before clicking
+                    time.sleep(random.uniform(0.3, 1.2))
+
+                    # Sometimes move mouse to element first (more human-like)
+                    if random.random() < 0.7:
+                        ActionChains(browser).move_to_element(container).pause(
+                            random.uniform(0.1, 0.5)
+                        ).click().perform()
+                    else:
+                        # Direct click
+                        container.click()
+
+                    # Random delay after clicking
+                    time.sleep(random.uniform(0.8, 2.0))
 
                     # Look for the full-size image in the preview pane
                     full_size_img = None
@@ -252,13 +385,14 @@ class GoogleScraper(BaseScraper):
                             f"Found full-size image: {full_size_img[:100]}..."
                         )
 
-                    # Close the preview if it opened
+                    # Close the preview if it opened (with random delay)
                     try:
                         close_button = browser.find_element(
                             By.CSS_SELECTOR, "[aria-label='Close']"
                         )
+                        time.sleep(random.uniform(0.2, 0.8))
                         close_button.click()
-                        time.sleep(0.5)
+                        time.sleep(random.uniform(0.3, 0.7))
                     except:
                         pass
 
@@ -319,3 +453,54 @@ class GoogleScraper(BaseScraper):
     def _parse_request_queries(self, query):
         """Encode query for URL"""
         return quote_plus(query) if query else ""
+
+    def _handle_rate_limiting(self, browser):
+        """Handle potential rate limiting by adding longer delays"""
+        try:
+            # Check for common rate limiting indicators
+            page_source = browser.page_source.lower()
+            rate_limit_indicators = [
+                "unusual traffic",
+                "automated requests",
+                "captcha",
+                "verify you are human",
+                "rate limit",
+                "too many requests",
+            ]
+
+            if any(indicator in page_source for indicator in rate_limit_indicators):
+                bt.logging.warning(
+                    "Detected potential rate limiting, adding longer delay"
+                )
+                # Add a much longer delay
+                time.sleep(random.uniform(30, 60))
+                return True
+
+        except Exception as e:
+            bt.logging.debug(f"Error checking for rate limiting: {str(e)}")
+
+        return False
+
+    def _add_human_behavior_simulation(self, browser):
+        """Add various human-like behaviors to avoid detection"""
+        try:
+            # Random page interactions
+            if random.random() < 0.4:
+                # Sometimes scroll up a bit
+                browser.execute_script("window.scrollBy(0, -100)")
+                time.sleep(random.uniform(0.5, 1.5))
+
+            if random.random() < 0.3:
+                # Sometimes move mouse to random position
+                actions = ActionChains(browser)
+                x = random.randint(50, 200)
+                y = random.randint(50, 200)
+                actions.move_by_offset(x, y).pause(random.uniform(0.2, 0.8)).perform()
+
+            # Random keyboard focus (tab through elements)
+            if random.random() < 0.2:
+                browser.execute_script("document.activeElement.blur();")
+                time.sleep(random.uniform(0.1, 0.3))
+
+        except Exception as e:
+            bt.logging.debug(f"Human behavior simulation failed: {str(e)}")
