@@ -3,6 +3,9 @@ import bittensor as bt
 import functools
 import json
 import os
+import numpy as np
+from typing import Any, Dict, Union, List
+from enum import Enum
 
 
 def print_info(metagraph, hotkey, block, isMiner=True):
@@ -106,3 +109,38 @@ def get_file_modality(filepath: str) -> str:
         return "video"
     else:
         return "file"
+
+
+def prepare_for_logging(obj: Any) -> Any:
+    """
+    Prepare an object for JSON serialization by converting numpy types and other
+    non-serializable objects to JSON-compatible types.
+    
+    Args:
+        obj: The object to prepare for logging
+        
+    Returns:
+        JSON-serializable version of the object
+    """
+    if obj is None:
+        return None
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, Enum):
+        return obj.value
+    elif isinstance(obj, dict):
+        return {k: prepare_for_logging(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [prepare_for_logging(item) for item in obj]
+    else:
+        # For any other type, try to convert to string
+        try:
+            return str(obj)
+        except:
+            return f"<non-serializable: {type(obj).__name__}>"

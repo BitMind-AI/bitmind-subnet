@@ -318,18 +318,18 @@ def add_validator_args(parser):
 
 def add_data_generator_args(parser):
     parser.add_argument(
-        "--cache-dir",
+        "--cache.base-dir",
         type=str,
         default=os.path.expanduser("~/.cache/sn34"),
         help="Directory for caching data",
     )
 
     parser.add_argument(
-        "--batch-size", type=int, default=3, help="Batch size for generation"
+        "--gen.batch-size", type=int, default=3, help="Batch size for generation"
     )
 
     parser.add_argument(
-        "--tasks",
+        "--gen.tasks",
         nargs="+",
         choices=["t2v", "t2i", "i2i", "i2v"],
         default=["t2v", "t2i", "i2i", "i2v"],
@@ -337,10 +337,17 @@ def add_data_generator_args(parser):
     )
 
     parser.add_argument(
-        "--device",
+        "--gen.device",
         type=str,
         default="cuda",
         help="Device to use for generation (cuda/cpu)",
+    )
+
+    parser.add_argument(
+        "--gen.off",
+        action="store_true",
+        default=False,
+        help="Disable generation pipeline",
     )
 
     parser.add_argument(
@@ -348,6 +355,25 @@ def add_data_generator_args(parser):
         type=int,
         default=50,
         help="Number of batches to generate before starting new W&B run (avoids log truncation)",
+    )
+
+    parser.add_argument(
+        "--scraper.num-queries-per-batch",
+        type=int,
+        default=10,
+    )
+
+    parser.add_argument(
+        "--scraper.num-images-per-query",
+        type=int,
+        default=50,
+    )
+
+    parser.add_argument(
+        "--scraper.off",
+        action="store_true",
+        default=False,
+        help="Disable scraping pipeline",
     )
 
     parser.add_argument("--wandb.process-name", type=str, default="generator")

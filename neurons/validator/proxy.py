@@ -38,7 +38,7 @@ from bitmind.epistula import query_miner
 from bitmind.metagraph import get_miner_uids, run_block_callback_thread
 from bitmind.scoring.miner_history import MinerHistory
 from bitmind.transforms import get_base_transforms
-from bitmind.types import Modality, NeuronType
+from bitmind.types import Modality, NeuronType, MinerType
 from bitmind.utils import on_block_interval
 from neurons.base import BaseNeuron
 
@@ -63,7 +63,7 @@ class MediaProcessor:
         try:
             image_bytes = base64.b64decode(b64_image)
             image = Image.open(io.BytesIO(image_bytes))
-            transformed_image = get_base_transforms(self.target_size)(np.array(image))
+            transformed_image, _ = get_base_transforms(self.target_size)(np.array(image))
             image_bytes, content_type = media_to_bytes(transformed_image)
             return image_bytes, content_type
 
@@ -109,7 +109,7 @@ class MediaProcessor:
 
                 frames = np.stack(frames)
                 if transform_frames:
-                    frames = get_base_transforms(self.target_size)(frames)
+                    frames, _ = get_base_transforms(self.target_size)(frames)
  
                 video_bytes, content_type = media_to_bytes(frames)
                 return video_bytes, content_type
@@ -650,6 +650,7 @@ class ValidatorProxy(BaseNeuron):
                 challenge_tasks.append(
                     query_miner(
                         uid,
+                        MinerType.DETECTOR,
                         media_bytes,
                         content_type,
                         modality,

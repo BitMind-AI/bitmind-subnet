@@ -28,7 +28,6 @@ from bitmind.metagraph import (
     run_block_callback_thread,
 )
 from bitmind.scoring import EvalEngine
-from bitmind.scraping import MultiSiteScraper, GoogleScraper
 from bitmind.transforms import apply_random_augmentations
 from bitmind.types import (
     MediaType,
@@ -36,7 +35,7 @@ from bitmind.types import (
     NeuronType,
     MinerType
 )
-from bitmind.utils import on_block_interval, print_info
+from bitmind.utils import on_block_interval, print_info, prepare_for_logging
 from bitmind.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
 
@@ -78,18 +77,6 @@ class Validator(BaseNeuron):
         self.recheck_miner_type = set([])
         self.eval_engine = EvalEngine(self.metagraph, self.config)
 
-        self.scraper = MultiSiteScraper(
-            output_dir=self.config.cache.base_dir,
-            scrapers=[
-                GoogleScraper(
-                    min_width=128,
-                    min_height=128,
-                    headless=True,
-                    media_type=MediaType.REAL
-                )
-            ],
-        )
-
         ## REGISTER BLOCK CALLBACKS
         self.block_callbacks.extend(
             [
@@ -98,7 +85,6 @@ class Validator(BaseNeuron):
                 self.send_challenge_to_miners_on_interval,
                 self.update_compressed_cache_on_interval,
                 self.update_media_cache_on_interval,
-                #self.scrape_new_media_on_interval,
                 self.start_new_wanbd_run_on_interval,
             ]
         )
@@ -331,30 +317,6 @@ class Validator(BaseNeuron):
         )
         self._media_cache_thread.start()
 
-    @on_block_interval("media_scraping_interval")
-    async def scrape_new_media_on_interval(self, block, retries=3):
-        bt.logging.info("Scraping new media")
-
-        for i in range(retries):
-            if i < retries - 1:
-                bt.logging.warning("Retrying")
-
-            results = await self.cache_system.sample("synthetic_image_sampler", 1)
-            if not results or results.get("count", 0) == 0:
-                bt.logging.warning("No metadata available for search query generation")
-                continue
-
-            image_sample = results["items"][0]
-            search_query = image_sample.get("metadata", {}).get("prompt", "").split(".")[0]
-            if not search_query:
-                bt.logging.warning(f"Prompt not found in {image_sample.get('path', 'unknown path')} for search query generation")
-                continue 
-            else:
-                self.scraper.download_images(search_query, limit_per_scraper=50)
-                return
-
-        bt.logging.error("Aborting media scraping. Either no metadata or no prompts are available.")
-
     @on_block_interval("epoch_length")
     async def set_weights_on_interval(self, block):
         try:
@@ -549,7 +511,7 @@ class Validator(BaseNeuron):
 
             miner_type = response.get("miner_type", "") or ""
             if miner_type.lower() == MinerType.DETECTOR.value.lower():
-                self.eval_engine.tracker.miner_types[uid] = MinerType.DETECTOR  # TODO clear scores?
+                self.eval_engine.tracker.miner_types[uid] = MinerType.DETECTOR
                 bt.logging.success(f"UID {uid}: {miner_type.lower()}")
             elif miner_type.lower() == MinerType.SEGMENTER.value.lower():
                 self.eval_engine.tracker.miner_types[uid] = MinerType.SEGMENTER
@@ -605,7 +567,7 @@ class Validator(BaseNeuron):
             "response_errors": [d["error"] for d in challenge_results],
             "predictions": [d["prediction"] for d in challenge_results],
             "challenge_metadata": {
-                k: v.value if hasattr(v, 'value') else v
+                k: prepare_for_logging(v)
                 for k, v in media_sample.items() 
                 if k not in (media_sample["modality"], "mask")
             },
