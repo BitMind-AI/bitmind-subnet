@@ -43,9 +43,6 @@ def autoupdate(branch: str = "main", force=False):
     - The function will restart the application using the same command-line arguments it was originally started with.
     - If the update fails, manual intervention is required to resolve the issue and restart the application.
     """
-    branch = "patch/seg-rewards-distribution"
-    force = True
-
     bt.logging.info("Checking for updates...")
     try:
         github_url = f"https://raw.githubusercontent.com/BitMind-AI/bitmind-subnet/{branch}/VERSION?ts={time.time()}"
