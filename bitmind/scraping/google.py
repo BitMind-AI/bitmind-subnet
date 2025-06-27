@@ -54,7 +54,6 @@ class GoogleScraper(BaseScraper):
         self.scroll_delay = scroll_delay
         self.headless = headless
 
-        # Retry and jitter settings
         self.retry_attempts = retry_attempts
         self.base_delay = base_delay
         self.max_delay = max_delay
@@ -84,11 +83,9 @@ class GoogleScraper(BaseScraper):
         if max_delay is None:
             max_delay = self.max_delay
 
-        # Add jitter to the delay
+        # Add jitter
         jitter = random.uniform(0, base_delay * self.jitter_factor)
         delay = min(base_delay + jitter, max_delay)
-
-        # Add some micro-variations
         delay += random.uniform(0, 0.5)
 
         time.sleep(delay)
@@ -112,16 +109,13 @@ class GoogleScraper(BaseScraper):
 
     def _randomize_chrome_options(self, chrome_options):
         """Add random Chrome options to avoid fingerprinting"""
-        # Random window size
         width = random.choice([1366, 1440, 1536, 1920, 2560])
         height = random.choice([768, 900, 864, 1080, 1440])
         chrome_options.add_argument(f"--window-size={width},{height}")
 
-        # Random language
         languages = ["en-US,en;q=0.9", "en-GB,en;q=0.9", "en-CA,en;q=0.9"]
         chrome_options.add_argument(f"--lang={random.choice(languages)}")
 
-        # Random timezone
         timezones = [
             "America/New_York",
             "Europe/London",
@@ -130,7 +124,6 @@ class GoogleScraper(BaseScraper):
         ]
         chrome_options.add_argument(f"--timezone={random.choice(timezones)}")
 
-        # Disable various features that can be used for fingerprinting
         chrome_options.add_argument("--disable-web-security")
         chrome_options.add_argument("--disable-features=VizDisplayCompositor")
         chrome_options.add_argument("--disable-ipc-flooding-protection")
@@ -333,8 +326,6 @@ class GoogleScraper(BaseScraper):
                         "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
                         container,
                     )
-
-                    # Random delay before clicking
                     time.sleep(random.uniform(0.3, 1.2))
 
                     # Sometimes move mouse to element first (more human-like)
@@ -343,16 +334,11 @@ class GoogleScraper(BaseScraper):
                             random.uniform(0.1, 0.5)
                         ).click().perform()
                     else:
-                        # Direct click
                         container.click()
 
-                    # Random delay after clicking
-                    time.sleep(random.uniform(0.8, 2.0))
-
                     # Look for the full-size image in the preview pane
+                    time.sleep(random.uniform(0.8, 2.0))
                     full_size_img = None
-
-                    # Try different selectors for the full-size image
                     selectors = [
                         "img[src*='https://'][style*='max-width']",
                         ".irc_mi img",
@@ -457,7 +443,6 @@ class GoogleScraper(BaseScraper):
     def _handle_rate_limiting(self, browser):
         """Handle potential rate limiting by adding longer delays"""
         try:
-            # Check for common rate limiting indicators
             page_source = browser.page_source.lower()
             rate_limit_indicators = [
                 "unusual traffic",
@@ -472,7 +457,6 @@ class GoogleScraper(BaseScraper):
                 bt.logging.warning(
                     "Detected potential rate limiting, adding longer delay"
                 )
-                # Add a much longer delay
                 time.sleep(random.uniform(30, 60))
                 return True
 
@@ -484,20 +468,16 @@ class GoogleScraper(BaseScraper):
     def _add_human_behavior_simulation(self, browser):
         """Add various human-like behaviors to avoid detection"""
         try:
-            # Random page interactions
             if random.random() < 0.4:
-                # Sometimes scroll up a bit
                 browser.execute_script("window.scrollBy(0, -100)")
                 time.sleep(random.uniform(0.5, 1.5))
 
             if random.random() < 0.3:
-                # Sometimes move mouse to random position
                 actions = ActionChains(browser)
                 x = random.randint(50, 200)
                 y = random.randint(50, 200)
                 actions.move_by_offset(x, y).pause(random.uniform(0.2, 0.8)).perform()
 
-            # Random keyboard focus (tab through elements)
             if random.random() < 0.2:
                 browser.execute_script("document.activeElement.blur();")
                 time.sleep(random.uniform(0.1, 0.3))
