@@ -1,3 +1,4 @@
+import base64
 import json
 from hashlib import sha256
 from uuid import uuid4
@@ -182,6 +183,7 @@ async def query_miner(
     connect_timeout: Optional[float] = None,
     sock_connect_timeout: Optional[float] = None,
     testnet_metadata: dict = None,
+    mask: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
     """
     Query a miner with media data.
@@ -225,8 +227,14 @@ async def query_miner(
         }
 
         if testnet_metadata:
-            testnet_headers = {f"X-Testnet-{k}": str(v) for k, v in testnet_metadata.items()}
-            headers.update(testnet_headers)
+            for k, v in testnet_metadata.items():
+                if k == "mask":
+                    mask_bytes = v.astype(np.float16).tobytes()
+                    mask_b64 = base64.b64encode(mask_bytes).decode('utf-8')
+                    headers["X-Mask-Base64"] = mask_b64
+                    headers["X-Mask-Shape"] = ",".join(map(str, mask.shape))
+                else:
+                    headers[f"X-Testnet-{k}"] = str(v)
 
         async with session.post(
             url,
