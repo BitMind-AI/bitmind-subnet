@@ -227,7 +227,7 @@ class Validator(BaseNeuron):
                         self.config.neuron.miner_connect_timeout,
                         self.config.neuron.miner_sock_connect_timeout,
                         testnet_metadata=(
-                            {k: v for k, v in media_sample.items() if k != modality}
+                            {k: v for k, v in media_sample.items() if k not in(modality, "mask")}
                             if self.config.netuid != MAINNET_UID
                             else {}
                         ),
