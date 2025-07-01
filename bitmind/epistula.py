@@ -183,7 +183,6 @@ async def query_miner(
     connect_timeout: Optional[float] = None,
     sock_connect_timeout: Optional[float] = None,
     testnet_metadata: dict = None,
-    mask: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
     """
     Query a miner with media data.
