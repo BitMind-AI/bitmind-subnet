@@ -38,15 +38,26 @@ class EvalEngine:
 
     def get_weights(self):
         """Returns an L1 normalized vector of scores (rewards EMA)."""
-        if np.isnan(self.scores).any():
-            bt.logging.warning(
-                f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
-            )
+        segmentation_uids = [
+            uid
+            for uid in range(len(self.scores))
+            if self.tracker.get_miner_type(uid) == MinerType.SEGMENTER
+        ]
+        detector_uids = [
+            uid
+            for uid in range(len(self.scores))
+            if self.tracker.get_miner_type(uid) == MinerType.DETECTOR
+        ]
 
-        # Normalize scores for each miner type separately
         normed_weights = np.zeros_like(self.scores)
+
         for miner_type in MinerType:
-            type_mask = np.array([self.tracker.get_miner_type(i) == miner_type for i in range(len(self.scores))])
+            type_mask = np.array(
+                [
+                    self.tracker.get_miner_type(i) == miner_type
+                    for i in range(len(self.scores))
+                ]
+            )
             if not np.any(type_mask):
                 continue
 
@@ -57,24 +68,25 @@ class EvalEngine:
 
             normed_weights[type_mask] = type_scores / type_norm
 
-        # uncomment to burn emissions 
-        #normed_weights = np.array([v * 0.6 for v in normed_weights])
-        #normed_weights[135] = 0.4
+        if len(segmentation_uids) > 0 and len(detector_uids) > 0:
 
-        segmentation_uids = [
-            uid for uid in range(len(normed_weights))
-            if self.tracker.get_miner_type(uid) == MinerType.SEGMENTER
-        ]
-        detector_uids = [
-            uid for uid in range(len(normed_weights))
-            if self.tracker.get_miner_type(uid) == MinerType.DETECTOR
-        ]
+            # Scale segmenters so their maximum doesn't exceed the 10th percentile of detectors
+            detector_10th_percentile = np.percentile(normed_weights[detector_uids], 10)
+            max_segmenter_weight = np.max(normed_weights[segmentation_uids])
+            if max_segmenter_weight > 0:
+                segmenter_scale = detector_10th_percentile / max_segmenter_weight
+                normed_weights[segmentation_uids] *= segmenter_scale
 
-        if len(segmentation_uids) > 0:
-            normed_weights[segmentation_uids] *= 0.1
-            normed_weights[detector_uids] *= 0.9
+        elif len(segmentation_uids) > 0:
+            segmenter_total = np.sum(normed_weights[segmentation_uids])
+            if segmenter_total > 0:
+                normed_weights[segmentation_uids] /= segmenter_total
 
-        bt.logging.debug(normed_weights)
+        elif len(detector_uids) > 0:
+            detector_total = np.sum(normed_weights[detector_uids])
+            if detector_total > 0:
+                normed_weights[detector_uids] /= detector_total
+
         return normed_weights
 
     def get_rewards(
