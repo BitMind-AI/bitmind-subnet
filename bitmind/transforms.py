@@ -537,11 +537,10 @@ def gaussian_noise_color(img, param, b=None):
     """
     ycbcr = rgb2ycbcr(img) / 255
     size_a = ycbcr.shape
-    if b is None:
-        b = (
-            ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
-        ) * 255
-        b = ycbcr2rgb(b)
+    b = (
+        ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
+    ) * 255
+    b = ycbcr2rgb(b)
     return np.clip(b, 0, 255).astype(np.uint8), {"b": b}
 
 
@@ -739,11 +738,10 @@ class RandomHorizontalFlipWithParams:
 
         if self.params.get("flip", False):
             img = np.fliplr(img)
+            mask = None if mask is None else np.fliplr(mask)
 
         if mask is not None:
-            mask = np.fliplr(mask)
             return img, mask
-
         return img
 
 
@@ -777,11 +775,10 @@ class RandomVerticalFlipWithParams:
 
         if self.params.get("flip", False):
             img = np.flipud(img)
+            mask = None if mask is None else np.flipud(mask)
 
         if mask is not None:
-            mask = np.flipud(mask)
             return img, mask
-
         return img
 
 
