@@ -522,27 +522,24 @@ def block_wise(img, param):
     return img
 
 
-def gaussian_noise_color(img, param, b=None):
+def gaussian_noise_color(img, param):
     """Apply colored Gaussian noise in YCbCr color space.
 
     Args:
         img (np.ndarray): Input RGB image array of shape (H, W, 3)
         param (float): Variance of the Gaussian noise
-        b (np.ndarray, optional): Pre-computed noisy image
 
     Returns:
         tuple: (distorted_image, params)
             distorted_image: np.ndarray, image with added color noise
-            params: dict with 'b' key containing the noisy image
     """
     ycbcr = rgb2ycbcr(img) / 255
     size_a = ycbcr.shape
-    if b is None:
-        b = (
-            ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
-        ) * 255
-        b = ycbcr2rgb(b)
-    return np.clip(b, 0, 255).astype(np.uint8), {"b": b}
+    b = (
+        ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
+    ) * 255
+    b = ycbcr2rgb(b)
+    return np.clip(b, 0, 255).astype(np.uint8)
 
 
 def gaussian_blur(img, param):
@@ -739,11 +736,10 @@ class RandomHorizontalFlipWithParams:
 
         if self.params.get("flip", False):
             img = np.fliplr(img)
+            mask = None if mask is None else np.fliplr(mask)
 
         if mask is not None:
-            mask = np.fliplr(mask)
             return img, mask
-
         return img
 
 
@@ -777,11 +773,10 @@ class RandomVerticalFlipWithParams:
 
         if self.params.get("flip", False):
             img = np.flipud(img)
+            mask = None if mask is None else np.flipud(mask)
 
         if mask is not None:
-            mask = np.flipud(mask)
             return img, mask
-
         return img
 
 
