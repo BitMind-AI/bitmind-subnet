@@ -219,39 +219,33 @@ async def query_miner(
         elif miner_type == MinerType.SEGMENTER:
             url = f"{base_url}/segment_{modality}"
 
-        headers = {
-            "Content-Type": content_type,
-            "X-Media-Type": modality,
-            **generate_header(hotkey, media, axon_info.hotkey),
-        }
+        if miner_type == MinerType.DETECTOR:
+            # For detectors, use the original approach with headers
+            headers = {
+                "Content-Type": content_type,
+                "X-Media-Type": modality,
+                **generate_header(hotkey, media, axon_info.hotkey),
+            }
 
-        if testnet_metadata:
-            for k, v in testnet_metadata.items():
-                if k == "mask":
-                    mask_bytes = v.astype(np.float16).tobytes()
-                    mask_b64 = base64.b64encode(mask_bytes).decode('utf-8')
-                    headers["X-Mask-Base64"] = mask_b64
-                    headers["X-Mask-Shape"] = ",".join(map(str, mask.shape))
-                else:
+            if testnet_metadata:
+                for k, v in testnet_metadata.items():
                     headers[f"X-Testnet-{k}"] = str(v)
 
-        async with session.post(
-            url,
-            headers=headers,
-            data=media,
-            timeout=aiohttp.ClientTimeout(
-                total=total_timeout,
-                connect=connect_timeout,
-                sock_connect=sock_connect_timeout,
-            ),
-        ) as res:
-            response["status"] = res.status
-            if res.status != 200:
-                response["error"] = f"HTTP {res.status} error"
-                return response
-            try:
-
-                if miner_type == MinerType.DETECTOR:
+            async with session.post(
+                url,
+                headers=headers,
+                data=media,
+                timeout=aiohttp.ClientTimeout(
+                    total=total_timeout,
+                    connect=connect_timeout,
+                    sock_connect=sock_connect_timeout,
+                ),
+            ) as res:
+                response["status"] = res.status
+                if res.status != 200:
+                    response["error"] = f"HTTP {res.status} error"
+                    return response
+                try:
                     data = await res.json()
                     if "prediction" not in data:
                         response["error"] = "Missing prediction in response"
@@ -272,7 +266,52 @@ async def query_miner(
                     response["prediction"] = pred
                     return response
 
-                elif miner_type == MinerType.SEGMENTER:
+                except json.JSONDecodeError:
+                    response["error"] = "Failed to decode JSON response"
+                    return response
+
+                except (TypeError, ValueError) as e:
+                    response["error"] = (
+                        f"Invalid prediction value. {e}"
+                    )
+                    return response
+
+        elif miner_type == MinerType.SEGMENTER:
+            form_data = FormData()
+            form_data.add_field('media', media, filename='media', content_type=content_type)
+
+            # Add mask if provided in testnet_metadata
+            if testnet_metadata and 'mask' in testnet_metadata:
+                mask = testnet_metadata['mask']
+                mask_bytes = mask.astype(np.float16).tobytes()
+                form_data.add_field('mask', mask_bytes, filename='mask.npy', content_type='application/octet-stream')
+
+            if testnet_metadata:
+                for k, v in testnet_metadata.items():
+                    if k != 'mask':  # Skip mask as it's handled separately
+                        headers[f"X-Testnet-{k}"] = str(v)
+
+            form_data_bytes = form_data.serialize()
+            headers = {
+                "X-Media-Type": modality,
+                **generate_header(hotkey, form_data_bytes, axon_info.hotkey),
+            }
+
+            async with session.post(
+                url,
+                headers=headers,
+                data=form_data,
+                timeout=aiohttp.ClientTimeout(
+                    total=total_timeout,
+                    connect=connect_timeout,
+                    sock_connect=sock_connect_timeout,
+                ),
+            ) as res:
+                response["status"] = res.status
+                if res.status != 200:
+                    response["error"] = f"HTTP {res.status} error"
+                    return response
+                try:
                     pred = await res.read()
                     if "X-Mask-Shape" not in res.headers:
                         raise ValueError("Missing X-Mask-Shape header")
@@ -286,15 +325,11 @@ async def query_miner(
                     response["prediction"] = pred
                     return response
 
-            except json.JSONDecodeError:
-                response["error"] = "Failed to decode JSON response"
-                return response
-
-            except (TypeError, ValueError) as e:
-                response["error"] = (
-                    f"Invalid prediction value. {e}"
-                )
-                return response
+                except (TypeError, ValueError) as e:
+                    response["error"] = (
+                        f"Invalid prediction value. {e}"
+                    )
+                    return response
 
     except asyncio.TimeoutError:
         response["status"] = 408
