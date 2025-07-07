@@ -9,18 +9,10 @@ import cv2
 from scipy import ndimage
 
 from bitmind.generation.util.image import ensure_mask_3d
+from bitmind.resolutions import ResolutionSampler
+from bitmind.types import MediaType
 
 TARGET_IMAGE_SIZE = (256, 256)
-
-
-class SourceType(Enum):
-    """
-    Enum for image source type for resolution augmentation logic.
-    REAL: Real-world images (e.g., from cameras, web, etc.)
-    GENERATED: AI-generated images (e.g., from diffusion models)
-    """
-    REAL = "real"
-    GENERATED = "generated"
 
 
 @dataclass
@@ -38,170 +30,6 @@ class ResolutionAugmentationConfig:
     real_to_generated_ratio: float = 0.2
     default_target_size: Tuple[int, int] = (256, 256)
     enable_dynamic_resolution: bool = True
-
-
-class ResolutionSampler:
-    """
-    Samples image resolutions from realistic distributions based on source type.
-    """
-    def __init__(self):
-        """
-        Initialize the sampler with hardcoded real and generated resolution distributions.
-        """
-        self.real_resolutions = [
-            (1600, 1200),   # 4:3, very common
-            (3264, 2448),   # 4:3, common phone
-            (2048, 1536),   # 4:3, iPad/camera
-            (4000, 3000),   # 4:3, high-res phone
-            (800, 600),     # 4:3, legacy
-            (1024, 768),    # 4:3, legacy
-            (2592, 1944),   # 4:3, common
-            (3008, 2000),   # 3:2, DSLR
-            (5184, 3456),   # 3:2, DSLR
-            (1280, 960),    # 4:3, web
-            (3000, 2000),   # 3:2, DSLR
-            (3888, 2592),   # 3:2, DSLR
-            (2448, 3264),   # 4:3, phone
-            (2816, 2112),   # 4:3, camera
-            (1280, 720),    # 16:9, HD
-            (1920, 1080),   # 16:9, HD
-            (2560, 1440),   # 16:9, QHD
-            (3840, 2160),   # 16:9, 4K
-            (512, 512),     # square, rare
-            (1024, 1024),   # square, rare
-            (1200, 1200),   # square, rare
-            (1080, 1080),   # square, rare
-            (720, 720),     # square, rare
-            (4096, 2160),   # 17:9, rare
-            (5000, 4000),   # 5:4, rare
-            (6000, 4000),   # 3:2, rare
-        ]
-        self.real_weights = [
-            0.10,  # 1600x1200
-            0.09,  # 3264x2448
-            0.08,  # 2048x1536
-            0.08,  # 4000x3000
-            0.07,  # 800x600
-            0.07,  # 1024x768
-            0.06,  # 2592x1944
-            0.05,  # 3008x2000
-            0.05,  # 5184x3456
-            0.04,  # 1280x960
-            0.04,  # 3000x2000
-            0.03,  # 3888x2592
-            0.03,  # 2448x3264
-            0.03,  # 2816x2112
-            0.03,  # 1280x720
-            0.03,  # 1920x1080
-            0.02,  # 2560x1440
-            0.02,  # 3840x2160
-            0.01,  # 512x512
-            0.01,  # 1024x1024
-            0.01,  # 1200x1200
-            0.01,  # 1080x1080
-            0.01,  # 720x720
-            0.01,  # 4096x2160
-            0.01,  # 5000x4000
-            0.01,  # 6000x4000
-        ]
-        # Normalize to sum to 1.0
-        self.real_weights = np.array(self.real_weights)
-        self.real_weights = self.real_weights / self.real_weights.sum()
-        # Synthetic (generated) resolutions and weights based on popular model defaults (see models.py)
-        # 1024x1024 (GPT-4V, SDXL, etc.) is given the highest weight, followed by 2048x2048 (Midjourney)
-        self.generated_resolutions = [
-            (1024, 1024),   # GPT-4V, SDXL, etc.
-            (2048, 2048),   # Midjourney default
-            (512, 512),     # SD, AnimateDiff, etc.
-            (768, 768),     # SDXL, AnimateDiff, etc.
-            (640, 640),     # AnimateDiff, etc.
-            (896, 896),     # AnimateDiff, etc.
-            (1536, 1536),   # IF, etc.
-            (800, 800),     # AnimateDiff, etc.
-            (960, 960),     # AnimateDiff, etc.
-            (512, 768),     # SDXL, AnimateDiff, etc.
-            (768, 512),     # SDXL, AnimateDiff, etc.
-            (512, 1024),    # AnimateDiff, etc.
-            (1024, 512),    # AnimateDiff, etc.
-            (512, 896),     # AnimateDiff, etc.
-            (896, 512),     # AnimateDiff, etc.
-            (720, 1280),    # HunyuanVideo, Wan2.1, etc.
-            (1280, 720),    # HunyuanVideo, Wan2.1, etc.
-            (832, 1104),    # HunyuanVideo
-            (1104, 832),    # HunyuanVideo
-            (480, 832),     # Mochi, Wan2.1
-            (480, 848),     # Mochi
-            (720, 720),     # AnimateDiff, etc.
-            (854, 480),     # AnimateDiff, etc.
-            (1024, 576),    # AnimateDiff, etc.
-            (1920, 1080),   # Some video/image models
-            (3840, 2160),   # 4K, rare
-            (2560, 1440),   # QHD, rare
-        ]
-        self.generated_weights = [
-            0.16,  # 1024x1024 (GPT-4V, SDXL, etc.)
-            0.13,  # 2048x2048 (Midjourney)
-            0.12,  # 512x512
-            0.11,  # 768x768
-            0.05,  # 640x640
-            0.04,  # 896x896
-            0.01,  # 1536x1536
-            0.01,  # 800x800
-            0.01,  # 960x960
-            0.07,  # 512x768
-            0.07,  # 768x512
-            0.03,  # 512x1024
-            0.03,  # 1024x512
-            0.01,  # 512x896
-            0.01,  # 896x512
-            0.02,  # 720x1280
-            0.02,  # 1280x720
-            0.01,  # 832x1104
-            0.01,  # 1104x832
-            0.01,  # 480x832
-            0.01,  # 480x848
-            0.01,  # 720x720
-            0.01,  # 854x480
-            0.01,  # 1024x576
-            0.01,  # 1920x1080
-            0.005, # 3840x2160
-            0.005, # 2560x1440
-        ]
-        # Normalize to sum to 1.0
-        self.generated_weights = np.array(self.generated_weights)
-        self.generated_weights = self.generated_weights / self.generated_weights.sum()
-
-    def sample_resolution(self, source_type: SourceType) -> Tuple[int, int]:
-        """
-        Sample a resolution based on source type distribution.
-
-        Args:
-            source_type: Whether the image is real or generated.
-
-        Returns:
-            Tuple of (width, height).
-        """
-        if source_type == SourceType.REAL:
-            idx = np.random.choice(len(self.real_resolutions), p=self.real_weights)
-            return self.real_resolutions[idx]
-        idx = np.random.choice(len(self.generated_resolutions), p=self.generated_weights)
-        return self.generated_resolutions[idx]
-
-    def sample_cross_domain_resolution(self, source_type: SourceType) -> Tuple[int, int]:
-        """
-        Sample a resolution from the opposite domain for adversarial training.
-
-        Args:
-            source_type: Original source type (will sample from opposite domain).
-
-        Returns:
-            Tuple of (width, height) from opposite domain.
-        """
-        if source_type == SourceType.REAL:
-            idx = np.random.choice(len(self.generated_resolutions), p=self.generated_weights)
-            return self.generated_resolutions[idx]
-        idx = np.random.choice(len(self.real_resolutions), p=self.real_weights)
-        return self.real_resolutions[idx]
 
 
 class DynamicResize:
@@ -228,31 +56,31 @@ class DynamicResize:
         self,
         img: np.ndarray,
         mask: Optional[np.ndarray] = None,
-        source_type: Optional[SourceType] = None
+        media_type: Optional[MediaType] = None
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
-        Apply dynamic resize based on source type and configuration.
+        Apply dynamic resize based on configuration.
 
         Args:
             img: Input image array.
             mask: Optional mask array.
-            source_type: Source type for dynamic resolution logic.
+            media_type: Optional MediaType instance.
 
         Returns:
             Resized image, or tuple of (image, mask) if mask provided.
         """
-        if not self.config.enable_dynamic_resolution or source_type is None:
+        if not self.config.enable_dynamic_resolution or media_type is None:
             target_size = self.target_size
         else:
             should_cross_domain = False
-            if source_type == SourceType.GENERATED:
+            if media_type == MediaType.SYNTHETIC:
                 should_cross_domain = random.random() < self.config.generated_to_real_ratio
             else:
                 should_cross_domain = random.random() < self.config.real_to_generated_ratio
             if should_cross_domain:
-                target_size = self.resolution_sampler.sample_cross_domain_resolution(source_type)
+                target_size = self.resolution_sampler.sample_cross_domain_resolution(media_type)
             else:
-                target_size = self.resolution_sampler.sample_resolution(source_type)
+                target_size = self.resolution_sampler.sample_resolution(media_type)
         img_resized = cv2.resize(img, target_size, interpolation=cv2.INTER_LINEAR)
         if mask is not None:
             mask_resized = cv2.resize(mask, target_size, interpolation=cv2.INTER_NEAREST)
@@ -288,7 +116,7 @@ class DynamicRandomResizedCrop:
         self,
         img: np.ndarray,
         mask: Optional[np.ndarray] = None,
-        source_type: Optional[SourceType] = None,
+        media_type: Optional[MediaType] = None,
         crop_params: Optional[Tuple[int, int, int, int]] = None
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
@@ -297,24 +125,24 @@ class DynamicRandomResizedCrop:
         Args:
             img: Input image array.
             mask: Optional mask array.
-            source_type: Source type for dynamic resolution logic.
+            media_type: Optional MediaType instance.
             crop_params: Pre-computed crop parameters (i, j, h, w).
 
         Returns:
             Cropped and resized image, or tuple of (image, mask) if mask provided.
         """
-        if not self.config.enable_dynamic_resolution or source_type is None:
+        if not self.config.enable_dynamic_resolution or media_type is None:
             target_size = self.target_size
         else:
             should_cross_domain = False
-            if source_type == SourceType.GENERATED:
+            if media_type == MediaType.SYNTHETIC:
                 should_cross_domain = random.random() < self.config.generated_to_real_ratio
             else:
                 should_cross_domain = random.random() < self.config.real_to_generated_ratio
             if should_cross_domain:
-                target_size = self.resolution_sampler.sample_cross_domain_resolution(source_type)
+                target_size = self.resolution_sampler.sample_cross_domain_resolution(media_type)
             else:
-                target_size = self.resolution_sampler.sample_resolution(source_type)
+                target_size = self.resolution_sampler.sample_resolution(media_type)
         img_cropped = self._resized_crop(
             img, mask=mask, crop_params=crop_params,
             target_size=target_size, interpolation=cv2.INTER_LINEAR
@@ -593,7 +421,7 @@ class ComposeTransforms:
         self,
         img: np.ndarray,
         mask: Optional[np.ndarray] = None,
-        source_type: Optional[SourceType] = None,
+        media_type: Optional[MediaType] = None,
         reuse_params: bool = False
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
@@ -602,7 +430,7 @@ class ComposeTransforms:
         Args:
             img: Input image array.
             mask: Optional mask array.
-            source_type: Source type for dynamic resolution logic.
+            media_type: Optional MediaType instance.
             reuse_params: Whether to reuse previous parameters.
 
         Returns:
@@ -615,27 +443,14 @@ class ComposeTransforms:
         for transform in self.transforms:
             transform_name = transform.__class__.__name__
             if hasattr(transform, '__call__'):
-                import inspect
-                sig = inspect.signature(transform.__call__)
-                supports_source_type = 'source_type' in sig.parameters
-                if supports_source_type:
-                    if current_mask is not None:
-                        result = transform(current_img, mask=current_mask, source_type=source_type)
-                        if isinstance(result, tuple):
-                            current_img, current_mask = result
-                        else:
-                            current_img = result
+                if current_mask is not None:
+                    result = transform(current_img, mask=current_mask, media_type=media_type)
+                    if isinstance(result, tuple):
+                        current_img, current_mask = result
                     else:
-                        current_img = transform(current_img, source_type=source_type)
+                        current_img = result
                 else:
-                    if current_mask is not None:
-                        result = transform(current_img, mask=current_mask)
-                        if isinstance(result, tuple):
-                            current_img, current_mask = result
-                        else:
-                            current_img = result
-                    else:
-                        current_img = transform(current_img)
+                    current_img = transform(current_img, media_type=media_type)
             if hasattr(transform, 'params'):
                 self.params[transform_name] = transform.params
         if current_mask is not None:
@@ -652,7 +467,7 @@ def get_base_transforms(
 
     Args:
         config: Resolution augmentation configuration.
-        resolution_sampler: Resolution sampler instance.
+        resolution_sampler: ResolutionSampler instance.
 
     Returns:
         Composed transform pipeline.
@@ -672,7 +487,7 @@ def get_augmentation_transforms(
 
     Args:
         config: Resolution augmentation configuration.
-        resolution_sampler: Resolution sampler instance.
+        resolution_sampler: ResolutionSampler instance.
 
     Returns:
         Composed transform pipeline with augmentations.
@@ -688,7 +503,7 @@ def get_augmentation_transforms(
 def apply_resolution_augmentations(
     img: np.ndarray,
     mask: Optional[np.ndarray] = None,
-    source_type: Optional[SourceType] = None,
+    media_type: Optional[MediaType] = None,
     config: Optional[ResolutionAugmentationConfig] = None,
     use_augmentations: bool = True
 ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
@@ -698,7 +513,7 @@ def apply_resolution_augmentations(
     Args:
         img: Input image array.
         mask: Optional mask array.
-        source_type: Source type (real or generated).
+        media_type: Optional MediaType instance.
         config: Augmentation configuration.
         use_augmentations: Whether to use augmentations or just base transforms.
 
@@ -712,7 +527,7 @@ def apply_resolution_augmentations(
         transforms = get_augmentation_transforms(config, resolution_sampler)
     else:
         transforms = get_base_transforms(config, resolution_sampler)
-    return transforms(img, mask=mask, source_type=source_type)
+    return transforms(img, mask=mask, media_type=media_type)
 
 
 def apply_random_augmentations(
@@ -721,7 +536,7 @@ def apply_random_augmentations(
     mask=None,
     level_probs=None,
     level=None,
-    source_type: Optional[SourceType] = None
+    media_type: Optional[MediaType] = None
 ):
     """
     Backward compatibility wrapper for the old apply_random_augmentations function.
@@ -732,7 +547,7 @@ def apply_random_augmentations(
         mask: np.ndarray, optional. Binary mask.
         level_probs: dict, not used in new implementation.
         level: int, not used in new implementation.
-        source_type: SourceType, optional. Source type for dynamic resolution logic.
+        media_type: Optional MediaType instance.
 
     Returns:
         tuple: (aug_image, aug_mask, 0, {}) for compatibility.
@@ -740,15 +555,15 @@ def apply_random_augmentations(
     config = ResolutionAugmentationConfig()
     if isinstance(inputs, tuple):
         aug_A = apply_resolution_augmentations(
-            inputs[0], mask=None, source_type=source_type, config=config
+            inputs[0], mask=None, media_type=media_type, config=config
         )
         aug_B = apply_resolution_augmentations(
-            inputs[1], mask=None, source_type=source_type, config=config
+            inputs[1], mask=None, media_type=media_type, config=config
         )
         transformed = np.concatenate([aug_A, aug_B], axis=0)
         return transformed, None, 0, {}
     else:
         aug_image, aug_mask = apply_resolution_augmentations(
-            inputs, mask=mask, source_type=source_type, config=config
+            inputs, mask=mask, media_type=media_type, config=config
         )
         return aug_image, aug_mask, 0, {}

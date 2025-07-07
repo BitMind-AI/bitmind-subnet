@@ -154,33 +154,19 @@ def create_random_mask(
 
 
 def is_black_output(
-    modality: str, output: Union[dict, Image.Image], threshold: int = 10
+    modality: str, output: dict, threshold: int = 10
 ) -> bool:
     """
     Returns True if the image or frames are (almost) completely black.
+    Expects output to be a dict with keys 'image' or 'video', and the value to have .images[0] or .frames[0].
+    Throws errors if the format is not as expected.
     """
     if modality == "image":
-        # Handle different output formats
-        if isinstance(output, dict) and modality in output:
-            gen_output = output[modality]
-            if hasattr(gen_output, 'images') and gen_output.images:
-                arr = np.array(gen_output.images[0])
-            elif isinstance(gen_output, Image.Image):
-                arr = np.array(gen_output)
-            else:
-                return False
-        elif isinstance(output, Image.Image):
-            arr = np.array(output)
-        else:
-            return False
+        arr = np.array(output["image"].images[0])
         return bool(np.mean(arr) < threshold)
     elif modality == "video":
-        if isinstance(output, dict) and modality in output:
-            gen_output = output[modality]
-            if hasattr(gen_output, 'frames') and gen_output.frames:
-                return bool(np.all(
-                    [np.mean(np.array(frame)) < threshold for frame in gen_output.frames[0]]
-                ))
-        return False
+        return bool(np.all(
+            [np.mean(np.array(arr)) < threshold for arr in output["video"].frames[0]]
+        ))
     else:
-        return False
+        raise ValueError(f"Unsupported modality: {modality}")
