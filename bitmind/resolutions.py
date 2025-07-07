@@ -4,15 +4,17 @@ from typing import Tuple
 from bitmind.types import MediaType
 
 
-"""Canonical real image resolutions derived from dataset analysis.
+"""Canonical real image resolutions derived from analysis of a real image dataset.
 
-Images were grouped by aspect ratio, then dimensions were binned to the nearest
-128 pixels to reduce noise from minor variations. For each aspect ratio, we kept
-1 bin per 0.5% of dataset frequency (no minimum), resulting in a concise and
-representative set of (width, height) tuples for use in the ResolutionSampler.
+Images were grouped by aspect ratio, then each image's resolution was
+snapped to the most common value within ±8 pixels for that aspect ratio.
+For each aspect ratio, we kept 1 bin per 0.5% of dataset frequency (no
+minimum), resulting in a concise and representative set of (width,
+height) tuples for use in the ResolutionSampler.
 
-Synthetic image resolutions are based on common default sizes used by popular
-generative models (e.g., Stable Diffusion, Midjourney, GPT-4V, etc.).
+Synthetic image resolutions are based on common default sizes used by
+popular generative models (e.g., Stable Diffusion, Midjourney, GPT-4V,
+etc.).
 """
 
 
@@ -22,40 +24,59 @@ class ResolutionSampler:
     def __init__(self) -> None:
         """Initialize the ResolutionSampler with real and synthetic resolution data."""
         self.real_resolutions = [
-            (256, 256),
-            (384, 256),
-            (384, 384),
-            (384, 640),
-            (512, 256),
-            (512, 384),
-            (512, 512),
-            (512, 640),
-            (512, 768),
-            (512, 896),
-            (640, 384),
-            (640, 512),
+            (348, 348),
+            (400, 300),
+            (400, 320),
+            (400, 400),
+            (400, 600),
+            (460, 345),
+            (480, 270),
+            (480, 360),
+            (480, 640),
+            (500, 333),
+            (500, 375),
+            (500, 500),
+            (500, 750),
+            (564, 846),
+            (600, 400),
+            (600, 450),
+            (600, 600),
+            (600, 800),
+            (600, 900),
+            (630, 420),
+            (640, 360),
+            (640, 480),
             (640, 640),
-            (640, 768),
-            (640, 896),
-            (640, 1024),
-            (768, 512),
-            (768, 640),
-            (768, 768),
-            (896, 512),
-            (896, 640),
-            (896, 768),
-            (896, 896),
-            (1024, 512),
-            (1024, 640),
-            (1024, 768),
-            (1536, 1152),
-            (2048, 2048),
-            (2432, 2432),
-            (2560, 1920),
+            (640, 960),
+            (660, 440),
+            (700, 525),
+            (700, 700),
+            (720, 480),
+            (720, 540),
+            (736, 552),
+            (750, 500),
+            (750, 750),
+            (800, 400),
+            (800, 450),
+            (800, 500),
+            (800, 533),
+            (800, 534),
+            (800, 600),
+            (800, 800),
+            (900, 600),
+            (960, 640),
+            (960, 720),
+            (1000, 600),
+            (1000, 667),
+            (1000, 750),
+            (1023, 682),
+            (1024, 576),
+            (1024, 683),
+            (1080, 720),
         ]
         # Assign equal weights to all real resolutions
         self.real_weights = np.ones(len(self.real_resolutions)) / len(self.real_resolutions)
-        
+
         # Synthetic (generated) resolutions and weights based on popular model defaults
         self.synthetic_resolutions = [
             (1024, 1024),   # GPT-4V, SDXL, IF, etc.
@@ -118,30 +139,38 @@ class ResolutionSampler:
 
     def sample_resolution(self, media_type: MediaType) -> Tuple[int, int]:
         """Sample a resolution based on the media type.
-        
+
         Args:
             media_type: The type of media (REAL or SYNTHETIC).
-            
+
         Returns:
             A tuple of (width, height) representing the sampled resolution.
         """
         if media_type == MediaType.REAL:
-            idx = np.random.choice(len(self.real_resolutions), p=self.real_weights)
+            idx = np.random.choice(
+                len(self.real_resolutions), p=self.real_weights
+            )
             return self.real_resolutions[idx]
-        idx = np.random.choice(len(self.synthetic_resolutions), p=self.synthetic_weights)
+        idx = np.random.choice(
+            len(self.synthetic_resolutions), p=self.synthetic_weights
+        )
         return self.synthetic_resolutions[idx]
 
     def sample_cross_domain_resolution(self, media_type: MediaType) -> Tuple[int, int]:
         """Sample a resolution from the opposite domain of the media type.
-        
+
         Args:
             media_type: The type of media (REAL or SYNTHETIC).
-            
+
         Returns:
             A tuple of (width, height) representing the sampled resolution.
         """
         if media_type == MediaType.REAL:
-            idx = np.random.choice(len(self.synthetic_resolutions), p=self.synthetic_weights)
+            idx = np.random.choice(
+                len(self.synthetic_resolutions), p=self.synthetic_weights
+            )
             return self.synthetic_resolutions[idx]
-        idx = np.random.choice(len(self.real_resolutions), p=self.real_weights)
+        idx = np.random.choice(
+            len(self.real_resolutions), p=self.real_weights
+        )
         return self.real_resolutions[idx]
