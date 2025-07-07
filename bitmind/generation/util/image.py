@@ -1,13 +1,12 @@
 import numpy as np
-import PIL
-import os
 from PIL import Image, ImageDraw
+import os
 from typing import Tuple, Union, List
 
 
 def resize_image(
-    image: PIL.Image.Image, max_width: int, max_height: int
-) -> PIL.Image.Image:
+    image: Image.Image, max_width: int, max_height: int
+) -> Image.Image:
     """Resize the image to fit within specified dimensions while maintaining aspect ratio."""
     original_width, original_height = image.size
 
@@ -21,7 +20,7 @@ def resize_image(
         new_width = int(new_height * aspect_ratio)
 
     # Resize the image using the high-quality LANCZOS filter
-    resized_image = image.resize((new_width, new_height), PIL.Image.LANCZOS)
+    resized_image = image.resize((new_width, new_height), Image.LANCZOS)
     return resized_image
 
 
@@ -40,7 +39,7 @@ def resize_images_in_directory(directory, target_width, target_height):
             (".png", ".jpg", ".jpeg", ".bmp", ".gif")
         ):  # Check for image file extensions
             filepath = os.path.join(directory, filename)
-            with PIL.Image.open(filepath) as img:
+            with Image.open(filepath) as img:
                 # Resize the image and save back to the file location
                 resized_img = resize_image(
                     img, max_width=target_width, max_height=target_height
@@ -85,7 +84,7 @@ def create_random_mask(
     max_size_ratio: float = 0.5,
     allow_multiple: bool = True,
     allowed_shapes: list = ["rectangle", "circle", "ellipse", "triangle"],
-) -> "Image.Image":
+) -> Image.Image:
     """
     Create a random mask (or masks) for i2i/inpainting with more variety.
     Returns a single-channel ("L" mode) mask image.
@@ -155,15 +154,33 @@ def create_random_mask(
 
 
 def is_black_output(
-    modality: str, output: Union[List[Image.Image], Image.Image], threshold: int = 10
+    modality: str, output: Union[dict, Image.Image], threshold: int = 10
 ) -> bool:
     """
     Returns True if the image or frames are (almost) completely black.
     """
     if modality == "image":
-        arr = np.array(output[modality].images[0])
-        return np.mean(arr) < threshold
+        # Handle different output formats
+        if isinstance(output, dict) and modality in output:
+            gen_output = output[modality]
+            if hasattr(gen_output, 'images') and gen_output.images:
+                arr = np.array(gen_output.images[0])
+            elif isinstance(gen_output, Image.Image):
+                arr = np.array(gen_output)
+            else:
+                return False
+        elif isinstance(output, Image.Image):
+            arr = np.array(output)
+        else:
+            return False
+        return bool(np.mean(arr) < threshold)
     elif modality == "video":
-        return np.all(
-            [np.mean(np.array(arr)) < threshold for arr in output[modality].frames[0]]
-        )
+        if isinstance(output, dict) and modality in output:
+            gen_output = output[modality]
+            if hasattr(gen_output, 'frames') and gen_output.frames:
+                return bool(np.all(
+                    [np.mean(np.array(frame)) < threshold for frame in gen_output.frames[0]]
+                ))
+        return False
+    else:
+        return False

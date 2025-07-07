@@ -1,685 +1,353 @@
 import math
 import random
-from scipy import ndimage
-import torchvision.transforms as transforms
-import torchvision.transforms.functional as F
+from typing import Tuple, Union, List, Optional, Dict, Any
+from dataclasses import dataclass
+from enum import Enum
+
 import numpy as np
 import cv2
+from scipy import ndimage
 
 from bitmind.generation.util.image import ensure_mask_3d
 
 TARGET_IMAGE_SIZE = (256, 256)
 
 
-def apply_random_augmentations(
-    inputs,
-    target_image_size=None,
-    mask=None,
-    level_probs=None,
-    level=None,
-):
+class SourceType(Enum):
     """
-    Apply image transformations based on randomly selected difficulty level.
-
-    Args:
-        inputs: np.ndarray or tuple of np.ndarray. Image(s) to transform
-        target_image_size: int or tuple. Output size for resize.
-        mask: np.ndarray, optional. Binary mask to ensure crop contains mask foreground.
-            If provided, the returned aug_mask may be 3D (H, W, 1); squeeze to 2D (H, W) for storage or training as needed.
-        level_probs: dict with augmentation levels and their probabilities.
-            Default probabilities:
-            - Level 0 (25%): No augmentations (base transforms)
-            - Level 1 (25%): Basic augmentations
-            - Level 2 (25%): Medium distortions
-            - Level 3 (25%): Hard distortions
-        level: set to override level_probs
-
-    Returns:
-        tuple: (aug_image, aug_mask, level, transform_params)
-            aug_image: Augmented image(s) as np.ndarray
-            aug_mask: Augmented mask (if provided, else None)
-                (Note: aug_mask may be 3D (H, W, 1); squeeze to 2D for storage/training.)
-            level: int, chosen augmentation level
-            transform_params: dict, parameters used for the transforms
-
-    Raises:
-        ValueError: If probabilities don't sum to 1.0 (within floating point precision)
+    Enum for image source type for resolution augmentation logic.
+    REAL: Real-world images (e.g., from cameras, web, etc.)
+    GENERATED: AI-generated images (e.g., from diffusion models)
     """
-    if level is None:
-        if level_probs is None:
-            level_probs = {
-                0: 0.25,  # No augmentations (base transforms)
-                1: 0.25,  # Basic augmentations
-                2: 0.25,  # Medium distortions
-                3: 0.25,  # Hard distortions
-            }
-
-        if not math.isclose(sum(level_probs.values()), 1.0, rel_tol=1e-9):
-            raise ValueError("Probabilities of levels must sum to 1.0")
-
-        # get cumulative probs and select augmentation level
-        cumulative_probs = {}
-        cumsum = 0
-        for level, prob in sorted(level_probs.items()):
-            cumsum += prob
-            cumulative_probs[level] = cumsum
-
-        rand_val = np.random.random()
-        for curr_level, cum_prob in cumulative_probs.items():
-            if rand_val <= cum_prob:
-                level = curr_level
-                break
-
-    if level == 0:
-        tforms = get_base_transforms(target_image_size)
-    elif level == 1:
-        tforms = get_random_augmentations(target_image_size)
-    elif level == 2:
-        tforms = get_random_augmentations_medium(target_image_size)
-    else:  # level == 3
-        tforms = get_random_augmentations_hard(target_image_size)
-
-    if isinstance(inputs, tuple):
-        transformed_A, _ = tforms(inputs[0], reuse_params=False)
-        transformed_B, _ = tforms(inputs[1], reuse_params=True)
-        transformed = np.concatenate([transformed_A, transformed_B], axis=0)
-        return transformed, None, level, tforms.params
-    else:
-        aug_image, aug_mask = tforms(inputs, mask, reuse_params=False)
-        return aug_image, aug_mask, level, tforms.params
+    REAL = "real"
+    GENERATED = "generated"
 
 
-def get_base_transforms(target_image_size):
+@dataclass
+class ResolutionAugmentationConfig:
     """
-    Get basic transforms (center crop and resize).
+    Configuration for resolution-based augmentations.
 
-    Args:
-        target_image_size: int or tuple. Output size for resize.
-
-    Returns:
-        ComposeWithParams: Composed transform pipeline
+    Attributes:
+        generated_to_real_ratio: Percentage of generated images to resize to real resolutions.
+        real_to_generated_ratio: Percentage of real images to resize to generated resolutions.
+        default_target_size: Default target size for standard processing.
+        enable_dynamic_resolution: Whether to enable dynamic resolution sampling.
     """
-    return ComposeWithParams(
-        [
-            CenterCrop(),
-            Resize(target_image_size),
+    generated_to_real_ratio: float = 0.3
+    real_to_generated_ratio: float = 0.2
+    default_target_size: Tuple[int, int] = (256, 256)
+    enable_dynamic_resolution: bool = True
+
+
+class ResolutionSampler:
+    """
+    Samples image resolutions from realistic distributions based on source type.
+    """
+    def __init__(self):
+        """
+        Initialize the sampler with hardcoded real and generated resolution distributions.
+        """
+        self.real_resolutions = [
+            (1600, 1200),   # 4:3, very common
+            (3264, 2448),   # 4:3, common phone
+            (2048, 1536),   # 4:3, iPad/camera
+            (4000, 3000),   # 4:3, high-res phone
+            (800, 600),     # 4:3, legacy
+            (1024, 768),    # 4:3, legacy
+            (2592, 1944),   # 4:3, common
+            (3008, 2000),   # 3:2, DSLR
+            (5184, 3456),   # 3:2, DSLR
+            (1280, 960),    # 4:3, web
+            (3000, 2000),   # 3:2, DSLR
+            (3888, 2592),   # 3:2, DSLR
+            (2448, 3264),   # 4:3, phone
+            (2816, 2112),   # 4:3, camera
+            (1280, 720),    # 16:9, HD
+            (1920, 1080),   # 16:9, HD
+            (2560, 1440),   # 16:9, QHD
+            (3840, 2160),   # 16:9, 4K
+            (512, 512),     # square, rare
+            (1024, 1024),   # square, rare
+            (1200, 1200),   # square, rare
+            (1080, 1080),   # square, rare
+            (720, 720),     # square, rare
+            (4096, 2160),   # 17:9, rare
+            (5000, 4000),   # 5:4, rare
+            (6000, 4000),   # 3:2, rare
         ]
-    )
+        self.real_weights = [
+            0.10,  # 1600x1200
+            0.09,  # 3264x2448
+            0.08,  # 2048x1536
+            0.08,  # 4000x3000
+            0.07,  # 800x600
+            0.07,  # 1024x768
+            0.06,  # 2592x1944
+            0.05,  # 3008x2000
+            0.05,  # 5184x3456
+            0.04,  # 1280x960
+            0.04,  # 3000x2000
+            0.03,  # 3888x2592
+            0.03,  # 2448x3264
+            0.03,  # 2816x2112
+            0.03,  # 1280x720
+            0.03,  # 1920x1080
+            0.02,  # 2560x1440
+            0.02,  # 3840x2160
+            0.01,  # 512x512
+            0.01,  # 1024x1024
+            0.01,  # 1200x1200
+            0.01,  # 1080x1080
+            0.01,  # 720x720
+            0.01,  # 4096x2160
+            0.01,  # 5000x4000
+            0.01,  # 6000x4000
+        ]
+        # Normalize to sum to 1.0
+        self.real_weights = np.array(self.real_weights)
+        self.real_weights = self.real_weights / self.real_weights.sum()
+        # Synthetic (generated) resolutions and weights based on popular model defaults (see models.py)
+        # 1024x1024 (GPT-4V, SDXL, etc.) is given the highest weight, followed by 2048x2048 (Midjourney)
+        self.generated_resolutions = [
+            (1024, 1024),   # GPT-4V, SDXL, etc.
+            (2048, 2048),   # Midjourney default
+            (512, 512),     # SD, AnimateDiff, etc.
+            (768, 768),     # SDXL, AnimateDiff, etc.
+            (640, 640),     # AnimateDiff, etc.
+            (896, 896),     # AnimateDiff, etc.
+            (1536, 1536),   # IF, etc.
+            (800, 800),     # AnimateDiff, etc.
+            (960, 960),     # AnimateDiff, etc.
+            (512, 768),     # SDXL, AnimateDiff, etc.
+            (768, 512),     # SDXL, AnimateDiff, etc.
+            (512, 1024),    # AnimateDiff, etc.
+            (1024, 512),    # AnimateDiff, etc.
+            (512, 896),     # AnimateDiff, etc.
+            (896, 512),     # AnimateDiff, etc.
+            (720, 1280),    # HunyuanVideo, Wan2.1, etc.
+            (1280, 720),    # HunyuanVideo, Wan2.1, etc.
+            (832, 1104),    # HunyuanVideo
+            (1104, 832),    # HunyuanVideo
+            (480, 832),     # Mochi, Wan2.1
+            (480, 848),     # Mochi
+            (720, 720),     # AnimateDiff, etc.
+            (854, 480),     # AnimateDiff, etc.
+            (1024, 576),    # AnimateDiff, etc.
+            (1920, 1080),   # Some video/image models
+            (3840, 2160),   # 4K, rare
+            (2560, 1440),   # QHD, rare
+        ]
+        self.generated_weights = [
+            0.16,  # 1024x1024 (GPT-4V, SDXL, etc.)
+            0.13,  # 2048x2048 (Midjourney)
+            0.12,  # 512x512
+            0.11,  # 768x768
+            0.05,  # 640x640
+            0.04,  # 896x896
+            0.01,  # 1536x1536
+            0.01,  # 800x800
+            0.01,  # 960x960
+            0.07,  # 512x768
+            0.07,  # 768x512
+            0.03,  # 512x1024
+            0.03,  # 1024x512
+            0.01,  # 512x896
+            0.01,  # 896x512
+            0.02,  # 720x1280
+            0.02,  # 1280x720
+            0.01,  # 832x1104
+            0.01,  # 1104x832
+            0.01,  # 480x832
+            0.01,  # 480x848
+            0.01,  # 720x720
+            0.01,  # 854x480
+            0.01,  # 1024x576
+            0.01,  # 1920x1080
+            0.005, # 3840x2160
+            0.005, # 2560x1440
+        ]
+        # Normalize to sum to 1.0
+        self.generated_weights = np.array(self.generated_weights)
+        self.generated_weights = self.generated_weights / self.generated_weights.sum()
 
-
-def get_random_augmentations(target_image_size):
-    """
-    Get basic augmentations with geometric transforms.
-
-    Args:
-        target_image_size: int or tuple. Output size for resize.
-
-    Returns:
-        ComposeWithParams: Composed transform pipeline with basic augmentations
-    """
-    base_augmentations = [
-        RandomRotationWithParams(degrees=20, order=2),
-        RandomResizedCropWithParams(target_image_size, scale=(0.2, 1.0)),
-        RandomHorizontalFlipWithParams(),
-        RandomVerticalFlipWithParams(),
-    ]
-    return ComposeWithParams(base_augmentations)
-
-
-def get_random_augmentations_medium(target_image_size):
-    """
-    Get medium difficulty transforms with mild distortions.
-
-    Args:
-        target_image_size: int or tuple. Output size for resize.
-
-    Returns:
-        ComposeWithParams: Composed transform pipeline with medium distortions
-    """
-    base_augmentations = get_random_augmentations(target_image_size)
-    distortions = [
-        ApplyDeeperForensicsDistortion("CS", level_min=0, level_max=1),
-        ApplyDeeperForensicsDistortion("CC", level_min=0, level_max=1),
-        ApplyDeeperForensicsDistortion("JPEG", level_min=0, level_max=1),
-    ]
-    return ComposeWithParams(base_augmentations.transforms + distortions)
-
-
-def get_random_augmentations_hard(target_image_size):
-    """
-    Get hard difficulty transforms with more severe distortions.
-
-    Args:
-        target_image_size: int or tuple. Output size for resize.
-
-    Returns:
-        ComposeWithParams: Composed transform pipeline with severe distortions
-    """
-    base_augmentations = get_random_augmentations(target_image_size)
-    distortions = [
-        ApplyDeeperForensicsDistortion("CS", level_min=0, level_max=2),
-        ApplyDeeperForensicsDistortion("CC", level_min=0, level_max=2),
-        ApplyDeeperForensicsDistortion("JPEG", level_min=0, level_max=2),
-        ApplyDeeperForensicsDistortion("GNC", level_min=0, level_max=2),
-        ApplyDeeperForensicsDistortion("GB", level_min=0, level_max=2),
-    ]
-    return ComposeWithParams(base_augmentations.transforms + distortions)
-
-
-class ComposeWithParams:
-    def __init__(self, transforms):
+    def sample_resolution(self, source_type: SourceType) -> Tuple[int, int]:
         """
-        Compose multiple transforms while tracking their randomly selected parameters.
-        Useful for logging or situations where transforms need to be reapplied with
-        the same parameters.
+        Sample a resolution based on source type distribution.
 
         Args:
-            transforms: list of transform objects to compose
-        """
-        self.transforms = transforms
-        self.params = {}
-
-    def __call__(self, frames, masks=None, reuse_params=False):
-        """
-        Apply composed transforms to frames and optional masks.
-
-        Args:
-            frames: np.ndarray, the image(s) to transform
-            masks: np.ndarray, optional mask(s) to transform
-            reuse_params: bool, if True, reuse previous params (for paired images/mask)
+            source_type: Whether the image is real or generated.
 
         Returns:
-            tuple: (output_frames, output_masks)
-                output_frames: np.ndarray, transformed frames
-                output_masks: np.ndarray or None, transformed masks if provided
+            Tuple of (width, height).
         """
-        if not reuse_params:
-            self.params = {}
+        if source_type == SourceType.REAL:
+            idx = np.random.choice(len(self.real_resolutions), p=self.real_weights)
+            return self.real_resolutions[idx]
+        idx = np.random.choice(len(self.generated_resolutions), p=self.generated_weights)
+        return self.generated_resolutions[idx]
 
-        is_single_image = frames.ndim == 3  # (H, W, C)
-        if is_single_image:
-            # Add fake temporal dim → (1, H, W, C)
-            frames = frames[None, ...]
-            masks = masks[None, ...] if masks is not None else None
-
-        output_frames = np.zeros(
-            (frames.shape[0],) + TARGET_IMAGE_SIZE + (frames.shape[-1],)
-        )
-        output_masks = (
-            None if masks is None else np.zeros((masks.shape[0],) + TARGET_IMAGE_SIZE)
-        )
-
-        for i in range(frames.shape[0]):
-            frame = frames[i]
-            mask = ensure_mask_3d(masks[i]) if masks is not None else None
-
-            for transform in self.transforms:
-                frame, mask_ = self.apply_transform(
-                    image=frame, mask=mask, transform=transform
-                )
-                mask = mask if mask_ is None else mask_
-
-            output_frames[i] = frame
-            if mask is not None:
-                if mask.ndim == 3:
-                    mask = (mask.sum(axis=2) > 0).astype(np.uint8)
-                output_masks[i] = mask
-
-        if is_single_image:
-            output_frames = output_frames[0]
-            output_masks = None if output_masks is None else output_masks[0]
-
-        output_frames = output_frames.astype(np.uint8)
-        output_masks = (
-            None if output_masks is None else (output_masks > 0).astype(np.uint8)
-        )
-        return output_frames, output_masks
-
-    def apply_transform(self, image, mask, transform):
+    def sample_cross_domain_resolution(self, source_type: SourceType) -> Tuple[int, int]:
         """
-        Apply a single transform while tracking its parameters.
+        Sample a resolution from the opposite domain for adversarial training.
 
         Args:
-            image: np.ndarray, image to transform
-            mask: np.ndarray or None, optional mask to transform
-            transform: transform object to apply
+            source_type: Original source type (will sample from opposite domain).
 
         Returns:
-            tuple: (transformed_image, transformed_mask)
-                transformed_image: np.ndarray, transformed image
-                transformed_mask: np.ndarray or None, transformed mask if provided
+            Tuple of (width, height) from opposite domain.
         """
-        transform_name = getattr(transform, "__name__", transform.__class__.__name__)
-        if transform_name in self.params:
-            output = transform(image, mask=mask, **self.params[transform_name])
-        else:
-            output = transform(image, mask=mask)
-            if hasattr(transform, "params"):
-                self.params[transform_name] = transform.params
-
-        if isinstance(output, tuple):
-            tform_image = output[0]
-            tform_mask = output[1]
-        else:
-            tform_image = output
-            tform_mask = None
-
-        return tform_image, tform_mask
+        if source_type == SourceType.REAL:
+            idx = np.random.choice(len(self.generated_resolutions), p=self.generated_weights)
+            return self.generated_resolutions[idx]
+        idx = np.random.choice(len(self.real_resolutions), p=self.real_weights)
+        return self.real_resolutions[idx]
 
 
-class ApplyDeeperForensicsDistortion:
-    """Wrapper for applying DeeperForensics distortions."""
-
-    def __init__(self, distortion_type, level_min=0, level_max=3):
-        """
-        Initialize distortion transform.
-
-        Args:
-            distortion_type: str, type of distortion to apply
-            level_min: int, minimum distortion level
-            level_max: int, maximum distortion level
-        """
-        self.__name__ = distortion_type
-        self.distortion_type = distortion_type
-        self.level = None
-        self.level_min = level_min
-        self.level_max = level_max
-        self.params = {}  # level
-        self.distortion_params = {}  # distortion_type specific
-
-    def __call__(self, img, level=None, **kwargs):
-        """
-        Apply distortion transform.
-
-        Args:
-            img: np.ndarray, input image to distort
-            level: int or None, optional distortion level
-            **kwargs: additional keyword arguments
-
-        Returns:
-            np.ndarray: Distorted image
-        """
-        if level is None and self.level is None:
-            self.level = random.randint(self.level_min, self.level_max)
-            self.params = {"level": self.level}
-        elif self.level is None:
-            self.level = level
-            self.params = {"level": self.level}
-
-        if self.level > 0:
-            self.distortion_func = get_distortion_function(self.distortion_type)
-            if len(self.distortion_params) == 0:
-                self.distortion_param = get_distortion_parameter(
-                    self.distortion_type, self.level
-                )
-                self.distortion_params = {"param": self.distortion_param}
-        else:
-            return img
-
-        output = self.distortion_func(img, **self.distortion_params)
-        if isinstance(output, tuple):
-            self.distortion_params.update(output[1])
-            return output[0]
-        else:
-            return output
-
-
-# DeeperForensics Distortion Functions
-def get_distortion_parameter(distortion_type, level):
-    """Get distortion parameter based on type and level.
-
-    Args:
-        distortion_type: str, type of distortion
-        level: int, distortion level (1-5)
-
-    Returns:
-        float or int: Parameter value for the specified distortion
-
-    Parameters are arranged from least severe (level 1) to most severe (level 5).
-    Each distortion type has different parameter behavior:
-
-    CS (Color Saturation):
-        - Range: [0.4 -> 0.0]
-        - Lower values = worse distortion
-        - 0.4 = slight desaturation
-        - 0.0 = complete desaturation (grayscale)
-
-    CC (Color Contrast):
-        - Range: [0.85 -> 0.35]
-        - Lower values = worse distortion
-        - 0.85 = slight contrast reduction
-        - 0.35 = severe contrast reduction
-
-    BW (Block Wise):
-        - Range: [16 -> 80]
-        - Higher values = worse distortion
-        - Controls number of random blocks added
-        - 16 = few blocks
-        - 80 = many blocks
-
-    GNC (Gaussian Noise Color):
-        - Range: [0.001 -> 0.05]
-        - Higher values = worse distortion
-        - Controls noise variance
-        - 0.001 = subtle noise
-        - 0.05 = very noisy
-
-    GB (Gaussian Blur):
-        - Range: [7 -> 21]
-        - Higher values = worse distortion
-        - Controls blur kernel size
-        - 7 = slight blur
-        - 21 = heavy blur
-
-    JPEG (JPEG Compression):
-        - Range: [2 -> 6]
-        - Higher values = worse distortion
-        - Controls downsampling factor
-        - 2 = mild compression
-        - 6 = severe compression
+class DynamicResize:
     """
-    param_dict = {
-        "CS": [0.4, 0.3, 0.2, 0.1, 0.0],
-        "CC": [0.85, 0.725, 0.6, 0.475, 0.35],
-        "BW": [16, 32, 48, 64, 80],
-        "GNC": [0.001, 0.002, 0.005, 0.01, 0.05],
-        "GB": [7, 9, 13, 17, 21],
-        "JPEG": [2, 3, 4, 5, 6],
-    }
-    return param_dict[distortion_type][level - 1]
-
-
-def get_distortion_function(distortion_type):
+    Resize transform that uses dynamic resolution sampling based on source type.
     """
-    Args:
-        distortion_type: str, type of distortion
-
-    Returns:
-        callable: Function that implements the specified distortion
-    """
-    func_dict = {
-        "CS": color_saturation,
-        "CC": color_contrast,
-        "BW": block_wise,
-        "GNC": gaussian_noise_color,
-        "GB": gaussian_blur,
-        "JPEG": jpeg_compression,
-    }
-    return func_dict[distortion_type]
-
-
-class Resize:
-    def __init__(self, target_size):
-        self.target_size = target_size
-
-    def resize(self, img, interpolation=cv2.INTER_LINEAR):
-        """
-        Resize an image.
-
-        Args:
-            img: np.ndarray, input image
-            interpolation: int, interpolation method
-
-        Returns:
-            np.ndarray: Resized image
-        """
-        if self.target_size is None:
-            # TODO get standard resolutions here
-            return img
-        return cv2.resize(img, self.target_size, interpolation=interpolation)
-
-    def __call__(self, img, mask=None):
-        """
-        Apply resize transform.
-
-        Args:
-            img: np.ndarray, input image
-            mask: np.ndarray or None, optional mask to resize
-
-        Returns:
-            np.ndarray or tuple: Resized image, or tuple of (image, mask) if mask provided
-        """
-        img = self.resize(img, interpolation=cv2.INTER_LINEAR)
-        if mask is not None:
-            mask = self.resize(mask, interpolation=cv2.INTER_NEAREST)
-            return img, mask
-        return img
-
-
-def rgb2ycbcr(img_rgb):
-    """Convert RGB image to YCbCr color space.
-
-    Args:
-        img_rgb (np.ndarray): RGB image array of shape (H, W, 3)
-
-    Returns:
-        np.ndarray: YCbCr image array of shape (H, W, 3) with values normalized to [0,1]
-    """
-    img_rgb = img_rgb.astype(np.float32)
-    img_ycrcb = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2YCR_CB)
-    img_ycbcr = img_ycrcb[:, :, (0, 2, 1)].astype(np.float32)
-    img_ycbcr[:, :, 0] = (img_ycbcr[:, :, 0] * (235 - 16) + 16) / 255.0
-    img_ycbcr[:, :, 1:] = (img_ycbcr[:, :, 1:] * (240 - 16) + 16) / 255.0
-    return img_ycbcr
-
-
-def ycbcr2rgb(img_ycbcr):
-    """Convert YCbCr image to RGB color space.
-
-    Args:
-        img_ycbcr (np.ndarray): YCbCr image array of shape (H, W, 3)
-
-    Returns:
-        np.ndarray: RGB image array of shape (H, W, 3) with values in [0,255]
-    """
-    img_ycbcr = img_ycbcr.astype(np.float32)
-    img_ycbcr[:, :, 0] = (img_ycbcr[:, :, 0] * 255.0 - 16) / (235 - 16)
-    img_ycbcr[:, :, 1:] = (img_ycbcr[:, :, 1:] * 255.0 - 16) / (240 - 16)
-    img_ycrcb = img_ycbcr[:, :, (0, 2, 1)].astype(np.float32)
-    img_rgb = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCR_CB2RGB)
-    return img_rgb
-
-
-def color_saturation(img, param):
-    """Apply color saturation distortion.
-
-    Args:
-        img (np.ndarray): Input RGB image array of shape (H, W, 3)
-        param (float): Saturation multiplier parameter
-
-    Returns:
-        np.ndarray: Distorted RGB image array with modified saturation
-    """
-    ycbcr = rgb2ycbcr(img)
-    ycbcr[:, :, 1] = 0.5 + (ycbcr[:, :, 1] - 0.5) * param
-    ycbcr[:, :, 2] = 0.5 + (ycbcr[:, :, 2] - 0.5) * param
-    img = ycbcr2rgb(ycbcr).astype(np.uint8)
-    return img
-
-
-def color_contrast(img, param):
-    """Apply color contrast distortion.
-
-    Args:
-        img (np.ndarray): Input RGB image array of shape (H, W, 3)
-        param (float): Contrast multiplier parameter
-
-    Returns:
-        np.ndarray: Distorted RGB image array with modified contrast
-    """
-    img = img.astype(np.float32) * param
-    return img.astype(np.uint8)
-
-
-def block_wise(img, param):
-    """Apply block-wise distortion by adding random gray blocks.
-
-    NOTE: CURRENTLY NOT USED
-
-    Args:
-        img (np.ndarray): Input RGB image array of shape (H, W, 3)
-        param (int): Number of blocks to add, scaled by image dimensions
-
-    Returns:
-        np.ndarray: Distorted RGB image array with added gray blocks
-    """
-    width = 8
-    block = np.ones((width, width, 3)).astype(int) * 128
-    param = min(img.shape[0], img.shape[1]) // 256 * param
-    for _ in range(param):
-        r_w = random.randint(0, img.shape[1] - 1 - width)
-        r_h = random.randint(0, img.shape[0] - 1 - width)
-        img[r_h : r_h + width, r_w : r_w + width, :] = block
-    return img
-
-
-def gaussian_noise_color(img, param, b=None):
-    """Apply colored Gaussian noise in YCbCr color space.
-
-    Args:
-        img (np.ndarray): Input RGB image array of shape (H, W, 3)
-        param (float): Variance of the Gaussian noise
-        b (np.ndarray, optional): Pre-computed noisy image
-
-    Returns:
-        tuple: (distorted_image, params)
-            distorted_image: np.ndarray, image with added color noise
-            params: dict with 'b' key containing the noisy image
-    """
-    ycbcr = rgb2ycbcr(img) / 255
-    size_a = ycbcr.shape
-    if b is None:
-        b = (
-            ycbcr + math.sqrt(param) * np.random.randn(size_a[0], size_a[1], size_a[2])
-        ) * 255
-        b = ycbcr2rgb(b)
-    return np.clip(b, 0, 255).astype(np.uint8), {"b": b}
-
-
-def gaussian_blur(img, param):
-    """Apply Gaussian blur with specified kernel size.
-
-    Args:
-        img (np.ndarray): Input RGB image array of shape (H, W, 3)
-        param (int): Gaussian kernel size (must be odd)
-
-    Returns:
-        np.ndarray: Blurred RGB image array
-    """
-    return cv2.GaussianBlur(img, (param, param), param * 1.0 / 6)
-
-
-def jpeg_compression(img, param):
-    """Apply JPEG compression-like distortion through downsampling.
-
-    Args:
-        img (np.ndarray): Input RGB image array of shape (H, W, 3)
-        param (int): Downsampling factor
-
-    Returns:
-        np.ndarray: Distorted RGB image array with compression artifacts
-    """
-    h, w, _ = img.shape
-    s_h = h // param
-    s_w = w // param
-    img = cv2.resize(img, (s_w, s_h))
-    return cv2.resize(img, (w, h))
-
-
-class CenterCrop:
-    """Center crop an image to a square."""
-
-    def crop(self, img):
-        """
-        Perform center crop.
-
-        Args:
-            img (np.ndarray): Input image array
-
-        Returns:
-            np.ndarray: Center cropped image array
-        """
-        h, w = img.shape[:2]
-        m = min(h, w)
-        i = (h - m) // 2
-        j = (w - m) // 2
-        return img[i : i + m, j : j + m]
-
-    def __call__(self, img, mask=None):
-        """
-        Apply center crop transform to an image an optionally an associated mask.
-
-        Args:
-            img (np.ndarray): Input image array
-            mask (np.ndarray, optional): Input mask array
-
-        Returns:
-            np.ndarray or tuple: Cropped image, or tuple of (image, mask) if mask provided
-        """
-        img = self.crop(img)
-        if mask is not None:
-            mask = self.crop(mask)
-            return img, mask
-        return img
-
-
-class RandomResizedCropWithParams:
-    """Randomly crop and resize an image, ensuring the crop contains the mask foreground if a mask is provided."""
-
-    def __init__(self, size, scale):
-        """
-        Initialize random resized crop transform.
-
-        Args:
-            size (int or tuple): Target output size
-            scale (tuple): Range of size of the origin size cropped
-        """
-        self.params = None
-        self.scale = scale
-        self.size = size
-        if isinstance(self.size, int):
-            self.size = (size, size)
-
-    def __call__(self, img, mask=None, crop_params=None):
-        """
-        Apply random resized crop transform.
-
-        Args:
-            img (np.ndarray): Input image array
-            mask (np.ndarray, optional): Input mask array
-            crop_params (tuple, optional): Pre-computed crop parameters
-
-        Returns:
-            np.ndarray or tuple: Cropped and resized image, or tuple of (image, mask) if mask provided
-        """
-        img = self.resized_crop(
-            img, mask=mask, crop_params=crop_params, interpolation=cv2.INTER_LINEAR
-        )
-        if mask is not None:
-            prev_crop_params = self.params["crop_params"]
-            mask = self.resized_crop(
-                mask,
-                mask=None,
-                crop_params=prev_crop_params,
-                interpolation=cv2.INTER_NEAREST,
-            )
-            return img, mask
-        return img
-
-    def resized_crop(
-        self, img, mask=None, crop_params=None, interpolation=cv2.INTER_LINEAR
+    def __init__(
+        self,
+        config: ResolutionAugmentationConfig,
+        resolution_sampler: ResolutionSampler,
+        target_size: Optional[Tuple[int, int]] = None
     ):
         """
-        Randomly crop and resize an image, ensuring the crop contains the mask foreground if a mask is provided.
+        Args:
+            config: ResolutionAugmentationConfig instance.
+            resolution_sampler: ResolutionSampler instance.
+            target_size: Optional override for target size.
+        """
+        self.config = config
+        self.resolution_sampler = resolution_sampler
+        self.target_size = target_size or config.default_target_size
+
+    def __call__(
+        self,
+        img: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+        source_type: Optional[SourceType] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Apply dynamic resize based on source type and configuration.
 
         Args:
-            img (np.ndarray): Input image array
-            mask (np.ndarray, optional): Input mask array
-            crop_params (tuple, optional): Pre-computed crop parameters (i, j, h, w)
-            interpolation (int): Interpolation method
+            img: Input image array.
+            mask: Optional mask array.
+            source_type: Source type for dynamic resolution logic.
 
         Returns:
-            np.ndarray: Cropped and resized image array
+            Resized image, or tuple of (image, mask) if mask provided.
+        """
+        if not self.config.enable_dynamic_resolution or source_type is None:
+            target_size = self.target_size
+        else:
+            should_cross_domain = False
+            if source_type == SourceType.GENERATED:
+                should_cross_domain = random.random() < self.config.generated_to_real_ratio
+            else:
+                should_cross_domain = random.random() < self.config.real_to_generated_ratio
+            if should_cross_domain:
+                target_size = self.resolution_sampler.sample_cross_domain_resolution(source_type)
+            else:
+                target_size = self.resolution_sampler.sample_resolution(source_type)
+        img_resized = cv2.resize(img, target_size, interpolation=cv2.INTER_LINEAR)
+        if mask is not None:
+            mask_resized = cv2.resize(mask, target_size, interpolation=cv2.INTER_NEAREST)
+            return img_resized, mask_resized
+        return img_resized
+
+
+class DynamicRandomResizedCrop:
+    """
+    Random resized crop that uses dynamic resolution sampling.
+    """
+    def __init__(
+        self,
+        config: ResolutionAugmentationConfig,
+        resolution_sampler: ResolutionSampler,
+        scale: Tuple[float, float] = (0.2, 1.0),
+        target_size: Optional[Tuple[int, int]] = None
+    ):
+        """
+        Args:
+            config: ResolutionAugmentationConfig instance.
+            resolution_sampler: ResolutionSampler instance.
+            scale: Range for random crop area.
+            target_size: Optional override for target size.
+        """
+        self.config = config
+        self.resolution_sampler = resolution_sampler
+        self.scale = scale
+        self.target_size = target_size or config.default_target_size
+        self.params: Dict[str, Any] = {}
+
+    def __call__(
+        self,
+        img: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+        source_type: Optional[SourceType] = None,
+        crop_params: Optional[Tuple[int, int, int, int]] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Apply dynamic random resized crop.
+
+        Args:
+            img: Input image array.
+            mask: Optional mask array.
+            source_type: Source type for dynamic resolution logic.
+            crop_params: Pre-computed crop parameters (i, j, h, w).
+
+        Returns:
+            Cropped and resized image, or tuple of (image, mask) if mask provided.
+        """
+        if not self.config.enable_dynamic_resolution or source_type is None:
+            target_size = self.target_size
+        else:
+            should_cross_domain = False
+            if source_type == SourceType.GENERATED:
+                should_cross_domain = random.random() < self.config.generated_to_real_ratio
+            else:
+                should_cross_domain = random.random() < self.config.real_to_generated_ratio
+            if should_cross_domain:
+                target_size = self.resolution_sampler.sample_cross_domain_resolution(source_type)
+            else:
+                target_size = self.resolution_sampler.sample_resolution(source_type)
+        img_cropped = self._resized_crop(
+            img, mask=mask, crop_params=crop_params,
+            target_size=target_size, interpolation=cv2.INTER_LINEAR
+        )
+        if mask is not None:
+            prev_crop_params = self.params.get("crop_params")
+            mask_cropped = self._resized_crop(
+                mask, mask=None, crop_params=prev_crop_params,
+                target_size=target_size, interpolation=cv2.INTER_NEAREST
+            )
+            return img_cropped, mask_cropped
+        return img_cropped
+
+    def _resized_crop(
+        self,
+        img: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+        crop_params: Optional[Tuple[int, int, int, int]] = None,
+        target_size: Tuple[int, int] = (256, 256),
+        interpolation: int = cv2.INTER_LINEAR
+    ) -> np.ndarray:
+        """
+        Perform random resized crop with mask-aware cropping.
+
+        Args:
+            img: Input image array.
+            mask: Optional mask array.
+            crop_params: Pre-computed crop parameters (i, j, h, w).
+            target_size: Target size for resize.
+            interpolation: Interpolation method for resize.
+
+        Returns:
+            Cropped and resized image array.
         """
         height, width = img.shape[:2]
         if crop_params is None:
@@ -688,179 +356,399 @@ class RandomResizedCropWithParams:
             h = w = int(round(np.sqrt(target_area)))
             h = min(h, height)
             w = min(w, width)
-
             if mask is not None:
                 coords = np.where(mask > 0)
-                ys, xs = coords[0], coords[1]
-
-                if len(xs) == 0 or len(ys) == 0:
-                    # No foreground, fall back to random crop
-                    i = np.random.randint(0, height - h + 1)
-                    j = np.random.randint(0, width - w + 1)
-                else:
+                if len(coords[0]) > 0 and len(coords[1]) > 0:
+                    ys, xs = coords[0], coords[1]
                     x0, x1 = xs.min(), xs.max()
                     y0, y1 = ys.min(), ys.max()
                     min_i = max(0, y1 - h + 1)
                     max_i = min(y0, height - h)
                     min_j = max(0, x1 - w + 1)
                     max_j = min(x0, width - w)
-                    if min_i > max_i or min_j > max_j:
-                        i = max(0, y0 - (h // 2))
-                        j = max(0, x0 - (w // 2))
+                    if min_i <= max_i and min_j <= max_j:
+                        i = np.random.randint(min_i, max_i + 1)
+                        j = np.random.randint(min_j, max_j + 1)
                     else:
-                        i = np.random.randint(min_i, max_i + 1) if max_i >= min_i else 0
-                        j = np.random.randint(min_j, max_j + 1) if max_j >= min_j else 0
+                        i = max(0, min(height - h, (y0 + y1) // 2 - h // 2))
+                        j = max(0, min(width - w, (x0 + x1) // 2 - w // 2))
+                else:
+                    i = np.random.randint(0, height - h + 1)
+                    j = np.random.randint(0, width - w + 1)
             else:
                 i = np.random.randint(0, height - h + 1)
                 j = np.random.randint(0, width - w + 1)
         else:
             i, j, h, w = crop_params
+        self.params["crop_params"] = (i, j, h, w)
+        cropped = img[i:i+h, j:j+w]
+        if cropped.ndim == 3:
+            cropped = cropped
+        return cv2.resize(cropped, target_size, interpolation=interpolation)
 
-        self.params = {"crop_params": (i, j, h, w)}
-        cropped = img[i : i + h, j : j + w, :]
 
-        return cv2.resize(cropped, self.size, interpolation=interpolation)
-
-
-class RandomHorizontalFlipWithParams:
-
-    def __init__(self, p=0.5):
+class CenterCrop:
+    """
+    Center crop an image to a square.
+    """
+    def __call__(self, img: np.ndarray, mask: Optional[np.ndarray] = None) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
+        Apply center crop transform to an image and optionally a mask.
+
         Args:
-            p (float): Probability of flipping the image
-        """
-        self.p = p
-        self.params = {}
-
-    def __call__(self, img, mask=None, flip=None):
-        """
-        Args:
-            img (np.ndarray): Input image array
-            mask (np.ndarray, optional): Input mask array
-            flip (bool, optional): Pre-computed flip decision
+            img: Input image array.
+            mask: Optional mask array.
 
         Returns:
-            np.ndarray or tuple: Flipped image, or tuple of (image, mask) if mask provided
+            Cropped image, or tuple of (image, mask) if mask provided.
         """
-        if flip is not None:
-            self.params = {"flip": flip}
-        elif not hasattr(self, "params") or len(self.params) == 0:
-            flip = np.random.random() < self.p
-            self.params = {"flip": flip}
-
-        if self.params.get("flip", False):
-            img = np.fliplr(img)
-
+        img_cropped = self._crop(img)
         if mask is not None:
-            mask = np.fliplr(mask)
-            return img, mask
+            mask_cropped = self._crop(mask)
+            return img_cropped, mask_cropped
+        return img_cropped
 
-        return img
-
-
-class RandomVerticalFlipWithParams:
-
-    def __init__(self, p=0.5):
+    def _crop(self, img: np.ndarray) -> np.ndarray:
         """
-        Args:
-            p (float): Probability of flipping the image
-        """
-        self.p = p
-        self.params = {}
-
-    def __call__(self, img, mask=None, flip=None):
-        """
-        Apply vertical flip transform.
+        Perform center crop to square.
 
         Args:
-            img (np.ndarray): Input image array
-            mask (np.ndarray, optional): Input mask array
-            flip (bool, optional): Pre-computed flip decision
+            img: Input image array.
 
         Returns:
-            np.ndarray or tuple: Flipped image, or tuple of (image, mask) if mask provided
+            Center-cropped image array.
         """
-        if flip is not None:
-            self.params = {"flip": flip}
-        elif not hasattr(self, "params") or len(self.params) == 0:
-            flip = np.random.random() < self.p
-            self.params = {"flip": flip}
-
-        if self.params.get("flip", False):
-            img = np.flipud(img)
-
-        if mask is not None:
-            mask = np.flipud(mask)
-            return img, mask
-
-        return img
+        h, w = img.shape[:2]
+        m = min(h, w)
+        i = (h - m) // 2
+        j = (w - m) // 2
+        return img[i:i + m, j:j + m]
 
 
-class RandomRotationWithParams:
-    """Randomly rotate an image."""
-
-    def __init__(self, degrees, p=0.5, reshape=False, mode="reflect", order=2):
+class RandomRotation:
+    """
+    Randomly rotate an image (and mask) by a random angle within a range.
+    """
+    def __init__(
+        self,
+        degrees: Union[float, Tuple[float, float]] = 20,
+        p: float = 0.5,
+        reshape: bool = False,
+        mode: str = "reflect",
+        order: int = 2
+    ):
         """
-        Initialize random rotation transform.
-
         Args:
-            degrees (float or tuple): Range of degrees to select from. If float, uses (-degrees, degrees)
-            p (float): Probability of rotating the image
-            reshape (bool): If True, expands output image to fit rotated image
-            mode (str): How to fill the border ('reflect', 'constant', etc)
-            order (int): Interpolation order (0-5)
+            degrees: Range of degrees to select from. If float, uses (-degrees, degrees).
+            p: Probability of rotating the image.
+            reshape: If True, expands output image to fit rotated image.
+            mode: How to fill the border ('reflect', 'constant', etc).
+            order: Interpolation order (0-5).
         """
         if isinstance(degrees, (tuple, list)):
             self.degrees = degrees
         else:
             self.degrees = (-degrees, degrees)
         self.p = p
-        self.params = None
         self.reshape = reshape
         self.mode = mode
         self.order = order
+        self.params: Dict[str, Any] = {}
 
-    def __call__(self, img, mask, rotate=None, angle=None, order=None, **kwargs):
+    def __call__(
+        self,
+        img: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+        rotate: Optional[bool] = None,
+        angle: Optional[float] = None,
+        order: Optional[int] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
-        Perform rotation transform.
+        Randomly rotate the image and mask.
 
         Args:
-            img (np.ndarray): Input RGB image array of shape (H, W, C)
-            mask (np.ndarray, optional): Input mask array
-            rotate (bool, optional): Pre-computed rotation decision
-            angle (float, optional): Pre-computed rotation angle
-            order (int, optional): Pre-computed interpolation order
-            **kwargs: Additional keyword arguments
+            img: Input image array.
+            mask: Optional mask array.
+            rotate: Pre-computed rotation decision.
+            angle: Pre-computed rotation angle.
+            order: Pre-computed interpolation order.
 
         Returns:
-            np.ndarray or tuple: Rotated image, or tuple of (image, mask) if mask provided
+            Rotated image, or tuple of (image, mask) if mask provided.
         """
         if rotate is None:
             rotate = np.random.random() < self.p
-            self.params = {"rotate": rotate}
-
+        self.params["rotate"] = rotate
         if not rotate:
-            return img
-
+            return (img, mask) if mask is not None else img
         order = self.order if order is None else order
         if isinstance(order, (tuple, list)):
             order = random.randint(order[0], order[1])
-
         if angle is None:
             angle = random.uniform(self.degrees[0], self.degrees[1])
-
-        self.params.update({"order": order, "angle": angle})
-        img = ndimage.rotate(
-            img, angle, reshape=self.reshape, mode=self.mode, order=order, axes=(0, 1)
-        )
+        self.params["order"] = order
+        self.params["angle"] = angle
+        img_rot = ndimage.rotate(img, angle, reshape=self.reshape, mode=self.mode, order=order, axes=(0, 1))
         if mask is not None:
-            mask = ndimage.rotate(
-                mask,
-                angle,
-                reshape=self.reshape,
-                mode=self.mode,
-                order=order,
-                axes=(0, 1),
-            )
+            mask_rot = ndimage.rotate(mask, angle, reshape=self.reshape, mode=self.mode, order=0, axes=(0, 1))
+            return img_rot, mask_rot
+        return img_rot
+
+
+class RandomHorizontalFlip:
+    """
+    Random horizontal flip with configurable probability.
+    """
+    def __init__(self, p: float = 0.5):
+        """
+        Args:
+            p: Probability of flipping the image.
+        """
+        self.p = p
+        self.params: Dict[str, Any] = {}
+
+    def __call__(
+        self,
+        img: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+        flip: Optional[bool] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Apply random horizontal flip.
+
+        Args:
+            img: Input image array.
+            mask: Optional mask array.
+            flip: Pre-computed flip decision.
+
+        Returns:
+            Flipped image, or tuple of (image, mask) if mask provided.
+        """
+        if flip is None:
+            flip = np.random.random() < self.p
+        self.params["flip"] = flip
+        if flip:
+            img = np.fliplr(img)
+            if mask is not None:
+                mask = np.fliplr(mask)
+        if mask is not None:
             return img, mask
         return img
+
+
+class RandomVerticalFlip:
+    """
+    Random vertical flip with configurable probability.
+    """
+    def __init__(self, p: float = 0.5):
+        """
+        Args:
+            p: Probability of flipping the image.
+        """
+        self.p = p
+        self.params: Dict[str, Any] = {}
+
+    def __call__(
+        self,
+        img: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+        flip: Optional[bool] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Apply random vertical flip.
+
+        Args:
+            img: Input image array.
+            mask: Optional mask array.
+            flip: Pre-computed flip decision.
+
+        Returns:
+            Flipped image, or tuple of (image, mask) if mask provided.
+        """
+        if flip is None:
+            flip = np.random.random() < self.p
+        self.params["flip"] = flip
+        if flip:
+            img = np.flipud(img)
+            if mask is not None:
+                mask = np.flipud(mask)
+        if mask is not None:
+            return img, mask
+        return img
+
+
+class ComposeTransforms:
+    """
+    Compose multiple transforms with source type awareness.
+    """
+    def __init__(self, transforms: List[Any]):
+        """
+        Args:
+            transforms: List of transform objects to compose.
+        """
+        self.transforms = transforms
+        self.params: Dict[str, Any] = {}
+
+    def __call__(
+        self,
+        img: np.ndarray,
+        mask: Optional[np.ndarray] = None,
+        source_type: Optional[SourceType] = None,
+        reuse_params: bool = False
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Apply composed transforms.
+
+        Args:
+            img: Input image array.
+            mask: Optional mask array.
+            source_type: Source type for dynamic resolution logic.
+            reuse_params: Whether to reuse previous parameters.
+
+        Returns:
+            Transformed image, or tuple of (image, mask) if mask provided.
+        """
+        if not reuse_params:
+            self.params = {}
+        current_img = img
+        current_mask = mask
+        for transform in self.transforms:
+            transform_name = transform.__class__.__name__
+            if hasattr(transform, '__call__'):
+                import inspect
+                sig = inspect.signature(transform.__call__)
+                supports_source_type = 'source_type' in sig.parameters
+                if supports_source_type:
+                    if current_mask is not None:
+                        result = transform(current_img, mask=current_mask, source_type=source_type)
+                        if isinstance(result, tuple):
+                            current_img, current_mask = result
+                        else:
+                            current_img = result
+                    else:
+                        current_img = transform(current_img, source_type=source_type)
+                else:
+                    if current_mask is not None:
+                        result = transform(current_img, mask=current_mask)
+                        if isinstance(result, tuple):
+                            current_img, current_mask = result
+                        else:
+                            current_img = result
+                    else:
+                        current_img = transform(current_img)
+            if hasattr(transform, 'params'):
+                self.params[transform_name] = transform.params
+        if current_mask is not None:
+            return current_img, current_mask
+        return current_img
+
+
+def get_base_transforms(
+    config: ResolutionAugmentationConfig,
+    resolution_sampler: ResolutionSampler
+) -> ComposeTransforms:
+    """
+    Get basic transforms with dynamic resolution support.
+
+    Args:
+        config: Resolution augmentation configuration.
+        resolution_sampler: Resolution sampler instance.
+
+    Returns:
+        Composed transform pipeline.
+    """
+    return ComposeTransforms([
+        CenterCrop(),
+        DynamicResize(config, resolution_sampler),
+    ])
+
+
+def get_augmentation_transforms(
+    config: ResolutionAugmentationConfig,
+    resolution_sampler: ResolutionSampler
+) -> ComposeTransforms:
+    """
+    Get augmentation transforms with dynamic resolution support.
+
+    Args:
+        config: Resolution augmentation configuration.
+        resolution_sampler: Resolution sampler instance.
+
+    Returns:
+        Composed transform pipeline with augmentations.
+    """
+    return ComposeTransforms([
+        DynamicRandomResizedCrop(config, resolution_sampler),
+        RandomRotation(degrees=20, p=0.5),
+        RandomHorizontalFlip(p=0.5),
+        RandomVerticalFlip(p=0.2),
+    ])
+
+
+def apply_resolution_augmentations(
+    img: np.ndarray,
+    mask: Optional[np.ndarray] = None,
+    source_type: Optional[SourceType] = None,
+    config: Optional[ResolutionAugmentationConfig] = None,
+    use_augmentations: bool = True
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Apply resolution-aware augmentations to an image.
+
+    Args:
+        img: Input image array.
+        mask: Optional mask array.
+        source_type: Source type (real or generated).
+        config: Augmentation configuration.
+        use_augmentations: Whether to use augmentations or just base transforms.
+
+    Returns:
+        Augmented image, or tuple of (image, mask) if mask provided.
+    """
+    if config is None:
+        config = ResolutionAugmentationConfig()
+    resolution_sampler = ResolutionSampler()
+    if use_augmentations:
+        transforms = get_augmentation_transforms(config, resolution_sampler)
+    else:
+        transforms = get_base_transforms(config, resolution_sampler)
+    return transforms(img, mask=mask, source_type=source_type)
+
+
+def apply_random_augmentations(
+    inputs,
+    target_image_size=None,
+    mask=None,
+    level_probs=None,
+    level=None,
+    source_type: Optional[SourceType] = None
+):
+    """
+    Backward compatibility wrapper for the old apply_random_augmentations function.
+
+    Args:
+        inputs: np.ndarray or tuple of np.ndarray. Image(s) to transform.
+        target_image_size: int or tuple. Output size for resize (ignored in favor of dynamic resolution).
+        mask: np.ndarray, optional. Binary mask.
+        level_probs: dict, not used in new implementation.
+        level: int, not used in new implementation.
+        source_type: SourceType, optional. Source type for dynamic resolution logic.
+
+    Returns:
+        tuple: (aug_image, aug_mask, 0, {}) for compatibility.
+    """
+    config = ResolutionAugmentationConfig()
+    if isinstance(inputs, tuple):
+        aug_A = apply_resolution_augmentations(
+            inputs[0], mask=None, source_type=source_type, config=config
+        )
+        aug_B = apply_resolution_augmentations(
+            inputs[1], mask=None, source_type=source_type, config=config
+        )
+        transformed = np.concatenate([aug_A, aug_B], axis=0)
+        return transformed, None, 0, {}
+    else:
+        aug_image, aug_mask = apply_resolution_augmentations(
+            inputs, mask=mask, source_type=source_type, config=config
+        )
+        return aug_image, aug_mask, 0, {}
