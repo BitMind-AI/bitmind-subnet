@@ -58,8 +58,17 @@ class SegmentationMiner(BaseMiner):
 
             ### SEGMENT - update the Segmenter class with your own model and preprocessing
             heatmap = self.segmenter.segment(image_tensor)
+
+            # If testnet mask is provided, compute IOU for validation
+            if "mask" in testnet_metadata:
+                pred_mask = (heatmap > 0.5).astype(np.uint8)
+                gt_mask = testnet_metadata["mask"]
+
+                intersection = np.logical_and(pred_mask, gt_mask).sum()
+                union = np.logical_or(pred_mask, gt_mask).sum()
+                iou = intersection / union if union > 0 else 0.0
+                bt.logging.info(f"Testnet mask IOU: {iou:.4f}")
             
-            # Return raw binary mask with metadata in headers
             heatmap_bytes = heatmap.astype(np.float16).tobytes()
             
             headers = {
