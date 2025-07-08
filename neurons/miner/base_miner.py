@@ -43,15 +43,16 @@ def decode_mask_from_header(mask_b64: str) -> np.ndarray:
 def extract_testnet_metadata(headers):
     headers = dict(headers)
     testnet_metadata = {}
+    mask = None
     for key, value in headers.items():
         if key.lower().startswith("x-testnet-"):
-            if "mask" in key.lower():
-                testnet_metadata["mask"] = decode_mask_from_header(value)
-            else:
+            if key.lower().endswith("mask"):
+                mask = decode_mask_from_header(value)
+            elif "mask" not in key.lower():
                 metadata_key = key[len("x-testnet-") :].lower()
                 testnet_metadata[metadata_key] = value
 
-    return testnet_metadata
+    return testnet_metadata, mask
 
 
 class BaseMiner(BaseNeuron, ABC):

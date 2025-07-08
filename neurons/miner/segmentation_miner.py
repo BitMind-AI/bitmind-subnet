@@ -48,7 +48,7 @@ class SegmentationMiner(BaseMiner):
                 f"Unexpected content type: {content_type}, expected image/jpeg"
             )
 
-        testnet_metadata = extract_testnet_metadata(request.headers)
+        testnet_metadata, gt_mask = extract_testnet_metadata(request.headers)
         if len(testnet_metadata) > 0:
             bt.logging.info(json.dumps(testnet_metadata, indent=2))
 
@@ -60,9 +60,8 @@ class SegmentationMiner(BaseMiner):
             heatmap = self.segmenter.segment(image_tensor)
 
             # If testnet mask is provided, compute IOU for validation
-            if "mask" in testnet_metadata:
+            if gt_mask is not None:
                 pred_mask = (heatmap > 0.5).astype(np.uint8)
-                gt_mask = testnet_metadata["mask"]
 
                 intersection = np.logical_and(pred_mask, gt_mask).sum()
                 union = np.logical_or(pred_mask, gt_mask).sum()
