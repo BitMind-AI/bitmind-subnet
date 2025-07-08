@@ -39,7 +39,6 @@ from bitmind.utils import ExitContext, get_metadata
 from bitmind.wandb_utils import init_wandb, clean_wandb_cache
 from bitmind.types import CacheConfig, MediaType, Modality
 from bitmind.cache.sampler import ImageSampler
-from bitmind.scraping import MultiSiteScraper, GoogleScraper
 from bitmind.generation import (
     GenerationPipeline,
     initialize_model_registry,
@@ -73,19 +72,6 @@ class Generator:
             bt.logging.set_trace(True)
 
         bt.logging.success(self.config)
-
-        self.scraper = MultiSiteScraper(
-            output_dir=self.config.cache.base_dir,
-            scrapers=[
-                GoogleScraper(
-                    min_width=128,
-                    min_height=128,
-                    headless=True,
-                    media_type=MediaType.REAL
-                )
-            ],
-        )
-
         wallet_configured = (
             self.config.wallet.name is not None
             and self.config.wallet.hotkey is not None
@@ -180,7 +166,7 @@ class Generator:
     async def run(self):
         """Main generator loop"""
         try:
-            cache_dir = self.config.cache.base_dir
+            cache_dir = self.config.cache_dir
             batch_size = self.config.batch_size
             device = self.config.device
 
@@ -215,41 +201,25 @@ class Generator:
                     break
 
                 try:
-                    ### Image scraping
-                    if not self.config.scraper.off:
-                        queries = [
-                            self.generation_pipeline.prompt_generator.generate_search_query(
-                                max_tokens=30)
-                            for _ in range(self.config.scraper.num_queries_per_batch)
-                        ]
+                    image_samples = await self.sample_images(batch_size)
+                    bt.logging.info(
+                        f"Starting batch generation | Batch Size: {len(image_samples)} | Batch Count: {gen_count}"
+                    )
 
-                        for query in queries: 
-                            self.scraper.download_images(
-                                query, 
-                                limit_per_scraper=self.config.scraper.num_images_per_query
-                            )
+                    start_time = time.time()
 
-                    ### Image/video generation
-                    if not self.config.gen.off:
-                        image_samples = await self.sample_images(batch_size)
-                        bt.logging.info(
-                            f"Starting batch generation | Batch Size: {len(image_samples)} | Batch Count: {gen_count}"
-                        )
+                    filepaths = self.generation_pipeline.generate(
+                        image_samples, model_names=model_names
+                    )
+                    await asyncio.sleep(1)
 
-                        start_time = time.time()
-                        filepaths = self.generation_pipeline.generate(
-                            image_samples, model_names=model_names
-                        )
-                        await asyncio.sleep(1)
+                    duration = time.time() - start_time
+                    gen_count += len(filepaths)
+                    batch_count += 1
+                    bt.logging.info(
+                        f"Generated {len(filepaths)} files in batch #{batch_count} in {duration:.2f} seconds"
+                    )
 
-                        duration = time.time() - start_time
-                        gen_count += len(filepaths)
-                        batch_count += 1
-                        bt.logging.info(
-                            f"Generated {len(filepaths)} files in batch #{batch_count} in {duration:.2f} seconds"
-                        )
-
-                    ### Wandb run management
                     if not self.config.wandb.off:
                         if batch_count >= self.config.wandb.num_batches_per_run:
                             batch_count = 0

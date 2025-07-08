@@ -102,14 +102,6 @@ def add_validator_args(parser):
         type=int,
         help="How often to unpack random media files, measured in 12 second blocks",
         default=300,
-
-    )
-
-    parser.add_argument(
-        "--media-scraping-interval",
-        type=int,
-        help="How often to unpack random media files, measured in 12 second blocks",
-        default=400,
     )
 
     parser.add_argument(
@@ -318,18 +310,18 @@ def add_validator_args(parser):
 
 def add_data_generator_args(parser):
     parser.add_argument(
-        "--cache.base-dir",
+        "--cache-dir",
         type=str,
         default=os.path.expanduser("~/.cache/sn34"),
         help="Directory for caching data",
     )
 
     parser.add_argument(
-        "--gen.batch-size", type=int, default=3, help="Batch size for generation"
+        "--batch-size", type=int, default=3, help="Batch size for generation"
     )
 
     parser.add_argument(
-        "--gen.tasks",
+        "--tasks",
         nargs="+",
         choices=["t2v", "t2i", "i2i", "i2v"],
         default=["t2v", "t2i", "i2i", "i2v"],
@@ -337,17 +329,10 @@ def add_data_generator_args(parser):
     )
 
     parser.add_argument(
-        "--gen.device",
+        "--device",
         type=str,
         default="cuda",
         help="Device to use for generation (cuda/cpu)",
-    )
-
-    parser.add_argument(
-        "--gen.off",
-        action="store_true",
-        default=False,
-        help="Disable generation pipeline",
     )
 
     parser.add_argument(
@@ -355,25 +340,6 @@ def add_data_generator_args(parser):
         type=int,
         default=50,
         help="Number of batches to generate before starting new W&B run (avoids log truncation)",
-    )
-
-    parser.add_argument(
-        "--scraper.num-queries-per-batch",
-        type=int,
-        default=10,
-    )
-
-    parser.add_argument(
-        "--scraper.num-images-per-query",
-        type=int,
-        default=50,
-    )
-
-    parser.add_argument(
-        "--scraper.off",
-        action="store_true",
-        default=False,
-        help="Disable scraping pipeline",
     )
 
     parser.add_argument("--wandb.process-name", type=str, default="generator")
