@@ -708,10 +708,7 @@ class ValidatorProxy(BaseNeuron):
 
         if not valid_responses:
             bt.logging.warning("No valid responses received from miners")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="No valid predictions received",
-            )
+            return [], []
 
         predictions = np.array([r["prediction"] for r in valid_responses])
         uids = [r["uid"] for r in valid_responses]
