@@ -228,12 +228,12 @@ async def query_miner(
 
         if testnet_metadata:
             for k, v in testnet_metadata.items():
-                if MinerType.SEGMENTER and k == 'mask':
+                if miner_type == MinerType.SEGMENTER and k == 'mask':
                     resized_mask = cv2.resize(v, (128, 128))
                     _, buffer = cv2.imencode('.png', (resized_mask * 255).astype(np.uint8))
                     b64_mask = base64.b64encode(buffer).decode('utf-8')
                     headers["X-Testnet-mask"] = b64_mask
-                else:
+                elif k != 'mask':
                     headers[f"X-Testnet-{k}"] = str(v)
 
         async with session.post(
