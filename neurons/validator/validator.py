@@ -126,7 +126,7 @@ class Validator(BaseNeuron):
             self.step += 1
             if self.config.autoupdate and (self.step == 0 or not self.step % 30):
                 bt.logging.debug("Checking autoupdate")
-                autoupdate(branch="release/3.1.3")
+                autoupdate(branch="main")
 
             # Make sure our substrate thread is alive
             if not self.substrate_thread.is_alive():
