@@ -227,7 +227,7 @@ class Validator(BaseNeuron):
                         self.config.neuron.miner_connect_timeout,
                         self.config.neuron.miner_sock_connect_timeout,
                         testnet_metadata=(
-                            {k: v for k, v in media_sample.items() if k not in(modality, "mask")}
+                            {k: v for k, v in media_sample.items() if k != modality}
                             if self.config.netuid != MAINNET_UID
                             else {}
                         ),
@@ -592,10 +592,15 @@ class Validator(BaseNeuron):
                 )
 
         for i in valid_indices:
+            pred = results['predictions'][i]
+            mtype = self.eval_engine.tracker.get_miner_type(uids[i])
+            if mtype == MinerType.SEGMENTER:
+                pred = f"shape: {np.array(pred).shape} min: {np.min(pred)} max: {np.max(pred)}"
+
             bt.logging.success(
                 f"UID: {results['miner_uids'][i]} | "
                 f"HOTKEY: {results['miner_hotkeys'][i]} | "
-                f"PRED: {results['predictions'][i]}"
+                f"PRED: {pred}"
             )
             video_metrics = {
                 "video_" + k: f"{v:.4f}"
