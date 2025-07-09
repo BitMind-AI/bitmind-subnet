@@ -182,7 +182,6 @@ class Generator:
 
             await self.wait_for_cache()
             bt.logging.success("Cache populated. Proceeding to generation.")
-            bt.logging.success("AUTOUPDATE SUCCESSFUL!.")            
 
             model_registry = initialize_model_registry()
             model_names = model_registry.get_interleaved_model_names(self.config.tasks)
