@@ -423,9 +423,6 @@ class Resize:
         Returns:
             np.ndarray: Resized image
         """
-        if self.target_size is None:
-            # TODO get standard resolutions here
-            return img
         return cv2.resize(img, self.target_size, interpolation=interpolation)
 
     def __call__(self, img, mask=None):
