@@ -11,7 +11,13 @@ from bitmind.generation.util.image import ensure_mask_3d
 TARGET_IMAGE_SIZE = (256, 256)
 
 
-def apply_random_augmentations(inputs, target_image_size, mask=None, level_probs=None):
+def apply_random_augmentations(
+    inputs,
+    target_image_size=None,
+    mask=None,
+    level_probs=None,
+    level=None,
+):
     """
     Apply image transformations based on randomly selected difficulty level.
 
@@ -26,6 +32,7 @@ def apply_random_augmentations(inputs, target_image_size, mask=None, level_probs
             - Level 1 (25%): Basic augmentations
             - Level 2 (25%): Medium distortions
             - Level 3 (25%): Hard distortions
+        level: set to override level_probs
 
     Returns:
         tuple: (aug_image, aug_mask, level, transform_params)
@@ -38,29 +45,30 @@ def apply_random_augmentations(inputs, target_image_size, mask=None, level_probs
     Raises:
         ValueError: If probabilities don't sum to 1.0 (within floating point precision)
     """
-    if level_probs is None:
-        level_probs = {
-            0: 0.25,  # No augmentations (base transforms)
-            1: 0.25,  # Basic augmentations
-            2: 0.25,  # Medium distortions
-            3: 0.25,  # Hard distortions
-        }
+    if level is None:
+        if level_probs is None:
+            level_probs = {
+                0: 0.25,  # No augmentations (base transforms)
+                1: 0.25,  # Basic augmentations
+                2: 0.25,  # Medium distortions
+                3: 0.25,  # Hard distortions
+            }
 
-    if not math.isclose(sum(level_probs.values()), 1.0, rel_tol=1e-9):
-        raise ValueError("Probabilities of levels must sum to 1.0")
+        if not math.isclose(sum(level_probs.values()), 1.0, rel_tol=1e-9):
+            raise ValueError("Probabilities of levels must sum to 1.0")
 
-    # get cumulative probs and select augmentation level
-    cumulative_probs = {}
-    cumsum = 0
-    for level, prob in sorted(level_probs.items()):
-        cumsum += prob
-        cumulative_probs[level] = cumsum
+        # get cumulative probs and select augmentation level
+        cumulative_probs = {}
+        cumsum = 0
+        for level, prob in sorted(level_probs.items()):
+            cumsum += prob
+            cumulative_probs[level] = cumsum
 
-    rand_val = np.random.random()
-    for curr_level, cum_prob in cumulative_probs.items():
-        if rand_val <= cum_prob:
-            level = curr_level
-            break
+        rand_val = np.random.random()
+        for curr_level, cum_prob in cumulative_probs.items():
+            if rand_val <= cum_prob:
+                level = curr_level
+                break
 
     if level == 0:
         tforms = get_base_transforms(target_image_size)
