@@ -359,7 +359,7 @@ def add_data_generator_args(parser):
     parser.add_argument(
         "--scraper.num-images-per-query",
         type=int,
-        default=50,
+        default=10,
     )
 
     parser.add_argument(
