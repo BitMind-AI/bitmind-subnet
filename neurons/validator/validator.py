@@ -415,7 +415,6 @@ class Validator(BaseNeuron):
 
         if sample and sample.get(modality) is not None:
             bt.logging.debug("Augmenting Media")
-            media_type = MediaType(sample.get("media_type")) if sample.get("media_type") else None
             augmented_media, augmented_mask, aug_level, aug_params = apply_random_augmentations(
                 sample.get(modality),
                 media_type=media_type,
