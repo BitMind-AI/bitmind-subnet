@@ -103,37 +103,32 @@ class ResolutionSampler:
             (854, 480),
             (1024, 576),
             (1920, 1080),   # 1080p
-            (3840, 2160),   # 4K
-            (2560, 1440),   # QHD
         ]
         self.synthetic_weights = np.array([
-            0.16,   # 1024x1024 (GPT-4V, SDXL, etc.)
-            0.13,   # 2048x2048 (Midjourney)
-            0.12,   # 512x512
-            0.11,   # 768x768
-            0.05,   # 640x640
-            0.04,   # 896x896
-            0.01,   # 1536x1536
-            0.01,   # 800x800
-            0.01,   # 960x960
-            0.07,   # 512x768
-            0.07,   # 768x512
-            0.03,   # 512x1024
-            0.03,   # 1024x512
-            0.01,   # 512x896
-            0.01,   # 896x512
-            0.02,   # 720x1280
-            0.02,   # 1280x720
-            0.01,   # 832x1104
-            0.01,   # 1104x832
-            0.01,   # 480x832
-            0.01,   # 480x848
-            0.01,   # 720x720
-            0.01,   # 854x480
-            0.01,   # 1024x576
-            0.01,   # 1920x1080
-            0.005,  # 3840x2160
-            0.005,  # 2560x1440
+            0.15,   # 1024x1024 (DALL-E default, SD default) - most common
+            0.08,   # 2048x2048 (SD Core 1.5MP equivalent) - high quality
+            0.08,   # 512x512 - DALL-E 2 option
+            0.06,   # 768x768 - SDXL base resolution
+            0.06,   # 640x640 - common smaller size
+            0.05,   # 896x896 - SDXL intermediate
+            0.05,   # 800x800 - square variant
+            0.05,   # 960x960 - larger square
+            0.05,   # 512x768 - portrait
+            0.05,   # 768x512 - landscape
+            0.05,   # 512x1024 - tall portrait
+            0.05,   # 1024x512 - wide landscape
+            0.04,   # 1536x1024 - DALL-E landscape
+            0.04,   # 1024x1536 - DALL-E portrait
+            0.03,   # 1792x1024 - DALL-E 3 landscape
+            0.03,   # 1024x1792 - DALL-E 3 portrait
+            0.03,   # 832x1104 - SDXL portrait
+            0.03,   # 1104x832 - SDXL landscape
+            0.02,   # 480x832 - smaller portrait
+            0.02,   # 480x848 - smaller portrait variant
+            0.02,   # 720x720 - smaller square
+            0.02,   # 854x480 - mobile landscape
+            0.02,   # 1024x576 - widescreen
+            0.02,   # 1920x1080 - HD video
         ])
         self.synthetic_weights = self.synthetic_weights / self.synthetic_weights.sum()
 
@@ -174,3 +169,27 @@ class ResolutionSampler:
             len(self.real_resolutions), p=self.real_weights
         )
         return self.real_resolutions[idx]
+
+    def closest_resolution_within_scale(self, original_size, candidate_resolutions, max_scale=2.0):
+        """
+        Find the closest resolution in candidate_resolutions to original_size that does not require upscaling by more than max_scale.
+
+        Args:
+            original_size: tuple (width, height) of the original image
+            candidate_resolutions: list of (width, height) tuples
+            max_scale: maximum allowed upscaling factor
+
+        Returns:
+            (width, height) tuple of the closest valid resolution, or None if none found
+        """
+        orig_w, orig_h = original_size
+        best = None
+        best_dist = float('inf')
+        for w, h in candidate_resolutions:
+            scale = max(w / orig_w, h / orig_h)
+            if scale <= max_scale:
+                dist = (w - orig_w) ** 2 + (h - orig_h) ** 2
+                if dist < best_dist:
+                    best = (w, h)
+                    best_dist = dist
+        return best

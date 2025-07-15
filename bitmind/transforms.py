@@ -241,7 +241,18 @@ class DynamicResize:
             else:
                 should_cross_domain = random.random() < self.config.real_to_generated_ratio
             if should_cross_domain:
-                target_size = self.resolution_sampler.sample_cross_domain_resolution(media_type)
+                # Sample a cross-domain resolution, but limit upscaling to 2x
+                if media_type == MediaType.SYNTHETIC:
+                    candidate_resolutions = self.resolution_sampler.real_resolutions
+                else:
+                    candidate_resolutions = self.resolution_sampler.synthetic_resolutions
+                closest = self.resolution_sampler.closest_resolution_within_scale(
+                    (img.shape[1], img.shape[0]), candidate_resolutions, max_scale=3.0
+                )
+                if closest is not None:
+                    target_size = closest
+                else:
+                    target_size = (img.shape[1], img.shape[0])
             else:
                 # Keep original resolution if not cross-domain
                 target_size = (img.shape[1], img.shape[0])  # (width, height)
@@ -302,7 +313,18 @@ class DynamicRandomResizedCrop:
             else:
                 should_cross_domain = random.random() < self.config.real_to_generated_ratio
             if should_cross_domain:
-                target_size = self.resolution_sampler.sample_cross_domain_resolution(media_type)
+                # Sample a cross-domain resolution, but limit upscaling to 2x
+                if media_type == MediaType.SYNTHETIC:
+                    candidate_resolutions = self.resolution_sampler.real_resolutions
+                else:
+                    candidate_resolutions = self.resolution_sampler.synthetic_resolutions
+                closest = self.resolution_sampler.closest_resolution_within_scale(
+                    (img.shape[1], img.shape[0]), candidate_resolutions, max_scale=3.0
+                )
+                if closest is not None:
+                    target_size = closest
+                else:
+                    target_size = (img.shape[1], img.shape[0])
             else:
                 # Keep original resolution if not cross-domain
                 target_size = (img.shape[1], img.shape[0])  # (width, height)
