@@ -63,7 +63,9 @@ class MediaProcessor:
         try:
             image_bytes = base64.b64decode(b64_image)
             image = Image.open(io.BytesIO(image_bytes))
-            transformed_image, _ = get_base_transforms(self.target_size)(np.array(image))
+            # For proxy images (unknown media type), pass None to keep original resolution
+            transforms = get_base_transforms(None)
+            transformed_image, _ = transforms(np.array(image), None)
             image_bytes, content_type = media_to_bytes(transformed_image)
             return image_bytes, content_type
 
@@ -109,7 +111,9 @@ class MediaProcessor:
 
                 frames = np.stack(frames)
                 if transform_frames:
-                    frames, _ = get_base_transforms(self.target_size)(frames)
+                    # For proxy videos (unknown media type), pass None to keep original resolution
+                    transforms = get_base_transforms(None)
+                    frames, _ = transforms(frames, None)
  
                 video_bytes, content_type = media_to_bytes(frames)
                 return video_bytes, content_type
