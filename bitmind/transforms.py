@@ -872,7 +872,7 @@ class RandomRotationWithParams:
                 angle,
                 reshape=self.reshape,
                 mode=self.mode,
-                order=order,
+                order=0,  # Nearest neighbor to preserve binary values
                 axes=(0, 1),
             )
             return img, mask
