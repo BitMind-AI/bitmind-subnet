@@ -6,7 +6,10 @@ import time
 import uuid
 
 import bittensor as bt
+import numpy as np
 import wandb
+
+from bitmind.types import MinerType
 
 
 class WandbLogger:
@@ -159,7 +162,7 @@ class WandbLogger:
         bt.logging.info(f"Logged media file to WandB with UUID: {media_uuid}")
         return media_uuid
 
-    def _log_challenge_results(self, challenge_results, media_uuids):
+    def _log_challenge_results(self, challenge_results, media_uuids, task_type):
         """
         Log challenge results with reference to media artifact.
 
@@ -168,12 +171,19 @@ class WandbLogger:
             media_uuids: List of UUIDs of the associated media
         """
         run = self._ensure_run()
+
+        if task_type == MinerType.SEGMENTER:
+            raw_preds = challenge_results.pop("predictions", {})
+            uids = challenge_results.get("miner_uids", [])
+            mask_preds = create_mask_preds(raw_preds, uids)
+            challenge_results.update(mask_preds)
+
         log_data = {
             "results": challenge_results,
             "media_uuids": media_uuids,
         }
-
         run.log(log_data)
+
         bt.logging.info(f"Logged challenge results with media UUIDs: {media_uuids}")
 
     def log(self, media_sample, challenge_results):
@@ -203,7 +213,7 @@ class WandbLogger:
                     media_uuids.append(self._maybe_log_media(media_path, metadata_path))
 
         # Step 2: Log challenge results with reference to logged media uuid if available
-        self._log_challenge_results(challenge_results, media_uuids)
+        self._log_challenge_results(challenge_results, media_uuids, media_sample["task_type"])
         return media_uuids
 
     def finish(self):
@@ -262,6 +272,28 @@ def init_wandb(
     bt.logging.success(f"Started wandb run {run_name}")
     return run
 
+
+def create_mask_preds(raw_preds, uids):
+
+    preds = {}
+    for i, image_array in enumerate(raw_preds):
+        try:
+            uid = uids[i]
+            if image_array is None or len(image_array.shape) == 0:
+                continue
+
+            # Normalize to 0-255 range for visualization
+            if image_array.dtype != np.uint8:
+                if image_array.max() > 1.0:
+                    image_array = image_array / image_array.max()
+                image_array = (image_array * 255).astype(np.uint8)
+
+            preds[f"prediction_{uid}"] = wandb.Image(image_array, mode="L")
+
+        except Exception as e:
+            bt.logging.warning(f"Failed to add miner {uid} mask to wandb logs: {e}")
+
+    return preds
 
 def clean_wandb_cache(wandb_dir, hours=1):
     """

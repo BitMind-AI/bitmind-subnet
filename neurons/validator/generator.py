@@ -181,7 +181,7 @@ class Generator:
         """Main generator loop"""
         try:
             cache_dir = self.config.cache.base_dir
-            batch_size = self.config.batch_size
+            batch_size = self.config.gen.batch_size
             device = self.config.device
 
             Path(cache_dir).mkdir(parents=True, exist_ok=True)

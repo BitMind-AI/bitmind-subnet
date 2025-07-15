@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 import bittensor as bt
 import numpy as np
 import requests
+import base64
+import cv2
 import uvicorn
 from bittensor.core.axon import FastAPIThreadedServer
 from bittensor.core.extrinsics.serving import serve_extrinsic
@@ -19,14 +21,38 @@ from bitmind.utils import print_info
 from neurons.base import BaseNeuron
 
 
+def decode_mask_from_header(mask_b64: str) -> np.ndarray:
+    """
+    Only for testnet mining.
+    Decode the base64-encoded mask from the X-Testnet-mask header
+    and convert it to a 256x256 binary mask.
+
+    Args:
+        mask_b64: Base64 encoded PNG mask string
+
+    Returns:
+        256x256 binary mask as numpy array
+    """
+    mask_bytes = base64.b64decode(mask_b64)
+    mask_array = cv2.imdecode(np.frombuffer(mask_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
+    mask_256x256 = cv2.resize(mask_array, (256, 256))
+    binary_mask = (mask_256x256 > 127).astype(np.uint8)
+    return binary_mask
+
+
 def extract_testnet_metadata(headers):
     headers = dict(headers)
     testnet_metadata = {}
+    mask = None
     for key, value in headers.items():
         if key.lower().startswith("x-testnet-"):
-            metadata_key = key[len("x-testnet-") :].lower()
-            testnet_metadata[metadata_key] = value
-    return testnet_metadata
+            if key.lower().endswith("mask"):
+                mask = decode_mask_from_header(value)
+            elif "mask" not in key.lower():
+                metadata_key = key[len("x-testnet-") :].lower()
+                testnet_metadata[metadata_key] = value
+
+    return testnet_metadata, mask
 
 
 class BaseMiner(BaseNeuron, ABC):

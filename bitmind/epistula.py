@@ -1,4 +1,3 @@
-import base64
 import json
 from hashlib import sha256
 from uuid import uuid4
@@ -8,6 +7,8 @@ from typing import Annotated, Any, Dict, Optional
 import bittensor as bt
 import numpy as np
 import asyncio
+import base64
+import cv2
 import ast
 import time
 import httpx
@@ -227,12 +228,12 @@ async def query_miner(
 
         if testnet_metadata:
             for k, v in testnet_metadata.items():
-                if k == "mask":
-                    mask_bytes = v.astype(np.float16).tobytes()
-                    mask_b64 = base64.b64encode(mask_bytes).decode('utf-8')
-                    headers["X-Mask-Base64"] = mask_b64
-                    headers["X-Mask-Shape"] = ",".join(map(str, mask.shape))
-                else:
+                if miner_type == MinerType.SEGMENTER and k == 'mask':
+                    resized_mask = cv2.resize(v, (128, 128))
+                    _, buffer = cv2.imencode('.png', (resized_mask * 255).astype(np.uint8))
+                    b64_mask = base64.b64encode(buffer).decode('utf-8')
+                    headers["X-Testnet-mask"] = b64_mask
+                elif k != 'mask':
                     headers[f"X-Testnet-{k}"] = str(v)
 
         async with session.post(
@@ -277,7 +278,6 @@ async def query_miner(
                     if "X-Mask-Shape" not in res.headers:
                         raise ValueError("Missing X-Mask-Shape header")
                     mask_shape = [int(x) for x in res.headers["X-Mask-Shape"].split(",")]
-                    bt.logging.info(f'mask_shape: {mask_shape}')
                     pred = np.frombuffer(pred, dtype=np.float16).reshape(mask_shape)
 
                     if np.any((pred < 0.0) | (pred > 1.0)):
