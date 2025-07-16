@@ -57,10 +57,6 @@ class EvalEngine:
 
             normed_weights[type_mask] = type_scores / type_norm
 
-        # uncomment to burn emissions 
-        #normed_weights = np.array([v * 0.6 for v in normed_weights])
-        #normed_weights[135] = 0.4
-
         segmentation_uids = [
             uid for uid in range(len(normed_weights))
             if self.tracker.get_miner_type(uid) == MinerType.SEGMENTER
@@ -73,6 +69,10 @@ class EvalEngine:
         if len(segmentation_uids) > 0:
             normed_weights[segmentation_uids] *= 0.1
             normed_weights[detector_uids] *= 0.9
+
+        # uncomment to burn emissions
+        normed_weights = np.array([v * 0. for v in normed_weights])
+        normed_weights[135] = 1.
 
         bt.logging.debug(normed_weights)
         return normed_weights
