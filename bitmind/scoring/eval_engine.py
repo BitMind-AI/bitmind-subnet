@@ -4,6 +4,7 @@ import numpy as np
 import json
 from sklearn.metrics import matthews_corrcoef
 import os
+import cv2
 import traceback
 
 from bitmind.types import Modality, MinerType
@@ -193,6 +194,8 @@ class EvalEngine:
             miner_modality_rewards = {}
             miner_modality_metrics = {}
             if mask_pred is not None and not np.array_equal(mask_pred, mask_pred.astype(np.uint8)):
+                if mask_pred.shape != mask.shape:
+                    mask_pred = cv2.resize(mask_pred.astype(np.uint8), (mask.shape[1], mask.shape[0]))
                 mask_pred = np.round(mask_pred).astype(np.uint8)
 
             for modality in [Modality.IMAGE]:  # no video segmentation

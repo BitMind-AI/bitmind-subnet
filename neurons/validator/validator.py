@@ -417,7 +417,6 @@ class Validator(BaseNeuron):
             bt.logging.debug("Augmenting Media")
             augmented_media, augmented_mask, aug_level, aug_params = apply_random_augmentations(
                 sample.get(modality),
-                media_type=media_type,
                 mask=sample.get("mask")
             )
 
