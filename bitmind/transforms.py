@@ -74,7 +74,11 @@ def apply_random_augmentations(
                 break
 
     # determine target resolution (for resize)
-    original_res = inputs.shape[0:2] if inputs.ndim == 3 else inputs.shape[1:3]
+    if isinstance(inputs, tuple):
+        original_res = inputs[0].shape[1:3]
+    else:
+        original_res = inputs.shape[0:2] if inputs.ndim == 3 else inputs.shape[1:3]
+
     resize_res = original_res
     if np.random.rand() < resize_prob:
         scale = np.random.uniform(0.5, 1.5)
@@ -86,6 +90,7 @@ def apply_random_augmentations(
     crop_scale = (1., 1.)
     if np.random.rand() < crop_prob:
         crop_scale = (np.random.uniform(0.35, 0.99), np.random.uniform(0.35, 0.99))
+        crop_scale = (min(224, crop_scale[0]*resize_res[0]), min(224, crop_scale[1]*resize_res[1]))
 
     if level == 0:
         tforms = get_base_transforms(resize_res, crop_scale)
@@ -100,9 +105,30 @@ def apply_random_augmentations(
         transformed_A, _ = tforms(inputs[0], reuse_params=False)
         transformed_B, _ = tforms(inputs[1], reuse_params=True)
         transformed = np.concatenate([transformed_A, transformed_B], axis=0)
+        
+        # Log transformed versions with timestamp
+        timestamp = int(time.time())
+        log_dir = Path("transform_logs") 
+        log_dir.mkdir(exist_ok=True)
+        
+        print(f"Logging to {log_dir}")
+        np.save(log_dir / f"transformed_A_{timestamp}.npy", transformed_A)
+        np.save(log_dir / f"transformed_B_{timestamp}.npy", transformed_B)
+        
         return transformed, None, level, tforms.params
     else:
         transformed_inputs, transformed_masks = tforms(inputs, mask, reuse_params=False)
+        # Log original and transformed data with timestamp to avoid overwrites
+        timestamp = int(time.time())
+        log_dir = Path("transform_logs")
+        log_dir.mkdir(exist_ok=True)
+        
+        print(f"Logging to {log_dir}")
+        np.save(log_dir / f"original_inputs_{timestamp}.npy", inputs)
+        np.save(log_dir / f"transformed_inputs_{timestamp}.npy", transformed_inputs)
+        if mask is not None:
+            np.save(log_dir / f"original_masks_{timestamp}.npy", mask)
+            np.save(log_dir / f"transformed_masks_{timestamp}.npy", transformed_masks)
         return transformed_inputs, transformed_masks, level, tforms.params
 
 

@@ -284,7 +284,7 @@ def add_validator_args(parser):
         "--challenge.multi-video-prob",
         type=float,
         help="Probability of stitching together two videos of the same media type",
-        default=0.0,
+        default=0.2,
     )
 
     parser.add_argument(
