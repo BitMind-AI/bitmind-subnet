@@ -198,9 +198,9 @@ class Generator:
             bt.logging.success("Cache populated. Proceeding to generation.")
 
             model_registry = initialize_model_registry()
-            model_names = model_registry.get_interleaved_model_names(self.config.tasks)
+            model_names = model_registry.get_interleaved_model_names(self.config.gen.tasks)
             bt.logging.info(f"Starting generator")
-            bt.logging.info(f"Tasks: {self.config.tasks}")
+            bt.logging.info(f"Tasks: {self.config.gen.tasks}")
             bt.logging.info(f"Models: {model_names}")
 
             self.generation_pipeline = GenerationPipeline(

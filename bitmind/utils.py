@@ -4,8 +4,10 @@ import functools
 import json
 import os
 import numpy as np
-from typing import Any, Dict, Union, List
+from typing import Any, Dict, Union, List, Optional, Tuple
 from enum import Enum
+
+from bitmind.types import MediaType
 
 
 def print_info(metagraph, hotkey, block, isMiner=True):
@@ -115,10 +117,10 @@ def prepare_for_logging(obj: Any) -> Any:
     """
     Prepare an object for JSON serialization by converting numpy types and other
     non-serializable objects to JSON-compatible types.
-    
+
     Args:
         obj: The object to prepare for logging
-        
+
     Returns:
         JSON-serializable version of the object
     """

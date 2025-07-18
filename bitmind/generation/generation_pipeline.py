@@ -66,7 +66,7 @@ class GenerationPipeline:
         """
         self.output_dir = Path(output_dir)
         self.model_registry = model_registry or initialize_model_registry()
-        self.device = device
+        self.device = device or "cuda"
         self.loop = asyncio.get_event_loop()
 
         self.prompt_generator = PromptGenerator(
@@ -94,7 +94,9 @@ class GenerationPipeline:
             ValueError: If image is None and cannot be sampled.
         """
         bt.logging.info(f"---------- Starting Generation ----------")
-        prompts = self.generate_prompts(image_samples, downstream_tasks=tasks, clear_gpu=True)
+        prompts = self.generate_prompts(
+            image_samples, downstream_tasks=tasks, clear_gpu=True
+        )
         paths, stats = self.generate_media(prompts, model_names, image_samples, tasks)
 
         def log_stats(stats):
@@ -139,18 +141,22 @@ class GenerationPipeline:
         # organize prompts in a dict to avoid failed prompt generations causing misaligned images/prompts
         prompts = {task: {} for task in downstream_tasks}
         for i in range(k):
-            image_path = image_samples[i].get('path')
-            image = image_samples[i].get('image')
+            image_path = image_samples[i].get("path")
+            image = image_samples[i].get("image")
             for task in downstream_tasks:
                 try:
                     prompts[task][i] = self.prompt_generator.generate(
                         image, downstream_task=task
                     )
 
-                    bt.logging.info(f"Generated prompt {i+1}/{k}: {prompts[task][i]} from {image_path}")
+                    bt.logging.info(
+                        f"Generated prompt {i+1}/{k}: {prompts[task][i]} from {image_path}"
+                    )
                 except Exception as e:
                     prompts[task][i] = None
-                    bt.logging.error(f"Error generating prompt for image {i+1}: {e} from {image_path}")
+                    bt.logging.error(
+                        f"Error generating prompt for image {i+1}: {e} from {image_path}"
+                    )
                     bt.logging.error(traceback.format_exc())
                     continue
 
@@ -215,7 +221,7 @@ class GenerationPipeline:
                 try:
                     image = None
                     if image_samples is not None and len(image_samples) > prompt_idx:
-                        image = image_samples[prompt_idx].get('image')
+                        image = image_samples[prompt_idx].get("image")
 
                     # 3 retries for black (NSFW filtered) output
                     for _ in range(3):
@@ -371,28 +377,6 @@ class GenerationPipeline:
         bt.logging.debug("Preparing generation arguments")
         gen_args = model_config.get("generate_args", {}).copy()
 
-        # prep inptask-specific generation args
-        if task == "i2i":
-            if image is None:
-                raise ValueError("image cannot be None for image-to-image generation")
-            image = Image.fromarray(image)
-            target_size = (1024, 1024)
-            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
-                image = image.resize(target_size, Image.Resampling.LANCZOS)
-
-            gen_args["mask_image"] = create_random_mask(image.size)
-            gen_args["image"] = image
-
-        elif task == "i2v":
-            if image is None:
-                raise ValueError("image cannot be None for image-to-video generation")
-            image = Image.fromarray(image)
-            # Get target size from gen_args if specified, otherwise use default
-            target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
-            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
-                image = image.resize(target_size, Image.Resampling.LANCZOS)
-            gen_args["image"] = image
-
         # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
@@ -410,6 +394,37 @@ class GenerationPipeline:
             gen_args["height"] = gen_args["resolution"][0]
             gen_args["width"] = gen_args["resolution"][1]
             del gen_args["resolution"]
+
+        # prep inptask-specific generation args
+        if task == "i2i":
+            if image is None:
+                raise ValueError("image cannot be None for image-to-image generation")
+
+            if image.shape[0] != image.shape[1]:
+                h, w = image.shape[:2]
+                m = min(h, w)
+                i = (h - m) // 2
+                j = (w - m) // 2
+                image = image[i : i + m, j : j + m, :]
+
+            image = Image.fromarray(image)
+            target_size = (gen_args.get("width", 1024), gen_args.get("height", 1024))
+            if image.size[0] != target_size[0] or image.size[1] != target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+
+            gen_args["image"] = image
+            gen_args["mask_image"] = create_random_mask(target_size)
+
+        elif task == "i2v":
+            if image is None:
+                raise ValueError("image cannot be None for image-to-video generation")
+            image = Image.fromarray(image)
+            # Get target size from gen_args if specified, otherwise use default
+            target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
+            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+            gen_args["image"] = image
+
 
         truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
         bt.logging.debug(f"Generating media from prompt: {truncated_prompt}")
@@ -462,29 +477,6 @@ class GenerationPipeline:
 
         mask_image = gen_args.get("mask_image", None)
         if mask_image is not None and modality == "image":
-            # Get generated image from gen_output
-            generated_img = None
-            if hasattr(gen_output, 'images') and gen_output.images:
-                generated_img = gen_output.images[0]
-            elif isinstance(gen_output, Image.Image):
-                generated_img = gen_output
-            if generated_img is not None:
-                if isinstance(generated_img, Image.Image):
-                    gen_img_np = np.array(generated_img)
-                else:
-                    gen_img_np = generated_img
-                if isinstance(mask_image, Image.Image):
-                    mask_np = np.array(mask_image)
-                else:
-                    mask_np = mask_image
-                # Resize mask to size of generated image
-                mask_resized = cv2.resize(mask_np, (gen_img_np.shape[1], gen_img_np.shape[0]), interpolation=cv2.INTER_NEAREST)
-                # Ensure mask_resized is uint8 and single-channel
-                mask_image = Image.fromarray(mask_resized.astype(np.uint8), mode="L")
-                output["mask_image"] = mask_image
-            else:
-                output["mask_image"] = mask_image
-        elif mask_image is not None:
             output["mask_image"] = mask_image
 
         del self.model
