@@ -105,30 +105,11 @@ def apply_random_augmentations(
         transformed_A, _ = tforms(inputs[0], reuse_params=False)
         transformed_B, _ = tforms(inputs[1], reuse_params=True)
         transformed = np.concatenate([transformed_A, transformed_B], axis=0)
-        
-        # Log transformed versions with timestamp
-        timestamp = int(time.time())
-        log_dir = Path("transform_logs") 
-        log_dir.mkdir(exist_ok=True)
-        
-        print(f"Logging to {log_dir}")
-        np.save(log_dir / f"transformed_A_{timestamp}.npy", transformed_A)
-        np.save(log_dir / f"transformed_B_{timestamp}.npy", transformed_B)
-        
+
         return transformed, None, level, tforms.params
     else:
         transformed_inputs, transformed_masks = tforms(inputs, mask, reuse_params=False)
-        # Log original and transformed data with timestamp to avoid overwrites
-        timestamp = int(time.time())
-        log_dir = Path("transform_logs")
-        log_dir.mkdir(exist_ok=True)
-        
-        print(f"Logging to {log_dir}")
-        np.save(log_dir / f"original_inputs_{timestamp}.npy", inputs)
-        np.save(log_dir / f"transformed_inputs_{timestamp}.npy", transformed_inputs)
-        if mask is not None:
-            np.save(log_dir / f"original_masks_{timestamp}.npy", mask)
-            np.save(log_dir / f"transformed_masks_{timestamp}.npy", transformed_masks)
+
         return transformed_inputs, transformed_masks, level, tforms.params
 
 
