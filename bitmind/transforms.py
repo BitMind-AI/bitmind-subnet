@@ -6,6 +6,7 @@ import torchvision.transforms.functional as F
 import numpy as np
 import cv2
 import os
+from pathlib import Path
 import time
 
 from bitmind.generation.util.image import ensure_mask_3d
@@ -708,6 +709,8 @@ class ResizeCropWithParams:
             i, j, h, w = crop_params
 
         self.params = {"crop_params": (i, j, h, w)}
+        if img.ndim == 2:
+            return img[i : i + h, j : j + w]
         return img[i : i + h, j : j + w, :]
 
 

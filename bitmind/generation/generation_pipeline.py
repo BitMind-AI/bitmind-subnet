@@ -377,27 +377,6 @@ class GenerationPipeline:
         bt.logging.debug("Preparing generation arguments")
         gen_args = model_config.get("generate_args", {}).copy()
 
-        # prep inptask-specific generation args
-        if task == "i2i":
-            if image is None:
-                raise ValueError("image cannot be None for image-to-image generation")
-            image = Image.fromarray(image)
-            target_size = (1024, 1024)
-            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
-                image = image.resize(target_size, Image.Resampling.LANCZOS)
-
-            gen_args["image"] = image
-
-        elif task == "i2v":
-            if image is None:
-                raise ValueError("image cannot be None for image-to-video generation")
-            image = Image.fromarray(image)
-            # Get target size from gen_args if specified, otherwise use default
-            target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
-            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
-                image = image.resize(target_size, Image.Resampling.LANCZOS)
-            gen_args["image"] = image
-
         # Prepare generation arguments
         for k, v in gen_args.items():
             if isinstance(v, dict):
@@ -416,18 +395,36 @@ class GenerationPipeline:
             gen_args["width"] = gen_args["resolution"][1]
             del gen_args["resolution"]
 
+        # prep inptask-specific generation args
         if task == "i2i":
-            output_height = gen_args.get("height", image.size[1])
-            output_width = gen_args.get("width", image.size[0])
-            expected_output_size = (output_width, output_height)
+            if image is None:
+                raise ValueError("image cannot be None for image-to-image generation")
 
-            bt.logging.debug(
-                f"Creating mask for expected output size: {expected_output_size}"
-            )
-            bt.logging.debug(f"Input image size: {image.size}")
+            if image.shape[0] != image.shape[1]:
+                h, w = image.shape[:2]
+                m = min(h, w)
+                i = (h - m) // 2
+                j = (w - m) // 2
+                image = image[i : i + m, j : j + m, :]
 
-            # Create mask based on final expected output size
-            gen_args["mask_image"] = create_random_mask(expected_output_size)
+            image = Image.fromarray(image)
+            target_size = (gen_args.get("width", 1024), gen_args.get("height", 1024))
+            if image.size[0] != target_size[0] or image.size[1] != target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+
+            gen_args["image"] = image
+            gen_args["mask_image"] = create_random_mask(target_size)
+
+        elif task == "i2v":
+            if image is None:
+                raise ValueError("image cannot be None for image-to-video generation")
+            image = Image.fromarray(image)
+            # Get target size from gen_args if specified, otherwise use default
+            target_size = (gen_args.get("height", 768), gen_args.get("width", 768))
+            if image.size[0] > target_size[0] or image.size[1] > target_size[1]:
+                image = image.resize(target_size, Image.Resampling.LANCZOS)
+            gen_args["image"] = image
+
 
         truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
         bt.logging.debug(f"Generating media from prompt: {truncated_prompt}")
@@ -480,34 +477,6 @@ class GenerationPipeline:
 
         mask_image = gen_args.get("mask_image", None)
         if mask_image is not None and modality == "image":
-            if not hasattr(gen_output, "images") or not gen_output.images:
-                bt.logging.error(f"Unexpected gen_output format: {type(gen_output)}")
-                output["mask_image"] = mask_image
-            else:
-                generated_img = gen_output.images[0]
-                gen_img_size = generated_img.size  # (width, height)
-
-                if not isinstance(mask_image, Image.Image):
-                    mask_image = Image.fromarray(mask_image, mode="L")
-
-                mask_size = mask_image.size  # (width, height)
-
-                if mask_size != gen_img_size:
-                    bt.logging.warning(
-                        f"Mask size {mask_size} doesn't match generated image size {gen_img_size}, resizing mask"
-                    )
-                    mask_np = np.array(mask_image)
-                    mask_resized = cv2.resize(
-                        mask_np,
-                        (gen_img_size[0], gen_img_size[1]),
-                        interpolation=cv2.INTER_NEAREST,
-                    )
-                    mask_image = Image.fromarray(
-                        mask_resized.astype(np.uint8), mode="L"
-                    )
-
-                output["mask_image"] = mask_image
-        elif mask_image is not None:
             output["mask_image"] = mask_image
 
         del self.model
