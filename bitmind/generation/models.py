@@ -232,7 +232,9 @@ def get_image_to_image_models() -> List[ModelConfig]:
                 "strength": 0.99,
                 "generator": torch.Generator(
                     "cuda" if torch.cuda.is_available() else "cpu"
-                )
+                ),
+                "height": 512, 
+                "width": 512
             },
             tags=["stable-diffusion", "xl", "inpainting"],
         ),
@@ -242,7 +244,9 @@ def get_image_to_image_models() -> List[ModelConfig]:
             pipeline_cls=AutoPipelineForInpainting,
             pretrained_args={"torch_dtype": torch.float16, "variant": "fp16"},
             generate_args={
-                "num_inference_steps": {"min": 40, "max": 60},
+                "num_inference_steps": {"min": 40, "max": 60}, 
+                "height": 512, 
+                "width": 512
             },
             scheduler={"cls": DEISMultistepScheduler},
             tags=["stable-diffusion", "inpainting", "dreamshaper"],

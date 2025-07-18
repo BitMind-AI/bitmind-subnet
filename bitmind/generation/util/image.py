@@ -1,13 +1,12 @@
 import numpy as np
-import PIL
-import os
 from PIL import Image, ImageDraw
+import os
 from typing import Tuple, Union, List
 
 
 def resize_image(
-    image: PIL.Image.Image, max_width: int, max_height: int
-) -> PIL.Image.Image:
+    image: Image.Image, max_width: int, max_height: int
+) -> Image.Image:
     """Resize the image to fit within specified dimensions while maintaining aspect ratio."""
     original_width, original_height = image.size
 
@@ -21,7 +20,7 @@ def resize_image(
         new_width = int(new_height * aspect_ratio)
 
     # Resize the image using the high-quality LANCZOS filter
-    resized_image = image.resize((new_width, new_height), PIL.Image.LANCZOS)
+    resized_image = image.resize((new_width, new_height), Image.LANCZOS)
     return resized_image
 
 
@@ -40,7 +39,7 @@ def resize_images_in_directory(directory, target_width, target_height):
             (".png", ".jpg", ".jpeg", ".bmp", ".gif")
         ):  # Check for image file extensions
             filepath = os.path.join(directory, filename)
-            with PIL.Image.open(filepath) as img:
+            with Image.open(filepath) as img:
                 # Resize the image and save back to the file location
                 resized_img = resize_image(
                     img, max_width=target_width, max_height=target_height
@@ -85,7 +84,7 @@ def create_random_mask(
     max_size_ratio: float = 0.5,
     allow_multiple: bool = True,
     allowed_shapes: list = ["rectangle", "circle", "ellipse", "triangle"],
-) -> "Image.Image":
+) -> Image.Image:
     """
     Create a random mask (or masks) for i2i/inpainting with more variety.
     Returns a single-channel ("L" mode) mask image.
@@ -155,15 +154,19 @@ def create_random_mask(
 
 
 def is_black_output(
-    modality: str, output: Union[List[Image.Image], Image.Image], threshold: int = 10
+    modality: str, output: dict, threshold: int = 10
 ) -> bool:
     """
     Returns True if the image or frames are (almost) completely black.
+    Expects output to be a dict with keys 'image' or 'video', and the value to have .images[0] or .frames[0].
+    Throws errors if the format is not as expected.
     """
     if modality == "image":
-        arr = np.array(output[modality].images[0])
-        return np.mean(arr) < threshold
+        arr = np.array(output["image"].images[0])
+        return bool(np.mean(arr) < threshold)
     elif modality == "video":
-        return np.all(
-            [np.mean(np.array(arr)) < threshold for arr in output[modality].frames[0]]
-        )
+        return bool(np.all(
+            [np.mean(np.array(arr)) < threshold for arr in output["video"].frames[0]]
+        ))
+    else:
+        raise ValueError(f"Unsupported modality: {modality}")

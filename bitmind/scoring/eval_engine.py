@@ -4,6 +4,7 @@ import numpy as np
 import json
 from sklearn.metrics import matthews_corrcoef
 import os
+import cv2
 import traceback
 
 from bitmind.types import Modality, MinerType
@@ -71,8 +72,8 @@ class EvalEngine:
             normed_weights[detector_uids] *= 0.9
 
         # uncomment to burn emissions
-        normed_weights = np.array([v * 0. for v in normed_weights])
-        normed_weights[135] = 1.
+        normed_weights = np.array([v * 0.3 for v in normed_weights])
+        normed_weights[135] = 0.7
 
         bt.logging.debug(normed_weights)
         return normed_weights
@@ -193,6 +194,8 @@ class EvalEngine:
             miner_modality_rewards = {}
             miner_modality_metrics = {}
             if mask_pred is not None and not np.array_equal(mask_pred, mask_pred.astype(np.uint8)):
+                if mask_pred.shape != mask.shape:
+                    mask_pred = cv2.resize(mask_pred.astype(np.uint8), (mask.shape[1], mask.shape[0]))
                 mask_pred = np.round(mask_pred).astype(np.uint8)
 
             for modality in [Modality.IMAGE]:  # no video segmentation

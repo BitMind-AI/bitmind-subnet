@@ -37,7 +37,6 @@ from bitmind.encoding import media_to_bytes
 from bitmind.epistula import query_miner
 from bitmind.metagraph import get_miner_uids, run_block_callback_thread
 from bitmind.scoring.miner_history import MinerHistory
-from bitmind.transforms import get_base_transforms
 from bitmind.types import Modality, NeuronType, MinerType
 from bitmind.utils import on_block_interval
 from neurons.base import BaseNeuron
@@ -63,15 +62,14 @@ class MediaProcessor:
         try:
             image_bytes = base64.b64decode(b64_image)
             image = Image.open(io.BytesIO(image_bytes))
-            transformed_image, _ = get_base_transforms(self.target_size)(np.array(image))
-            image_bytes, content_type = media_to_bytes(transformed_image)
+            image_bytes, content_type = media_to_bytes(np.array(image))
             return image_bytes, content_type
 
         except Exception as e:
             bt.logging.error(f"Error processing image: {e}")
             raise ValueError(f"Failed to process image: {str(e)}")
 
-    def process_video(self, video_data: bytes, transform_frames=True) -> np.ndarray:
+    def process_video(self, video_data: bytes) -> np.ndarray:
         """
         Process raw video bytes into frames and preprocess
 
@@ -108,9 +106,7 @@ class MediaProcessor:
                     raise ValueError("No frames extracted from video")
 
                 frames = np.stack(frames)
-                if transform_frames:
-                    frames, _ = get_base_transforms(self.target_size)(frames)
- 
+
                 video_bytes, content_type = media_to_bytes(frames)
                 return video_bytes, content_type
 
@@ -553,7 +549,7 @@ class ValidatorProxy(BaseNeuron):
 
             proc_start = time.time()
             media_bytes, content_type = await asyncio.to_thread(
-                self.media_processor.process_video, video_data, transform_frames=False
+                self.media_processor.process_video, video_data
             )
             bt.logging.trace(
                 f"[{request_id}] Video processed in {time.time() - proc_start:.2f}s"
