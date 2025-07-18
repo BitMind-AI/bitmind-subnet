@@ -72,8 +72,8 @@ class EvalEngine:
             normed_weights[detector_uids] *= 0.9
 
         # uncomment to burn emissions
-        normed_weights = np.array([v * 0. for v in normed_weights])
-        normed_weights[135] = 1.
+        normed_weights = np.array([v * 0.3 for v in normed_weights])
+        normed_weights[135] = 0.7
 
         bt.logging.debug(normed_weights)
         return normed_weights
