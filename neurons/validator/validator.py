@@ -9,6 +9,7 @@ import traceback
 from threading import Thread
 from time import sleep
 from typing import Any, Dict, Optional, List, Tuple
+import datetime
 
 import aiohttp
 import bittensor as bt
@@ -35,7 +36,7 @@ from bitmind.types import (
     NeuronType,
     MinerType
 )
-from bitmind.utils import on_block_interval, print_info, prepare_for_logging
+from bitmind.utils import on_block_interval, print_info, prepare_for_logging, limit_video_frames
 from bitmind.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
 
@@ -204,9 +205,11 @@ class Validator(BaseNeuron):
         modality = media_sample["modality"]
         media = media_sample[modality]
 
+
         media_bytes, content_type = media_to_bytes(
             media, fps=media_sample.get("fps", None)
         )
+
 
         bt.logging.info(f"----- Starting Challenge at Block {block} -----")
         bt.logging.info(f"Sampled from {modality} cache")
@@ -419,6 +422,10 @@ class Validator(BaseNeuron):
                 sample.get(modality),
                 mask=sample.get("mask")
             )
+
+            if modality == Modality.VIDEO:
+                # limit frames after transforms to handle multi-video as a single video
+                augmented_media = limit_video_frames(augmented_media)
 
             sample.update(
                 { 
