@@ -35,7 +35,7 @@ from bitmind.types import (
     NeuronType,
     MinerType
 )
-from bitmind.utils import on_block_interval, print_info, prepare_for_logging
+from bitmind.utils import on_block_interval, print_info, prepare_for_logging, limit_video_frames
 from bitmind.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
 
@@ -419,6 +419,10 @@ class Validator(BaseNeuron):
                 sample.get(modality),
                 mask=sample.get("mask")
             )
+
+            if modality == Modality.VIDEO:
+                # limit frames after transforms to handle multi-video as a single video
+                augmented_media = limit_video_frames(augmented_media)
 
             sample.update(
                 { 
