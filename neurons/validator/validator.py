@@ -9,7 +9,6 @@ import traceback
 from threading import Thread
 from time import sleep
 from typing import Any, Dict, Optional, List, Tuple
-import datetime
 
 import aiohttp
 import bittensor as bt
