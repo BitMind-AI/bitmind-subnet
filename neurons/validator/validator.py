@@ -205,11 +205,9 @@ class Validator(BaseNeuron):
         modality = media_sample["modality"]
         media = media_sample[modality]
 
-
         media_bytes, content_type = media_to_bytes(
             media, fps=media_sample.get("fps", None)
         )
-
 
         bt.logging.info(f"----- Starting Challenge at Block {block} -----")
         bt.logging.info(f"Sampled from {modality} cache")
