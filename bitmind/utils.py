@@ -148,7 +148,7 @@ def prepare_for_logging(obj: Any) -> Any:
             return f"<non-serializable: {type(obj).__name__}>"
 
 
-def limit_video_frames(video: np.ndarray, pixel_budget: int = 50_000_000) -> np.ndarray:
+def limit_video_frames(video: np.ndarray, pixel_budget: int = 50_000_000, frame_limit: int = 144) -> np.ndarray:
     """
     Limits the number of frames in a video based on its resolution to avoid timeouts.
 
@@ -162,7 +162,7 @@ def limit_video_frames(video: np.ndarray, pixel_budget: int = 50_000_000) -> np.
     F, H, W, _ = video.shape
     pixels_per_frame = H * W
     max_frames = max(1, pixel_budget // pixels_per_frame)
-    num_frames = min(F, max_frames)
+    num_frames = min(F, max_frames, frame_limit)
 
     if np.random.random() < 0.5:
         return video[-num_frames:]
