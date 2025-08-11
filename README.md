@@ -11,8 +11,8 @@
   </p>
   
   <p>
-    <a href="https://wandb.ai/bitmindai/bitmind-subnet">📊 W&B Mainnet 34</a> ·
-    <a href="https://wandb.ai/bitmindai/bitmind-subnet">📊 W&B Testnet 168</a>
+    <a href="https://wandb.ai/bitmindai/subnet-379-validator">📊 W&B Mainnet 34 (coming soon)</a> ·
+    <a href="https://wandb.ai/bitmindai/subnet-379-validator">📊 W&B Testnet 379</a>
   </p>
 
   <p>
