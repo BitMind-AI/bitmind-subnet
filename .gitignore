@@ -50,7 +50,6 @@ Thumbs.db
 .env.production
 
 # Model files and cache
-models*
 *.pth
 *.pt
 *.ckpt
