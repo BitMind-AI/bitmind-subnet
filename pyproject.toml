@@ -1,28 +1,29 @@
 [build-system]
-requires = ["setuptools>=64", "wheel", "pip>=21.0"]
+requires = ["setuptools>=69.0", "wheel", "pip>=21.0"]
 build-backend = "setuptools.build_meta"
 
+
+
 [project]
-name = "bitmind"
+name = "gas"
 dynamic = ["version"]
 description = "SN34 on bittensor"
-authors = [
-    {name = "BitMind", email = "intern@bitmind.ai"}
-]
+authors = [{ name = "GAS", email = "intern@bitmind.ai" }]
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = ""}
-urls = {homepage = "http://bitmind.ai"}
+license = { text = "" }
+urls = { homepage = "http://bitmind.ai" }
 
 dependencies = [
-    "bittensor==9.3.0",
-    "bittensor-cli==9.4.1",
+    "bittensor==9.7.0",
+    "bittensor-cli==9.7.0",
     "pillow==10.4.0",
     "substrate-interface==1.7.11",
     "numpy==2.0.1",
-    "pandas==2.2.3",
-    "torch==2.5.1",
-    "asyncpg==0.29.0",
+    "pandas==2.3.0",
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    "asyncpg==0.30.0",
     "httpcore==1.0.7",
     "httpx==0.28.1",
     "pyarrow==19.0.1",
@@ -31,22 +32,45 @@ dependencies = [
     "black==25.1.0",
     "pre-commit==4.2.0",
     "diffusers==0.33.1",
-    "transformers==4.50.0",
-    "scikit-learn==1.6.1",
+    "transformers==4.55.0",
+    "scikit-learn==1.7.1",
     "av==14.2.0",
     "opencv-python==4.11.0.86",
     "wandb==0.19.9",
     "uvicorn==0.27.1",
     "python-multipart==0.0.20",
     "peft==0.15.0",
-    "hf_xet==1.1.1",
-    "ftfy==6.3.1",
-    "stamina==24.1.0",
-    "selenium==4.18.1"
+    "aiohttp==3.10.2",
+    "onnx==1.18.0",
+    "onnxruntime==1.22.0",
+    "sympy==1.14.0",
+    "coloredlogs==15.0.1",
+    "flatbuffers==25.2.10",
+    "humanfriendly==10.0",
+    "hf_xet==1.1.7",
+    "nest-asyncio==1.6.0",
+    "python-dotenv==1.0.1",
+    "redis==5.0.1",
+    "accelerate==1.8.1",
+    "openai",
+    "google-genai",
+    "google-cloud-storage",
+    "selenium==4.34.0",
+    "stamina==25.1.0",
+    "click>=8.0.0",
 ]
 
+[project.scripts]
+gascli = "gas.cli:cli"
+
 [tool.setuptools]
-packages = {find = {where = ["."], exclude = ["docs*", "wandb*", "*.egg-info"]}}
+packages = { find = { where = [
+    ".",
+], exclude = [
+    "docs*",
+    "wandb*",
+    "*.egg-info",
+] } }
 
 [tool.setuptools.dynamic]
-version = {file = "VERSION"}
+version = { file = "VERSION" }

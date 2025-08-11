@@ -1,0 +1,81 @@
+# Installation
+
+## Prerequisites
+
+1. **Python 3.10+** (required)
+2. **uv** (fast Python package manager)
+3. **Git** (for cloning the repository)
+
+### Installing uv
+
+Install uv using one of these methods:
+
+```bash
+# Method 1: Official installer (recommended)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Method 2: Using pip
+pip install uv
+```
+
+## Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd GAS
+   ```
+
+2. **Run the installation script**:
+   ```bash
+   ./install.sh
+   ```
+
+The installation script will:
+- Check for Python 3.10+ and uv
+- Create a virtual environment using uv (fast dependency resolution)
+- Install all dependencies from `pyproject.toml`
+- Install the GAS package in development mode
+- Install the `gascli` command-line tool
+- Install additional git dependencies (Janus)
+
+## Usage
+
+### Activating the Virtual Environment
+
+Before using `gascli`, you need to activate the virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+### CLI Commands
+
+Once the virtual environment is activated, you can use the GAS CLI:
+
+```bash
+gascli --help                    # Show main help
+gascli validator --help          # Validator commands help
+gascli miner --help              # Miner commands help
+```
+
+### Available Aliases
+
+- `validator` → `vali`, `v`
+- `miner` → `m`
+
+### Global Commands
+
+```bash
+# Show all services status
+gascli status
+```
+
+### Alternative Usage (without activation)
+
+You can also run commands directly without activating the environment:
+
+```bash
+.venv/bin/gascli --help
+.venv/bin/gascli validator start
+``` 

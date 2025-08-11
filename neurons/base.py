@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 from threading import Thread
 from typing import Callable, List
 import bittensor as bt
@@ -11,17 +12,17 @@ from nest_asyncio import asyncio
 from substrateinterface import SubstrateInterface
 import signal
 
-from bitmind import (
-    __spec_version__ as spec_version,
+from gas import (
+    __spec_version__,
+    __version__,
 )
-from bitmind.metagraph import run_block_callback_thread
-from bitmind.types import NeuronType
-from bitmind.utils import ExitContext, on_block_interval
-from bitmind.config import (
+from gas.utils.metagraph import run_block_callback_thread
+from gas.types import NeuronType
+from gas.utils import ExitContext, on_block_interval
+from gas.config import (
     add_args,
-    add_validator_args,
     add_miner_args,
-    add_proxy_args,
+    add_validator_args,
     validate_config_and_neuron_path,
 )
 
@@ -51,10 +52,6 @@ class BaseNeuron:
         bt.logging.info("Resyncing Metagraph")
         self.metagraph.sync(subtensor=self.subtensor)
 
-        if self.neuron_type == NeuronType.VALIDATOR:
-            bt.logging.info("Metagraph updated, re-syncing hotkeys and moving averages")
-            self.eval_engine.sync_to_metagraph()
-
     async def run_callbacks(self, block):
         if (
             hasattr(self, "initialization_complete")
@@ -78,7 +75,7 @@ class BaseNeuron:
 
     def __init__(self, config=None):
         bt.logging.info(
-            f"Bittensor Version: {bt.__version__} | SN34 Version {spec_version}"
+            f"Bittensor Version: {bt.__version__} | SN34 Version {__spec_version__}"
         )
 
         parser = argparse.ArgumentParser()
@@ -90,9 +87,6 @@ class BaseNeuron:
         if self.neuron_type == NeuronType.VALIDATOR:
             bt.axon.add_args(parser)
             add_validator_args(parser)
-        if self.neuron_type == NeuronType.VALIDATOR_PROXY:
-            add_validator_args(parser)
-            add_proxy_args(parser)
         if self.neuron_type == NeuronType.MINER:
             bt.axon.add_args(parser)
             add_miner_args(parser)
@@ -101,6 +95,9 @@ class BaseNeuron:
         if config:
             base_config = copy.deepcopy(config)
             self.config.merge(base_config)
+
+        if hasattr(self.config, 'cache') and hasattr(self.config.cache, 'base_dir'):
+            self.config.cache.base_dir = str(Path(self.config.cache.base_dir).expanduser())
 
         validate_config_and_neuron_path(self.config)
 
