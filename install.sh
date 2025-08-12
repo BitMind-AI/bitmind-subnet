@@ -84,7 +84,27 @@ else
     log_success "System dependencies already installed ✓"
 fi
 
-# Check and install Node.js and npm
+log_info "Installing ChromeDriver dependencies..."
+if command -v apt-get >/dev/null 2>&1; then
+    # Install Chrome if not present
+    if ! command -v google-chrome >/dev/null 2>&1; then
+        apt-get update && apt-get install -y wget gnupg2
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+        apt-get update && apt-get install -y google-chrome-stable
+        log_success "Google Chrome installed ✓"
+    else
+        log_success "Google Chrome already installed ✓"
+    fi
+    
+    # Install ChromeDriver dependencies and Xvfb
+    apt-get update && apt-get install -y libnss3 libnspr4 xvfb
+    log_success "ChromeDriver dependencies and Xvfb installed ✓"
+else
+    log_error "Could not find apt-get. Please install Chrome, libnss3, libnspr4, and xvfb manually"
+    exit 1
+fi
+
 log_info "Checking for Node.js and npm..."
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
     log_info "Installing Node.js and npm..."
@@ -105,7 +125,6 @@ else
     log_success "Node.js and npm already installed ✓"
 fi
 
-# Install PM2 globally if not already installed
 log_info "Checking for PM2..."
 if ! command -v pm2 >/dev/null 2>&1; then
     log_info "Installing PM2 globally..."
@@ -119,7 +138,14 @@ else
     log_success "PM2 already installed ✓"
 fi
 
-# Check if uv is installed
+log_info "Installing dotenv for ecosystem config..."
+if ! npm install dotenv; then
+    log_error "Failed to install dotenv"
+    log_error "Please install dotenv manually: npm install dotenv"
+    exit 1
+fi
+log_success "dotenv installed ✓"
+
 log_info "Checking for uv..."
 if ! command -v uv >/dev/null 2>&1; then
     log_error "uv is not installed. Please install uv first:"
@@ -180,8 +206,9 @@ fi
 
 echo
 log_success "🎉 GAS installation completed!"
+echo 
+echo -e "${BLUE}═══════════════════ QUICKSTART ════════════════════${NC}"
 echo
-echo -e "${BLUE}═══════════════════════════════════════════${NC}"
 echo -e "${GREEN}1. Activate Virtual Environment:${NC}"
 echo -e "  ${YELLOW}source .venv/bin/activate${NC}"
 echo -e "  or, less conveniently, run gascli with ${YELLOW}.venv/bin/gascli${NC}"
@@ -196,6 +223,6 @@ echo -e "    ${YELLOW}validator${NC} → ${YELLOW}vali${NC}, ${YELLOW}v${NC}"
 echo -e "    ${YELLOW}miner${NC} → ${YELLOW}m${NC}"
 echo
 echo -e "${GREEN}3. Important Notes:${NC}"
-echo -e "  ${YELLOW}Validators:${NC} Make sure to update your .env.validator file before starting"
+echo -e "  ${YELLOW}Validators:${NC} Make sure to update your .env.validator"
 echo
-echo -e "${BLUE}═══════════════════════════════════════════${NC}" 
+echo -e "${BLUE}═══════════════════════════════════════════════════${NC}" 
