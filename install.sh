@@ -123,12 +123,37 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
         log_info "Installing required system dependencies..."
         check_apt_get "pkg-config, cmake, and ffmpeg"
         
-        if ! apt-get update && apt-get install -y pkg-config cmake ffmpeg; then
+        # Update package lists
+        log_info "Updating package lists..."
+        if ! apt-get update; then
+            log_error "Failed to update package lists"
+            exit 1
+        fi
+        
+        # Install dependencies
+        log_info "Installing pkg-config, cmake, and ffmpeg..."
+        if ! apt-get install -y pkg-config cmake ffmpeg; then
             log_error "Failed to install system dependencies via apt-get"
             log_error "Please install pkg-config, cmake, and ffmpeg manually"
             exit 1
         fi
-        log_success "System dependencies installed ✓"
+        
+        # Verify installation
+        log_info "Verifying system dependencies installation..."
+        if ! check_command pkg-config; then
+            log_error "pkg-config installation verification failed"
+            exit 1
+        fi
+        if ! check_command cmake; then
+            log_error "cmake installation verification failed"
+            exit 1
+        fi
+        if ! check_command ffmpeg; then
+            log_error "ffmpeg installation verification failed"
+            exit 1
+        fi
+        
+        log_success "System dependencies installed and verified ✓"
     else
         log_success "System dependencies already installed ✓"
     fi
@@ -138,17 +163,43 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
     
     # Install Chrome if not present
     if ! check_command google-chrome; then
-        apt-get update && apt-get install -y wget gnupg2
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+        log_info "Installing Google Chrome dependencies..."
+        if ! apt-get install -y wget gnupg2; then
+            log_error "Failed to install wget and gnupg2"
+            exit 1
+        fi
+        
+        log_info "Adding Google Chrome repository..."
+        if ! wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -; then
+            log_error "Failed to add Google Chrome signing key"
+            exit 1
+        fi
+        
         echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-        apt-get update && apt-get install -y google-chrome-stable
-        log_success "Google Chrome installed ✓"
+        
+        log_info "Installing Google Chrome..."
+        if ! apt-get install -y google-chrome-stable; then
+            log_error "Failed to install Google Chrome"
+            exit 1
+        fi
+        
+        # Verify Chrome installation
+        if ! check_command google-chrome; then
+            log_error "Google Chrome installation verification failed"
+            exit 1
+        fi
+        
+        log_success "Google Chrome installed and verified ✓"
     else
         log_success "Google Chrome already installed ✓"
     fi
     
     # Install ChromeDriver dependencies and Xvfb
-    apt-get update && apt-get install -y libnss3 libnspr4 xvfb
+    log_info "Installing ChromeDriver dependencies and Xvfb..."
+    if ! apt-get install -y libnss3 libnspr4 xvfb; then
+        log_error "Failed to install ChromeDriver dependencies and Xvfb"
+        exit 1
+    fi
     log_success "ChromeDriver dependencies and Xvfb installed ✓"
 
     log_info "Checking for Node.js and npm..."
@@ -156,7 +207,7 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
         log_info "Installing Node.js and npm..."
         check_apt_get "Node.js and npm"
         
-        if ! apt-get update && apt-get install -y nodejs npm; then
+        if ! apt-get install -y nodejs npm; then
             log_error "Failed to install Node.js and npm via apt-get"
             log_error "Please install Node.js and npm manually"
             exit 1

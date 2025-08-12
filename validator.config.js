@@ -122,7 +122,6 @@ if (config.startValidator) {
     watch: false,
     instances: 1,
     autorestart: true,
-    max_memory_restart: '1G',
   });
 }
 
@@ -148,7 +147,6 @@ if (config.startGenerator) {
     watch: false,
     instances: 1,
     autorestart: true,
-    max_memory_restart: '1G',
   });
 }
 
@@ -175,7 +173,6 @@ if (config.startData) {
     watch: false,
     instances: 1,
     autorestart: true,
-    max_memory_restart: '1G',
   });
 }
 
