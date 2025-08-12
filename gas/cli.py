@@ -487,6 +487,9 @@ def push_discriminator(
         sys.exit(1)
 
 
+miner.add_command(push_discriminator, name="push")
+
+
 # =============================================================================
 # GLOBAL COMMANDS (for backward compatibility and convenience)
 # =============================================================================

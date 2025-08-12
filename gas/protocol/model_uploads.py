@@ -38,11 +38,8 @@ def generate_presigned_url(
     headers = generate_header(wallet.hotkey, payload_bytes)
     headers['Content-Type'] = 'application/json'
     
-    print(f"📡 Requesting presigned URL...")
-    print(f"  Filename: {filename}")
-    print(f"  File size: {file_size} bytes")
-    print(f"  Expected hash: {file_hash}")
-    print(f"  SS58 Address: {headers['Epistula-Signed-By']}")
+    print(f"\n📡 Requesting presigned URL...")
+    print(f"  Request signed by: {headers['Epistula-Signed-By']}")
     
     # Make the presigned URL request
     try:
@@ -55,17 +52,12 @@ def generate_presigned_url(
             headers=headers,
             timeout=30
         )
-        
-        print(f"  Response status: {response.status_code}")
-        print(f"  Response headers: {dict(response.headers)}")
-        
+
         # Parse response
         try:
             result = response.json()
-            print(f"  Response body: {result}")
         except json.JSONDecodeError:
             result = {"error": "Invalid JSON response", "text": response.text}
-            print(f"  Response text: {response.text}")
         
         return {
             "status_code": response.status_code,
@@ -129,7 +121,7 @@ def confirm_upload(wallet: bt.wallet, upload_endpoint: str, model_id: int, file_
     headers = generate_header(wallet.hotkey, payload_bytes)
     headers['Content-Type'] = 'application/json'
     
-    print(f"✅ Confirming upload...")
+    print(f"Confirming upload...")
     print(f"  Model ID: {model_id}")
     print(f"  File hash: {file_hash}")
     
@@ -180,14 +172,7 @@ def upload_model_zip_presigned(wallet: bt.wallet, file_path: str, upload_endpoin
     print(f"  Name: {filename}")
     print(f"  Size: {file_size} bytes ({file_size / 1024 / 1024:.1f} MB)")
     print(f"  Hash: {file_hash}")
-    print(f"  SS58 Address: {wallet.hotkey.ss58_address}")
-    print(f"  Endpoint: {upload_endpoint}")
 
-    # Step 1: Generate presigned URL
-    print(f"\n{'='*60}")
-    print(f"STEP 1: Generate Presigned URL")
-    print(f"{'='*60}")
-    
     presigned_result = generate_presigned_url(
         wallet, 
         upload_endpoint, 
@@ -215,12 +200,7 @@ def upload_model_zip_presigned(wallet: bt.wallet, file_path: str, upload_endpoin
     print(f"  Model ID: {model_id}")
     print(f"  R2 Key: {r2_key}")
     print(f"  Expires at: {expires_at}")
-    
-    # Step 2: Upload file to R2
-    print(f"\n{'='*60}")
-    print(f"STEP 2: Upload File to R2")
-    print(f"{'='*60}")
-    
+
     upload_result = upload_to_r2(presigned_url, file_content, 'application/octet-stream')
     
     if not upload_result['success']:
@@ -235,10 +215,6 @@ def upload_model_zip_presigned(wallet: bt.wallet, file_path: str, upload_endpoin
     print(f"✅ File uploaded to R2 successfully!")
     print(f"  ETag: {upload_result['response'].get('etag', 'N/A')}")
     
-    # Step 3: Confirm upload
-    print(f"\n{'='*60}")
-    print(f"STEP 3: Confirm Upload")
-    print(f"{'='*60}")
     
     confirm_result = confirm_upload(wallet, upload_endpoint, model_id, file_hash)
     
