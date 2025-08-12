@@ -124,7 +124,7 @@ async def push_model_zip(
         raise ValueError("Either --onnx-dir or --model-zip must be provided")
 
     # Step 1: Upload to cloud inference system
-    print_step(1, 2, "Uploading model zip to cloud inference system...")
+    print_step(1, 2, " Uploading model zip to cloud inference system...")
     response = upload_model_zip_presigned(wallet, zip_path, MODEL_UPLOAD_ENDPOINT)
 
     if not response["success"]:
@@ -250,7 +250,10 @@ def main():
         print_error("ONNX directory validation failed")
         sys.exit(1)
 
-    # Initialize wallet
+    print()
+    print(f"{Fore.CYAN}{Style.BRIGHT}=== Starting Model Push ==={Style.RESET_ALL}")
+
+   # Initialize wallet
     print_info(f"Initializing wallet: {args.wallet_name}/{args.wallet_hotkey}")
     try:
         wallet = bt.wallet(name=args.wallet_name, hotkey=args.wallet_hotkey)
@@ -266,9 +269,6 @@ def main():
     if hotkey not in mg.hotkeys:
         print_warning(f"Hotkey {hotkey} not registered on netuid {netuid}")
         print_warning("This may cause issues with model registration")
-
-    print()
-    print(f"{Fore.CYAN}{Style.BRIGHT}=== Starting Model Push ==={Style.RESET_ALL}")
 
     try:
         success = asyncio.run(
