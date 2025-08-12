@@ -26,7 +26,7 @@ from gas.utils import (
     print_info,
     save_validator_state,
     load_validator_state,
-    apply_random_augmentations
+    apply_random_augmentations,
 )
 from gas.utils.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
@@ -34,7 +34,7 @@ from gas.evaluation import (
     GenerativeChallengeManager,
     MinerTypeTracker,
     DiscriminatorTracker,
-    get_discriminator_rewards
+    get_discriminator_rewards,
 )
 
 try:
@@ -88,11 +88,19 @@ class Validator(BaseNeuron):
             [
                 self.log_on_block,
                 self.start_new_wanbd_run,
-                #self.issue_generator_challenge,
+                # self.issue_generator_challenge,
                 self.issue_discriminator_challenge,
                 self.set_weights,
             ]
         )
+
+        self.reward_config = {
+            "window": self.config.scoring.window,
+            "image_score_weight": self.config.scoring.image_weight,
+            "video_score_weight": self.config.scoring.video_weight,
+            "binary_score_weight": self.config.scoring.binary_weight,
+            "multiclass_score_weight": self.config.scoring.multiclass_weight,
+        }
 
         # SETUP HEARTBEAT THREAD
         if self.config.neuron.heartbeat:
@@ -117,11 +125,9 @@ class Validator(BaseNeuron):
             self.miner_type_tracker,
         )
 
-        self.discriminator_tracker = DiscriminatorTracker(
-            store_last_n=200
-        )
+        self.discriminator_tracker = DiscriminatorTracker(store_last_n=200)
 
-        #self.generator_tracker = GeneratorTracker()
+        # self.generator_tracker = GeneratorTracker()
 
         await self.load_state()
 
@@ -130,7 +136,9 @@ class Validator(BaseNeuron):
         if total_dataset_media == 0:
             bt.logging.warning("No dataset media found.")
         else:
-            bt.logging.info(f"Found {total_dataset_media} dataset media entries: {dataset_counts}")
+            bt.logging.info(
+                f"Found {total_dataset_media} dataset media entries: {dataset_counts}"
+            )
 
         self.initialization_complete = True
         bt.logging.success(
@@ -169,7 +177,7 @@ class Validator(BaseNeuron):
 
     @on_block_interval("generator_challenge_interval")
     async def issue_generator_challenge(self, block):
-        """ Generator challenges coming soon! """
+        """Generator challenges coming soon!"""
         # await self.generative_challenge_manager.issue_generative_challenge()
         return
 
@@ -192,15 +200,19 @@ class Validator(BaseNeuron):
             bt.logging.trace("No dscriminative miners found to challenge.")
             return
 
-        # sample media 
+        # sample media
         for attempt in range(retries):
             modality, media_type, _ = self.determine_challenge_type()
-            bt.logging.debug(f"Sampling attempt {attempt + 1}/{retries}: {modality}/{media_type}")
-            cache_result = self.content_manager.sample_media_with_content(modality, media_type)
-            if cache_result is not None and cache_result.get('count', 0):
+            bt.logging.debug(
+                f"Sampling attempt {attempt + 1}/{retries}: {modality}/{media_type}"
+            )
+            cache_result = self.content_manager.sample_media_with_content(
+                modality, media_type
+            )
+            if cache_result is not None and cache_result.get("count", 0):
                 break
 
-        if cache_result is None or not cache_result.get('count', 0):
+        if cache_result is None or not cache_result.get("count", 0):
             bt.logging.warning(
                 f"Failed to sample data after {retries} attempts. Discriminator challenge skipped."
             )
@@ -208,13 +220,15 @@ class Validator(BaseNeuron):
 
         # extract and augment media
         media_sample = cache_result["items"][0]
-        bt.logging.info(json.dumps(media_sample.get('metadata'), indent=2))
+        bt.logging.info(json.dumps(media_sample.get("metadata"), indent=2))
 
         media = media_sample[modality.value]
         augmented_media, _, _, aug_params = apply_random_augmentations(media)
 
         bt.logging.success(f"Sampled {media_type} {modality} from cache")
-        bt.logging.info(f"Querying orchestrator with discriminator challenge for {miner_uids}")
+        bt.logging.info(
+            f"Querying orchestrator with discriminator challenge for {miner_uids}"
+        )
         async with aiohttp.ClientSession() as session:
             results = await query_orchestrator(
                 session,
@@ -224,31 +238,35 @@ class Validator(BaseNeuron):
                 media_to_bytes(augmented_media)[0],
                 total_timeout=self.config.neuron.miner_total_timeout,
                 connect_timeout=self.config.neuron.miner_connect_timeout,
-                sock_connect_timeout=self.config.neuron.miner_sock_connect_timeout
+                sock_connect_timeout=self.config.neuron.miner_sock_connect_timeout,
             )
 
         if isinstance(results, dict) and results.get("status") != 200:
-            bt.logging.error(f"Orchestrator request failed: {results.get('error', 'Unknown error')}")
+            bt.logging.error(
+                f"Orchestrator request failed: {results.get('error', 'Unknown error')}"
+            )
             return
 
         bt.logging.info(f"Received {len(results)} results from orchestrator")
         predictions = [
-            r["result"]["probabilities"]
-            if r.get("result") is not None
-            else None
+            r["result"]["probabilities"] if r.get("result") is not None else None
             for r in results
         ]
 
         generator_rewards = {}  # placeholder for GAS Phase II
-        discriminator_rewards, discriminator_metrics = get_discriminator_rewards(
+
+        discriminator_reward_outputs = get_discriminator_rewards(
             label=media_type.int_value,
             predictions=predictions,
             uids=[r.get("uid") for r in results],
             hotkeys=[r.get("hotkey") for r in results],
             challenge_modality=modality,
             discriminator_tracker=self.discriminator_tracker,
-            window=200,
+            **self.reward_config,
         )
+        discriminator_rewards = discriminator_reward_outputs["rewards"]
+        discriminator_metrics = discriminator_reward_outputs["metrics"]
+        discriminator_correct = discriminator_reward_outputs["correct"]
 
         self.update_scores(generator_rewards, discriminator_rewards)
         await self.save_state()
@@ -256,9 +274,7 @@ class Validator(BaseNeuron):
         # Log responses and metrics
         for r in results:
             log_fn = (
-                bt.logging.success 
-                if r.get("status") == 200
-                else bt.logging.warning
+                bt.logging.success if r.get("status") == 200 else bt.logging.warning
             )
 
             uid = r.get("uid")
@@ -267,6 +283,7 @@ class Validator(BaseNeuron):
             metrics = discriminator_metrics.get(uid, {})
             r.update({f"{k}_metrics": v for k, v in metrics.items()})
             r["reward"] = discriminator_rewards.get(uid, {})
+            r["correct"] = int(discriminator_correct.get(uid, False))
             r["score"] = self.scores[uid]
 
             log_fn(json.dumps(r, indent=2))
@@ -507,7 +524,7 @@ class Validator(BaseNeuron):
             bt.logging.info("Heartbeat")
 
 
-if __name__ == "__main__":  
+if __name__ == "__main__":
     try:
         validator = Validator()
         asyncio.run(validator.run())

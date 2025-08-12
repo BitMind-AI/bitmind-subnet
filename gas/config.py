@@ -234,6 +234,13 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--scoring.window",
+        type=int,
+        help="Number of recent predictions to consider in evaluation",
+        default=200,
+    )
+
+    parser.add_argument(
         "--scoring.image-weight",
         type=float,
         help="Weight for image modality scoring",
