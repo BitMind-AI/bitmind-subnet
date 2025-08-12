@@ -199,9 +199,6 @@ class Validator(BaseNeuron):
         if not miner_uids:
             bt.logging.trace("No dscriminative miners found to challenge.")
             return
-
-        miner_uids = [u for u in miner_uids if u not in [5,8,11,13]]
-
         # sample media
         for attempt in range(retries):
             modality, media_type, _ = self.determine_challenge_type()
