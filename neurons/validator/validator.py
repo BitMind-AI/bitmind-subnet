@@ -117,13 +117,13 @@ class Validator(BaseNeuron):
             self.config, self.wallet, self.metagraph, self.subtensor
         )
 
-        self.generative_challenge_manager = GenerativeChallengeManager(
-            self.config,
-            self.wallet,
-            self.metagraph,
-            self.subtensor,
-            self.miner_type_tracker,
-        )
+        #self.generative_challenge_manager = GenerativeChallengeManager(
+        #    self.config,
+        #    self.wallet,
+        #    self.metagraph,
+        #    self.subtensor,
+        #    self.miner_type_tracker,
+        #)
 
         self.discriminator_tracker = DiscriminatorTracker(store_last_n=200)
 
@@ -199,6 +199,8 @@ class Validator(BaseNeuron):
         if not miner_uids:
             bt.logging.trace("No dscriminative miners found to challenge.")
             return
+
+        miner_uids = [u for u in miner_uids if u not in [5,8,11,13]]
 
         # sample media
         for attempt in range(retries):
@@ -502,8 +504,9 @@ class Validator(BaseNeuron):
 
     async def shutdown(self):
         """Shutdown the validator and clean up resources."""
-        if self.generative_challenge_manager:
-            self.generative_challenge_manager.shutdown()
+        pass
+        #if self.generative_challenge_manager:
+        #   await  self.generative_challenge_manager.shutdown()
 
     def heartbeat(self):
         bt.logging.info("Starting Heartbeat")
