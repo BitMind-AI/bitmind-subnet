@@ -12,6 +12,36 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Default values
+SKIP_SYSTEM_DEPS=false
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-system-deps)
+            SKIP_SYSTEM_DEPS=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --no-system-deps    Skip installation of system dependencies"
+            echo "  -h, --help         Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0                 Install with all system dependencies"
+            echo "  $0 --no-system-deps Install without system dependencies"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 # Logging functions
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -27,6 +57,18 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Helper functions
+check_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+check_apt_get() {
+    if ! check_command apt-get; then
+        log_error "Could not find apt-get. Please install $1 manually"
+        exit 1
+    fi
 }
 
 # Print banner
@@ -59,35 +101,43 @@ if [ "$major" -lt 3 ] || ([ "$major" -eq 3 ] && [ "$minor" -lt 10 ]); then
     exit 1
 fi
 
+log_info "Checking for uv..."
+if ! check_command uv; then
+    log_error "uv is not installed. Please install uv first:"
+    log_error "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+    log_error "  or"
+    log_error "  pip install uv"
+    exit 1
+fi
+
+log_success "uv detected ✓"
+
 # Python 3.10+ is supported with no upper version limit
 
 log_success "Python $python_version detected ✓"
 
-# Check and install required system dependencies
-log_info "Checking system dependencies..."
-if ! command -v pkg-config >/dev/null 2>&1 || ! command -v cmake >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
-    log_info "Installing required system dependencies..."
-    if command -v apt-get >/dev/null 2>&1; then
-        # For Debian/Ubuntu systems
+# Check and install required system dependencies (unless --no-system-deps is specified)
+if [ "$SKIP_SYSTEM_DEPS" = false ]; then
+    log_info "Checking system dependencies..."
+    if ! check_command pkg-config || ! check_command cmake || ! check_command ffmpeg; then
+        log_info "Installing required system dependencies..."
+        check_apt_get "pkg-config, cmake, and ffmpeg"
+        
         if ! apt-get update && apt-get install -y pkg-config cmake ffmpeg; then
             log_error "Failed to install system dependencies via apt-get"
             log_error "Please install pkg-config, cmake, and ffmpeg manually"
             exit 1
         fi
+        log_success "System dependencies installed ✓"
     else
-        log_error "Could not find apt-get. Please install pkg-config, cmake, and ffmpeg manually"
-        log_error "These are required for building some Python packages"
-        exit 1
+        log_success "System dependencies already installed ✓"
     fi
-    log_success "System dependencies installed ✓"
-else
-    log_success "System dependencies already installed ✓"
-fi
 
-log_info "Installing ChromeDriver dependencies..."
-if command -v apt-get >/dev/null 2>&1; then
+    log_info "Installing ChromeDriver dependencies..."
+    check_apt_get "Chrome, libnss3, libnspr4, and xvfb"
+    
     # Install Chrome if not present
-    if ! command -v google-chrome >/dev/null 2>&1; then
+    if ! check_command google-chrome; then
         apt-get update && apt-get install -y wget gnupg2
         wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
         echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
@@ -100,62 +150,78 @@ if command -v apt-get >/dev/null 2>&1; then
     # Install ChromeDriver dependencies and Xvfb
     apt-get update && apt-get install -y libnss3 libnspr4 xvfb
     log_success "ChromeDriver dependencies and Xvfb installed ✓"
-else
-    log_error "Could not find apt-get. Please install Chrome, libnss3, libnspr4, and xvfb manually"
-    exit 1
-fi
 
-log_info "Checking for Node.js and npm..."
-if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-    log_info "Installing Node.js and npm..."
-    if command -v apt-get >/dev/null 2>&1; then
-        # For Debian/Ubuntu systems
+    log_info "Checking for Node.js and npm..."
+    if ! check_command node || ! check_command npm; then
+        log_info "Installing Node.js and npm..."
+        check_apt_get "Node.js and npm"
+        
         if ! apt-get update && apt-get install -y nodejs npm; then
             log_error "Failed to install Node.js and npm via apt-get"
             log_error "Please install Node.js and npm manually"
             exit 1
         fi
+        log_success "Node.js and npm installed ✓"
+        
+        # Refresh PATH to ensure npm is available
+        export PATH="$PATH:/usr/local/bin:/usr/bin"
+        hash -r  # Clear command hash table
+        
+        # Small delay to ensure system registers new binaries
+        sleep 2
     else
-        log_error "Could not find apt-get. Please install Node.js and npm manually"
-        log_error "These are required for PM2 installation"
+        log_success "Node.js and npm already installed ✓"
+    fi
+
+    # Verify npm is available and working
+    log_info "Verifying npm installation..."
+    if ! npm --version >/dev/null 2>&1; then
+        log_error "npm is not available or not working properly"
         exit 1
     fi
-    log_success "Node.js and npm installed ✓"
-else
-    log_success "Node.js and npm already installed ✓"
-fi
+    
+    log_success "npm verified and working ✓"
 
-log_info "Checking for PM2..."
-if ! command -v pm2 >/dev/null 2>&1; then
-    log_info "Installing PM2 globally..."
-    if ! npm install -g pm2; then
-        log_error "Failed to install PM2 globally"
-        log_error "Please install PM2 manually: npm install -g pm2"
+    log_info "Checking for PM2..."
+    if ! check_command pm2; then
+        log_info "Installing PM2 globally..."
+        # Ensure we're using the correct npm
+        npm_path=$(which npm)
+        log_info "Using npm at: $npm_path"
+        
+        if ! npm install -g pm2; then
+            log_error "Failed to install PM2 globally"
+            log_error "Please install PM2 manually: npm install -g pm2"
+            exit 1
+        fi
+        
+        # Verify PM2 installation
+        if ! check_command pm2; then
+            log_error "PM2 was not found in PATH after installation"
+            log_error "You may need to restart your shell or add npm global bin to PATH"
+            exit 1
+        fi
+        
+        log_success "PM2 installed globally ✓"
+    else
+        log_success "PM2 already installed ✓"
+    fi
+
+    log_info "Installing dotenv for ecosystem config..."
+    if ! npm install dotenv; then
+        log_error "Failed to install dotenv"
+        log_error "Please install dotenv manually: npm install dotenv"
         exit 1
     fi
-    log_success "PM2 installed globally ✓"
+    log_success "dotenv installed ✓"
 else
-    log_success "PM2 already installed ✓"
+    log_warning "Skipping system dependencies installation (--no-system-deps specified)"
+    log_warning "Make sure you have the following installed manually:"
+    log_warning "  - pkg-config, cmake, ffmpeg"
+    log_warning "  - Google Chrome, libnss3, libnspr4, xvfb"
+    log_warning "  - Node.js, npm, PM2, dotenv"
 fi
 
-log_info "Installing dotenv for ecosystem config..."
-if ! npm install dotenv; then
-    log_error "Failed to install dotenv"
-    log_error "Please install dotenv manually: npm install dotenv"
-    exit 1
-fi
-log_success "dotenv installed ✓"
-
-log_info "Checking for uv..."
-if ! command -v uv >/dev/null 2>&1; then
-    log_error "uv is not installed. Please install uv first:"
-    log_error "  curl -LsSf https://astral.sh/uv/install.sh | sh"
-    log_error "  or"
-    log_error "  pip install uv"
-    exit 1
-fi
-
-log_success "uv detected ✓"
 
 # Remove existing virtual environment to ensure fresh install
 if [ -d ".venv" ]; then
@@ -181,27 +247,20 @@ log_success "Virtual environment created and dependencies installed ✓"
 # Verify installation
 log_info "Verifying installation..."
 
-# Check if gascli command is available in the virtual environment
+# Check if gascli command is available and working in the virtual environment
 if .venv/bin/gascli --help >/dev/null 2>&1; then
-    log_success "gascli command installed successfully ✓"
+    log_success "gascli command installed and working ✓"
 else
-    log_error "gascli command not found in virtual environment."
+    log_error "gascli command not found or not working in virtual environment."
     log_warning "Checking if package was installed correctly..."
     
     # Check if the package is installed
     if pip show gas >/dev/null 2>&1; then
         log_success "gas package is installed ✓"
+        log_warning "gascli command may need to be reinstalled or virtual environment may need to be recreated."
     else
         log_error "gas package is not installed."
     fi
-fi
-
-# Test basic CLI functionality
-log_info "Testing CLI functionality..."
-if .venv/bin/gascli --help >/dev/null 2>&1; then
-    log_success "CLI help system working ✓"
-else
-    log_warning "CLI help command failed. Installation may be incomplete."
 fi
 
 echo
@@ -224,5 +283,9 @@ echo -e "    ${YELLOW}miner${NC} → ${YELLOW}m${NC}"
 echo
 echo -e "${GREEN}3. Important Notes:${NC}"
 echo -e "  ${YELLOW}Validators:${NC} Make sure to update your .env.validator"
+if [ "$SKIP_SYSTEM_DEPS" = true ]; then
+    echo -e "  ${YELLOW}System Dependencies:${NC} You skipped system dependency installation"
+    echo -e "  ${YELLOW}  Validators: ${NC} Make sure you have: pkg-config, cmake, ffmpeg, Chrome, Node.js, PM2"
+fi
 echo
 echo -e "${BLUE}═══════════════════════════════════════════════════${NC}" 

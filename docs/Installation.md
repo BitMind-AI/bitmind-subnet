@@ -6,6 +6,17 @@
 2. **uv** (fast Python package manager)
 3. **Git** (for cloning the repository)
 
+### System Dependencies
+
+The installation script will automatically install the following system dependencies (unless `--no-system-deps` is specified):
+
+- **Build tools**: pkg-config, cmake
+- **Media processing**: ffmpeg
+- **Browser automation**: Google Chrome, libnss3, libnspr4, xvfb
+- **Process management**: Node.js, npm, PM2, dotenv
+
+**Note**: The `--no-system-deps` option is primarily intended for **discriminative miners** who only need to submit models and don't require Chrome browser automation or Node.js process management tools. Validators should use the full installation to ensure all dependencies are available.
+
 ### Installing uv
 
 Install uv using one of these methods:
@@ -31,8 +42,15 @@ pip install uv
    ./install.sh
    ```
 
+   **Options:**
+   - `./install.sh --no-system-deps` - Skip system dependency installation (intended for discriminative miners)
+
 The installation script will:
 - Check for Python 3.10+ and uv
+- Install system dependencies (unless `--no-system-deps` is specified):
+  - pkg-config, cmake, ffmpeg
+  - chrome web driver, libnss3, libnspr4, xvfb
+  - Node.js, npm, PM2, dotenv
 - Create a virtual environment using uv (fast dependency resolution)
 - Install all dependencies from `pyproject.toml`
 - Install the GAS package in development mode

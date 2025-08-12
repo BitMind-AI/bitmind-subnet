@@ -41,6 +41,9 @@ cd GAS
 ./install.sh
 ```
 
+**Options:**
+- `./install.sh --no-system-deps` - Skip system dependency installation (intended for discriminative miners)
+
 ### Using gascli
 ```bash
 # Activate virtual environment to use gascli
