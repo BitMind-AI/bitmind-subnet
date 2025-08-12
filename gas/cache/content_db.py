@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 import random
+import contextlib
 
 import bittensor as bt
 
@@ -34,9 +35,46 @@ class ContentDB:
 
         self._init_database()
 
+    @contextlib.contextmanager
+    def _get_db_connection(self, max_retries=3, retry_delay=1.0):
+        """Context manager for database connections with retry logic."""
+        for attempt in range(max_retries):
+            try:
+                conn = sqlite3.connect(
+                    self.db_path,
+                    timeout=30.0,
+                    check_same_thread=False,
+                    isolation_level=None 
+                )
+                # Enable WAL mode for better concurrency
+                conn.execute("PRAGMA journal_mode=WAL")
+                # Set busy timeout
+                conn.execute("PRAGMA busy_timeout=30000")
+                # Enable foreign keys
+                conn.execute("PRAGMA foreign_keys=ON")
+
+                yield conn
+                conn.close()
+                return
+            except sqlite3.OperationalError as e:
+                if "unable to open database file" in str(e) or "database is locked" in str(e):
+                    if attempt < max_retries - 1:
+                        bt.logging.warning(f"Database locked, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        continue
+                    else:
+                        bt.logging.error(f"Failed to open database after {max_retries} attempts: {e}")
+                        raise
+                else:
+                    raise
+            except Exception as e:
+                bt.logging.error(f"Database error: {e}")
+                raise
+
     def _init_database(self):
         """Initialize the database schema."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS prompts (
@@ -100,10 +138,9 @@ class ContentDB:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_modality ON media (modality)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_media_type ON media (media_type)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_file_path ON media (file_path)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_download_url ON media (download_url)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_model_name ON media (model_name)")
-
-            conn.commit()
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_source_type ON media (source_type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_created_at ON media (created_at)")
 
     def add_prompt_entry(
         self,
@@ -114,7 +151,7 @@ class ContentDB:
         prompt_id = str(uuid.uuid4())
         created_at = time.time()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             try:
                 conn.execute(
                     """
@@ -159,7 +196,7 @@ class ContentDB:
         Returns:
             List of PromptEntry objects
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
 
             # Build query based on strategy
@@ -245,7 +282,7 @@ class ContentDB:
         Returns:
             List of MediaEntry objects
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
 
             # Build query based on strategy
@@ -363,7 +400,7 @@ class ContentDB:
         if timestamp is None:
             timestamp = int(created_at)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             conn.execute(
                 """
                 INSERT INTO media (id, prompt_id, file_path, modality, media_type, source_type,
@@ -421,7 +458,7 @@ class ContentDB:
         else:
             raise ValueError("Must provide either prompt_id or media_id")
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
             f"""
@@ -471,7 +508,7 @@ class ContentDB:
         Returns:
             Dictionary with various statistics
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             # Count prompts by type
             cursor = conn.execute(
                 """
@@ -527,7 +564,7 @@ class ContentDB:
         """
         cutoff_time = time.time() - (days_old * 24 * 60 * 60)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             # First, get IDs of prompts to remove
             cursor = conn.execute(
                 """
@@ -571,7 +608,7 @@ class ContentDB:
         Returns:
             MediaEntry object or None if not found
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """
@@ -623,7 +660,7 @@ class ContentDB:
             True if successful, False otherwise
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._get_db_connection() as conn:
                 cursor = conn.execute(
                     """
                     DELETE FROM media WHERE file_path = ?
@@ -649,7 +686,7 @@ class ContentDB:
         Returns:
             List of MediaEntry objects
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
 
             if modality:
@@ -712,7 +749,7 @@ class ContentDB:
         Returns:
             Dictionary with counts for each modality/media_type combination
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             cursor = conn.execute(
                 """
                 SELECT modality, media_type, COUNT(*) as count

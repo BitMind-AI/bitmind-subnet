@@ -117,13 +117,13 @@ class Validator(BaseNeuron):
             self.config, self.wallet, self.metagraph, self.subtensor
         )
 
-        self.generative_challenge_manager = GenerativeChallengeManager(
-            self.config,
-            self.wallet,
-            self.metagraph,
-            self.subtensor,
-            self.miner_type_tracker,
-        )
+        #self.generative_challenge_manager = GenerativeChallengeManager(
+        #    self.config,
+        #    self.wallet,
+        #    self.metagraph,
+        #    self.subtensor,
+        #    self.miner_type_tracker,
+        #)
 
         self.discriminator_tracker = DiscriminatorTracker(store_last_n=200)
 
@@ -199,7 +199,6 @@ class Validator(BaseNeuron):
         if not miner_uids:
             bt.logging.trace("No dscriminative miners found to challenge.")
             return
-
         # sample media
         for attempt in range(retries):
             modality, media_type, _ = self.determine_challenge_type()
@@ -229,6 +228,8 @@ class Validator(BaseNeuron):
         bt.logging.info(
             f"Querying orchestrator with discriminator challenge for {miner_uids}"
         )
+
+        # query orchestrator
         async with aiohttp.ClientSession() as session:
             results = await query_orchestrator(
                 session,
@@ -241,6 +242,7 @@ class Validator(BaseNeuron):
                 sock_connect_timeout=self.config.neuron.miner_sock_connect_timeout,
             )
 
+        # process responses
         if isinstance(results, dict) and results.get("status") != 200:
             bt.logging.error(
                 f"Orchestrator request failed: {results.get('error', 'Unknown error')}"
@@ -253,8 +255,8 @@ class Validator(BaseNeuron):
             for r in results
         ]
 
+        # compute rewards, update scores, save state, & log
         generator_rewards = {}  # placeholder for GAS Phase II
-
         discriminator_reward_outputs = get_discriminator_rewards(
             label=media_type.int_value,
             predictions=predictions,
@@ -499,8 +501,9 @@ class Validator(BaseNeuron):
 
     async def shutdown(self):
         """Shutdown the validator and clean up resources."""
-        if self.generative_challenge_manager:
-            self.generative_challenge_manager.shutdown()
+        pass
+        #if self.generative_challenge_manager:
+        #   await  self.generative_challenge_manager.shutdown()
 
     def heartbeat(self):
         bt.logging.info("Starting Heartbeat")

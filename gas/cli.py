@@ -122,42 +122,6 @@ def load_env():
                         os.environ[key] = value
 
 
-def get_network_settings():
-    """Determine network settings based on chain endpoint"""
-    chain_endpoint = os.environ.get("CHAIN_ENDPOINT", "")
-    click.echo(f"Debug: CHAIN_ENDPOINT = '{chain_endpoint}'")
-
-    if "test" in chain_endpoint:
-        return 379
-    elif "finney" in chain_endpoint:
-        return 34
-    return None
-
-
-def get_log_param():
-    """Get logging parameter based on LOGLEVEL"""
-    loglevel = os.environ.get("LOGLEVEL", "info")
-
-    if loglevel == "trace":
-        return "--logging.trace"
-    elif loglevel == "debug":
-        return "--logging.debug"
-    else:
-        return "--logging.info"
-
-
-def get_auto_update_param():
-    """Get auto-update parameter"""
-    auto_update = os.environ.get("AUTO_UPDATE", "false").lower()
-    return "" if auto_update == "true" else "--autoupdate-off"
-
-
-def get_heartbeat_param():
-    """Get heartbeat parameter"""
-    heartbeat = os.environ.get("HEARTBEAT", "false").lower()
-    return "--heartbeat" if heartbeat == "true" else ""
-
-
 def run_pm2_command(cmd: str, service: Optional[str] = None):
     """Run PM2 command and handle output"""
     try:
@@ -187,132 +151,48 @@ def clean_existing_services(services: List[str]):
             time.sleep(1)
 
 
-def start_validator():
-    """Start the validator service"""
-    click.echo("Starting validator...")
+def start_validator_services(no_generation=False, no_data_downloads=False):
+    """Start validator services using ecosystem config"""
+    click.echo("Starting validator services...")
 
     # Login to W&B if API key is provided (only needed for validator)
     wandb_key = os.environ.get("WANDB_API_KEY")
     if wandb_key:
         subprocess.run(["wandb", "login", wandb_key])
 
-    netuid = get_network_settings()
-    if not netuid:
-        click.echo("Error: Could not determine NETUID from CHAIN_ENDPOINT", err=True)
+    # Use ecosystem config to start services
+    ecosystem_path = Path(__file__).parent.parent / "validator.config.js"
+    if not ecosystem_path.exists():
+        click.echo("Error: validator.config.js not found in project root.", err=True)
         return False
 
-    log_param = get_log_param()
-    auto_update_param = get_auto_update_param()
-    heartbeat_param = get_heartbeat_param()
+    # Set environment variables for service selection
+    os.environ["START_VALIDATOR"] = "true"
+    os.environ["START_GENERATOR"] = "false" if no_generation else "true"
+    os.environ["START_DATA"] = "false" if no_data_downloads else "true"
 
-    # Use virtual environment Python if available
-    python_interpreter = get_python_interpreter()
+    # Clean up existing services
+    services_to_clean = []
+    if not no_generation:
+        services_to_clean.append(GENERATOR)
+    if not no_data_downloads:
+        services_to_clean.append(DATA)
+    services_to_clean.append(VALIDATOR)
+    clean_existing_services(services_to_clean)
 
-    # Get the absolute path to the validator script
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent  # Go up one level from gas/ to project root
-    validator_script = project_root / "neurons" / "validator" / "validator.py"
-
-    validator_cmd = [
-        "pm2",
-        "start",
-        str(validator_script),
-        "--interpreter",
-        python_interpreter,
-        "--name",
-        VALIDATOR,
-        "--",
-        "--wallet.name",
-        os.environ.get("WALLET_NAME", ""),
-        "--wallet.hotkey",
-        os.environ.get("WALLET_HOTKEY", ""),
-        "--netuid",
-        str(netuid),
-        "--subtensor.chain_endpoint",
-        os.environ.get("CHAIN_ENDPOINT", ""),
-        "--proxy.port",
-        os.environ.get("PROXY_PORT", "10913"),
-        "--neuron.sample-size",
-        "256",
-        "--cache.base-dir",
-        os.environ.get("SN34_CACHE_DIR", DEFAULT_CACHE_DIR),
-        "--cache.retain_previous_epoch",
-        "--gen.off",
-        "--scraper.off",
-        log_param,
-        auto_update_param,
-        heartbeat_param,
-    ]
-
-    result = subprocess.run(validator_cmd)
-    return result.returncode == 0
-
-
-def start_generator():
-    """Start the generator service"""
-    click.echo("Starting generator service...")
-
-    # Use virtual environment Python if available
-    python_interpreter = get_python_interpreter()
-
-    # Get the absolute path to the service script
-    generator_script = Path(__file__).parent / "services" / "generator_service.py"
-
-    generator_cmd = [
-        "pm2",
-        "start",
-        str(generator_script),
-        "--interpreter",
-        python_interpreter,
-        "--name",
-        GENERATOR,
-        "--",
-        "--cache-dir",
-        os.environ.get("SN34_CACHE_DIR", DEFAULT_CACHE_DIR),
-        "--device",
-        os.environ.get("DEVICE", "cuda"),
-        "--batch-size",
-        "1",
-        "--log-level",
-        os.environ.get("LOGLEVEL", "info"),
-    ]
-
-    result = subprocess.run(generator_cmd)
-    return result.returncode == 0
-
-
-def start_data():
-    """Start the data service"""
-    click.echo("Starting data service...")
-
-    # Use virtual environment Python if available
-    python_interpreter = get_python_interpreter()
-
-    # Get the absolute path to the service script
-    data_script = Path(__file__).parent / "services" / "data_service.py"
-
-    data_cmd = [
-        "pm2",
-        "start",
-        str(data_script),
-        "--interpreter",
-        python_interpreter,
-        "--name",
-        DATA,
-        "--",
-        "--cache-dir",
-        os.environ.get("SN34_CACHE_DIR", DEFAULT_CACHE_DIR),
-        "--chain-endpoint",
-        os.environ.get("CHAIN_ENDPOINT", ""),
-        "--scraper-interval",
-        "300",
-        "--dataset-interval",
-        "1800",
-        "--log-level",
-        os.environ.get("LOGLEVEL", "info"),
-    ]
-
-    result = subprocess.run(data_cmd)
+    # Start services using ecosystem config
+    result = subprocess.run(["pm2", "start", str(ecosystem_path)])
+    
+    if result.returncode == 0:
+        services_started = ["validator"]
+        if not no_generation:
+            services_started.append("generator")
+        if not no_data_downloads:
+            services_started.append("data")
+        click.echo(f"Validator services started: {', '.join(services_started)}")
+    else:
+        click.echo("Some validator services failed to start", err=True)
+    
     return result.returncode == 0
 
 
@@ -362,38 +242,11 @@ cli.add_command(validator, name="v")
 @click.option("--no-data-downloads", is_flag=True, help="Skip starting data service")
 def start(no_generation, no_data_downloads):
     """Start validator services"""
-    click.echo("Starting validator services...")
-
     # Load environment variables from .env.validator
     load_env()
-
-    services_to_start = ["validator"]
-    services_to_clean = [VALIDATOR]
-
-    if not no_generation:
-        services_to_start.append("generator")
-        services_to_clean.append(GENERATOR)
-    if not no_data_downloads:
-        services_to_start.append("data")
-        services_to_clean.append(DATA)
-
-    # Clean up existing services
-    clean_existing_services(services_to_clean)
-
-    # Start services
-    success = True
-    for service in services_to_start:
-        if service == "validator":
-            success &= start_validator()
-        elif service == "generator":
-            success &= start_generator()
-        elif service == "data":
-            success &= start_data()
-
-    if success:
-        click.echo(f"Validator services started: {', '.join(services_to_start)}")
-    else:
-        click.echo("Some validator services failed to start", err=True)
+    
+    # Start services using the unified function
+    return start_validator_services(no_generation, no_data_downloads)
 
 
 @validator.command()
@@ -506,7 +359,6 @@ def db_stats(db_path, base_dir, detailed):
     except Exception as e:
         click.echo(f"❌ Error running db_stats script: {e}", err=True)
         sys.exit(1)
-
 
 @validator.command(name="db-rows")
 @click.option("--db-path", default=None, help="Path to the prompt database")
@@ -633,6 +485,9 @@ def push_discriminator(
     except Exception as e:
         click.echo(f"❌ Error running push_model script: {e}", err=True)
         sys.exit(1)
+
+
+miner.add_command(push_discriminator, name="push")
 
 
 # =============================================================================

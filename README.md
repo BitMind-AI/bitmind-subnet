@@ -42,28 +42,34 @@ cd GAS
 ```
 
 ### Using gascli
-
 ```bash
-# Activate virtual environment
+# Activate virtual environment to use gascli
 source .venv/bin/activate
 
 # Show available commands
 gascli --help
 
-# Start validator services
+# Validators: Start or restart validator services
 gascli validator start
 
-# Push a discriminator model
-gascli miner push-discriminator --onnx-dir /path/to/models
-
-# Check service status
-gascli status
+# Miners: Push discriminator models
+gascli miner push-discriminator --onnx-dir /path/to/models --wallet-name default --hotkey-name default
 ```
 
 **Available Aliases:**
 - `validator` → `vali`, `v`
 - `miner` → `m`
 
+### Not using gascli
+```bash
+# Validators: Start or restart validator services
+# (Does not require virtualenv activation)
+pm2 start validator.config.js  
+
+# Miners: Push discriminator models
+source .venv/bin/activate
+python neurons/discriminator/push_model.py --onnx-dir /path/to/models --wallet-name default --hotkey-name default
+```
 For detailed installation and usage instructions, see [Installation Guide](docs/Installation.md).
 
 
