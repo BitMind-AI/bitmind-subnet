@@ -247,7 +247,7 @@ class Validator(BaseNeuron):
             bt.logging.error(
                 f"Orchestrator request failed: {results.get('error', 'Unknown error')}"
             )
-            return
+            return  # no penalty is applied to any miner if orchestrator call fails altogether
 
         bt.logging.info(f"Received {len(results)} results from orchestrator")
         predictions = [
@@ -279,14 +279,17 @@ class Validator(BaseNeuron):
                 bt.logging.success if r.get("status") == 200 else bt.logging.warning
             )
 
+            # update result with challenge media_type, metrics, rewards, scores for logging
             uid = r.get("uid")
-
-            # update results with metrics, rewards, scores for logging
-            metrics = discriminator_metrics.get(uid, {})
-            r.update({f"{k}_metrics": v for k, v in metrics.items()})
+            r["result"] = {} if r.get("result") is None else r["result"]
+            r["result"]["media_type"] = media_type.value
             r["reward"] = discriminator_rewards.get(uid, {})
             r["correct"] = int(discriminator_correct.get(uid, False))
             r["score"] = self.scores[uid]
+            r.update({
+                f"{k}_metrics": v 
+                for k, v in discriminator_metrics.get(uid, {}).items()
+            })
 
             log_fn(json.dumps(r, indent=2))
 

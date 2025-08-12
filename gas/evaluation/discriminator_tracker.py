@@ -65,12 +65,17 @@ class DiscriminatorTracker:
              for modality in [Modality.IMAGE, Modality.VIDEO]
         }
 
-    def get_predictions_and_labels(self, uid, modality):
+    def get_predictions_and_labels(self, uid, modality, window=None):
         if uid not in self.predictions or modality not in self.predictions[uid]:
             return [], []
             
         predictions = list(self.predictions[uid][modality])
         labels = list(self.labels[uid][modality])
+
+        if window is not None:
+            window = min(window, len(predictions))
+            predictions = predictions[-window:]
+            labels = labels[-window:]
         
         valid_indices = [
             i for i, p in enumerate(predictions)
@@ -81,11 +86,15 @@ class DiscriminatorTracker:
 
         return np.array(predictions), np.array(labels)
         
-    def get_invalid_prediction_count(self, uid, modality):
+    def get_invalid_prediction_count(self, uid, modality, window=None):
         if uid not in self.predictions or modality not in self.predictions[uid]:
             return 0
             
-        predictions = self.predictions[uid][modality]
+        predictions = list(self.predictions[uid][modality])
+        if window is not None:
+            window = min(window, len(predictions))
+            predictions = predictions[-window:]
+
         none_count = sum(
             1 for p in predictions 
             if p is None or (isinstance(p, (list, np.ndarray)) and np.any(p == None))

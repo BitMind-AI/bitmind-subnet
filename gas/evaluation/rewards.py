@@ -63,50 +63,51 @@ def get_discriminator_rewards(
                         modality=challenge_modality,
                         miner_hotkey=hotkey,
                     )
-        
-                pred_count = discriminator_tracker.get_prediction_count(uid).get(modality, 0)
-                if not pred_count:
+
+                # get current valid/invalid prediction counts, skip if there are no valid preds
+                invalid_count = discriminator_tracker.get_invalid_prediction_count(uid, modality, window)
+                preds, labels = discriminator_tracker.get_predictions_and_labels(uid, modality, window)
+                if not len(preds) or not len(labels):
                     continue
 
-                recent_preds, recent_labels = discriminator_tracker.get_predictions_and_labels(uid, modality)
-                if window is not None:
-                    window = min(window, len(recent_preds))
-                    recent_preds = recent_preds[-window:]
-                    recent_labels = recent_labels[-window:]
+                # take argmax of stored probabilities 
+                predictions = np.argmax(preds, axis=1)
 
-                predictions = np.argmax(recent_preds, axis=1)
-                miner_correct[uid] = predictions[-1] == label
+                # compute correctness of last prediction if evaluating current challenge modality
+                if modality == challenge_modality:
+                    miner_correct[uid] = predictions[-1] == label
 
-                # don't compute MCC until at least 5 preds and multiple labels
-                if pred_count < 5 or len(np.unique(recent_labels)) < 2:
+                # Always compute MCC for both modalities if > 5 preds made with > 2 unique labels
+                pred_count = len(preds)
+                if pred_count < 5 or len(np.unique(labels)) < 2:
                     continue
-
-                miner_modality_rewards[modality.value] = 0.0
-                miner_modality_metrics[modality.value] = {"multi_class_mcc": 0, "binary_mcc": 0}
 
                 # multi-class MCC (real vs synthetic vs semi-synthetic)
-                multi_class_mcc = matthews_corrcoef(recent_labels, predictions)
+                multi_class_mcc = matthews_corrcoef(labels, predictions)
 
                 # Binary MCC (real vs any synthetic)
-                binary_labels = (recent_labels > 0).astype(int)
+                binary_labels = (labels > 0).astype(int)
                 binary_preds = (predictions > 0).astype(int)
                 binary_mcc = matthews_corrcoef(binary_labels, binary_preds)
 
                 # penalize for invalid predictions by reducing MCC
-                invalid_count = discriminator_tracker.get_invalid_prediction_count(uid, modality)
                 total_attempts = pred_count + invalid_count
                 invalid_penalty = invalid_count / total_attempts if total_attempts > 0 else 0
-    
-                miner_modality_rewards[modality.value] = (
+
+                modality_reward = (
                     binary_score_weight * max(0, binary_mcc) * (1 - invalid_penalty)
                     + multiclass_score_weight * max(0,  multi_class_mcc) * (1 - invalid_penalty)
                 )
-                miner_modality_metrics[modality.value]['binary_mcc'] = binary_mcc
-                miner_modality_metrics[modality.value]['multi_class_mcc'] = multi_class_mcc
-                miner_modality_metrics[modality.value]['sample_size'] = len(recent_preds)
-                miner_modality_metrics[modality.value]['invalid_count'] = invalid_count
-                miner_modality_metrics[modality.value]['total_attempts'] = total_attempts
 
+                miner_modality_rewards[modality.value] = modality_reward
+                miner_modality_metrics[modality.value] = {
+                    'binary_mcc': binary_mcc,
+                    'multi_class_mcc': multi_class_mcc,
+                    'sample_size': len(preds),
+                    'invalid_count': invalid_count,
+                    'total_attempts': total_attempts
+                }
+ 
             except Exception as e:
                 bt.logging.error(
                     f"Couldn't compute detection rewards for miner {uid}, "
