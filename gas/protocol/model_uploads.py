@@ -76,7 +76,7 @@ def generate_presigned_url(
 def upload_to_r2(presigned_url: str, file_content: bytes, content_type: str = 'application/octet-stream') -> dict:
     """Upload file directly to R2 using presigned URL."""
     
-    print(f"☁️ Uploading file to R2...")
+    print(f"🚢 Uploading file to R2...")
     print(f"  Content type: {content_type}")
     print(f"  File size: {len(file_content)} bytes")
     
@@ -121,7 +121,7 @@ def confirm_upload(wallet: bt.wallet, upload_endpoint: str, model_id: int, file_
     headers = generate_header(wallet.hotkey, payload_bytes)
     headers['Content-Type'] = 'application/json'
     
-    print(f"Confirming upload...")
+    print(f"📡 Confirming upload...")
     print(f"  Model ID: {model_id}")
     print(f"  File hash: {file_hash}")
     
@@ -196,10 +196,10 @@ def upload_model_zip_presigned(wallet: bt.wallet, file_path: str, upload_endpoin
     r2_key = presigned_data['r2_key']
     expires_at = presigned_data['expires_at']
     
-    print(f"✅ Presigned URL generated successfully!")
-    print(f"  Model ID: {model_id}")
-    print(f"  R2 Key: {r2_key}")
-    print(f"  Expires at: {expires_at}")
+    print(f"  ✅ Presigned URL generated successfully!")
+    print(f"    Model ID: {model_id}")
+    print(f"    R2 Key: {r2_key}")
+    print(f"    Expires at: {expires_at}")
 
     upload_result = upload_to_r2(presigned_url, file_content, 'application/octet-stream')
     
@@ -212,9 +212,8 @@ def upload_model_zip_presigned(wallet: bt.wallet, file_path: str, upload_endpoin
             "response": upload_result['response']
         }
     
-    print(f"✅ File uploaded to R2 successfully!")
-    print(f"  ETag: {upload_result['response'].get('etag', 'N/A')}")
-    
+    print(f"  ✅ File uploaded to R2 successfully!")
+    print(f"    ETag: {upload_result['response'].get('etag', 'N/A')}")
     
     confirm_result = confirm_upload(wallet, upload_endpoint, model_id, file_hash)
     
@@ -231,10 +230,10 @@ def upload_model_zip_presigned(wallet: bt.wallet, file_path: str, upload_endpoin
     final_model_id = confirm_data['model_id']
     final_r2_key = confirm_data['r2_key']
     
-    print(f"✅ Upload confirmed successfully!")
-    print(f"  Model ID: {final_model_id}")
-    print(f"  R2 Key: {final_r2_key}")
-    print(f"  File Hash: {confirm_data['file_hash']}")
+    print(f"  ✅ Upload confirmed")
+    print(f"    Model ID: {final_model_id}")
+    print(f"    R2 Key: {final_r2_key}")
+    print(f"    File Hash: {confirm_data['file_hash']}")
     
     return {
         "success": True,

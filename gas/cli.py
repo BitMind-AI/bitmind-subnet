@@ -477,13 +477,9 @@ def push_discriminator(
     # Execute the push_model script
     try:
         result = subprocess.run(cmd, check=True)
-        if result.returncode == 0:
-            click.echo("✅ Model push completed successfully!")
     except subprocess.CalledProcessError as e:
-        click.echo(f"❌ Model push failed with exit code {e.returncode}", err=True)
         sys.exit(e.returncode)
     except Exception as e:
-        click.echo(f"❌ Error running push_model script: {e}", err=True)
         sys.exit(1)
 
 

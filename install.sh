@@ -177,6 +177,13 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
         
         echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
         
+        # Update package lists after adding the repository
+        log_info "Updating package lists to include Google Chrome repository..."
+        if ! apt-get update; then
+            log_error "Failed to update package lists after adding Google Chrome repository"
+            exit 1
+        fi
+        
         log_info "Installing Google Chrome..."
         if ! apt-get install -y google-chrome-stable; then
             log_error "Failed to install Google Chrome"

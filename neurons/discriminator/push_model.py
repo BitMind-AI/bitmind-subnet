@@ -124,6 +124,7 @@ async def push_model_zip(
         raise ValueError("Either --onnx-dir or --model-zip must be provided")
 
     # Step 1: Upload to cloud inference system
+    print()
     print_step(1, 2, " Uploading model zip to cloud inference system...")
     response = upload_model_zip_presigned(wallet, zip_path, MODEL_UPLOAD_ENDPOINT)
 
