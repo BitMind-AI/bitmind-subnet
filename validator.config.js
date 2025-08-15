@@ -85,6 +85,18 @@ const dataScript = path.join(projectRoot, 'gas', 'services', 'data_service.py');
 // Build apps array
 const apps = [];
 
+// Common HF env
+const HF_ENV = {
+  TRANSFORMERS_VERBOSITY: 'error',
+  DIFFUSERS_VERBOSITY: 'error',
+  TOKENIZERS_PARALLELISM: 'false',
+  HF_HUB_VERBOSITY: 'error',
+  ACCELERATE_LOG_LEVEL: 'error',
+  HUGGINGFACE_HUB_TOKEN: process.env.HUGGINGFACE_HUB_TOKEN || process.env.HF_TOKEN,
+  HF_HOME: path.join(os.homedir(), '.cache', 'huggingface'),
+  HF_HUB_DISABLE_TELEMETRY: '1',
+};
+
 // Validator service
 if (config.startValidator) {
   const validatorArgs = [
@@ -95,9 +107,6 @@ if (config.startValidator) {
     '--proxy.port', config.proxyPort,
     '--neuron.sample-size', '256',
     '--cache.base-dir', config.cacheDir,
-    '--cache.retain_previous_epoch',
-    '--gen.off',
-    '--scraper.off',
     logParam,
     autoUpdateParam,
   ];
@@ -113,11 +122,7 @@ if (config.startValidator) {
     args: validatorArgs.join(' '),
     env: {
       WANDB_API_KEY: process.env.WANDB_API_KEY,
-      TRANSFORMERS_VERBOSITY: 'error',
-      DIFFUSERS_VERBOSITY: 'error',
-      TOKENIZERS_PARALLELISM: 'false',
-      HF_HUB_VERBOSITY: 'error',
-      ACCELERATE_LOG_LEVEL: 'error',
+      ...HF_ENV,
     },
     watch: false,
     instances: 1,
@@ -138,11 +143,7 @@ if (config.startGenerator) {
       '--log-level', config.loglevel,
     ].join(' '),
     env: {
-      TRANSFORMERS_VERBOSITY: 'error',
-      DIFFUSERS_VERBOSITY: 'error',
-      TOKENIZERS_PARALLELISM: 'false',
-      HF_HUB_VERBOSITY: 'error',
-      ACCELERATE_LOG_LEVEL: 'error',
+      ...HF_ENV,
     },
     watch: false,
     instances: 1,
@@ -164,11 +165,7 @@ if (config.startData) {
       '--log-level', config.loglevel,
     ].join(' '),
     env: {
-      TRANSFORMERS_VERBOSITY: 'error',
-      DIFFUSERS_VERBOSITY: 'error',
-      TOKENIZERS_PARALLELISM: 'false',
-      HF_HUB_VERBOSITY: 'error',
-      ACCELERATE_LOG_LEVEL: 'error',
+      ...HF_ENV,
     },
     watch: false,
     instances: 1,

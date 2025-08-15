@@ -23,14 +23,12 @@ import requests
 from gas.types import Modality, MediaType, DatasetConfig
 
 
-IMAGES_PER_PARQUET = 5  # 200
-VIDEOS_PER_ZIP = 10
-PARQUET_PER_DATASET = 2  # 3
-ZIPS_PER_DATASET = 1
-
-
 def download_and_extract(
     dataset: DatasetConfig,
+    images_per_parquet: int = 100,
+    videos_per_zip: int = 50,
+    parquet_per_dataset: int = 5,
+    zips_per_dataset: int = 2,
 ) -> Generator[Tuple[bytes, Dict[str, Any]], None, None]:
     """
     Download datasets and yield extracted media as a generator.
@@ -56,9 +54,9 @@ def download_and_extract(
 
             remote_paths = _get_download_urls(dataset.path, filenames)
             n_files = (
-                PARQUET_PER_DATASET
+                parquet_per_dataset
                 if dataset.modality == Modality.IMAGE
-                else ZIPS_PER_DATASET
+                else zips_per_dataset
             )
             to_download = _select_files_to_download(remote_paths, n_files)
 
@@ -70,12 +68,12 @@ def download_and_extract(
             for source_file in downloaded_files:
                 if dataset.modality == Modality.IMAGE:
                     for media_bytes, metadata in yield_images_from_parquet(
-                        source_file, IMAGES_PER_PARQUET, dataset
+                        source_file, images_per_parquet, dataset
                     ):
                         yield media_bytes, metadata
                 elif dataset.modality == Modality.VIDEO:
                     for media_bytes, metadata in yield_videos_from_zip(
-                        source_file, VIDEOS_PER_ZIP, dataset
+                        source_file, videos_per_zip, dataset
                     ):
                         yield media_bytes, metadata
 

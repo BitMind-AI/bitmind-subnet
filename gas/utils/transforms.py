@@ -90,7 +90,9 @@ def apply_random_augmentations(
     crop_scale = (1., 1.)
     if np.random.rand() < crop_prob:
         crop_scale = (np.random.uniform(0.35, 0.99), np.random.uniform(0.35, 0.99))
-        crop_scale = (min(224, crop_scale[0]*resize_res[0]), min(224, crop_scale[1]*resize_res[1]))
+        min_scale_h = max(0.35, 224 / resize_res[0])
+        min_scale_w = max(0.35, 224 / resize_res[1])
+        crop_scale = (max(crop_scale[0], min_scale_h), max(crop_scale[1], min_scale_w))
 
     if level == 0:
         tforms = get_base_transforms(resize_res, crop_scale)
@@ -109,7 +111,6 @@ def apply_random_augmentations(
         return transformed, None, level, tforms.params
     else:
         transformed_inputs, transformed_masks = tforms(inputs, mask, reuse_params=False)
-
         return transformed_inputs, transformed_masks, level, tforms.params
 
 
@@ -643,8 +644,8 @@ class ResizeCropWithParams:
                 crop_params=prev_crop_params,
                 interpolation=cv2.INTER_NEAREST,
             )
-            return img, mask
-        return img
+
+        return img, mask
 
 
     def resize(self, img, mask=None):

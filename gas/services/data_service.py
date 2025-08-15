@@ -32,13 +32,22 @@ class DataService:
 
     def __init__(self, config):
         self.config = config
-        
-        if hasattr(self.config, 'cache') and hasattr(self.config.cache, 'base_dir'):
-            self.config.cache.base_dir = str(Path(self.config.cache.base_dir).expanduser())
+
+        if hasattr(self.config, "cache") and hasattr(self.config.cache, "base_dir"):
+            self.config.cache.base_dir = str(
+                Path(self.config.cache.base_dir).expanduser()
+            )
 
         # used for filesystem/db writes
-        self.content_manager = ContentManager(self.config.cache.base_dir)
-        
+        self.content_manager = ContentManager(
+            base_dir=self.config.cache.base_dir,
+            max_per_source=getattr(self.config, "max_per_source", 500),
+            enable_source_limits=getattr(self.config, "enable_source_limits", True),
+            prune_strategy=getattr(self.config, "prune_strategy", "oldest"),
+            remove_on_sample=getattr(self.config, "remove_on_sample", True),
+            min_source_threshold=getattr(self.config, "min_source_threshold", 0.8),
+        )
+
         # scraper initialization
         self.scrapers = [
             GoogleScraper(
@@ -46,16 +55,16 @@ class DataService:
                 media_type="real",
                 max_year=2017,
                 min_width=128,
-                min_height=128
+                min_height=128,
             )
         ]
-        
+
         # Dataset download vars
         self.dataset_registry = initialize_dataset_registry()
         self.scraper_thread: Optional[Thread] = None
         self.downloader_thread: Optional[Thread] = None
         self.stop_event = Event()
-        
+
         # Service state
         self.is_running = False
         self.step = 0
@@ -78,14 +87,24 @@ class DataService:
         self.substrate_thread = run_block_callback_thread(
             self.substrate, self.run_callbacks
         )
-                
+
     def start(self):
         """Start the data service with substrate connection."""
         bt.logging.info("[DATA-SERVICE] Starting data service")
-        
+
+        # Enforce hard caps at startup in case max_per_source was lowered
+        try:
+            pruned = self.content_manager.enforce_source_caps()
+            if pruned:
+                bt.logging.info(
+                    f"[DATA-SERVICE] Enforced source caps on startup: {pruned}"
+                )
+        except Exception as e:
+            bt.logging.warning(f"[DATA-SERVICE] Failed to enforce caps on startup: {e}")
+
         self.is_running = True
         bt.logging.success("[DATA-SERVICE] Data service started successfully")
-        
+
         asyncio.get_event_loop().run_until_complete(self.start_dataset_download(0))
         asyncio.get_event_loop().run_until_complete(self.start_scraper_cycle(0))
 
@@ -105,11 +124,11 @@ class DataService:
                     self.substrate, self.run_callbacks
                 )
 
-            if self.step % 60 == 0: 
+            if self.step % 60 == 0:
                 self.log_status()
-            
+
             time.sleep(1)
-    
+
     def stop(self):
         """Stop the data service."""
         bt.logging.info("[DATA-SERVICE] Stopping data service")
@@ -118,10 +137,10 @@ class DataService:
 
         if self.scraper_thread and self.scraper_thread.is_alive():
             self.scraper_thread.join(timeout=10)
-            
+
         if self.downloader_thread and self.downloader_thread.is_alive():
             self.downloader_thread.join(timeout=10)
-            
+
         bt.logging.success("[DATA-SERVICE] Data service stopped")
 
     async def run_callbacks(self, block):
@@ -150,68 +169,100 @@ class DataService:
         """Start a scraper cycle at the specified block interval."""
         try:
             bt.logging.info(f"[DATA-SERVICE] Starting scraper cycle at block {block}")
-            
+
             queries = self.content_manager.sample_search_queries(k=5, remove=False)
             if not queries:
-                bt.logging.warning("[DATA-SERVICE] No search queries available for scraping")
+                bt.logging.warning(
+                    "[DATA-SERVICE] No search queries available for scraping"
+                )
                 return
-                
+
             query_texts = [q.content for q in queries]
             query_ids = [q.id for q in queries]
-            
+
             if not self.scraper_thread or not self.scraper_thread.is_alive():
                 self.scraper_thread = Thread(
                     target=self._scraper_worker,
                     args=(query_texts, query_ids),
-                    daemon=True
+                    daemon=True,
                 )
                 self.scraper_thread.start()
                 bt.logging.info("[DATA-SERVICE] Scraper thread started")
-            
+
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error starting scraper cycle: {e}")
             bt.logging.error(traceback.format_exc())
-    
+
     def _scraper_worker(self, queries: List[str], query_ids: List[str]):
         """Worker thread that handles scraping operations."""
         try:
-            bt.logging.info(f"[DATA-SERVICE] Scraper worker started with {len(queries)} queries")
-            
+            # Check if scrapers need more data
+            sources_needing_data = self.content_manager.get_sources_needing_data()
+            scraper_sources_needing_data = sources_needing_data.get("scraper", [])
+
+            if not scraper_sources_needing_data:
+                bt.logging.info(
+                    "[DATA-SERVICE] All scraper sources have sufficient data"
+                )
+                return
+
+            bt.logging.info(
+                f"[DATA-SERVICE] Scraper worker started with {len(queries)} queries"
+            )
+            bt.logging.info(
+                f"[DATA-SERVICE] Scraper sources needing data: {scraper_sources_needing_data}"
+            )
+
             total_saved = 0
             for scraper in self.scrapers:
                 scraper_name = scraper.__class__.__name__
+
+                # Check if this scraper needs more data
+                if not self.content_manager.needs_more_data("scraper", scraper_name):
+                    continue
+
                 bt.logging.debug(f"[DATA-SERVICE] Processing {scraper_name}")
-                
+
                 try:
                     # Process yielded image data from the scraper
                     for query_id, image_data in scraper.download_images(
                         queries=queries,
                         query_ids=query_ids,
                         source_image_paths=None,
-                        limit=3,
+                        limit=10,
                     ):
                         if self.stop_event.is_set():
                             break
-                            
+
+                        # Check if scraper still needs data
+                        if not self.content_manager.needs_more_data(
+                            "scraper", scraper_name
+                        ):
+                            break
+
                         # Add metadata to image_data for tracking
-                        image_data['query_id'] = query_id
-                        image_data['scraper_name'] = scraper_name
-                        image_data['modality'] = scraper.modality
-                        image_data['media_type'] = scraper.media_type
-                        
+                        image_data["query_id"] = query_id
+                        image_data["scraper_name"] = scraper_name
+                        image_data["modality"] = scraper.modality
+                        image_data["media_type"] = scraper.media_type
+
                         # Direct ContentManager operation
-                        saved = self._write_media('scraper', image_data, scraper_name=scraper_name)
+                        saved = self._write_media(
+                            "scraper", image_data, scraper_name=scraper_name
+                        )
                         if saved:
                             total_saved += 1
-                    
+
                     bt.logging.debug(f"[DATA-SERVICE] Completed {scraper_name}")
-                    
+
                 except Exception as e:
                     bt.logging.error(f"[DATA-SERVICE] Error in {scraper_name}: {e}")
                     bt.logging.error(traceback.format_exc())
-                    
-            bt.logging.success(f"[DATA-SERVICE] Scraper worker completed. Saved {total_saved} images.")
-            
+
+            bt.logging.success(
+                f"[DATA-SERVICE] Scraper worker completed. Saved {total_saved} images."
+            )
+
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error in scraper worker: {e}")
             bt.logging.error(traceback.format_exc())
@@ -220,77 +271,116 @@ class DataService:
     async def start_dataset_download(self, block):
         """Start dataset download at the specified block interval."""
         try:
-            bt.logging.info(f"[DATA-SERVICE] Starting dataset download at block {block}")
+            bt.logging.info(
+                f"[DATA-SERVICE] Starting dataset download at block {block}"
+            )
 
             # Start downloader thread if not already running
             if not self.downloader_thread or not self.downloader_thread.is_alive():
                 self.downloader_thread = Thread(
-                    target=self._downloader_worker,
-                    daemon=True
+                    target=self._downloader_worker, daemon=True
                 )
                 self.downloader_thread.start()
                 bt.logging.info("[DATA-SERVICE] Dataset downloader thread started")
-            
+
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error starting dataset download: {e}")
             bt.logging.error(traceback.format_exc())
-   
-    def _downloader_worker(self):
-        try:            
-            image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
-            video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
-            datasets = [
-                x for pair in zip_longest(image_datasets, video_datasets) 
-                for x in pair if x is not None
-            ]
 
-            if not datasets:
-                bt.logging.warning("[DATA-SERVICE] No enabled datasets found for download")
+    def _downloader_worker(self):
+        try:
+            sources_needing_data = self.content_manager.get_sources_needing_data()
+            dataset_sources_needing_data = sources_needing_data.get("dataset", [])
+
+            if not dataset_sources_needing_data:
+                bt.logging.info(
+                    "[DATA-SERVICE] All dataset sources have sufficient data"
+                )
                 return
 
-            bt.logging.info(f"[DATA-SERVICE] Starting download for {len(datasets)} datasets")
+            bt.logging.info(
+                f"[DATA-SERVICE] Sources needing data: {dataset_sources_needing_data}"
+            )
+            image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
+            video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
+            all_datasets = image_datasets + video_datasets
+
+            datasets_to_download = [
+                dataset
+                for dataset in all_datasets
+                if dataset.path in dataset_sources_needing_data
+            ]
+
+            if not datasets_to_download:
+                bt.logging.warning("[DATA-SERVICE] No datasets need downloading")
+                return
+
+            bt.logging.info(
+                f"[DATA-SERVICE] Starting download for {len(datasets_to_download)} datasets"
+            )
 
             total_saved = 0
-            for dataset in datasets:
-                for media_bytes, metadata in download_and_extract(dataset):
+            for dataset in datasets_to_download:
+                # Check if we still need data for this dataset
+                if not self.content_manager.needs_more_data("dataset", dataset.path):
+                    continue
+
+                for media_bytes, metadata in download_and_extract(
+                    dataset,
+                    images_per_parquet=getattr(
+                        self.config, "dataset_images_per_parquet", 100
+                    ),
+                    videos_per_zip=getattr(self.config, "dataset_videos_per_zip", 50),
+                    parquet_per_dataset=getattr(
+                        self.config, "dataset_parquet_per_dataset", 5
+                    ),
+                    zips_per_dataset=getattr(
+                        self.config, "dataset_zips_per_dataset", 2
+                    ),
+                ):
                     if self.stop_event.is_set():
                         break
-                        
-                    saved = self._write_media('dataset', (media_bytes, metadata))
+
+                    if not self.content_manager.needs_more_data(
+                        "dataset", dataset.path
+                    ):
+                        break
+
+                    saved = self._write_media("dataset", (media_bytes, metadata))
                     if saved:
                         total_saved += 1
-                
+
             bt.logging.success(
                 f"[DATA-SERVICE] Dataset download completed. Saved {total_saved} media files."
             )
-                    
+
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error in dataset download worker: {e}")
             bt.logging.error(traceback.format_exc())
-        
+
     def _write_media(self, source_type: str, data, **kwargs) -> bool:
         """
         Write media using the appropriate ContentManager method based on source type.
-        
+
         Args:
             source_type: 'scraper' or 'dataset'
-            data: For scraped media, this is image_data dict. For dataset media, 
+            data: For scraped media, this is image_data dict. For dataset media,
                 this is (media_bytes, metadata) tuple
             **kwargs: Additional arguments like scraper_name for scraped media
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            if source_type == 'scraper':
-                return self._write_scraped_media(data, kwargs.get('scraper_name'))
-            elif source_type == 'dataset':
+            if source_type == "scraper":
+                return self._write_scraped_media(data, kwargs.get("scraper_name"))
+            elif source_type == "dataset":
                 media_content, metadata = data
                 return self._write_dataset_media(media_content, metadata)
             else:
                 bt.logging.error(f"[DATA-SERVICE] Unknown source type: {source_type}")
                 return False
-                
+
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error writing {source_type} media: {e}")
             return False
@@ -298,88 +388,64 @@ class DataService:
     def _write_scraped_media(self, image_data: dict, scraper_name: str) -> bool:
         """Write scraped media using ContentManager."""
         try:
-            # Extract data from image_data
-            url = image_data['url']
-            image_content = image_data['image_content']  # This is already a PIL Image
-            width = image_data['width']
-            height = image_data['height']
-            metadata = image_data['metadata']
-            query_id = image_data['query_id']
-
-            modality = Modality(image_data['modality'].lower())
-            media_type = MediaType(image_data['media_type'].lower())
-            
-            # Prepare metadata with scraper context (excluding width/height as they go in resolution field)
-            scraped_metadata = {
-                **(metadata or {})
-            }
-            
-            # Write image using specialized scraped media method
-            # image_content is already a PIL Image from the scraper
             save_path = self.content_manager.write_scraped_media(
-                modality=modality,
-                media_type=media_type,
-                prompt_id=query_id,
-                media_content=image_content,
-                download_url=url,
+                modality=Modality(image_data["modality"].lower()),
+                media_type=MediaType(image_data["media_type"].lower()),
+                prompt_id=image_data["query_id"],
+                media_content=image_data[
+                    "image_content"
+                ],  # This is already a PIL Image
+                download_url=image_data["url"],
                 scraper_name=scraper_name,
-                resolution=(width, height)
+                resolution=(image_data["width"], image_data["height"]),
             )
-            
+
             if save_path:
                 bt.logging.trace(f"[DATA-SERVICE] Saved scraped media: {save_path}")
                 return True
             else:
-                bt.logging.warning(f"[DATA-SERVICE] Failed to save scraped media: {url}")
+                bt.logging.warning(
+                    f"[DATA-SERVICE] Failed to save scraped media: {image_data['url']}"
+                )
                 return False
-                
+
         except Exception as e:
-            bt.logging.error(f"[DATA-SERVICE] Error writing scraped media {image_data.get('url', 'unknown')}: {e}")
+            bt.logging.error(
+                f"[DATA-SERVICE] Error writing scraped media {image_data.get('url', 'unknown')}: {e}"
+            )
             return False
 
     def _write_dataset_media(self, media_content, metadata: dict) -> bool:
         """Write dataset media using ContentManager."""
         try:
-            # Extract dataset-specific metadata
-            dataset_name = metadata.get('dataset_path', 'unknown')
-            dataset_source_file = metadata.get('source_parquet') or metadata.get('source_zip', 'unknown')
-            dataset_index = metadata.get('original_index') or metadata.get('path_in_zip', 'unknown')
-            
-            # Convert string values to proper enum types
-            modality_str = metadata.get('modality')
-            media_type_str = metadata.get('media_type')
-            modality = Modality(modality_str.lower())
-            media_type = MediaType(media_type_str.lower())
-            
-            # Extract resolution if available
-            resolution = None
-            if 'image_size' in metadata:
-                resolution = tuple(metadata['image_size'])  # (width, height)
-            
-            # Prepare clean metadata (remove internal fields)
-            clean_metadata = {k: v for k, v in metadata.items() 
-                            if k not in ['modality', 'media_type', 'dataset_path', 'source_parquet', 
-                                       'source_zip', 'original_index', 'path_in_zip', 'image_size']}
-            
-            # Write media using specialized dataset media method
-            # media_content is now a PIL Image from the dataset download
+            dataset_source_file = metadata.get("source_parquet") or metadata.get(
+                "source_zip", "unknown"
+            )
+            dataset_index = metadata.get("original_index") or metadata.get(
+                "path_in_zip", "unknown"
+            )
+
             save_path = self.content_manager.write_dataset_media(
-                modality=modality,
-                media_type=media_type,
+                modality=Modality(metadata.get("modality").lower()),
+                media_type=MediaType(metadata.get("media_type")),
                 media_content=media_content,
-                dataset_name=dataset_name,
+                dataset_name=metadata.get("dataset_path", "unknown"),
                 dataset_source_file=dataset_source_file,
                 dataset_index=str(dataset_index),
-                resolution=resolution
+                resolution=(
+                    tuple(metadata["image_size"]) if "image_size" in metadata else None
+                ),
             )
-            
+
             if save_path:
                 bt.logging.trace(f"[DATA-SERVICE] Saved dataset media: {save_path}")
                 return True
             else:
-                bt.logging.warning(f"[DATA-SERVICE] Failed to save dataset media from {dataset_name}")
+                bt.logging.warning(
+                    f"[DATA-SERVICE] Failed to save dataset media from {dataset_name}"
+                )
                 return False
-                
+
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error writing dataset media: {e}")
             return False
@@ -390,28 +456,40 @@ class DataService:
             bt.logging.info(f"[DATA-SERVICE] Block: {block} | Step: {self.step}")
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Error in log_on_block: {e}")
-    
+
     def log_status(self):
         """Log current service status."""
         try:
-            scraper_status = "Running" if (self.scraper_thread and self.scraper_thread.is_alive()) else "Stopped"
-            downloader_status = "Running" if (self.downloader_thread and self.downloader_thread.is_alive()) else "Stopped"
-            
-            bt.logging.info(f"[DATA-SERVICE] Status - Scraper: {scraper_status} | Dataset: {downloader_status}")
+            scraper_status = (
+                "Running"
+                if (self.scraper_thread and self.scraper_thread.is_alive())
+                else "Stopped"
+            )
+            downloader_status = (
+                "Running"
+                if (self.downloader_thread and self.downloader_thread.is_alive())
+                else "Stopped"
+            )
+
+            bt.logging.info(
+                f"[DATA-SERVICE] Status - Scraper: {scraper_status} | Dataset: {downloader_status}"
+            )
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Error getting status: {e}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Combined data service (scraper + dataset)")
-    
-    add_args(parser)   
-    add_data_service_args(parser)    
+    parser = argparse.ArgumentParser(
+        description="Combined data service (scraper + dataset)"
+    )
+
+    add_args(parser)
+    add_data_service_args(parser)
     bt.subtensor.add_args(parser)
     bt.logging.add_args(parser)
-    
+
     config = bt.config(parser)
-    
+
     bt.logging(config=config, logging_dir=config.neuron.full_path)
     bt.logging.set_info()
     if config.logging.debug:
@@ -419,11 +497,11 @@ def main():
     if config.logging.trace:
         bt.logging.set_trace(True)
 
-    bt.logging.success(config)    
-    
+    bt.logging.success(config)
+
     # Create and run service
     service = DataService(config)
-    
+
     try:
         service.start()
     except KeyboardInterrupt:
@@ -436,4 +514,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

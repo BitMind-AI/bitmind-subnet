@@ -47,7 +47,12 @@ class GeneratorService:
         self._generation_thread: Optional[Thread] = None
 
         # Components
-        self.content_manager = ContentManager(self.config.cache.base_dir)
+        self.content_manager = ContentManager(
+            base_dir=self.config.cache.base_dir,
+            max_per_source=getattr(self.config, 'max_per_source', 500),
+            enable_source_limits=getattr(self.config, 'enable_source_limits', True),
+            prune_strategy=getattr(self.config, 'prune_strategy', 'oldest')
+        )
         self.generation_pipeline: Optional[GenerationPipeline] = None
         self.prompt_generator: Optional[PromptGenerator] = None
         self.model_registry = None
