@@ -209,7 +209,6 @@ def cli(ctx):
     load_env()
 
     # Set default values
-    os.environ.setdefault("PROXY_PORT", "10913")
     os.environ.setdefault("DEVICE", "cuda")
     os.environ.setdefault("SN34_CACHE_DIR", DEFAULT_CACHE_DIR)
 
