@@ -141,7 +141,7 @@ async def push_model_zip(
     # Step 2: Register on Blockchain
     print_step(2, 2, "Registering model metadata on blockchain...")
     
-    if chain_endpoint is None:
+    if not chain_endpoint:
         chain_endpoint = "finney" if netuid == 34 else "test"
 
     print_info(f"Connecting to subnet {netuid} via {chain_endpoint}")
@@ -222,7 +222,7 @@ def main():
     )
     parser.add_argument(
         "--chain-endpoint",
-        default="wss://test.finney.opentensor.ai:443/",
+        default="",
         help="Subtensor network",
     )
     parser.add_argument(
