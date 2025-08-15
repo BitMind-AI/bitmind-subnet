@@ -110,7 +110,6 @@ if (config.startValidator) {
     '--netuid', netuid.toString(),
     '--subtensor.chain_endpoint', config.chainEndpoint,
     '--proxy.port', config.proxyPort,
-    '--neuron.sample-size', '256',
     '--cache.base-dir', config.cacheDir,
     logParam,
     autoUpdateParam,
