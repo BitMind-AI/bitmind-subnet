@@ -79,6 +79,16 @@ echo "║   Installing gas package and gascli       ║"
 echo "╚═══════════════════════════════════════════╝"
 echo -e "${NC}"
 
+# Check if sudo is available and inform user about system dependencies
+if [ "$SKIP_SYSTEM_DEPS" = false ]; then
+    if ! sudo -n true 2>/dev/null; then
+        log_warning "System dependencies installation requires sudo privileges."
+        log_warning "You may be prompted for your password during installation."
+        log_warning "To skip system dependencies, run: $0 --no-system-deps"
+        echo
+    fi
+fi
+
 # Check if we're in the right directory
 if [ ! -f "pyproject.toml" ]; then
     log_error "pyproject.toml not found. Please run this script from the project root directory."
@@ -125,14 +135,14 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
         
         # Update package lists
         log_info "Updating package lists..."
-        if ! apt-get update; then
+        if ! sudo apt-get update; then
             log_error "Failed to update package lists"
             exit 1
         fi
         
         # Install dependencies
         log_info "Installing pkg-config, cmake, and ffmpeg..."
-        if ! apt-get install -y pkg-config cmake ffmpeg; then
+        if ! sudo apt-get install -y pkg-config cmake ffmpeg; then
             log_error "Failed to install system dependencies via apt-get"
             log_error "Please install pkg-config, cmake, and ffmpeg manually"
             exit 1
@@ -164,28 +174,29 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
     # Install Chrome if not present
     if ! check_command google-chrome; then
         log_info "Installing Google Chrome dependencies..."
-        if ! apt-get install -y wget gnupg2; then
+        if ! sudo apt-get install -y wget gnupg2; then
             log_error "Failed to install wget and gnupg2"
+            log_error "Please run: sudo apt-get install -y wget gnupg2"
             exit 1
         fi
         
         log_info "Adding Google Chrome repository..."
-        if ! wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -; then
+        if ! wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -; then
             log_error "Failed to add Google Chrome signing key"
             exit 1
         fi
         
-        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
         
         # Update package lists after adding the repository
         log_info "Updating package lists to include Google Chrome repository..."
-        if ! apt-get update; then
+        if ! sudo apt-get update; then
             log_error "Failed to update package lists after adding Google Chrome repository"
             exit 1
         fi
         
         log_info "Installing Google Chrome..."
-        if ! apt-get install -y google-chrome-stable; then
+        if ! sudo apt-get install -y google-chrome-stable; then
             log_error "Failed to install Google Chrome"
             exit 1
         fi
@@ -203,7 +214,7 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
     
     # Install ChromeDriver dependencies and Xvfb
     log_info "Installing ChromeDriver dependencies and Xvfb..."
-    if ! apt-get install -y libnss3 libnspr4 xvfb; then
+    if ! sudo apt-get install -y libnss3 libnspr4 xvfb; then
         log_error "Failed to install ChromeDriver dependencies and Xvfb"
         exit 1
     fi
@@ -214,7 +225,7 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
         log_info "Installing Node.js and npm..."
         check_apt_get "Node.js and npm"
         
-        if ! apt-get install -y nodejs npm; then
+        if ! sudo apt-get install -y nodejs npm; then
             log_error "Failed to install Node.js and npm via apt-get"
             log_error "Please install Node.js and npm manually"
             exit 1
