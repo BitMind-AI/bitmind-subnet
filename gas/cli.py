@@ -444,7 +444,7 @@ cli.add_command(miner, name="m")
 @click.option("--model-zip", help="Path to pre-existing model zip file")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
-@click.option("--netuid", default=379, help="Subnet UID")
+@click.option("--netuid", default=34, help="Subnet UID")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
 def push_discriminator(

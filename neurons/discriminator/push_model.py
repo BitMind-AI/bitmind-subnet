@@ -9,7 +9,7 @@ Usage:
 Options:
     --wallet-name NAME         Bittensor wallet name (default: default)
     --wallet-hotkey KEY       Bittensor hotkey name (default: default)
-    --netuid UID             Subnet UID (default: 379)
+    --netuid UID             Subnet UID (default: 34)
     --subtensor-chain-endpoint URL  Subtensor network endpoint
     --retry-delay SECS       Retry delay in seconds (default: 60)
 
@@ -217,7 +217,7 @@ def main():
     parser.add_argument(
         "--netuid",
         type=int,
-        default=379,
+        default=34,
         help="Subnet UID"
     )
     parser.add_argument(

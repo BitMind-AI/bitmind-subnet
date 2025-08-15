@@ -46,7 +46,7 @@ gascli miner push-discriminator \
   --onnx-dir models/ \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name \
-  --netuid 379 \
+  --netuid 34 \
   --chain-endpoint wss://test.finney.opentensor.ai:443/ \
   --retry-delay 60
 ```
@@ -55,7 +55,7 @@ gascli miner push-discriminator \
 - `--onnx-dir` or `--model-zip`: Path to your ONNX models
 - `--wallet-name`: Bittensor wallet name (default: "default")
 - `--wallet-hotkey`: Bittensor hotkey name (default: "default") 
-- `--netuid`: Subnet UID (default: 379)
+- `--netuid`: Subnet UID (default: 34)
 - `--chain-endpoint`: Subtensor network endpoint (default: "wss://test.finney.opentensor.ai:443/")
 - `--retry-delay`: Retry delay in seconds (default: 60)
 
