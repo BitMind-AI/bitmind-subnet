@@ -5,8 +5,8 @@ import uuid
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
-import random
 import contextlib
+import random
 
 import bittensor as bt
 
@@ -71,6 +71,10 @@ class ContentDB:
             except Exception as e:
                 bt.logging.error(f"Database error: {e}")
                 raise
+
+    def get_connection(self):
+        """Public context manager for DB connections (read-only or read-write)."""
+        return self._get_db_connection()
 
     def _init_database(self):
         """Initialize the database schema."""
@@ -177,202 +181,38 @@ class ContentDB:
                 )
                 return cursor.fetchone()[0]
 
-    def sample_prompt_entries(
-        self,
-        k: int = 1,
-        content_type: str = "prompt",
-        remove: bool = False,
-        strategy: str = "random",
-    ) -> List[PromptEntry]:
+    def _row_to_media_entry(self, row) -> MediaEntry:
         """
-        Sample prompts from the database.
-
-        Args:
-            k: Number of prompts to sample
-            content_type: Either "prompt" or "search_query"
-            remove: Whether to mark prompts as used (increment used_count)
-            strategy: Sampling strategy - "random", "least_used", "oldest", "newest"
-
-        Returns:
-            List of PromptEntry objects
+        Helper method to convert a database row to a MediaEntry object.
         """
-        with self._get_db_connection() as conn:
-            conn.row_factory = sqlite3.Row
-
-            # Build query based on strategy
-            if strategy == "random":
-                query = """
-                    SELECT * FROM prompts 
-                    WHERE content_type = ? 
-                    ORDER BY RANDOM() 
-                    LIMIT ?
-                """
-            elif strategy == "least_used":
-                query = """
-                    SELECT * FROM prompts 
-                    WHERE content_type = ? 
-                    ORDER BY used_count ASC, RANDOM() 
-                    LIMIT ?
-                """
-            elif strategy == "oldest":
-                query = """
-                    SELECT * FROM prompts 
-                    WHERE content_type = ? 
-                    ORDER BY created_at ASC, RANDOM() 
-                    LIMIT ?
-                """
-            elif strategy == "newest":
-                query = """
-                    SELECT * FROM prompts 
-                    WHERE content_type = ? 
-                    ORDER BY created_at DESC, RANDOM() 
-                    LIMIT ?
-                """
-            else:
-                raise ValueError(f"Unknown sampling strategy: {strategy}")
-
-            cursor = conn.execute(query, (content_type, k))
-            rows = cursor.fetchall()
-
-            prompts = []
-            for row in rows:
-                prompt = PromptEntry(
-                    id=row["id"],
-                    content=row["content"],
-                    content_type=row["content_type"],
-                    created_at=row["created_at"],
-                    used_count=row["used_count"],
-                    last_used=row["last_used"],
-                    source_media_id=row["source_media_id"],
-                )
-                prompts.append(prompt)
-
-                # Mark as used if requested
-                if remove:
-                    conn.execute(
-                        """
-                        UPDATE prompts 
-                        SET used_count = used_count + 1, last_used = ? 
-                        WHERE id = ?
-                    """,
-                        (time.time(), row["id"]),
-                    )
-
-            conn.commit()
-            return prompts
-
-    def sample_media_entries(
-        self,
-        k: int = 1,
-        modality: Modality = Modality.IMAGE,
-        media_type: MediaType = MediaType.SYNTHETIC,
-        remove: bool = False,
-        strategy: str = "random",
-    ) -> List[MediaEntry]:
-        """
-        Sample media entries from the database.
-
-        Args:
-            k: Number of media entries to sample
-            modality: Modality.IMAGE or Modality.VIDEO
-            media_type: MediaType.REAL, MediaType.SYNTHETIC, or MediaType.SEMISYNTHETIC
-            remove: Whether to mark associated prompts as used (increment used_count)
-            strategy: Sampling strategy - "random", "least_used", "oldest", "newest"
-
-        Returns:
-            List of MediaEntry objects
-        """
-        with self._get_db_connection() as conn:
-            conn.row_factory = sqlite3.Row
-
-            # Build query based on strategy
-            if strategy == "random":
-                query = """
-                    SELECT m.* 
-                    FROM media m
-                    LEFT JOIN prompts p ON m.prompt_id = p.id
-                    WHERE m.modality = ? AND m.media_type = ?
-                    ORDER BY RANDOM() 
-                    LIMIT ?
-                """
-            elif strategy == "least_used":
-                query = """
-                    SELECT m.* 
-                    FROM media m
-                    LEFT JOIN prompts p ON m.prompt_id = p.id
-                    WHERE m.modality = ? AND m.media_type = ?
-                    ORDER BY COALESCE(p.used_count, 0) ASC, RANDOM() 
-                    LIMIT ?
-                """
-            elif strategy == "oldest":
-                query = """
-                    SELECT m.* 
-                    FROM media m
-                    LEFT JOIN prompts p ON m.prompt_id = p.id
-                    WHERE m.modality = ? AND m.media_type = ?
-                    ORDER BY m.created_at ASC, RANDOM() 
-                    LIMIT ?
-                """
-            elif strategy == "newest":
-                query = """
-                    SELECT m.* 
-                    FROM media m
-                    LEFT JOIN prompts p ON m.prompt_id = p.id
-                    WHERE m.modality = ? AND m.media_type = ?
-                    ORDER BY m.created_at DESC, RANDOM() 
-                    LIMIT ?
-                """
-            else:
-                raise ValueError(f"Unknown sampling strategy: {strategy}")
-
-            cursor = conn.execute(query, (modality.value, media_type.value, k))
-            rows = cursor.fetchall()
-
-            media_entries = []
-            for row in rows:
-                # Parse resolution from JSON string if it exists
+        # Parse resolution from JSON string if it exists
+        resolution = None
+        if row["resolution"]:
+            try:
+                resolution_data = json.loads(row["resolution"])
+                resolution = tuple(resolution_data)
+            except (json.JSONDecodeError, TypeError):
                 resolution = None
-                if row["resolution"]:
-                    try:
-                        resolution_data = json.loads(row["resolution"])
-                        resolution = tuple(resolution_data)
-                    except (json.JSONDecodeError, TypeError):
-                        resolution = None
-                
-                media = MediaEntry(
-                    id=row["id"],
-                    prompt_id=row["prompt_id"],
-                    file_path=row["file_path"],
-                    modality=row["modality"],
-                    media_type=row["media_type"],
-                    source_type=row["source_type"],
-                    model_name=row["model_name"],
-                    download_url=row["download_url"],
-                    scraper_name=row["scraper_name"],
-                    dataset_name=row["dataset_name"],
-                    dataset_source_file=row["dataset_source_file"],
-                    dataset_index=row["dataset_index"],
-                    created_at=row["created_at"],
-                    generation_args=json.loads(row["generation_args"]) if row["generation_args"] else None,
-                    resolution=resolution,
-                    file_size=row["file_size"],
-                    format=row["format"],
-                )
-                media_entries.append(media)
-
-                # Mark associated prompt as used if requested
-                if remove:
-                    conn.execute(
-                        """
-                        UPDATE prompts 
-                        SET used_count = used_count + 1, last_used = ? 
-                        WHERE id = ?
-                    """,
-                        (time.time(), row["prompt_id"]),
-                    )
-
-            conn.commit()
-            return media_entries
+        
+        return MediaEntry(
+            id=row["id"],
+            prompt_id=row["prompt_id"],
+            file_path=row["file_path"],
+            modality=row["modality"],
+            media_type=row["media_type"],
+            source_type=row["source_type"],
+            model_name=row["model_name"],
+            download_url=row["download_url"],
+            scraper_name=row["scraper_name"],
+            dataset_name=row["dataset_name"],
+            dataset_source_file=row["dataset_source_file"],
+            dataset_index=row["dataset_index"],
+            created_at=row["created_at"],
+            generation_args=json.loads(row["generation_args"]) if row["generation_args"] else None,
+            resolution=resolution,
+            file_size=row["file_size"],
+            format=row["format"],
+        )
 
     def add_media_entry(
         self,
@@ -469,35 +309,7 @@ class ContentDB:
 
             media_entries = []
             for row in cursor.fetchall():
-                # Parse resolution from JSON string if it exists
-                resolution = None
-                if row["resolution"]:
-                    try:
-                        resolution_data = json.loads(row["resolution"])
-                        resolution = tuple(resolution_data)
-                    except (json.JSONDecodeError, TypeError):
-                        resolution = None
-                
-                media = MediaEntry(
-                    id=row["id"],
-                    prompt_id=row["prompt_id"],
-                    file_path=row["file_path"],
-                    modality=row["modality"],
-                    media_type=row["media_type"],
-                    source_type=row["source_type"],
-                    model_name=row["model_name"],
-                    download_url=row["download_url"],
-                    scraper_name=row["scraper_name"],
-                    dataset_name=row["dataset_name"],
-                    dataset_source_file=row["dataset_source_file"],
-                    dataset_index=row["dataset_index"],
-                    created_at=row["created_at"],
-                    generation_args=json.loads(row["generation_args"]) if row["generation_args"] else None,
-                    resolution=resolution,
-                    file_size=row["file_size"],
-                    format=row["format"],
-                )
-                media_entries.append(media)
+                media_entries.append(self._row_to_media_entry(row))
 
             return media_entries
 
@@ -619,34 +431,7 @@ class ContentDB:
 
             row = cursor.fetchone()
             if row:
-                # Parse resolution from JSON string if it exists
-                resolution = None
-                if row["resolution"]:
-                    try:
-                        resolution_data = json.loads(row["resolution"])
-                        resolution = tuple(resolution_data)
-                    except (json.JSONDecodeError, TypeError):
-                        resolution = None
-
-                return MediaEntry(
-                    id=row["id"],
-                    prompt_id=row["prompt_id"],
-                    file_path=row["file_path"],
-                    modality=row["modality"],
-                    media_type=row["media_type"],
-                    source_type=row["source_type"],
-                    model_name=row["model_name"],
-                    download_url=row["download_url"],
-                    scraper_name=row["scraper_name"],
-                    dataset_name=row["dataset_name"],
-                    dataset_source_file=row["dataset_source_file"],
-                    dataset_index=row["dataset_index"],
-                    created_at=row["created_at"],
-                    generation_args=json.loads(row["generation_args"]) if row["generation_args"] else None,
-                    resolution=resolution,
-                    file_size=row["file_size"],
-                    format=row["format"],
-                )
+                return self._row_to_media_entry(row)
             return None
 
     def delete_media_entry_by_file_path(self, file_path: str) -> bool:
@@ -670,7 +455,7 @@ class ContentDB:
                 conn.commit()
                 return cursor.rowcount > 0
         except Exception as e:
-            print(f"Error deleting media entry for {file_path}: {e}")
+            bt.logging.error(f"Error deleting media entry for {file_path}: {e}")
             return False
 
     def get_media_by_model(
@@ -710,35 +495,7 @@ class ContentDB:
 
             media_entries = []
             for row in cursor.fetchall():
-                # Parse resolution from JSON string if it exists
-                resolution = None
-                if row["resolution"]:
-                    try:
-                        resolution_data = json.loads(row["resolution"])
-                        resolution = tuple(resolution_data)
-                    except (json.JSONDecodeError, TypeError):
-                        resolution = None
-
-                media = MediaEntry(
-                    id=row["id"],
-                    prompt_id=row["prompt_id"],
-                    file_path=row["file_path"],
-                    modality=row["modality"],
-                    media_type=row["media_type"],
-                    source_type=row["source_type"],
-                    model_name=row["model_name"],
-                    download_url=row["download_url"],
-                    scraper_name=row["scraper_name"],
-                    dataset_name=row["dataset_name"],
-                    dataset_source_file=row["dataset_source_file"],
-                    dataset_index=row["dataset_index"],
-                    created_at=row["created_at"],
-                    generation_args=json.loads(row["generation_args"]) if row["generation_args"] else None,
-                    resolution=resolution,
-                    file_size=row["file_size"],
-                    format=row["format"],
-                )
-                media_entries.append(media)
+                media_entries.append(self._row_to_media_entry(row))
 
             return media_entries
 
@@ -766,3 +523,349 @@ class ContentDB:
                 counts[key] = count
 
             return counts
+
+    def get_source_counts(self) -> Dict[str, Dict[str, int]]:
+        """
+        Get counts of media grouped by source type and source name.
+
+        Returns:
+            { 'dataset': {dataset_name: count, ...}, 'scraper': {...}, 'generated': {...} }
+        """
+        results: Dict[str, Dict[str, int]] = { 'dataset': {}, 'scraper': {}, 'generated': {} }
+        with self._get_db_connection() as conn:
+            # Dataset counts
+            cursor = conn.execute(
+                """
+                SELECT dataset_name, COUNT(*) AS cnt
+                FROM media
+                WHERE source_type = 'dataset' AND dataset_name IS NOT NULL
+                GROUP BY dataset_name
+                ORDER BY cnt DESC
+                """
+            )
+            results['dataset'] = { name: cnt for name, cnt in cursor.fetchall() }
+
+            # Scraper counts
+            cursor = conn.execute(
+                """
+                SELECT scraper_name, COUNT(*) AS cnt
+                FROM media
+                WHERE source_type = 'scraper' AND scraper_name IS NOT NULL
+                GROUP BY scraper_name
+                ORDER BY cnt DESC
+                """
+            )
+            results['scraper'] = { name: cnt for name, cnt in cursor.fetchall() }
+
+            # Generated/model counts
+            cursor = conn.execute(
+                """
+                SELECT model_name, COUNT(*) AS cnt
+                FROM media
+                WHERE source_type = 'generated' AND model_name IS NOT NULL
+                GROUP BY model_name
+                ORDER BY cnt DESC
+                """
+            )
+            results['generated'] = { name: cnt for name, cnt in cursor.fetchall() }
+
+        return results
+
+    def get_source_count(self, source_type: str, source_name: str) -> int:
+        """
+        Get count of media items for a particular source.
+        """
+        column_map = {
+            'dataset': 'dataset_name',
+            'scraper': 'scraper_name',
+            'generated': 'model_name',
+        }
+        col = column_map.get(source_type)
+        if not col:
+            return 0
+
+        with self._get_db_connection() as conn:
+            cursor = conn.execute(
+                f"SELECT COUNT(*) FROM media WHERE source_type = ? AND {col} = ?",
+                (source_type, source_name),
+            )
+            row = cursor.fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+
+    def prune_source_media(self, source_type: str, source_name: str, max_count: int, strategy: str = 'oldest') -> int:
+        """
+        Prune items for a source so that the total count is <= max_count.
+        Deletes database rows for the oldest (or random) items.
+
+        Returns:
+            Number of items pruned.
+        """
+        column_map = {
+            'dataset': 'dataset_name',
+            'scraper': 'scraper_name',
+            'generated': 'model_name',
+        }
+        col = column_map.get(source_type)
+        if not col:
+            return 0
+
+        current = self.get_source_count(source_type, source_name)
+        if current <= max_count:
+            return 0
+
+        to_remove = current - max_count
+        order_clause = 'created_at ASC' if strategy in ('oldest', 'least_used') else 'RANDOM()'
+
+        with self._get_db_connection() as conn:
+            # Select ids and file_paths to delete so we can clear FK references from prompts
+            cursor = conn.execute(
+                f"""
+                SELECT id, file_path
+                FROM media
+                WHERE source_type = ? AND {col} = ?
+                ORDER BY {order_clause}
+                LIMIT ?
+                """,
+                (source_type, source_name, to_remove),
+            )
+            rows = cursor.fetchall()
+            if not rows:
+                return 0
+
+            media_ids = [row[0] for row in rows]
+            file_paths = [row[1] for row in rows]
+
+            # Clear prompts.source_media_id for any prompts referencing these media ids
+            placeholders_ids = ",".join(["?"] * len(media_ids))
+            conn.execute(
+                f"UPDATE prompts SET source_media_id = NULL WHERE source_media_id IN ({placeholders_ids})",
+                media_ids,
+            )
+
+            # Delete the media rows
+            placeholders_files = ",".join(["?"] * len(file_paths))
+            conn.execute(
+                f"DELETE FROM media WHERE file_path IN ({placeholders_files})",
+                file_paths,
+            )
+
+            conn.commit()
+            return len(rows)
+
+    def sample_prompt_entries(
+        self,
+        k: int,
+        content_type: str = "prompt",
+        strategy: str = "random",
+        remove: bool = False,
+    ) -> List[PromptEntry]:
+        """
+        Sample prompts with different strategies. If remove=True, increments used_count and last_used.
+        """
+        with self.get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+
+            if strategy == "random":
+                query = (
+                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY RANDOM() LIMIT ?"
+                )
+            elif strategy == "least_used":
+                query = (
+                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY used_count ASC, RANDOM() LIMIT ?"
+                )
+            elif strategy == "oldest":
+                query = (
+                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at ASC, RANDOM() LIMIT ?"
+                )
+            elif strategy == "newest":
+                query = (
+                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at DESC, RANDOM() LIMIT ?"
+                )
+            else:
+                raise ValueError(f"Unknown sampling strategy: {strategy}")
+
+            rows = conn.execute(query, (content_type, k)).fetchall()
+            entries: List[PromptEntry] = []
+            now = time.time()
+            for row in rows:
+                entries.append(
+                    PromptEntry(
+                        id=row["id"],
+                        content=row["content"],
+                        content_type=row["content_type"],
+                        created_at=row["created_at"],
+                        used_count=row["used_count"],
+                        last_used=row["last_used"],
+                        source_media_id=row["source_media_id"],
+                    )
+                )
+                if remove:
+                    conn.execute(
+                        "UPDATE prompts SET used_count = used_count + 1, last_used = ? WHERE id = ?",
+                        (now, row["id"]),
+                    )
+            conn.commit()
+            return entries
+
+    def sample_media_entries(
+        self,
+        k: int,
+        modality: Modality,
+        media_type: MediaType,
+        strategy: str = "random",
+        remove: bool = False,
+    ) -> List[MediaEntry]:
+        """
+        Sample media with strategies. If remove=True and media has a prompt_id, increments the prompt used_count.
+        """
+        with self.get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+
+            def rows_to_entries(rows: List[sqlite3.Row]) -> List[MediaEntry]:
+                items: List[MediaEntry] = []
+                now = time.time()
+                for row in rows:
+                    items.append(self._row_to_media_entry(row))
+                    if remove and row["prompt_id"]:
+                        conn.execute(
+                            "UPDATE prompts SET used_count = used_count + 1, last_used = ? WHERE id = ?",
+                            (now, row["prompt_id"]),
+                        )
+                conn.commit()
+                return items
+
+            if strategy == "random":
+                query = (
+                    """
+                    SELECT m.*
+                    FROM media m
+                    LEFT JOIN prompts p ON m.prompt_id = p.id
+                    WHERE m.modality = ? AND m.media_type = ?
+                    ORDER BY RANDOM()
+                    LIMIT ?
+                    """
+                )
+                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                return rows_to_entries(rows)
+
+            if strategy == "least_used":
+                query = (
+                    """
+                    SELECT m.*
+                    FROM media m
+                    LEFT JOIN prompts p ON m.prompt_id = p.id
+                    WHERE m.modality = ? AND m.media_type = ?
+                    ORDER BY COALESCE(p.used_count, 0) ASC, RANDOM()
+                    LIMIT ?
+                    """
+                )
+                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                return rows_to_entries(rows)
+
+            if strategy == "oldest":
+                query = (
+                    """
+                    SELECT m.*
+                    FROM media m
+                    LEFT JOIN prompts p ON m.prompt_id = p.id
+                    WHERE m.modality = ? AND m.media_type = ?
+                    ORDER BY m.created_at ASC, RANDOM()
+                    LIMIT ?
+                    """
+                )
+                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                return rows_to_entries(rows)
+
+            if strategy == "newest":
+                query = (
+                    """
+                    SELECT m.*
+                    FROM media m
+                    LEFT JOIN prompts p ON m.prompt_id = p.id
+                    WHERE m.modality = ? AND m.media_type = ?
+                    ORDER BY m.created_at DESC, RANDOM()
+                    LIMIT ?
+                    """
+                )
+                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                return rows_to_entries(rows)
+
+            if strategy == "random_source":
+                items: List[MediaEntry] = []
+                for _ in range(k):
+                    sources = conn.execute(
+                        """
+                        SELECT DISTINCT 
+                            source_type,
+                            CASE 
+                                WHEN source_type = 'generated' THEN model_name
+                                WHEN source_type = 'dataset' THEN dataset_name
+                                WHEN source_type = 'scraper' THEN scraper_name
+                                ELSE NULL
+                            END as source_name
+                        FROM media 
+                        WHERE modality = ? AND media_type = ? 
+                            AND (
+                                (source_type = 'generated' AND model_name IS NOT NULL) OR
+                                (source_type = 'dataset' AND dataset_name IS NOT NULL) OR
+                                (source_type = 'scraper' AND scraper_name IS NOT NULL)
+                            )
+                        """,
+                        (modality.value, media_type.value),
+                    ).fetchall()
+
+                    if not sources:
+                        row = conn.execute(
+                            """
+                            SELECT m.* 
+                            FROM media m
+                            LEFT JOIN prompts p ON m.prompt_id = p.id
+                            WHERE m.modality = ? AND m.media_type = ?
+                            ORDER BY RANDOM() 
+                            LIMIT 1
+                            """,
+                            (modality.value, media_type.value),
+                        ).fetchone()
+                        if row:
+                            items.append(self._row_to_media_entry(row))
+                            if remove and row["prompt_id"]:
+                                conn.execute(
+                                    "UPDATE prompts SET used_count = used_count + 1, last_used = ? WHERE id = ?",
+                                    (time.time(), row["prompt_id"]),
+                                )
+                        continue
+
+                    source_type, source_name = random.choice(sources)
+                    source_column = {
+                        "dataset": "dataset_name",
+                        "scraper": "scraper_name",
+                        "generated": "model_name",
+                    }.get(source_type)
+                    if not source_column or not source_name:
+                        continue
+
+                    row = conn.execute(
+                        f"""
+                        SELECT m.* 
+                        FROM media m
+                        LEFT JOIN prompts p ON m.prompt_id = p.id
+                        WHERE m.modality = ? AND m.media_type = ? AND m.source_type = ? AND m.{source_column} = ?
+                        ORDER BY RANDOM() 
+                        LIMIT 1
+                        """,
+                        (modality.value, media_type.value, source_type, source_name),
+                    ).fetchone()
+
+                    if row:
+                        items.append(self._row_to_media_entry(row))
+                        if remove and row["prompt_id"]:
+                            conn.execute(
+                                "UPDATE prompts SET used_count = used_count + 1, last_used = ? WHERE id = ?",
+                                (time.time(), row["prompt_id"]),
+                            )
+                conn.commit()
+                return items
+
+            raise ValueError(f"Unknown sampling strategy: {strategy}")
+
+    

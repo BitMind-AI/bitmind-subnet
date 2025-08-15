@@ -71,6 +71,46 @@ def add_args(parser):
     parser.add_argument("--wandb.off", action="store_true", default=False)
 
 
+# Shared source-limit/demand-loading args
+
+def add_source_limit_args(parser):
+    parser.add_argument(
+        "--max-per-source",
+        type=int,
+        help="Maximum number of media items per source (dataset/scraper/model) (default: 1000)",
+        default=1000,
+    )
+
+    parser.add_argument(
+        "--enable-source-limits",
+        action="store_true",
+        help="Enable per-source maximum count limits",
+        default=True,
+    )
+
+    parser.add_argument(
+        "--prune-strategy",
+        type=str,
+        choices=["oldest", "least_used", "random"],
+        help="Strategy for pruning media when limits are exceeded (default: oldest)",
+        default="oldest",
+    )
+
+    parser.add_argument(
+        "--min-source-threshold",
+        type=float,
+        help="Minimum items per source as fraction of max-per-source (default: 0.8 = 80%)",
+        default=0.8,
+    )
+
+    parser.add_argument(
+        "--remove-on-sample",
+        action="store_true",
+        help="Remove media items when sampled (instead of pruning on add)",
+        default=True,
+    )
+
+
 def add_miner_args(parser):
     """Add miner specific arguments to the parser."""
 
@@ -132,35 +172,6 @@ def add_validator_args(parser):
         type=int,
         help="Port for generative challenge callbacks",
         default=10525,
-    )
-
-    parser.add_argument(
-        "--scraper.off",
-        action="store_true",
-        help="Disable scraper functionality",
-        default=False,
-    )
-
-    parser.add_argument(
-        "--gen.off", 
-        action="store_true",
-        help="Disable local content generation",
-        default=False,
-    )
-
-    parser.add_argument(
-        "--gen.device",
-        type=str,
-        help="Device to use for generation models (cuda/cpu)",
-        default="cuda",
-    )
-
-    parser.add_argument(
-        "--gen.tasks",
-        type=str,
-        nargs="+",
-        help="List of generation tasks to run",
-        default=["search_query", "prompt", "t2i", "i2i", "t2v", "i2v"],
     )
 
     parser.add_argument(
@@ -378,6 +389,9 @@ def add_generation_service_args(parser):
         default=300,
     )
 
+    # Shared source-limit args
+    add_source_limit_args(parser)
+
 
 def add_data_service_args(parser):
     """Add data service specific arguments to the parser."""
@@ -400,26 +414,43 @@ def add_data_service_args(parser):
         "--exclude-tags",
         type=str,
         help="Comma-separated list of tags to exclude from downloads",
-        default="large-zips",
+        default="",
     )
 
     parser.add_argument(
         "--scraper-batch-size",
         type=int,
         help="Batch size for scraper operations",
-        default=3,
+        default=10,
+    )
+
+    parser.add_argument(
+        "--dataset-images-per-parquet",
+        type=int,
+        help="Number of images to extract per parquet file (default: 100)",
+        default=100,
+    )
+
+    parser.add_argument(
+        "--dataset-videos-per-zip",
+        type=int,
+        help="Number of videos to extract per zip file (default: 50)",
+        default=200,
     )
 
     parser.add_argument(
         "--dataset-parquet-per-dataset",
         type=int,
-        help="Number of parquet files to download per dataset",
+        help="Number of parquet files to download per dataset (default: 5)",
         default=2,
     )
 
     parser.add_argument(
         "--dataset-zips-per-dataset",
         type=int,
-        help="Number of zip files to download per dataset",
-        default=1,
+        help="Number of zip files to download per dataset (default: 2)",
+        default=2,
     )
+
+    # Shared source-limit args
+    add_source_limit_args(parser)

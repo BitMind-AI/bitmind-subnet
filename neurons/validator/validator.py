@@ -199,6 +199,7 @@ class Validator(BaseNeuron):
         if not miner_uids:
             bt.logging.trace("No dscriminative miners found to challenge.")
             return
+
         # sample media
         for attempt in range(retries):
             modality, media_type, _ = self.determine_challenge_type()
@@ -206,7 +207,7 @@ class Validator(BaseNeuron):
                 f"Sampling attempt {attempt + 1}/{retries}: {modality}/{media_type}"
             )
             cache_result = self.content_manager.sample_media_with_content(
-                modality, media_type
+                modality, media_type, strategy="random_source"
             )
             if cache_result is not None and cache_result.get("count", 0):
                 break
@@ -219,15 +220,18 @@ class Validator(BaseNeuron):
 
         # extract and augment media
         media_sample = cache_result["items"][0]
-        bt.logging.info(json.dumps(media_sample.get("metadata"), indent=2))
 
         media = media_sample[modality.value]
-        augmented_media, _, _, aug_params = apply_random_augmentations(media)
+        aug_media, _, level, aug_params = apply_random_augmentations(media)
 
-        bt.logging.success(f"Sampled {media_type} {modality} from cache")
-        bt.logging.info(
-            f"Querying orchestrator with discriminator challenge for {miner_uids}"
-        )
+        bt.logging.success(f"Sampled {media_type} {modality} from cache:")
+        bt.logging.info(json.dumps(media_sample.get("metadata"), indent=2))
+
+        bt.logging.info(f"Applied level {level} augmentations:")
+        bt.logging.info(json.dumps(aug_params, indent=2))
+        bt.logging.info(f"Final media shape: {aug_media.shape}")
+
+        bt.logging.info(f"Sending discriminator challenge for {len(miner_uids)} UIDs")
 
         # query orchestrator
         async with aiohttp.ClientSession() as session:
@@ -236,7 +240,7 @@ class Validator(BaseNeuron):
                 self.wallet.hotkey,
                 miner_uids,
                 modality,
-                media_to_bytes(augmented_media)[0],
+                media_to_bytes(aug_media)[0],
                 total_timeout=self.config.neuron.miner_total_timeout,
                 connect_timeout=self.config.neuron.miner_connect_timeout,
                 sock_connect_timeout=self.config.neuron.miner_sock_connect_timeout,
