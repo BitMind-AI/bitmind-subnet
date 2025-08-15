@@ -170,20 +170,10 @@ class DataService:
         try:
             bt.logging.info(f"[DATA-SERVICE] Starting scraper cycle at block {block}")
 
-            queries = self.content_manager.sample_search_queries(k=5, remove=False)
-            if not queries:
-                bt.logging.warning(
-                    "[DATA-SERVICE] No search queries available for scraping"
-                )
-                return
-
-            query_texts = [q.content for q in queries]
-            query_ids = [q.id for q in queries]
-
+            # Launch scraper worker which will sample queries internally
             if not self.scraper_thread or not self.scraper_thread.is_alive():
                 self.scraper_thread = Thread(
                     target=self._scraper_worker,
-                    args=(query_texts, query_ids),
                     daemon=True,
                 )
                 self.scraper_thread.start()
@@ -193,65 +183,77 @@ class DataService:
             bt.logging.error(f"[DATA-SERVICE] Error starting scraper cycle: {e}")
             bt.logging.error(traceback.format_exc())
 
-    def _scraper_worker(self, queries: List[str], query_ids: List[str]):
+    def _scraper_worker(self):
         """Worker thread that handles scraping operations."""
         try:
             # Check if scrapers need more data
             sources_needing_data = self.content_manager.get_sources_needing_data()
-            scraper_sources_needing_data = sources_needing_data.get("scraper", [])
+            scraper_sources_needing_data = sources_needing_data.get('scraper', [])
 
+            # If DB is empty (no sources yet), seed all available scrapers
             if not scraper_sources_needing_data:
-                bt.logging.info(
-                    "[DATA-SERVICE] All scraper sources have sufficient data"
-                )
-                return
+                scraper_sources_needing_data = [s.__class__.__name__ for s in self.scrapers]
 
-            bt.logging.info(
-                f"[DATA-SERVICE] Scraper worker started with {len(queries)} queries"
-            )
-            bt.logging.info(
-                f"[DATA-SERVICE] Scraper sources needing data: {scraper_sources_needing_data}"
-            )
+            bt.logging.info(f"[DATA-SERVICE] Scraper sources needing data: {scraper_sources_needing_data}")
 
             total_saved = 0
             for scraper in self.scrapers:
                 scraper_name = scraper.__class__.__name__
 
                 # Check if this scraper needs more data
-                if not self.content_manager.needs_more_data("scraper", scraper_name):
+                if scraper_name not in scraper_sources_needing_data:
+                    continue
+                if not self.content_manager.needs_more_data('scraper', scraper_name):
                     continue
 
                 bt.logging.debug(f"[DATA-SERVICE] Processing {scraper_name}")
 
                 try:
-                    # Process yielded image data from the scraper
-                    for query_id, image_data in scraper.download_images(
-                        queries=queries,
-                        query_ids=query_ids,
-                        source_image_paths=None,
-                        limit=10,
-                    ):
+                    # Sample search queries for this cycle
+                    search_queries = self.content_manager.sample_search_queries(
+                        k=self.config.scraper_batch_size,
+                        remove=False,
+                        strategy="random",
+                    )
+
+                    if not search_queries:
+                        bt.logging.warning(f"[DATA-SERVICE] No search queries available for {scraper_name}")
+                        continue
+
+                    bt.logging.debug(f"[DATA-SERVICE] Scraping for {len(search_queries)} queries")
+
+                    for query_entry in search_queries:
                         if self.stop_event.is_set():
                             break
 
                         # Check if scraper still needs data
-                        if not self.content_manager.needs_more_data(
-                            "scraper", scraper_name
-                        ):
+                        if not self.content_manager.needs_more_data('scraper', scraper_name):
                             break
 
-                        # Add metadata to image_data for tracking
-                        image_data["query_id"] = query_id
-                        image_data["scraper_name"] = scraper_name
-                        image_data["modality"] = scraper.modality
-                        image_data["media_type"] = scraper.media_type
+                        # Scrape images for this query
+                        for image_data in scraper.download_images(
+                            queries=[query_entry.content],
+                            query_ids=[query_entry.id],
+                            source_image_paths=None,
+                            limit=10,
+                        ):
+                            if self.stop_event.is_set():
+                                break
 
-                        # Direct ContentManager operation
-                        saved = self._write_media(
-                            "scraper", image_data, scraper_name=scraper_name
-                        )
-                        if saved:
-                            total_saved += 1
+                            # Check again if scraper still needs data
+                            if not self.content_manager.needs_more_data('scraper', scraper_name):
+                                break
+
+                            # Add metadata
+                            image_data['query_id'] = query_entry.id
+                            image_data['scraper_name'] = scraper_name
+                            image_data['modality'] = scraper.modality
+                            image_data['media_type'] = scraper.media_type
+
+                            # Direct ContentManager operation
+                            saved = self._write_media('scraper', image_data, scraper_name=scraper_name)
+                            if saved:
+                                total_saved += 1
 
                     bt.logging.debug(f"[DATA-SERVICE] Completed {scraper_name}")
 
@@ -259,9 +261,7 @@ class DataService:
                     bt.logging.error(f"[DATA-SERVICE] Error in {scraper_name}: {e}")
                     bt.logging.error(traceback.format_exc())
 
-            bt.logging.success(
-                f"[DATA-SERVICE] Scraper worker completed. Saved {total_saved} images."
-            )
+            bt.logging.success(f"[DATA-SERVICE] Scraper worker completed. Saved {total_saved} images.")
 
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error in scraper worker: {e}")
@@ -289,25 +289,27 @@ class DataService:
 
     def _downloader_worker(self):
         try:
+            # Check which sources need more data
             sources_needing_data = self.content_manager.get_sources_needing_data()
-            dataset_sources_needing_data = sources_needing_data.get("dataset", [])
+            dataset_sources_needing_data = sources_needing_data.get('dataset', [])
 
+            # If DB is empty (no sources yet), seed all enabled datasets
             if not dataset_sources_needing_data:
-                bt.logging.info(
-                    "[DATA-SERVICE] All dataset sources have sufficient data"
-                )
-                return
+                image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
+                video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
+                all_datasets = image_datasets + video_datasets
+                dataset_sources_needing_data = [d.path for d in all_datasets]
 
-            bt.logging.info(
-                f"[DATA-SERVICE] Sources needing data: {dataset_sources_needing_data}"
-            )
+            bt.logging.info(f"[DATA-SERVICE] Sources needing data: {dataset_sources_needing_data}")
+
+            # Get datasets that need more data
             image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
             video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
             all_datasets = image_datasets + video_datasets
 
+            # Filter to only datasets that need data
             datasets_to_download = [
-                dataset
-                for dataset in all_datasets
+                dataset for dataset in all_datasets 
                 if dataset.path in dataset_sources_needing_data
             ]
 
@@ -315,38 +317,29 @@ class DataService:
                 bt.logging.warning("[DATA-SERVICE] No datasets need downloading")
                 return
 
-            bt.logging.info(
-                f"[DATA-SERVICE] Starting download for {len(datasets_to_download)} datasets"
-            )
+            bt.logging.info(f"[DATA-SERVICE] Starting download for {len(datasets_to_download)} datasets")
 
             total_saved = 0
             for dataset in datasets_to_download:
                 # Check if we still need data for this dataset
-                if not self.content_manager.needs_more_data("dataset", dataset.path):
+                if not self.content_manager.needs_more_data('dataset', dataset.path):
                     continue
 
                 for media_bytes, metadata in download_and_extract(
                     dataset,
-                    images_per_parquet=getattr(
-                        self.config, "dataset_images_per_parquet", 100
-                    ),
-                    videos_per_zip=getattr(self.config, "dataset_videos_per_zip", 50),
-                    parquet_per_dataset=getattr(
-                        self.config, "dataset_parquet_per_dataset", 5
-                    ),
-                    zips_per_dataset=getattr(
-                        self.config, "dataset_zips_per_dataset", 2
-                    ),
+                    images_per_parquet=getattr(self.config, 'dataset_images_per_parquet', 100),
+                    videos_per_zip=getattr(self.config, 'dataset_videos_per_zip', 50),
+                    parquet_per_dataset=getattr(self.config, 'dataset_parquet_per_dataset', 5),
+                    zips_per_dataset=getattr(self.config, 'dataset_zips_per_dataset', 2)
                 ):
                     if self.stop_event.is_set():
                         break
 
-                    if not self.content_manager.needs_more_data(
-                        "dataset", dataset.path
-                    ):
+                    # Check again if we still need data
+                    if not self.content_manager.needs_more_data('dataset', dataset.path):
                         break
 
-                    saved = self._write_media("dataset", (media_bytes, metadata))
+                    saved = self._write_media('dataset', (media_bytes, metadata))
                     if saved:
                         total_saved += 1
 
