@@ -34,6 +34,11 @@ function getHeartbeatParam(heartbeat) {
 // Load environment variables
 require('dotenv').config({ path: path.resolve(__dirname, '.env.validator') });
 
+// Check if old HUGGING_FACE_TOKEN is set and use it to set HUGGINGFACE_HUB_TOKEN
+if (process.env.HUGGING_FACE_TOKEN && !process.env.HUGGINGFACE_HUB_TOKEN) {
+  process.env.HUGGINGFACE_HUB_TOKEN = process.env.HUGGING_FACE_TOKEN;
+}
+
 // Get configuration from environment with defaults
 const config = {
   // Wallet
