@@ -280,6 +280,20 @@ else
     log_warning "  - Node.js, npm, PM2, dotenv"
 fi
 
+log_info "Checking if we need to clear v3.x cache"
+CACHE_DIR="$HOME/.cache/sn34"
+if [ -d "$CACHE_DIR" ]; then
+    # Check if any .db files exist in the cache directory
+    if ! find "$CACHE_DIR" -name "*.db" -type f | grep -q .; then
+        log_info "No .db files found in cache directory. Removing old $CACHE_DIR..."
+        rm -rf "$CACHE_DIR"
+        log_success "Cache directory cleaned ✓"
+    else
+        log_success "Cache directory contains .db files, keeping intact ✓"
+    fi
+else
+    log_info "Cache directory $CACHE_DIR does not exist, skipping cleanup"
+fi
 
 # Remove existing virtual environment to ensure fresh install
 if [ -d ".venv" ]; then
