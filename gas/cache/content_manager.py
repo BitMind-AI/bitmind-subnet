@@ -21,9 +21,15 @@ class ContentManager:
 	Provides high-level methods like write_media() and write_prompt().
 	"""
 
-	def __init__(self, base_dir: Optional[Path] = None, max_per_source: int = 500,
-	             enable_source_limits: bool = True, prune_strategy: str = "oldest",
-	             remove_on_sample: bool = True, min_source_threshold: float = 0.8):
+	def __init__(
+		self,
+		base_dir: Optional[Path] = None,
+		max_per_source: int = 500,
+		enable_source_limits: bool = True,
+		prune_strategy: str = "oldest",
+		remove_on_sample: bool = True,
+		min_source_threshold: float = 0.8
+	):
 		"""
 		Initialize the content manager.
 
@@ -47,7 +53,8 @@ class ContentManager:
 		self.prune_strategy = prune_strategy
 		
 		self.remove_on_sample = remove_on_sample
-		self.min_source_threshold = int(max_per_source * min_source_threshold)
+		min_source_threshold = 0.8 if min_source_threshold is None else min_source_threshold
+		self.min_source_threshold = int(max_per_source * float(min_source_threshold))
 
 	def write_prompt(self, content: str, content_type: str = "prompt", source_media_id: Optional[str] = None) -> str:
 		try:
@@ -323,16 +330,39 @@ class ContentManager:
 		if not media_entries:
 			print(f"No media available in database for {modality}/{media_type}")
 			return {'count': 0, 'items': []}
-		media_results = self.media_storage.retrieve_media(
-			media_entries=media_entries,
-			modality=modality,
-			remove_from_cache=remove_from_cache,
-			**kwargs,
-		)['items']
-		for media, db_entry in zip(media_results, media_entries):
+
+		# Split by source_type so we only remove dataset/scraper on sample
+		generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) == 'generated']
+		non_generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) != 'generated']
+
+		items: List[Dict[str, Any]] = []
+		# Retrieve non-generated content; allow removal if configured
+		if non_generated_entries:
+			non_gen_items = self.media_storage.retrieve_media(
+				media_entries=non_generated_entries,
+				modality=modality,
+				remove_from_cache=should_remove,
+				**kwargs,
+			)['items']
+			items.extend(non_gen_items)
+
+		# Retrieve generated content; never remove on sample
+		if generated_entries:
+			gen_items = self.media_storage.retrieve_media(
+				media_entries=generated_entries,
+				modality=modality,
+				remove_from_cache=False,
+				**kwargs,
+			)['items']
+			items.extend(gen_items)
+
+		# Attach ids and metadata; order doesn't matter, so align by concatenation
+		combined_entries: List[MediaEntry] = non_generated_entries + generated_entries
+		for media, db_entry in zip(items, combined_entries):
 			media['id'] = db_entry.id
 			media['metadata'] = db_entry.to_dict()
-		return {'count': len(media_results), 'items': media_results}
+
+		return {'count': len(items), 'items': items}
 
 	def sample_prompts_with_source_media(
 		self,

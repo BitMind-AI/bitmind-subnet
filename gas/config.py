@@ -71,6 +71,46 @@ def add_args(parser):
     parser.add_argument("--wandb.off", action="store_true", default=False)
 
 
+# Shared source-limit/demand-loading args
+
+def add_source_limit_args(parser):
+    parser.add_argument(
+        "--max-per-source",
+        type=int,
+        help="Maximum number of media items per source (dataset/scraper/model) (default: 1000)",
+        default=1000,
+    )
+
+    parser.add_argument(
+        "--enable-source-limits",
+        action="store_true",
+        help="Enable per-source maximum count limits",
+        default=True,
+    )
+
+    parser.add_argument(
+        "--prune-strategy",
+        type=str,
+        choices=["oldest", "least_used", "random"],
+        help="Strategy for pruning media when limits are exceeded (default: oldest)",
+        default="oldest",
+    )
+
+    parser.add_argument(
+        "--min-source-threshold",
+        type=float,
+        help="Minimum items per source as fraction of max-per-source (default: 0.8 = 80%)",
+        default=0.8,
+    )
+
+    parser.add_argument(
+        "--remove-on-sample",
+        action="store_true",
+        help="Remove media items when sampled (instead of pruning on add)",
+        default=True,
+    )
+
+
 def add_miner_args(parser):
     """Add miner specific arguments to the parser."""
 
@@ -349,6 +389,9 @@ def add_generation_service_args(parser):
         default=300,
     )
 
+    # Shared source-limit args
+    add_source_limit_args(parser)
+
 
 def add_data_service_args(parser):
     """Add data service specific arguments to the parser."""
@@ -382,28 +425,6 @@ def add_data_service_args(parser):
     )
 
     parser.add_argument(
-        "--max-per-source",
-        type=int,
-        help="Maximum number of media items per source (dataset/scraper/model) (default: 500)",
-        default=1000,
-    )
-
-    parser.add_argument(
-        "--enable-source-limits",
-        action="store_true",
-        help="Enable per-source maximum count limits",
-        default=True,
-    )
-
-    parser.add_argument(
-        "--prune-strategy",
-        type=str,
-        choices=["oldest", "least_used", "random"],
-        help="Strategy for pruning media when limits are exceeded (default: oldest)",
-        default="oldest",
-    )
-
-    parser.add_argument(
         "--dataset-images-per-parquet",
         type=int,
         help="Number of images to extract per parquet file (default: 100)",
@@ -431,16 +452,5 @@ def add_data_service_args(parser):
         default=2,
     )
 
-    parser.add_argument(
-        "--min-source-threshold",
-        type=float,
-        help="Minimum items per source as fraction of max-per-source (default: 0.8 = 80%)",
-        default=0.8,
-    )
-
-    parser.add_argument(
-        "--remove-on-sample",
-        action="store_true",
-        help="Remove media items when sampled (instead of pruning on add)",
-        default=True,
-    )
+    # Shared source-limit args
+    add_source_limit_args(parser)
