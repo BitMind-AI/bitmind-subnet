@@ -14,29 +14,33 @@ $ cp .env.validator.template .env.validator
 ```
 
 ```bash
-# .env.validator.template contents 
+# ======= Validator Configuration (FILL IN) =======
+# Wallet
+WALLET_NAME=
+WALLET_HOTKEY=
 
-# Wallet configuration
-WALLET_NAME=your_wallet_name
-WALLET_HOTKEY=your_hotkey_name
+# API Keys
+WANDB_API_KEY=
+HUGGINGFACE_HUB_TOKEN=
 
-# Network configuration
-CHAIN_ENDPOINT=wss://test.finney.opentensor.ai:443/
-NETUID=379
+# Network
+CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
+# OTF public finney endpoint:  wss://entrypoint-finney.opentensor.ai:443
+# OTF public testnet endpoint: wss://test.finney.opentensor.ai:443/
 
-# Service configuration
-PROXY_PORT=10913
+# Cache config
+SN34_CACHE_DIR=~/.cache/sn34
+HEARTBEAT=true
+
+# Generator config
+GENERATION_BATCH_SIZE=3
 DEVICE=cuda
-SN34_CACHE_DIR=~/.cache/sn34_cache
 
-# Logging
+# Other
 LOGLEVEL=info
-
-# Optional features
-AUTO_UPDATE=false
-HEARTBEAT=false
-WANDB_API_KEY=your_wandb_key
+AUTO_UPDATE=true
 ```
+
 > Once you've populated `.env.validator`, activate the virtual environment and start your validator processes
 ```bash
 $ source .venv/bin/activate
