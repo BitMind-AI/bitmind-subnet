@@ -34,7 +34,7 @@ pip install uv
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd GAS
+   cd bitmind-subnet
    ```
 
 2. **Run the installation script**:
