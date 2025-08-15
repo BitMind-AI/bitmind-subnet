@@ -278,7 +278,7 @@ class MediaStorage:
                 file_path.unlink()
 
             if file_path.suffix.lower() in [".png", ".jpg", ".jpeg"]:
-                mask_path = file_path.with_suffix("_mask.npy")
+                mask_path = file_path.parent / (file_path.stem + "_mask.npy")
                 if mask_path.exists():
                     mask_path.unlink()
 

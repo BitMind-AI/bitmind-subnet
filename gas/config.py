@@ -107,7 +107,7 @@ def add_source_limit_args(parser):
         "--remove-on-sample",
         action="store_true",
         help="Remove media items when sampled (instead of pruning on add)",
-        default=True,
+        default=False,
     )
 
 
