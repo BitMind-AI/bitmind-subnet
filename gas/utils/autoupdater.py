@@ -4,14 +4,14 @@
 # Copyright © 2025 BitMind
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-# documentation files (the “Software”), to deal in the Software without restriction, including without limitation
+# documentation files (the "Software"), to deal in the Software without restriction, including without limitation
 # the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
 # and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 # The above copyright notice and this permission notice shall be included in all copies or substantial portions of
 # the Software.
 
-# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
 # THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
@@ -22,8 +22,53 @@ import time
 import os
 import requests
 import subprocess
+import json
 import bittensor as bt
 import gas
+
+
+def get_running_sn34_apps_via_pm2():
+    """
+    Query PM2 for running processes and return names starting with 'sn34-'.
+    """
+    try:
+        result = subprocess.run([
+            "pm2", "jlist"
+        ], capture_output=True, text=True)
+        if result.returncode != 0:
+            bt.logging.warning(f"pm2 jlist failed: {result.stderr}")
+            return []
+        apps = json.loads(result.stdout)
+        if not isinstance(apps, list):
+            return []
+        return [proc.get('name') for proc in apps if isinstance(proc, dict) and isinstance(proc.get('name'), str) and proc.get('name').startswith('sn34-')]
+    except Exception as e:
+        bt.logging.warning(f"Failed to parse pm2 jlist: {e}")
+        return []
+
+
+def restart_pm2_services(base_path):
+    """
+    Restart running sn34-* PM2 services only. Does not restart other processes.
+    """
+    app_names = get_running_sn34_apps_via_pm2()
+
+    if not app_names:
+        bt.logging.warning("No sn34-* apps found; skipping PM2 restarts to avoid affecting other processes")
+        return False
+
+    # Restart each service individually
+    success = True
+    for app_name in app_names:
+        try:
+            bt.logging.info(f"Restarting {app_name}...")
+            subprocess.run(["pm2", "restart", app_name], check=True)
+            bt.logging.info(f"Successfully restarted {app_name}")
+        except subprocess.CalledProcessError as e:
+            bt.logging.error(f"Failed to restart {app_name}: {e}")
+            success = False
+
+    return success
 
 
 def autoupdate(branch: str = "main", force=False):
@@ -36,11 +81,12 @@ def autoupdate(branch: str = "main", force=False):
 
     Args:
     - branch (str): The name of the branch to check for updates. Defaults to "main".
+    - force (bool): Force update even if versions are the same. Defaults to False.
 
     Note:
     - The function assumes that the local codebase is a git repository and has the same structure as the remote repository.
     - It requires git to be installed and accessible from the command line.
-    - The function will restart the application using the same command-line arguments it was originally started with.
+    - The function will restart the application using PM2 services defined in validator.config.js.
     - If the update fails, manual intervention is required to resolve the issue and restart the application.
     """
     bt.logging.info("Checking for updates...")
@@ -77,14 +123,13 @@ def autoupdate(branch: str = "main", force=False):
                 if new_version == latest_version:
                     bt.logging.info("Updated successfully.")
 
-                    bt.logging.info("Restarting generator...")
-                    subprocess.run(["pm2", "restart", "sn34-generator"], check=True)
-
-                    bt.logging.info("Restarting proxy...")
-                    subprocess.run(["pm2", "restart", "sn34-proxy"], check=True)
-
-                    bt.logging.info(f"Restarting validator")
-                    os.kill(os.getpid(), signal.SIGINT)
+                    # Restart PM2 services using validator.config.js (with robust fallbacks)
+                    if restart_pm2_services(base_path):
+                        bt.logging.info("All PM2 services restarted successfully.")
+                        bt.logging.info(f"Restarting validator")
+                        os.kill(os.getpid(), signal.SIGINT)
+                    else:
+                        bt.logging.error("Failed to restart some PM2 services. Manual restart may be required.")
                 else:
                     bt.logging.error("Update failed. Manual update required.")
     except Exception as e:
