@@ -347,8 +347,8 @@ class Validator(BaseNeuron):
             normed_weights = self.scores / norm
 
             # temporary burn
-            normed_weights = np.array([v * 0.0 for v in normed_weights])
-            normed_weights[135] = 1.
+            normed_weights = np.array([v * 0.1 for v in normed_weights])
+            normed_weights[135] = 0.9
 
             self.set_weights_fn(
                 self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
