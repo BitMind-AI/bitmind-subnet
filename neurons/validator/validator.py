@@ -148,7 +148,7 @@ class Validator(BaseNeuron):
 
         while not self.exit_context.isExiting:
             self.step += 1
-            if self.config.autoupdate and (self.step == 0 or self.step % 30):
+            if self.config.autoupdate and (self.step == 0 or not self.step % 300):
                 bt.logging.debug("Checking autoupdate")
                 autoupdate(branch="main")
 
