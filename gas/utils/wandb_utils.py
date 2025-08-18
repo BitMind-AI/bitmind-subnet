@@ -10,6 +10,7 @@ import bittensor as bt
 import cv2
 import wandb
 from gas import __version__
+from gas.types import MediaType
 
 
 class WandbLogger:
@@ -162,7 +163,7 @@ class WandbLogger:
         bt.logging.info(f"Logged media file to WandB with UUID: {media_uuid}")
         return media_uuid
 
-    def _log_challenge_results(self, results, media_uuids, aug_params=None):
+    def _log_challenge_results(self, results, media_sample, media_uuids, aug_params=None):
         """
         Log challenge results with reference to media artifact.
 
@@ -174,15 +175,15 @@ class WandbLogger:
         run = self._ensure_run()
         
         # Prepare log data with the new structure
+        media_metadata = media_sample["metadata"]
         log_data = {
             "results": results,
             "media_uuids": media_uuids,
+            "media_metadata": media_metadata,
+            "augmentation_params": aug_params,
+            "label": MediaType(media_metadata["media_type"]).int_value
         }
-        
-        # Add augmentation parameters if provided
-        if aug_params:
-            log_data["augmentation_params"] = aug_params
-        
+
         # Extract key metrics for easier analysis
         successful_results = [r for r in results if r.get("status") == 200]
         failed_results = [r for r in results if r.get("status") != 200]
@@ -234,7 +235,7 @@ class WandbLogger:
                     media_uuids.append(self._maybe_log_media(media_path, metadata_path))
 
         # Step 2: Log challenge results with reference to logged media uuid if available
-        self._log_challenge_results(challenge_results, media_uuids, aug_params)
+        self._log_challenge_results(challenge_results, media_sample, media_uuids, aug_params)
         return media_uuids
 
     def finish(self):

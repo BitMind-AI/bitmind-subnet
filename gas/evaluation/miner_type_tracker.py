@@ -85,9 +85,9 @@ class MinerTypeTracker:
                 self.last_update[uid] = current_time
 
                 if old_type != miner_type:
-                    bt.logging.success(f"UID {uid}: {old_type} -> {miner_type}")
+                    bt.logging.trace(f"UID {uid}: {old_type} -> {miner_type}")
                 else:
-                    bt.logging.debug(f"UID {uid}: {miner_type}")
+                    bt.logging.trace(f"UID {uid}: {miner_type}")
 
     def get_miner_type(self, uid: int) -> Optional[MinerType]:
         return self.miner_types.get(uid)

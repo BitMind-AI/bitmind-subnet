@@ -148,7 +148,7 @@ class Validator(BaseNeuron):
 
         while not self.exit_context.isExiting:
             self.step += 1
-            if self.config.autoupdate and (self.step == 0 or not self.step % 30):
+            if self.config.autoupdate and (self.step == 0 or not self.step % 300):
                 bt.logging.debug("Checking autoupdate")
                 autoupdate(branch="main")
 
@@ -254,7 +254,7 @@ class Validator(BaseNeuron):
             return  # no penalty is applied to any miner if orchestrator call fails altogether
 
         bt.logging.info(f"Received {len(results)} results from orchestrator")
-        predictions = [
+        probabilities = [
             r["result"]["probabilities"] if r.get("result") is not None else None
             for r in results
         ]
@@ -263,13 +263,14 @@ class Validator(BaseNeuron):
         generator_rewards = {}  # placeholder for GAS Phase II
         discriminator_reward_outputs = get_discriminator_rewards(
             label=media_type.int_value,
-            predictions=predictions,
+            predictions=probabilities,
             uids=[r.get("uid") for r in results],
             hotkeys=[r.get("hotkey") for r in results],
             challenge_modality=modality,
             discriminator_tracker=self.discriminator_tracker,
             **self.reward_config,
         )
+        discriminator_preds = discriminator_reward_outputs["predictions"]
         discriminator_rewards = discriminator_reward_outputs["rewards"]
         discriminator_metrics = discriminator_reward_outputs["metrics"]
         discriminator_correct = discriminator_reward_outputs["correct"]
@@ -286,7 +287,7 @@ class Validator(BaseNeuron):
             # update result with challenge media_type, metrics, rewards, scores for logging
             uid = r.get("uid")
             r["result"] = {} if r.get("result") is None else r["result"]
-            r["result"]["media_type"] = media_type.value
+            r["prediction"] = discriminator_preds.get(uid)
             r["reward"] = discriminator_rewards.get(uid, {})
             r["correct"] = int(discriminator_correct.get(uid, False))
             r["score"] = self.scores[uid]
