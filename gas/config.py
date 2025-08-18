@@ -41,7 +41,7 @@ def add_args(parser):
         "--epoch-length",
         type=int,
         help="The default epoch length (how often we set weights, measured in 12 second blocks).",
-        default=60,
+        default=360,
     )
 
     parser.add_argument(
@@ -150,7 +150,7 @@ def add_validator_args(parser):
         "--discriminator-challenge-interval",
         type=int,
         help="How often we send challenges to generative miners, measured in 12 second blocks.",
-        default=5,
+        default=10,
     )
 
     parser.add_argument(
@@ -185,21 +185,21 @@ def add_validator_args(parser):
         "--neuron.miner-total-timeout",
         type=float,
         help="Total timeout for miner requests in seconds",
-        default=11.0,
+        default=90.0,
     )
 
     parser.add_argument(
         "--neuron.miner-connect-timeout",
         type=float,
         help="TCP connection timeout for miner requests in seconds",
-        default=4.0,
+        default=6.0,
     )
 
     parser.add_argument(
         "--neuron.miner-sock-connect-timeout",
         type=float,
         help="Socket connection timeout for miner requests in seconds",
-        default=3.0,
+        default=5.0,
     )
 
     parser.add_argument(
