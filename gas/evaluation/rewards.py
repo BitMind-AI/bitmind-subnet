@@ -41,6 +41,7 @@ def get_discriminator_rewards(
             - metrics: Dict mapping UIDs to modality metrics
             - correct: Dict mapping UIDs to correctness booleans
     """
+    miner_predictions = {}
     miner_rewards = {}
     miner_metrics = {}
     miner_correct = {}
@@ -76,6 +77,7 @@ def get_discriminator_rewards(
                 # compute correctness of last prediction if evaluating current challenge modality
                 if modality == challenge_modality:
                     miner_correct[uid] = predictions[-1] == label
+                    miner_predictions[uid] = int(predictions[-1])
 
                 # Always compute MCC for both modalities if > 5 preds made with > 2 unique labels
                 pred_count = len(preds)
@@ -128,5 +130,6 @@ def get_discriminator_rewards(
     return {
        'rewards': miner_rewards, 
        'metrics': miner_metrics, 
-       'correct': miner_correct
+       'correct': miner_correct,
+       'predictions': miner_predictions
     }
