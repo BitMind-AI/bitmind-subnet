@@ -19,7 +19,7 @@ from gas.datasets import initialize_dataset_registry
 from gas.datasets.dataset_registry import DatasetRegistry
 from gas.datasets.download import download_and_extract
 from gas.scraping import GoogleScraper
-from gas.types import MediaType, Modality
+from gas.types import MediaType, Modality, SourceType
 from gas.utils import on_block_interval
 from gas.utils.metagraph import run_block_callback_thread
 
@@ -52,7 +52,6 @@ class DataService:
         self.scrapers = [
             GoogleScraper(
                 headless=True,
-                media_type="real",
                 max_year=2017,
                 min_width=128,
                 min_height=128,
@@ -203,7 +202,7 @@ class DataService:
                 # Check if this scraper needs more data
                 if scraper_name not in scraper_sources_needing_data:
                     continue
-                if not self.content_manager.needs_more_data('scraper', scraper_name):
+                if not self.content_manager.needs_more_data(SourceType.SCRAPER, scraper_name):
                     continue
 
                 bt.logging.debug(f"[DATA-SERVICE] Processing {scraper_name}")
@@ -227,11 +226,11 @@ class DataService:
                             break
 
                         # Check if scraper still needs data
-                        if not self.content_manager.needs_more_data('scraper', scraper_name):
+                        if not self.content_manager.needs_more_data(SourceType.SCRAPER, scraper_name):
                             break
 
                         # Scrape images for this query
-                        for image_data in scraper.download_images(
+                        for query_id, image_data in scraper.download_images(
                             queries=[query_entry.content],
                             query_ids=[query_entry.id],
                             source_image_paths=None,
@@ -241,16 +240,15 @@ class DataService:
                                 break
 
                             # Check again if scraper still needs data
-                            if not self.content_manager.needs_more_data('scraper', scraper_name):
+                            if not self.content_manager.needs_more_data(SourceType.SCRAPER, scraper_name):
                                 break
 
                             # Add metadata
-                            image_data['query_id'] = query_entry.id
+                            image_data['query_id'] = query_id
                             image_data['scraper_name'] = scraper_name
-                            image_data['modality'] = scraper.modality
-                            image_data['media_type'] = scraper.media_type
+                            image_data['modality'] = str(scraper.modality.value).lower()
+                            image_data['media_type'] = str(scraper.media_type.value).lower()
 
-                            # Direct ContentManager operation
                             saved = self._write_media('scraper', image_data, scraper_name=scraper_name)
                             if saved:
                                 total_saved += 1
@@ -322,7 +320,7 @@ class DataService:
             total_saved = 0
             for dataset in datasets_to_download:
                 # Check if we still need data for this dataset
-                if not self.content_manager.needs_more_data('dataset', dataset.path):
+                if not self.content_manager.needs_more_data(SourceType.DATASET, dataset.path):
                     continue
 
                 for media_bytes, metadata in download_and_extract(
@@ -336,7 +334,7 @@ class DataService:
                         break
 
                     # Check again if we still need data
-                    if not self.content_manager.needs_more_data('dataset', dataset.path):
+                    if not self.content_manager.needs_more_data(SourceType.DATASET, dataset.path):
                         break
 
                     saved = self._write_media('dataset', (media_bytes, metadata))
@@ -385,9 +383,7 @@ class DataService:
                 modality=Modality(image_data["modality"].lower()),
                 media_type=MediaType(image_data["media_type"].lower()),
                 prompt_id=image_data["query_id"],
-                media_content=image_data[
-                    "image_content"
-                ],  # This is already a PIL Image
+                media_content=image_data["image_content"],
                 download_url=image_data["url"],
                 scraper_name=scraper_name,
                 resolution=(image_data["width"], image_data["height"]),
@@ -417,12 +413,13 @@ class DataService:
             dataset_index = metadata.get("original_index") or metadata.get(
                 "path_in_zip", "unknown"
             )
+            dataset_name = metadata.get("dataset_path", "unknown")
 
             save_path = self.content_manager.write_dataset_media(
                 modality=Modality(metadata.get("modality").lower()),
                 media_type=MediaType(metadata.get("media_type")),
                 media_content=media_content,
-                dataset_name=metadata.get("dataset_path", "unknown"),
+                dataset_name=dataset_name,
                 dataset_source_file=dataset_source_file,
                 dataset_index=str(dataset_index),
                 resolution=(

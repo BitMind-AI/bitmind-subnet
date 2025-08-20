@@ -4,7 +4,7 @@ import numpy as np
 import time
 import uuid
 
-from gas.types import Modality, MediaType
+from gas.types import Modality, MediaType, SourceType
 
 
 @dataclass
@@ -52,9 +52,9 @@ class MediaEntry:
     id: str
     prompt_id: str
     file_path: str
-    modality: str  # "image" or "video" (kept as string for database compatibility)
-    media_type: str  # "real", "synthetic", "semisynthetic" (kept as string for database compatibility)
-    source_type: str = "generated"  # "scraper", "dataset", "generated"
+    modality: Modality  # image or video
+    media_type: MediaType  # real, synthetic, semisynthetic
+    source_type: SourceType = SourceType.GENERATED  # "scraper", "dataset", "generated"
 
     # For synthetic media (generated content)
     model_name: Optional[str] = None
@@ -80,4 +80,11 @@ class MediaEntry:
             self.created_at = time.time()
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if isinstance(data.get("modality"), Modality):
+            data["modality"] = data["modality"].value
+        if isinstance(data.get("media_type"), MediaType):
+            data["media_type"] = data["media_type"].value
+        if isinstance(data.get("source_type"), SourceType):
+            data["source_type"] = data["source_type"].value
+        return data

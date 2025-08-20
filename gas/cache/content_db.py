@@ -11,7 +11,7 @@ import random
 import bittensor as bt
 
 from gas.cache.types import PromptEntry, MediaEntry
-from gas.types import Modality, MediaType
+from gas.types import Modality, MediaType, SOURCE_TYPE_TO_DB_NAME_FIELD, SourceType
 
 
 class ContentDB:
@@ -198,9 +198,9 @@ class ContentDB:
             id=row["id"],
             prompt_id=row["prompt_id"],
             file_path=row["file_path"],
-            modality=row["modality"],
-            media_type=row["media_type"],
-            source_type=row["source_type"],
+            modality=Modality(row["modality"]),
+            media_type=MediaType(row["media_type"]),
+            source_type=SourceType(row["source_type"]),
             model_name=row["model_name"],
             download_url=row["download_url"],
             scraper_name=row["scraper_name"],
@@ -220,7 +220,7 @@ class ContentDB:
         file_path: str,
         modality: Modality,
         media_type: MediaType,
-        source_type: str = "generated",
+        source_type: SourceType = SourceType.GENERATED,
         model_name: Optional[str] = None,
         download_url: Optional[str] = None,
         scraper_name: Optional[str] = None,
@@ -255,7 +255,7 @@ class ContentDB:
                     str(file_path),
                     modality.value,
                     media_type.value,
-                    source_type,
+                    source_type.value,
                     model_name,
                     download_url,
                     scraper_name,
@@ -571,28 +571,23 @@ class ContentDB:
 
         return results
 
-    def get_source_count(self, source_type: str, source_name: str) -> int:
+    def get_source_count(self, source_type: SourceType, source_name: str) -> int:
         """
         Get count of media items for a particular source.
         """
-        column_map = {
-            'dataset': 'dataset_name',
-            'scraper': 'scraper_name',
-            'generated': 'model_name',
-        }
-        col = column_map.get(source_type)
+        col = SOURCE_TYPE_TO_DB_NAME_FIELD.get(source_type)
         if not col:
             return 0
 
         with self._get_db_connection() as conn:
             cursor = conn.execute(
                 f"SELECT COUNT(*) FROM media WHERE source_type = ? AND {col} = ?",
-                (source_type, source_name),
+                (source_type.value, source_name),
             )
             row = cursor.fetchone()
             return int(row[0]) if row and row[0] is not None else 0
 
-    def prune_source_media(self, source_type: str, source_name: str, max_count: int, strategy: str = 'oldest') -> int:
+    def prune_source_media(self, source_type: SourceType, source_name: str, max_count: int, strategy: str = 'oldest') -> int:
         """
         Prune items for a source so that the total count is <= max_count.
         Deletes database rows for the oldest (or random) items.
@@ -600,12 +595,7 @@ class ContentDB:
         Returns:
             Number of items pruned.
         """
-        column_map = {
-            'dataset': 'dataset_name',
-            'scraper': 'scraper_name',
-            'generated': 'model_name',
-        }
-        col = column_map.get(source_type)
+        col = SOURCE_TYPE_TO_DB_NAME_FIELD.get(source_type)
         if not col:
             return 0
 
@@ -626,7 +616,7 @@ class ContentDB:
                 ORDER BY {order_clause}
                 LIMIT ?
                 """,
-                (source_type, source_name, to_remove),
+                (source_type.value, source_name, to_remove),
             )
             rows = cursor.fetchall()
             if not rows:
@@ -836,11 +826,7 @@ class ContentDB:
                         continue
 
                     source_type, source_name = random.choice(sources)
-                    source_column = {
-                        "dataset": "dataset_name",
-                        "scraper": "scraper_name",
-                        "generated": "model_name",
-                    }.get(source_type)
+                    source_column = SOURCE_TYPE_TO_DB_NAME_FIELD.get(SourceType(source_type))
                     if not source_column or not source_name:
                         continue
 
