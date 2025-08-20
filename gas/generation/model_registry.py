@@ -135,8 +135,11 @@ class ModelRegistry:
         model = self.get_model(model_name)
         if model is None:
             raise ValueError(f"Model not found: {model_name}")
-
-        return Modality.VIDEO if model.task == ModelTask.TEXT_TO_VIDEO else Modality.IMAGE
+        return (
+            Modality.VIDEO
+            if model.task in (ModelTask.TEXT_TO_VIDEO, ModelTask.IMAGE_TO_VIDEO)
+            else Modality.IMAGE
+        )
 
     def get_task(self, model_name: str) -> str:
         model = self.get_model(model_name)
