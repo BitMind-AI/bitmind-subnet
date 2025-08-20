@@ -5,40 +5,6 @@ from pydantic import BaseModel
 from typing import Dict, List, Any, Optional, Union
 import json
 
-
-@dataclass
-class DiscriminatorEvalResult:
-    """Simple evaluation result"""
-
-    # model_id: str  ##
-    real_accuracy: float = 0.0
-    iou: float = 0.0
-    synthetic_accuracy: float = 0.0
-    combined_score: float = 0.0
-    miner_uid: Optional[int] = None
-
-
-@dataclass
-class GeneratorEvalResult:
-    """Evaluation result for a generator miner"""
-
-    miner_uid: int
-    avg_fool_rate: float = (
-        0.0  # Avg % of discriminators fooled per generated media sample
-    )
-    avg_confidence_when_fooled: float = (
-        0.0  # Average discriminator confidence when fooled
-    )
-    sample_size: int = 0  # Total number of discriminator tests
-    fooled_discriminators: int = 0  # Number of discriminators fooled
-    content_samples: List[str] = None  # List of content file paths tested
-    evaluation_time: float = 0.0
-
-    def __post_init__(self):
-        if self.content_samples is None:
-            self.content_samples = []
-
-
 class NeuronType(Enum):
     VALIDATOR = "VALIDATOR"
     MINER = "MINER"
@@ -82,6 +48,28 @@ class MediaType(str, Enum):
         return mapping[self]
 
 
+class SourceType(str, Enum):
+    """Canonical source types for media provenance."""
+
+    SCRAPER = "scraper"
+    DATASET = "dataset"
+    GENERATED = "generated"
+
+
+SOURCE_TYPE_TO_NAME: Dict[SourceType, str] = {
+    SourceType.GENERATED: "model_name",
+    SourceType.DATASET: "dataset_name",
+    SourceType.SCRAPER: "download_url",
+}
+
+
+SOURCE_TYPE_TO_DB_NAME_FIELD: Dict[SourceType, str] = {
+    SourceType.GENERATED: "model_name",
+    SourceType.DATASET: "dataset_name",
+    SourceType.SCRAPER: "scraper_name",
+}
+
+
 @dataclass
 class DatasetConfig:
     path: str  # HuggingFace path
@@ -109,6 +97,7 @@ class DatasetConfig:
 
         if isinstance(self.media_type, str):
             self.media_type = MediaType(self.media_type.lower())
+
 
 class ModelTask(str, Enum):
     """Type of task the model is designed for"""

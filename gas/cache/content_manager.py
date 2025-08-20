@@ -11,7 +11,7 @@ from gas.cache.content_db import ContentDB
 from gas.cache.media_storage import MediaStorage
 from gas.cache.types import Media, MediaEntry, PromptEntry
 from gas.cache.util import extract_media_info, get_format_from_content
-from gas.types import MediaType, Modality
+from gas.types import MediaType, Modality, SourceType, SOURCE_TYPE_TO_NAME
 
 
 class ContentManager:
@@ -121,7 +121,7 @@ class ContentManager:
 				file_path=save_path,
 				modality=media_data.modality,
 				media_type=media_data.media_type,
-				source_type="generated",
+				source_type=SourceType.GENERATED,
 				generation_args=generation_args,
 				model_name=media_data.model_name,
 				mask_path=mask_path,
@@ -193,7 +193,7 @@ class ContentManager:
 			file_path=save_path,
 			modality=media_data.modality,
 			media_type=media_data.media_type,
-			source_type="scraper",
+			source_type=SourceType.SCRAPER,
 			download_url=download_url,
 			scraper_name=scraper_name,
 			mask_path=mask_path,
@@ -263,7 +263,7 @@ class ContentManager:
 			file_path=save_path,
 			modality=media_data.modality,
 			media_type=media_data.media_type,
-			source_type="dataset",
+			source_type=SourceType.DATASET,
 			dataset_name=dataset_name,
 			dataset_source_file=dataset_source_file,
 			dataset_index=dataset_index,
@@ -332,11 +332,10 @@ class ContentManager:
 			return {'count': 0, 'items': []}
 
 		# Split by source_type so we only remove dataset/scraper on sample
-		generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) == 'generated']
-		non_generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) != 'generated']
+		generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) == SourceType.GENERATED]
+		non_generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) != SourceType.GENERATED]
 
 		items: List[Dict[str, Any]] = []
-		# Retrieve non-generated content; allow removal if configured
 		if non_generated_entries:
 			non_gen_items = self.media_storage.retrieve_media(
 				media_entries=non_generated_entries,
@@ -346,7 +345,6 @@ class ContentManager:
 			)['items']
 			items.extend(non_gen_items)
 
-		# Retrieve generated content; never remove on sample
 		if generated_entries:
 			gen_items = self.media_storage.retrieve_media(
 				media_entries=generated_entries,
@@ -356,11 +354,15 @@ class ContentManager:
 			)['items']
 			items.extend(gen_items)
 
-		# Attach ids and metadata; order doesn't matter, so align by concatenation
 		combined_entries: List[MediaEntry] = non_generated_entries + generated_entries
 		for media, db_entry in zip(items, combined_entries):
 			media['id'] = db_entry.id
 			media['metadata'] = db_entry.to_dict()
+
+			origin_field = SOURCE_TYPE_TO_NAME[db_entry.source_type]
+			origin_value = getattr(db_entry, origin_field)
+			media['source_type'] = db_entry.source_type
+			media['source_name'] = origin_value
 
 		return {'count': len(items), 'items': items}
 
@@ -397,7 +399,7 @@ class ContentManager:
 				})
 		return results
 
-	def _check_and_prune_source(self, source_type: str, source_name: str, max_count: int) -> int:
+	def _check_and_prune_source(self, source_type: SourceType, source_name: str, max_count: int) -> int:
 		if not self.enable_source_limits:
 			return 0
 		current_count = self.content_db.get_source_count(source_type, source_name)
@@ -406,7 +408,7 @@ class ContentManager:
 				source_type, source_name, max_count, self.prune_strategy
 			)
 			if pruned > 0:
-				bt.logging.info(f"Pruned {pruned} items from {source_type} '{source_name}' to enforce cap {max_count}")
+				bt.logging.info(f"Pruned {pruned} items from {source_type.value} '{source_name}' to enforce cap {max_count}")
 			return pruned
 		return 0
 
@@ -416,17 +418,18 @@ class ContentManager:
 			return results
 		try:
 			counts = self.content_db.get_source_counts()
-			for source_type, sources in counts.items():
+			for source_type_str, sources in counts.items():
+				st = SourceType(source_type_str)
 				for source_name, count in sources.items():
 					if count > self.max_per_source:
 						pruned = self.content_db.prune_source_media(
-							source_type, source_name, self.max_per_source, self.prune_strategy
+							st, source_name, self.max_per_source, self.prune_strategy
 						)
 						if pruned > 0:
-							key = f"{source_type}:{source_name}"
+							key = f"{st.value}:{source_name}"
 							results[key] = pruned
 							bt.logging.info(
-								f"[CONTENT] Enforced cap: pruned {pruned} from {source_type} '{source_name}' (count {count} -> ≤ {self.max_per_source})"
+								f"[CONTENT] Enforced cap: pruned {pruned} from {st.value} '{source_name}' (count {count} -> ≤ {self.max_per_source})"
 							)
 		except Exception as e:
 			bt.logging.error(f"Error enforcing source caps: {e}")
@@ -484,10 +487,10 @@ class ContentManager:
 					sources_needing_data[source_type].append(source_name)
 		return sources_needing_data
 
-	def get_source_count(self, source_type: str, source_name: str) -> int:
+	def get_source_count(self, source_type: SourceType, source_name: str) -> int:
 		"""
 		Args:
-			source_type: 'dataset', 'scraper', or 'generated'
+			source_type: SourceType.DATASET, SourceType.SCRAPER, or SourceType.GENERATED
 			source_name: Name of the dataset, scraper, or model
 
 		Returns:
@@ -495,10 +498,10 @@ class ContentManager:
 		"""
 		return self.content_db.get_source_count(source_type, source_name)
 
-	def needs_more_data(self, source_type: str, source_name: str) -> bool:
+	def needs_more_data(self, source_type: SourceType, source_name: str) -> bool:
 		"""
 		Args:
-			source_type: 'dataset', 'scraper', or 'generated'
+			source_type: SourceType.DATASET, SourceType.SCRAPER, or SourceType.GENERATED
 			source_name: Name of the source
 
 		Returns:

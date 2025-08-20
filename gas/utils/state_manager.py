@@ -2,6 +2,7 @@ import os
 import shutil
 import time
 import traceback
+import tempfile
 from typing import Any, Dict, Optional
 import numpy as np
 import bittensor as bt
@@ -30,19 +31,19 @@ class StateManager:
         Returns:
             True if save was successful, False otherwise
         """
+        temp_dir = None
         try:
             os.makedirs(self.base_dir, exist_ok=True)
-            
-            # Clean up any existing temp directory
-            if os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir)
-            os.makedirs(self.temp_dir)
-            
+
+            # Create a unique temp directory per save to avoid partial writes on crash
+            temp_dir = tempfile.mkdtemp(dir=self.base_dir, prefix="state_temp_")
+            bt.logging.trace(f"Saving state using temp dir: {temp_dir}")
+
             # Save simple state data (numpy arrays)
             if state_data is not None:
                 for filename, value in state_data.items():
                     if isinstance(value, np.ndarray):
-                        np.save(os.path.join(self.temp_dir, filename), value)
+                        np.save(os.path.join(temp_dir, filename), value)
                         bt.logging.debug(f"Saved state for {filename}")
                     else:
                         bt.logging.warning(f"Object for {filename} is not a numpy array")
@@ -51,31 +52,36 @@ class StateManager:
             if state_objects is not None:
                 for obj, filename in state_objects:
                     try:
-                        obj.save_state(self.temp_dir, filename)
+                        obj.save_state(temp_dir, filename)
                         bt.logging.trace(f"Saved state for {filename}")
                     except Exception as e:
                         bt.logging.error(f"Failed to save state for {filename}: {e}")
                         bt.logging.error(traceback.format_exc())
                         # Continue without this object's state if it fails
-            
+
             # Mark as complete
-            with open(os.path.join(self.temp_dir, "complete"), "w") as f:
+            with open(os.path.join(temp_dir, "complete"), "w") as f:
                 f.write("1")
-            
+
             # Atomic swap: backup current, then move temp to current
             if os.path.exists(self.current_dir):
                 if os.path.exists(self.backup_dir):
                     shutil.rmtree(self.backup_dir)
-                os.rename(self.current_dir, self.backup_dir)
-            os.rename(self.temp_dir, self.current_dir)
-            
+                os.replace(self.current_dir, self.backup_dir)
+            os.replace(temp_dir, self.current_dir)
+            temp_dir = None
+
             bt.logging.success("Saved state successfully")
             return True
-            
+
         except Exception as e:
             bt.logging.error(f"Error during state save: {str(e)}")
             bt.logging.error(traceback.format_exc())
             return False
+        finally:
+            # cleanup on failure (temp is moved to current on success)
+            if temp_dir is not None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     def load_state(self, state_data_keys: list = None, state_objects: list = None) -> Optional[Dict[str, Any]]:
         """

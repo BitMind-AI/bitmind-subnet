@@ -114,7 +114,7 @@ def autoupdate(branch: str = "main", force=False):
             while os.path.basename(base_path) != "bitmind-subnet":
                 base_path = os.path.dirname(base_path)
 
-            os.system(f"cd {base_path} && git pull && chmod +x setup.sh && ./setup.sh")
+            os.system(f"cd {base_path} && git pull")
 
             with open(os.path.join(base_path, "VERSION")) as f:
                 new_version = f.read().strip()

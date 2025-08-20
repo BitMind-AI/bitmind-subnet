@@ -188,8 +188,11 @@ async def query_orchestrator(
     session: aiohttp.ClientSession,
     hotkey: bt.Keypair,
     miner_uids: str,
-    challenge_type: str,
+    modality: Modality,
     media: bytes,
+    source_type: str,
+    source_name: str,
+    label: int,
     total_timeout: float,
     connect_timeout: Optional[float] = None,
     sock_connect_timeout: Optional[float] = None,
@@ -201,7 +204,9 @@ async def query_orchestrator(
         session: aiohttp client session
         hotkey: validator hotkey Keypair for signing the request
         miner_uids: Comma-separated string of miner UIDs to challenge
-        challenge_type: Type of challenge ("image" or "video")
+        modality: Modality.IMAGE or Modality.VIDEO
+        source_type: generated, dataset, or scraped
+        source_name: model name, dataset name, or source url
         media: Binary file data (image or video)
         total_timeout: Total timeout for the request
         connect_timeout: Connection timeout
@@ -218,7 +223,15 @@ async def query_orchestrator(
 
     try:
         base_url = f"https://orchestrator.bitmind.workers.dev"
-        url = f"{base_url}/challenge-miners?minerUids={miner_uids}&type={challenge_type.value}"
+
+        querystr = (
+            f"minerUids={miner_uids}"
+            f"&type={modality.value}"
+            f"&source_type={source_type}"
+            f"&source_name={source_name}"
+            f"&label={source_name}"
+        )
+        url = f"{base_url}/challenge-miners?{querystr}"
 
         headers = generate_header(
             hotkey,

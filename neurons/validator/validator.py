@@ -20,7 +20,14 @@ from gas.utils.metagraph import (
     create_set_weights,
     run_block_callback_thread,
 )
-from gas.types import NeuronType, MediaType, MinerType, Modality, DiscriminatorType
+from gas.types import (
+    NeuronType,
+    MediaType,
+    MinerType,
+    Modality,
+    SourceType
+)
+
 from gas.utils import (
     on_block_interval,
     print_info,
@@ -232,7 +239,6 @@ class Validator(BaseNeuron):
         bt.logging.info(f"Final media shape: {aug_media.shape}")
 
         bt.logging.info(f"Sending discriminator challenge for {len(miner_uids)} UIDs")
-
         # query orchestrator
         async with aiohttp.ClientSession() as session:
             results = await query_orchestrator(
@@ -240,7 +246,10 @@ class Validator(BaseNeuron):
                 self.wallet.hotkey,
                 miner_uids,
                 modality,
-                media_to_bytes(aug_media)[0],
+                media=media_to_bytes(aug_media)[0],
+                source_type=media_sample["source_type"],
+                source_name=media_sample["source_name"],
+                label=media_type.int_value,
                 total_timeout=self.config.neuron.miner_total_timeout,
                 connect_timeout=self.config.neuron.miner_connect_timeout,
                 sock_connect_timeout=self.config.neuron.miner_sock_connect_timeout,
@@ -280,11 +289,7 @@ class Validator(BaseNeuron):
 
         # Log responses and metrics
         for r in results:
-            log_fn = (
-                bt.logging.success if r.get("status") == 200 else bt.logging.warning
-            )
-
-            # update result with challenge media_type, metrics, rewards, scores for logging
+            # update result with metrics, rewards, scores for logging
             uid = r.get("uid")
             r["result"] = {} if r.get("result") is None else r["result"]
             r["prediction"] = discriminator_preds.get(uid)
@@ -296,6 +301,11 @@ class Validator(BaseNeuron):
                 for k, v in discriminator_metrics.get(uid, {}).items()
             })
 
+            log_fn = (
+                bt.logging.success
+                if r.get("status") == 200 
+                else bt.logging.warning
+            )
             log_fn(json.dumps(r, indent=2))
 
         self.wandb_logger.log(results, media_sample, aug_params)
