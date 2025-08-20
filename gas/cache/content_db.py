@@ -146,6 +146,32 @@ class ContentDB:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_source_type ON media (source_type)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_created_at ON media (created_at)")
 
+            # Temporary data hygiene: prune prompts whose source_media_id no longer exists in media table
+            # Note: This only checks DB-level association, not filesystem existence.
+            try:
+                cursor = conn.execute(
+                    """
+                    SELECT COUNT(*) FROM prompts 
+                    WHERE source_media_id IS NOT NULL 
+                      AND source_media_id NOT IN (SELECT id FROM media)
+                    """
+                )
+                orphan_count = cursor.fetchone()[0] or 0
+                if orphan_count:
+                    bt.logging.warning(
+                        f"Pruning {orphan_count} orphan prompts with missing media references"
+                    )
+                    conn.execute(
+                        """
+                        DELETE FROM prompts 
+                        WHERE source_media_id IS NOT NULL 
+                          AND source_media_id NOT IN (SELECT id FROM media)
+                        """
+                    )
+                    conn.commit()
+            except Exception as e:
+                bt.logging.error(f"Failed pruning orphan prompts: {e}")
+
     def add_prompt_entry(
         self,
         content: str,
@@ -591,6 +617,7 @@ class ContentDB:
         """
         Prune items for a source so that the total count is <= max_count.
         Deletes database rows for the oldest (or random) items.
+        Also deletes any prompts whose source_media_id references the pruned media.
 
         Returns:
             Number of items pruned.
@@ -625,10 +652,10 @@ class ContentDB:
             media_ids = [row[0] for row in rows]
             file_paths = [row[1] for row in rows]
 
-            # Clear prompts.source_media_id for any prompts referencing these media ids
+            # Delete prompts that reference these media ids
             placeholders_ids = ",".join(["?"] * len(media_ids))
             conn.execute(
-                f"UPDATE prompts SET source_media_id = NULL WHERE source_media_id IN ({placeholders_ids})",
+                f"DELETE FROM prompts WHERE source_media_id IN ({placeholders_ids})",
                 media_ids,
             )
 
