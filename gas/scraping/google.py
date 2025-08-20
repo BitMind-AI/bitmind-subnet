@@ -16,6 +16,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 import stamina
 
 from gas.scraping.base import BaseScraper
+from gas.types import MediaType
 
 
 class GoogleScraper(BaseScraper):
@@ -38,7 +39,7 @@ class GoogleScraper(BaseScraper):
         max_delay=10.0,
         jitter_factor=0.3,
     ):
-        super().__init__(min_width, min_height, media_type)
+        super().__init__(min_width, min_height, media_type=MediaType.REAL)
 
         self.user_agents = user_agent
         if self.user_agents is None:
