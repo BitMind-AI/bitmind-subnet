@@ -346,7 +346,7 @@ def add_validator_args(parser):
         "--challenge.max-frames",
         type=int,
         help="Maximum number of video frames to sample for a challenge",
-        default=144,
+        default=24,
     )
 
 

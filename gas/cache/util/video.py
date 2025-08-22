@@ -16,7 +16,7 @@ def sample_frames(
     min_duration: float = 1.0,
     max_duration: float = 6.0,
     max_fps: float = 30.0,
-    max_frames: int = 144,
+    max_frames: int = 24,
     as_float32: bool = False,
     channels_first: bool = False,
     as_rgb: bool = True,
