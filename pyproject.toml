@@ -58,6 +58,7 @@ dependencies = [
     "selenium==4.34.0",
     "stamina==25.1.0",
     "click>=8.0.0",
+    "datasets==4.0.0",
 ]
 
 [project.scripts]

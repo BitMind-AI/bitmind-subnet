@@ -208,7 +208,7 @@ class MediaStorage:
         video_path: Path,
         min_duration: float = 1.0,
         max_duration: float = 6.0,
-        max_frames: int = 144,
+        max_frames: int = 24,
     ) -> Optional[Dict[str, Any]]:
         """
         Args:
@@ -356,7 +356,7 @@ class MediaStorage:
                         file_path,
                         min_duration=kwargs.get("min_duration", 1.0),
                         max_duration=kwargs.get("max_duration", 6.0),
-                        max_frames=kwargs.get("max_frames", 144),
+                        max_frames=kwargs.get("max_frames", 24),
                     )
 
                     if video_result is None or video_result.get("video") is None:
