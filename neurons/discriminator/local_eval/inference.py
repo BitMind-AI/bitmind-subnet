@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 import bittensor as bt
 import cv2
@@ -9,7 +9,6 @@ from PIL import Image
 
 from .data import video_payload
 
-MIN_SAMPLES_REQUIRED = 10
 
 
 async def run_image_inference(
@@ -18,7 +17,8 @@ async def run_image_inference(
     exam_results: Dict,
     dataset,
     dataset_split,
-    verbosity: int = 0
+    verbosity: int = 0,
+    max_samples: Optional[int] = None
 ) -> float:
     """Test model on image dataset."""
     
@@ -35,7 +35,7 @@ async def run_image_inference(
         inference_times = []
         
         for i, sample in enumerate(dataset):
-            if i >= MIN_SAMPLES_REQUIRED:  # Test exactly MIN_SAMPLES_REQUIRED (10) images
+            if max_samples is not None and i >= max_samples:  # Limit number of evaluated images
                 break
             
             try:
@@ -110,7 +110,10 @@ async def run_image_inference(
                 # Verbose output for each image sample
                 if verbosity >= 1:
                     result_symbol = "✅" if is_correct else "❌"
-                    bt.logging.info(f"{result_symbol} Image {i+1}/{MIN_SAMPLES_REQUIRED}: {'CORRECT' if is_correct else 'WRONG'} (True={true_label}, Pred={predicted_class}, Model={model_name})")
+                    if max_samples is not None:
+                        bt.logging.info(f"{result_symbol} Image {i+1}/{max_samples}: {'CORRECT' if is_correct else 'WRONG'} (True={true_label}, Pred={predicted_class}, Model={model_name})")
+                    else:
+                        bt.logging.info(f"{result_symbol} Image {i+1}: {'CORRECT' if is_correct else 'WRONG'} (True={true_label}, Pred={predicted_class}, Model={model_name})")
                 
             except Exception as e:
                 bt.logging.warning(f"Failed to process image sample {i}: {e}")
@@ -144,7 +147,8 @@ async def run_video_inference(
     dataset,
     dataset_config,
     verbosity: int = 0,
-    temp_dir: str = None
+    temp_dir: str = None,
+    max_samples: Optional[int] = None
 ) -> float:
     """Test model on video dataset."""
     
@@ -162,7 +166,7 @@ async def run_video_inference(
             total = 0
             inference_times = []
             for i, sample in enumerate(dataset):
-                if i >= 10:
+                if max_samples is not None and i >= max_samples:
                     break
                 
                 try:
@@ -260,7 +264,10 @@ async def run_video_inference(
                     
                     if verbosity >= 1:
                         result_symbol = "✅" if is_correct else "❌"
-                        bt.logging.info(f"{result_symbol} Video {i+1}/10: {'CORRECT' if is_correct else 'WRONG'} (True={true_label}, Pred={final_prediction}, Frames={len(frames)}, Model={model_name})")
+                        if max_samples is not None:
+                            bt.logging.info(f"{result_symbol} Video {i+1}/{max_samples}: {'CORRECT' if is_correct else 'WRONG'} (True={true_label}, Pred={final_prediction}, Frames={len(frames)}, Model={model_name})")
+                        else:
+                            bt.logging.info(f"{result_symbol} Video {i+1}: {'CORRECT' if is_correct else 'WRONG'} (True={true_label}, Pred={final_prediction}, Frames={len(frames)}, Model={model_name})")
                     total += 1
                     
                 except Exception as e:

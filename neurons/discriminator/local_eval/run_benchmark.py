@@ -30,6 +30,7 @@ async def run_model_exam(
     # prune_old_data removed
     stream_images: bool = True,
     temp_dir: str = None,
+    max_samples: int | None = None,
 ) -> Dict:
     """Run a model examination for image and/or video detectors.
 
@@ -138,7 +139,7 @@ async def run_model_exam(
             else:
                 # prune removed
                 image_accuracy = await test_image_inference(
-                    image_session, image_session.get_inputs(), exam_results, dataset=image_dataset, dataset_split=image_split, verbosity=verbosity
+                    image_session, image_session.get_inputs(), exam_results, dataset=image_dataset, dataset_split=image_split, verbosity=verbosity, max_samples=max_samples
                 )
                 exam_results["image_results"]["accuracy"] = image_accuracy
         
@@ -148,7 +149,7 @@ async def run_model_exam(
             video_dataset, video_config = load_latest_video_dataset(streaming=True, split='train')
             # prune removed
             video_accuracy = await test_video_inference(
-                video_session, video_session.get_inputs(), exam_results, dataset=video_dataset, dataset_config=video_config, verbosity=verbosity, temp_dir=temp_dir
+                video_session, video_session.get_inputs(), exam_results, dataset=video_dataset, dataset_config=video_config, verbosity=verbosity, temp_dir=temp_dir, max_samples=max_samples
             )
             exam_results["video_results"]["accuracy"] = video_accuracy
         
@@ -198,6 +199,7 @@ def main():
     parser.set_defaults(stream_images=True)
     parser.add_argument("--hf-home", type=str, default=None, help="Override Hugging Face cache root (sets HF_HOME)")
     parser.add_argument("--temp-dir", type=str, default=None, help="Directory for temporary video extraction (overrides TMPDIR)")
+    parser.add_argument("--max-samples", type=int, default=None, help="Maximum number of samples to evaluate per modality (use all if omitted)")
     args = parser.parse_args()
 
     if not args.image_model and not args.video_model:
@@ -240,6 +242,7 @@ def main():
             # prune removed
             stream_images=args.stream_images,
             temp_dir=args.temp_dir,
+            max_samples=args.max_samples,
         )
         return results
 
