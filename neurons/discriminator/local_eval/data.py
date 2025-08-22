@@ -3,10 +3,8 @@ import contextlib
 import tempfile
 import tarfile
 import os
-import shutil
-import glob
 from datasets import get_dataset_config_names, load_dataset
-from huggingface_hub import hf_hub_download, scan_cache_dir, delete_cache_entries
+from huggingface_hub import hf_hub_download, scan_cache_dir
 
 
 def discover_latest_image_config() -> Optional[str]:
@@ -18,54 +16,56 @@ def discover_latest_image_config() -> Optional[str]:
         return None
 
 
+def discover_all_image_configs() -> list:
+    """Return all config names sorted ascending; empty list if unavailable."""
+    try:
+        configs = get_dataset_config_names('bitmind/bm-image-benchmarks')
+        return sorted(configs) if configs else []
+    except Exception:
+        return []
+
+
 def load_latest_image_dataset(streaming: bool = True) -> Tuple[Optional[object], Optional[str]]:
-    """Load the latest image dataset config's train split.
+    """Load the newest working image dataset split, with fallback to older splits.
 
-    Returns a tuple of (dataset, config_name). Dataset is a streaming iterable if streaming=True.
+    Returns (dataset, config_name). Dataset is streaming iterable if streaming=True.
     """
-    latest_config = discover_latest_image_config()
-    if latest_config is None:
-        return None, None
-    try:
-        dataset = load_dataset('bitmind/bm-image-benchmarks', latest_config, split='train', streaming=streaming)
-        return dataset, latest_config
-    except Exception:
+    configs = discover_all_image_configs()
+    if not configs:
         return None, None
 
-
-def prune_image_dataset_cache() -> None:
-    """Best-effort removal of cached bm-image-benchmarks data from datasets cache.
-
-    This removes local cache directories for the dataset so the next
-    non-streaming load only keeps the latest split.
-    """
-    try:
+    # Try from newest to oldest
+    for config_name in reversed(configs):
         try:
-            from datasets.utils import logging as ds_logging  # noqa: F401
-            from datasets.config import HF_DATASETS_CACHE
-            cache_dir = HF_DATASETS_CACHE
+            dataset = load_dataset(
+                'bitmind/bm-image-benchmarks', config_name, split='train', streaming=streaming
+            )
+            # Probe a few samples to ensure they are loadable
+            probe_count = 0
+            for sample in dataset:
+                # Basic validation: must have label and at least one media field
+                if sample.get('label') is None:
+                    raise ValueError("missing label in sample")
+                # Accept either PIL object or a path/bytes; defer actual decoding to inference
+                media_has_value = (
+                    sample.get('media_image') is not None
+                    or sample.get('image') is not None
+                    or sample.get('filepath') is not None
+                )
+                if not media_has_value:
+                    raise ValueError("missing image media field")
+                probe_count += 1
+                if probe_count >= 3:
+                    break
+            if probe_count == 0:
+                # No samples produced; try older split
+                continue
+            return dataset, config_name
         except Exception:
-            cache_dir = os.path.expanduser("~/.cache/huggingface/datasets")
+            # Try older split
+            continue
 
-        if not os.path.isdir(cache_dir):
-            return
-
-        # Remove directories that clearly belong to the dataset
-        patterns = [
-            os.path.join(cache_dir, "bitmind___bm-image-benchmarks*"),
-            os.path.join(cache_dir, "*bitmind___bm-image-benchmarks*"),
-        ]
-        for pattern in patterns:
-            for path in glob.glob(pattern):
-                try:
-                    if os.path.isdir(path):
-                        shutil.rmtree(path, ignore_errors=True)
-                    elif os.path.isfile(path):
-                        os.remove(path)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+    return None, None
 
 
 def discover_latest_video_config() -> Optional[str]:
@@ -91,24 +91,6 @@ def load_latest_video_dataset(streaming: bool = True, split: str = 'train') -> T
         return dataset, latest_config
     except Exception:
         return None, None
-
-
-def prune_old_video_payloads(current_config: str) -> None:
-    """Remove cached TAR payloads for bm-video-benchmarks configs other than current."""
-    try:
-        cache_info = scan_cache_dir()
-        entries_to_delete = []
-        for repo in cache_info.repos:
-            if repo.repo_id == 'bitmind/bm-video-benchmarks' and repo.repo_type == 'dataset':
-                for revision in repo.revisions:
-                    for file_ref in revision.files:
-                        # file_ref.path like 'videos/<config>.tar.gz'
-                        if file_ref.path.startswith('videos/') and not file_ref.path.endswith(f'{current_config}.tar.gz'):
-                            entries_to_delete.append(file_ref)
-        if entries_to_delete:
-            delete_cache_entries(*entries_to_delete)
-    except Exception:
-        pass
 
 
 @contextlib.contextmanager

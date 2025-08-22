@@ -7,9 +7,6 @@ import logging
 import bittensor as bt
 import sys
 
-from .inference import run_image_inference as test_image_inference, run_video_inference as test_video_inference
-from .data import load_latest_image_dataset, load_latest_video_dataset, prune_image_dataset_cache, prune_old_video_payloads
-
 logger = bt.logging
 
 try:
@@ -30,8 +27,8 @@ async def run_model_exam(
     image_model_path: str = None,
     video_model_path: str = None,
     verbosity: int = 0,
-    prune_old_data: bool = False,
-    stream_images: bool = False,
+    # prune_old_data removed
+    stream_images: bool = True,
     temp_dir: str = None,
 ) -> Dict:
     """Run a model examination for image and/or video detectors.
@@ -45,13 +42,20 @@ async def run_model_exam(
         image_model_path (str, optional): Path to the image detector ONNX model. Defaults to None.
         video_model_path (str, optional): Path to the video detector ONNX model. Defaults to None.
         verbosity (int, optional): Level of verbosity for logging. Defaults to 0.
-        prune_old_data (bool, optional): Whether to delete cached older splits/configs. Defaults to False.
-        stream_images (bool, optional): Whether to stream images instead of downloading. Defaults to False.
+        prune_old_data removed.
+        stream_images (bool, optional): Whether to stream images instead of downloading. Defaults to True.
         temp_dir (str, optional): Directory for temporary video extraction. Defaults to None.
 
     Returns:
         Dict: A dictionary containing the exam results, including pass/fail status and metrics.
     """
+    # Delayed imports so HF_HOME/TMPDIR can be set in main() before these modules load
+    from .inference import (
+        run_image_inference as test_image_inference,
+        run_video_inference as test_video_inference,
+    )
+    from .data import load_latest_image_dataset, load_latest_video_dataset
+
     import onnxruntime as ort
     
     exam_results = {
@@ -132,8 +136,7 @@ async def run_model_exam(
                 logger.error("Image dataset discovery failed")
                 exam_results["image_results"]["error"] = "No dataset available"
             else:
-                if prune_old_data and image_split:
-                    prune_image_dataset_cache()
+                # prune removed
                 image_accuracy = await test_image_inference(
                     image_session, image_session.get_inputs(), exam_results, dataset=image_dataset, dataset_split=image_split, verbosity=verbosity
                 )
@@ -143,8 +146,7 @@ async def run_model_exam(
         if run_video and video_session:
             logger.info("🎬 Testing on video dataset with video_detector...")
             video_dataset, video_config = load_latest_video_dataset(streaming=True, split='train')
-            if prune_old_data and video_config:
-                prune_old_video_payloads(video_config)
+            # prune removed
             video_accuracy = await test_video_inference(
                 video_session, video_session.get_inputs(), exam_results, dataset=video_dataset, dataset_config=video_config, verbosity=verbosity, temp_dir=temp_dir
             )
@@ -190,8 +192,10 @@ def main():
     parser.add_argument("--hotkey", type=str, default="local", help="Identifier for the run")
     parser.add_argument("--file_hash", type=str, default="local", help="Model file hash identifier")
     parser.add_argument("-v", action="count", default=0, help="Increase verbosity (-v, -vv, -vvv)")
-    parser.add_argument("--prune-old-data", action="store_true", help="Delete cached older splits/configs after fetching the latest")
-    parser.add_argument("--stream-images", action="store_true", help="Stream images instead of downloading the latest split")
+    # prune-old-data option removed
+    # Stream images by default; allow disabling with --no-stream-images
+    parser.add_argument("--no-stream-images", dest="stream_images", action="store_false", help="Disable streaming images; download locally")
+    parser.set_defaults(stream_images=True)
     parser.add_argument("--hf-home", type=str, default=None, help="Override Hugging Face cache root (sets HF_HOME)")
     parser.add_argument("--temp-dir", type=str, default=None, help="Directory for temporary video extraction (overrides TMPDIR)")
     args = parser.parse_args()
@@ -202,6 +206,14 @@ def main():
     # Optionally override Hugging Face cache root
     if args.hf_home:
         os.environ["HF_HOME"] = args.hf_home
+
+    # Optionally override TMPDIR for temporary files (extraction, temp downloads)
+    if args.temp_dir:
+        try:
+            os.makedirs(args.temp_dir, exist_ok=True)
+        except Exception:
+            pass
+        os.environ["TMPDIR"] = args.temp_dir
 
     # Prepare minimal exam results envelope
     exam_results = {
@@ -225,7 +237,7 @@ def main():
             image_model_path=args.image_model,
             video_model_path=args.video_model,
             verbosity=args.v,
-            prune_old_data=args.prune_old_data,
+            # prune removed
             stream_images=args.stream_images,
             temp_dir=args.temp_dir,
         )

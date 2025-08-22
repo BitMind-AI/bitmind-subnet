@@ -490,11 +490,10 @@ miner.add_command(push_discriminator, name="push")
 @click.option("--image-model", help="Path to image detector ONNX model")
 @click.option("--video-model", help="Path to video detector ONNX model")
 @click.option("-v", count=True, help="Increase verbosity (-v, -vv, -vvv)")
-@click.option("--prune-old-data", is_flag=True, help="Delete cached older splits/configs after fetching the latest")
-@click.option("--stream-images", is_flag=True, help="Stream images instead of downloading the latest split")
+@click.option("--no-stream-images", is_flag=True, help="Disable streaming images; download locally")
 @click.option("--hf-home", help="Override Hugging Face cache root (sets HF_HOME)")
 @click.option("--temp-dir", help="Directory for temporary video extraction (overrides TMPDIR)")
-def benchmark(image_model, video_model, v, prune_old_data, stream_images, hf_home, temp_dir):
+def benchmark(image_model, video_model, v, no_stream_images, hf_home, temp_dir):
     """Run image/video benchmarks for provided ONNX models"""
     if not image_model and not video_model:
         click.echo("Error: Either --image-model or --video-model must be provided", err=True)
@@ -508,10 +507,9 @@ def benchmark(image_model, video_model, v, prune_old_data, stream_images, hf_hom
         cmd.extend(["--video_model", video_model])
     if v:
         cmd.extend(["-" + "v" * v])
-    if prune_old_data:
-        cmd.append("--prune-old-data")
-    if stream_images:
-        cmd.append("--stream-images")
+    # Stream by default; pass disable flag if requested
+    if no_stream_images:
+        cmd.append("--no-stream-images")
     if hf_home:
         cmd.extend(["--hf-home", hf_home])
     if temp_dir:
