@@ -182,7 +182,7 @@ async def run_video_inference(
                     cap = cv2.VideoCapture(video_path)
                     frames = []
                     frame_count = 0
-                    max_frames = 10  # Sample first 10 frames
+                    max_frames = 24
                     
                     while cap.isOpened() and frame_count < max_frames:
                         ret, frame = cap.read()
