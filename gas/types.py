@@ -36,6 +36,7 @@ class MediaType(str, Enum):
     REAL = "real"
     SYNTHETIC = "synthetic"
     SEMISYNTHETIC = "semisynthetic"
+    MIXED = "mixed"
 
     @property
     def int_value(self):
@@ -44,6 +45,7 @@ class MediaType(str, Enum):
             MediaType.REAL: 0,
             MediaType.SYNTHETIC: 1,
             MediaType.SEMISYNTHETIC: 2,
+            MediaType.MIXED: 3,
         }
         return mapping[self]
 
@@ -71,6 +73,15 @@ SOURCE_TYPE_TO_DB_NAME_FIELD: Dict[SourceType, str] = {
 
 
 @dataclass
+class LabelConfig:
+    """Configuration for label mapping in mixed datasets"""
+    column_name: str  # Name of the label column
+    real_values: List[Union[int, str, bool]]  # Values that indicate REAL content
+    synthetic_values: List[Union[int, str, bool]]  # Values that indicate AI/SYNTHETIC content
+    value_meanings: Optional[Dict[Union[int, str], str]] = None  # Optional description of what values mean
+
+
+@dataclass
 class DatasetConfig:
     path: str  # HuggingFace path
     modality: Modality
@@ -80,6 +91,8 @@ class DatasetConfig:
     source_format: str = ""
     priority: int = 1  # Optional: priority for sampling (higher is more frequent)
     enabled: bool = True
+    label_config: Optional['LabelConfig'] = None  # For mixed datasets: how to split by labels
+    filter_condition: Optional[str] = None  # For multi-modal datasets: filter by modality
 
     def __post_init__(self):
         """Validate and set defaults"""
@@ -97,6 +110,61 @@ class DatasetConfig:
 
         if isinstance(self.media_type, str):
             self.media_type = MediaType(self.media_type.lower())
+            
+        # Handle label_config conversion from dict to LabelConfig object
+        if self.label_config and isinstance(self.label_config, dict):
+            self.label_config = LabelConfig(**self.label_config)
+    
+    def is_mixed_dataset(self) -> bool:
+        """Check if this is a mixed dataset that needs label-based splitting"""
+        return self.label_config is not None
+    
+    def is_multi_modal_dataset(self) -> bool:
+        """Check if this dataset contains multiple modalities and needs filtering"""
+        return self.filter_condition is not None
+    
+    def get_media_type_for_label(self, label_value: Union[int, str, bool]) -> Optional[MediaType]:
+        """
+        Given a label value, return the appropriate MediaType for caching.
+        
+        Args:
+            label_value: The label value from the dataset
+            
+        Returns:
+            MediaType.REAL for real content, MediaType.SYNTHETIC for AI content, None if unknown
+        """
+        if not self.label_config:
+            return self.media_type
+            
+        if label_value in self.label_config.real_values:
+            return MediaType.REAL
+        elif label_value in self.label_config.synthetic_values:
+            return MediaType.SYNTHETIC
+        else:
+            return None  # Unknown label value
+    
+    def should_include_sample(self, sample: dict) -> bool:
+        """
+        Check if a sample should be included based on filter_condition.
+        
+        Args:
+            sample: Dictionary containing sample data
+            
+        Returns:
+            True if sample should be included, False otherwise
+        """
+        if not self.filter_condition:
+            return True
+            
+        # Simple condition evaluation for type filtering
+        # Could be extended for more complex conditions
+        if "==" in self.filter_condition:
+            field, value = self.filter_condition.split(" == ")
+            field = field.strip()
+            value = value.strip().strip("'\"")
+            return sample.get(field) == value
+            
+        return True
 
 
 class ModelTask(str, Enum):

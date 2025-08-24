@@ -1,0 +1,340 @@
+# Dataset configurations for the validator cache system
+# Each dataset entry defines a data source with modality, media type, and descriptive tags
+
+image_datasets:
+  # Real image datasets
+  - path: "bitmind/bm-eidon-image"
+    modality: "image"
+    media_type: "real"
+    tags: ["frontier"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/bm-real"
+    modality: "image"
+    media_type: "real"
+    tags: []
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/open-image-v7-256"
+    modality: "image"
+    media_type: "real"
+    tags: ["diverse"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/celeb-a-hq"
+    modality: "image"
+    media_type: "real"
+    tags: ["faces", "high-quality"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/ffhq-256"
+    modality: "image"
+    media_type: "real"
+    tags: ["faces", "high-quality"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/MS-COCO-unique-256"
+    modality: "image"
+    media_type: "real"
+    tags: ["diverse"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/AFHQ"
+    modality: "image"
+    media_type: "real"
+    tags: ["animals", "high-quality"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/lfw"
+    modality: "image"
+    media_type: "real"
+    tags: ["faces"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/caltech-256"
+    modality: "image"
+    media_type: "real"
+    tags: ["objects", "categorized"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/caltech-101"
+    modality: "image"
+    media_type: "real"
+    tags: ["objects", "categorized"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/dtd"
+    modality: "image"
+    media_type: "real"
+    tags: ["textures"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/idoc-mugshots-images"
+    modality: "image"
+    media_type: "real"
+    tags: ["faces"]
+    priority: 1
+    enabled: true
+
+  # Synthetic image datasets
+  - path: "bitmind/JourneyDB"
+    modality: "image"
+    media_type: "synthetic"
+    tags: ["midjourney"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/GenImage_MidJourney"
+    modality: "image"
+    media_type: "synthetic"
+    tags: ["midjourney"]
+    priority: 1
+    enabled: true
+
+  - path: "bitmind/bm-aura-imagegen"
+    modality: "image"
+    media_type: "synthetic"
+    tags: ["sora"]
+    priority: 1
+    enabled: true
+
+  # Semisynthetic image datasets
+  - path: "bitmind/face-swap"
+    modality: "image"
+    media_type: "semisynthetic"
+    tags: ["faces", "manipulated"]
+    priority: 1
+    enabled: true
+
+video_datasets:
+  # Real video datasets
+  - path: "bitmind/bm-eidon-video"
+    modality: "video"
+    media_type: "real"
+    tags: ["frontier"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  - path: "shangxd/imagenet-vidvrd"
+    modality: "video"
+    media_type: "real"
+    tags: ["diverse"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  - path: "nkp37/OpenVid-1M"
+    modality: "video"
+    media_type: "real"
+    tags: ["diverse", "large-zips"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  # Real video datasets (additional)
+  - path: "facebook/PE-Video"
+    modality: "video"
+    media_type: "real"
+    tags: ["meta", "physical-events"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  # Synthetic video datasets
+  - path: "faridlab/deepaction_v1"
+    modality: "video"
+    media_type: "synthetic"
+    tags: ["action-recognition", "deepfake"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  - path: "Rapidata/text-2-video-human-preferences-kling-v2.1-master"
+    modality: "video"
+    media_type: "synthetic"
+    tags: ["text-to-video", "kling", "human-preferences"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  - path: "nyuuzyou/klingai"
+    modality: "video"
+    media_type: "synthetic"
+    tags: ["kling-ai", "text-to-video"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  - path: "Rapidata/text-2-video-human-preferences-veo3"
+    modality: "video"
+    media_type: "synthetic"
+    tags: ["text-to-video", "veo3", "human-preferences"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  - path: "Rapidata/text-2-video-human-preferences-veo2"
+    modality: "video"
+    media_type: "synthetic"
+    tags: ["text-to-video", "veo2", "human-preferences"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+  # Semisynthetic video datasets
+  - path: "bitmind/semisynthetic-video"
+    modality: "video"
+    media_type: "semisynthetic"
+    tags: ["faces"]
+    source_format: "zip"
+    priority: 1
+    enabled: true
+
+# Mixed datasets containing both real and AI-generated content with labels
+# These datasets will be split at load time based on their labels:
+# - Real content (based on label_config.real_values) goes to REAL cache
+# - AI content (based on label_config.synthetic_values) goes to SYNTHETIC cache
+mixed_datasets:
+  - path: "Hemg/AI-Generated-vs-Real-Images-Datasets"
+    modality: "image"
+    media_type: "mixed"
+    tags: ["binary-classification", "art", "mixed-content"]
+    priority: 1
+    enabled: true
+    label_config:
+      column_name: "label"
+      real_values: [1]
+      synthetic_values: [0]
+      value_meanings:
+        0: "AiArtData"
+        1: "RealArt"
+
+  - path: "prithivMLmods/Deepfake-vs-Real-v2"
+    modality: "image"
+    media_type: "mixed"
+    tags: ["binary-classification", "deepfake", "mixed-content"]
+    priority: 1
+    enabled: true
+    label_config:
+      column_name: "label"
+      real_values: [1]
+      synthetic_values: [0]
+      value_meanings:
+        0: "Deepfake"
+        1: "Real"
+
+  - path: "JamieWithofs/Deepfake-and-real-images-4"
+    modality: "image"
+    media_type: "mixed"
+    tags: ["binary-classification", "deepfake", "mixed-content"]
+    priority: 1
+    enabled: true
+    label_config:
+      column_name: "label"
+      real_values: [1]
+      synthetic_values: [0]
+      value_meanings:
+        0: "Fake"
+        1: "Real"
+
+  - path: "Hemg/deepfake-and-real-images"
+    modality: "image"
+    media_type: "mixed"
+    tags: ["binary-classification", "deepfake", "mixed-content"]
+    priority: 1
+    enabled: true
+    label_config:
+      column_name: "label"
+      real_values: [1]
+      synthetic_values: [0]
+      value_meanings:
+        0: "Fake"
+        1: "Real"
+
+  - path: "prithivMLmods/Deepfake-vs-Real-60K"
+    modality: "image"
+    media_type: "mixed"
+    tags:
+      ["binary-classification", "deepfake", "mixed-content", "large-dataset"]
+    priority: 1
+    enabled: true
+    label_config:
+      column_name: "label"
+      real_values: [1]
+      synthetic_values: [0]
+      value_meanings:
+        0: "Fake"
+        1: "Real"
+
+  - path: "Whab/deepfake"
+    modality: "image"
+    media_type: "mixed"
+    tags: ["binary-classification", "deepfake", "mixed-content"]
+    priority: 1
+    enabled: true
+    label_config:
+      column_name: "label"
+      real_values: [1]
+      synthetic_values: [0]
+      value_meanings:
+        0: "Fake"
+        1: "Real"
+
+  - path: "egujr001/sample-real-fake-data"
+    modality: "image"
+    media_type: "mixed"
+    tags: ["binary-classification", "deepfake", "mixed-content", "sample-data"]
+    priority: 1
+    enabled: true
+    label_config:
+      column_name: "label"
+      real_values: [1]
+      synthetic_values: [0]
+      value_meanings:
+        0: "Fake"
+        1: "Real"
+
+  # Multi-modal datasets (same dataset path, split by modality)
+  - path: "AI-Safeguard/Ivy-Fake"
+    modality: "image"
+    media_type: "mixed"
+    tags:
+      ["binary-classification", "multi-modal-source", "ivy-fake", "explainable"]
+    priority: 1
+    enabled: true
+    filter_condition: "type == 'image'"
+    label_config:
+      column_name: "label"
+      real_values: ["real"]
+      synthetic_values: ["fake"]
+      value_meanings:
+        fake: "AI-generated content"
+        real: "Real content"
+
+  - path: "AI-Safeguard/Ivy-Fake"
+    modality: "video"
+    media_type: "mixed"
+    tags:
+      ["binary-classification", "multi-modal-source", "ivy-fake", "explainable"]
+    priority: 1
+    enabled: true
+    filter_condition: "type == 'video'"
+    label_config:
+      column_name: "label"
+      real_values: ["real"]
+      synthetic_values: ["fake"]
+      value_meanings:
+        fake: "AI-generated content"
+        real: "Real content"
