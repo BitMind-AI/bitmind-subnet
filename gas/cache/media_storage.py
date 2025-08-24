@@ -292,7 +292,6 @@ class MediaStorage:
         self,
         media_entries: List["MediaEntry"],
         modality: Modality,
-        remove_from_cache: bool = False,
         **kwargs,
     ) -> Dict[str, Any]:
         """
@@ -301,7 +300,6 @@ class MediaStorage:
         Args:
             media_entries: List of MediaEntry objects from database
             modality: The modality (Modality.IMAGE or Modality.VIDEO)
-            remove_from_cache: Whether to remove sampled items from cache
             **kwargs: Additional arguments for reading media
 
         Returns:
@@ -371,9 +369,6 @@ class MediaStorage:
                     }
 
                     sampled_items.append(item)
-
-                if remove_from_cache:
-                    self.delete_media_file(file_path)
 
             except Exception as e:
                 print(f"Error processing {file_path}: {e}")

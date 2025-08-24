@@ -540,6 +540,105 @@ def status():
         click.echo("No services found")
 
 
+@cli.command(name="install-py-deps")
+@click.option("--clear-venv", is_flag=True, help="Delete existing .venv directory (default is to preserve)")
+def install_py_deps(clear_venv):
+    """Install Python dependencies via uv"""
+    click.echo("Installing Python dependencies...")
+    
+    # Get the path to install.sh in the project root
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    install_script = project_root / "install.sh"
+    
+    if not install_script.exists():
+        click.echo("Error: install.sh not found in project root.", err=True)
+        return False
+    
+    # Build command args
+    cmd_args = [str(install_script), "--py-deps-only"]
+    if clear_venv:
+        cmd_args.append("--clear-venv")
+    
+    # Run install.sh with appropriate flags
+    try:
+        result = subprocess.run(cmd_args, check=True)
+        click.echo("✅ Python dependencies installation completed!")
+        return result.returncode == 0
+    except subprocess.CalledProcessError as e:
+        click.echo(f"❌ Python dependencies installation failed with exit code {e.returncode}", err=True)
+        return False
+    except Exception as e:
+        click.echo(f"❌ Error running install script: {e}", err=True)
+        return False
+
+
+@cli.command(name="install-sys-deps")
+@click.option("--clear-venv", is_flag=True, help="Delete existing .venv directory (default is to preserve)")
+def install_sys_deps(clear_venv):
+    """Install system dependencies"""
+    click.echo("Installing system dependencies...")
+    
+    # Get the path to install.sh in the project root
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    install_script = project_root / "install.sh"
+    
+    if not install_script.exists():
+        click.echo("Error: install.sh not found in project root.", err=True)
+        return False
+    
+    # Build command args
+    cmd_args = [str(install_script), "--sys-deps-only"]
+    if clear_venv:
+        cmd_args.append("--clear-venv")
+    
+    # Run install.sh with appropriate flags
+    try:
+        result = subprocess.run(cmd_args, check=True)
+        click.echo("✅ System dependencies installation completed!")
+        return result.returncode == 0
+    except subprocess.CalledProcessError as e:
+        click.echo(f"❌ System dependencies installation failed with exit code {e.returncode}", err=True)
+        return False
+    except Exception as e:
+        click.echo(f"❌ Error running install script: {e}", err=True)
+        return False
+
+
+@cli.command()
+@click.option("--clear-venv", is_flag=True, help="Delete existing .venv directory (default is to preserve)")
+def install(clear_venv):
+    """Run full installation (system + Python dependencies)"""
+    click.echo("Running full installation...")
+    
+    # Get the path to install.sh in the project root
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    install_script = project_root / "install.sh"
+    
+    if not install_script.exists():
+        click.echo("Error: install.sh not found in project root.", err=True)
+        return False
+    
+    # Build command args
+    cmd_args = [str(install_script)]
+    if clear_venv:
+        cmd_args.append("--clear-venv")
+    
+    # Run install.sh with appropriate flags
+    try:
+        result = subprocess.run(cmd_args, check=True)
+        click.echo("✅ Full installation completed!")
+        return result.returncode == 0
+    except subprocess.CalledProcessError as e:
+        click.echo(f"❌ Full installation failed with exit code {e.returncode}", err=True)
+        return False
+    except Exception as e:
+        click.echo(f"❌ Error running install script: {e}", err=True)
+        return False
+
+
 if __name__ == "__main__":
     # Check if we're in a virtual environment, if not, try to use the project's venv
     if not hasattr(sys, "real_prefix") and not (

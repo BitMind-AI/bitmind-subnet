@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 import bittensor as bt
 import numpy as np
 
-from gas.cache.content_db import ContentDB
+from gas.cache.content_db import ContentDB, SOURCE_TYPE_TO_DB_NAME_FIELD
 from gas.cache.media_storage import MediaStorage
 from gas.cache.types import Media, MediaEntry, PromptEntry
 from gas.cache.util import extract_media_info, get_format_from_content
@@ -325,7 +325,7 @@ class ContentManager:
 			modality=modality,
 			media_type=media_type,
 			strategy=kwargs.get("strategy", "random"),
-			remove=should_remove,
+			remove=False,
 		)
 		if not media_entries:
 			print(f"No media available in database for {modality}/{media_type}")
@@ -340,10 +340,14 @@ class ContentManager:
 			non_gen_items = self.media_storage.retrieve_media(
 				media_entries=non_generated_entries,
 				modality=modality,
-				remove_from_cache=should_remove,
+				remove_from_cache=False,
 				**kwargs,
 			)['items']
 			items.extend(non_gen_items)
+
+			if should_remove:
+				for entry in non_generated_entries:
+					self.delete_media(file_path=entry.file_path)
 
 		if generated_entries:
 			gen_items = self.media_storage.retrieve_media(
@@ -422,9 +426,7 @@ class ContentManager:
 				st = SourceType(source_type_str)
 				for source_name, count in sources.items():
 					if count > self.max_per_source:
-						pruned = self.content_db.prune_source_media(
-							st, source_name, self.max_per_source, self.prune_strategy
-						)
+						pruned = self._prune_source_media(st, source_name, self.max_per_source)
 						if pruned > 0:
 							key = f"{st.value}:{source_name}"
 							results[key] = pruned
@@ -435,24 +437,66 @@ class ContentManager:
 			bt.logging.error(f"Error enforcing source caps: {e}")
 		return results
 
+	def _prune_source_media(self, source_type: SourceType, source_name: str, max_count: int) -> int:
+
+		col = SOURCE_TYPE_TO_DB_NAME_FIELD.get(source_type)
+		if not col:
+			return 0
+
+		current = self.content_db.get_source_count(source_type, source_name)
+		if current <= max_count:
+			return 0
+
+		to_remove = current - max_count
+		order_clause = 'created_at ASC' if self.prune_strategy in ('oldest', 'least_used') else 'RANDOM()'
+
+		with self.content_db._get_db_connection() as conn:
+			cursor = conn.execute(
+				f"""
+				SELECT file_path FROM media
+				WHERE source_type = ? AND {col} = ?
+				ORDER BY {order_clause}
+				LIMIT ?
+				""",
+				(source_type.value, source_name, to_remove),
+			)
+			file_paths = [row[0] for row in cursor.fetchall()]
+
+		deleted_count = 0
+		for file_path in file_paths:
+			if self.delete_media(file_path=file_path):
+				deleted_count += 1
+
+		return deleted_count
+
 	def get_media_entry_by_file_path(self, file_path: str) -> Optional[MediaEntry]:
 		return self.content_db.get_media_entry_by_file_path(file_path)
 
-	def delete_media_by_file_path(self, file_path: str) -> bool:
+	def delete_media(self, file_path: str = None, media_id: str = None) -> bool:
+		if not file_path and not media_id:
+			return False
+
 		try:
-			# Delete from filesystem
+			if media_id and not file_path:
+				media_entry = self.content_db.get_media_entries(media_id=media_id)
+				if not media_entry:
+					return False
+				file_path = media_entry[0].file_path
+
 			file_path_obj = Path(file_path)
 			if file_path_obj.exists():
 				success = self.media_storage.delete_media_file(file_path_obj)
 				if not success:
 					return False
 
-			# Delete from database
 			return self.content_db.delete_media_entry_by_file_path(file_path)
 
 		except Exception as e:
-			bt.logging.error(f"Error deleting media {file_path}: {e}")
+			bt.logging.error(f"Error deleting media: {e}")
 			return False
+
+	def delete_media_by_file_path(self, file_path: str) -> bool:
+		return self.delete_media(file_path=file_path)
 
 	def get_stats(self) -> Dict[str, Any]:
 		return self.content_db.get_stats()
