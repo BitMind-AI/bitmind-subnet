@@ -157,7 +157,7 @@ class Validator(BaseNeuron):
             self.step += 1
             if self.config.autoupdate and (self.step == 0 or not self.step % 300):
                 bt.logging.debug("Checking autoupdate")
-                autoupdate(branch="main")
+                autoupdate(branch="main", install_deps=True)
 
             # Make sure our substrate thread is alive
             if not self.substrate_thread.is_alive():
@@ -543,7 +543,7 @@ class Validator(BaseNeuron):
                 bt.logging.error(
                     "Heartbeat detecting main process hang, attempting restart"
                 )
-                autoupdate(force=True)
+                autoupdate(force=True, install_deps=True)
                 sys.exit(0)
             last_step = self.step
             bt.logging.info("Heartbeat")
