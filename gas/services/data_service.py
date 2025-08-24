@@ -11,7 +11,6 @@ from pathlib import Path
 
 import bittensor as bt
 from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
-from substrateinterface import SubstrateInterface
 
 from gas.cache import ContentManager
 from gas.config import add_args, add_data_service_args
@@ -21,7 +20,7 @@ from gas.datasets.download import download_and_extract
 from gas.scraping import GoogleScraper
 from gas.types import MediaType, Modality, SourceType
 from gas.utils import on_block_interval
-from gas.utils.metagraph import run_block_callback_thread
+from gas.utils.metagraph import SubstrateConnectionManager
 
 
 class DataService:
@@ -70,12 +69,13 @@ class DataService:
 
         # block callbacks setup
         self.initialization_complete = True
-        self.substrate = SubstrateInterface(
-            ss58_format=SS58_FORMAT,
-            use_remote_preset=True,
+
+        self.substrate_manager = SubstrateConnectionManager(
             url=self.config.subtensor.chain_endpoint,
-            type_registry=TYPE_REGISTRY,
+            ss58_format=SS58_FORMAT,
+            type_registry=TYPE_REGISTRY
         )
+        self.substrate_task = None
 
         self.block_callbacks = [
             self.log_on_block,
@@ -83,11 +83,7 @@ class DataService:
             self.start_dataset_download,
         ]
 
-        self.substrate_thread = run_block_callback_thread(
-            self.substrate, self.run_callbacks
-        )
-
-    def start(self):
+    async def start(self):
         """Start the data service with substrate connection."""
         bt.logging.info("[DATA-SERVICE] Starting data service")
 
@@ -104,34 +100,48 @@ class DataService:
         self.is_running = True
         bt.logging.success("[DATA-SERVICE] Data service started successfully")
 
-        asyncio.get_event_loop().run_until_complete(self.start_dataset_download(0))
-        asyncio.get_event_loop().run_until_complete(self.start_scraper_cycle(0))
+        await self.start_dataset_download(0)
+        await self.start_scraper_cycle(0)
+
+        # Start substrate subscription
+        self.substrate_task = self.substrate_manager.start_subscription_task(self.run_callbacks)
+        bt.logging.info("🚀 Data service substrate subscription started")
 
         # Main service loop
         while self.is_running:
             self.step += 1
 
-            if not self.substrate_thread.is_alive():
-                bt.logging.info("Restarting substrate interface due to killed node")
-                self.substrate = SubstrateInterface(
-                    ss58_format=SS58_FORMAT,
-                    use_remote_preset=True,
-                    url=self.config.subtensor.chain_endpoint,
-                    type_registry=TYPE_REGISTRY,
-                )
-                self.substrate_thread = run_block_callback_thread(
-                    self.substrate, self.run_callbacks
-                )
+            # Check substrate connection health
+            if self.substrate_task is not None and self.substrate_task.done():
+                bt.logging.info("Data service substrate connection lost, restarting...")
+                try:
+                    self.substrate_task = self.substrate_manager.start_subscription_task(self.run_callbacks)
+                    bt.logging.info("✅ Data service substrate connection restarted")
+                except Exception as e:
+                    bt.logging.error(f"Failed to restart data service substrate task: {e}")
 
             if self.step % 60 == 0:
                 self.log_status()
 
-            time.sleep(1)
+            await asyncio.sleep(1)
 
-    def stop(self):
+    async def stop(self):
         """Stop the data service."""
         bt.logging.info("[DATA-SERVICE] Stopping data service")
         self.is_running = False
+
+        # Clean shutdown of async substrate connection
+        if hasattr(self, 'substrate_manager') and self.substrate_manager:
+            self.substrate_manager.stop()
+
+        if hasattr(self, 'substrate_task') and self.substrate_task and not self.substrate_task.done():
+            self.substrate_task.cancel()
+            try:
+                await self.substrate_task
+            except asyncio.CancelledError:
+                pass
+
+        bt.logging.info("✅ Data service shutdown complete")
         self.stop_event.set()
 
         if self.scraper_thread and self.scraper_thread.is_alive():
@@ -185,7 +195,6 @@ class DataService:
     def _scraper_worker(self):
         """Worker thread that handles scraping operations."""
         try:
-            # Check if scrapers need more data
             sources_needing_data = self.content_manager.get_sources_needing_data()
             scraper_sources_needing_data = sources_needing_data.get('scraper', [])
 
@@ -208,7 +217,6 @@ class DataService:
                 bt.logging.debug(f"[DATA-SERVICE] Processing {scraper_name}")
 
                 try:
-                    # Sample search queries for this cycle
                     search_queries = self.content_manager.sample_search_queries(
                         k=self.config.scraper_batch_size,
                         remove=False,
@@ -468,7 +476,7 @@ class DataService:
             bt.logging.warning(f"[DATA-SERVICE] Error getting status: {e}")
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(
         description="Combined data service (scraper + dataset)"
     )
@@ -493,10 +501,10 @@ def main():
     service = DataService(config)
 
     try:
-        service.start()
+        await service.start()
     except KeyboardInterrupt:
         bt.logging.info("[DATA-SERVICE] Shutting down data service")
-        service.stop()
+        await service.stop()
     except Exception as e:
         bt.logging.error(f"[DATA-SERVICE] Unhandled exception: {e}")
         bt.logging.error(traceback.format_exc())
@@ -504,4 +512,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
