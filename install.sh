@@ -14,6 +14,9 @@ NC='\033[0m' # No Color
 
 # Default values
 SKIP_SYSTEM_DEPS=false
+PY_DEPS_ONLY=false
+SYS_DEPS_ONLY=false
+CLEAR_VENV=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -22,16 +25,35 @@ while [[ $# -gt 0 ]]; do
             SKIP_SYSTEM_DEPS=true
             shift
             ;;
+        --py-deps-only)
+            PY_DEPS_ONLY=true
+            SKIP_SYSTEM_DEPS=true
+            shift
+            ;;
+        --sys-deps-only)
+            SYS_DEPS_ONLY=true
+            shift
+            ;;
+        --clear-venv)
+            CLEAR_VENV=true
+            shift
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  --no-system-deps    Skip installation of system dependencies"
+            echo "  --py-deps-only      Install only Python dependencies (implies --no-system-deps)"
+            echo "  --sys-deps-only     Install only system dependencies"
+            echo "  --clear-venv        Delete existing .venv directory (default is to preserve)"
             echo "  -h, --help         Show this help message"
             echo ""
             echo "Examples:"
-            echo "  $0                 Install with all system dependencies"
+            echo "  $0                 Install with all system dependencies (preserves .venv)"
             echo "  $0 --no-system-deps Install without system dependencies"
+            echo "  $0 --py-deps-only  Install only Python dependencies"
+            echo "  $0 --sys-deps-only Install only system dependencies"
+            echo "  $0 --clear-venv    Install and delete existing virtual environment"
             exit 0
             ;;
         *)
@@ -284,91 +306,113 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
     fi
     log_success "dotenv installed ✓"
 else
-    log_warning "Skipping system dependencies installation (--no-system-deps specified)"
+    if [ "$PY_DEPS_ONLY" = true ]; then
+        log_warning "Installing Python dependencies only (--py-deps-only specified)"
+    else
+        log_warning "Skipping system dependencies installation (--no-system-deps specified)"
+    fi
     log_warning "Make sure you have the following installed manually:"
     log_warning "  - pkg-config, cmake, ffmpeg"
     log_warning "  - Google Chrome, libnss3, libnspr4, xvfb"
     log_warning "  - Node.js, npm, PM2, dotenv"
 fi
 
-log_info "Checking if we need to clear v3.x cache"
-CACHE_DIR="$HOME/.cache/sn34"
-if [ -d "$CACHE_DIR" ]; then
-    # Check if any .db files exist in the cache directory
-    if ! find "$CACHE_DIR" -name "*.db" -type f | grep -q .; then
-        log_info "No .db files found in cache directory. Removing old $CACHE_DIR..."
-        rm -rf "$CACHE_DIR"
-        log_success "Cache directory cleaned ✓"
+# Skip Python dependencies if only installing system dependencies
+if [ "$SYS_DEPS_ONLY" = false ]; then
+    log_info "Checking if we need to clear v3.x cache"
+    CACHE_DIR="$HOME/.cache/sn34"
+    if [ -d "$CACHE_DIR" ]; then
+        # Check if any .db files exist in the cache directory
+        if ! find "$CACHE_DIR" -name "*.db" -type f | grep -q .; then
+            log_info "No .db files found in cache directory. Removing old $CACHE_DIR..."
+            rm -rf "$CACHE_DIR"
+            log_success "Cache directory cleaned ✓"
+        else
+            log_success "Cache directory contains .db files, keeping intact ✓"
+        fi
     else
-        log_success "Cache directory contains .db files, keeping intact ✓"
+        log_info "Cache directory $CACHE_DIR does not exist, skipping cleanup"
     fi
+
+    # Remove existing virtual environment if requested (default is to preserve)
+    if [ -d ".venv" ] && [ "$CLEAR_VENV" = true ]; then
+        log_info "Removing existing virtual environment..."
+        rm -rf .venv
+    elif [ -d ".venv" ]; then
+        log_info "Preserving existing virtual environment..."
+    fi
+
+    # Create virtual environment and install dependencies with uv
+    log_info "Creating virtual environment and installing dependencies with uv..."
+    uv sync
+
+    # Install the gas package (this creates the gascli entry point)
+    log_info "Installing gas package..."
+    uv pip install -e .
+
+    # Install additional git dependencies
+    log_info "Installing additional git dependencies..."
+    source .venv/bin/activate && uv pip install git+https://github.com/deepseek-ai/Janus.git
+    log_success "Git dependencies installed ✓"
+
+    log_success "Virtual environment created and dependencies installed ✓"
 else
-    log_info "Cache directory $CACHE_DIR does not exist, skipping cleanup"
+    log_warning "Skipping Python dependencies installation (--sys-deps-only specified)"
 fi
 
-# Remove existing virtual environment to ensure fresh install
-if [ -d ".venv" ]; then
-    log_info "Removing existing virtual environment..."
-    rm -rf .venv
-fi
+# Verify installation (skip if only installing system dependencies)
+if [ "$SYS_DEPS_ONLY" = false ]; then
+    log_info "Verifying installation..."
 
-# Create virtual environment and install dependencies with uv
-log_info "Creating virtual environment and installing dependencies with uv..."
-uv sync
-
-# Install the gas package (this creates the gascli entry point)
-log_info "Installing gas package..."
-uv pip install -e .
-
-# Install additional git dependencies
-log_info "Installing additional git dependencies..."
-source .venv/bin/activate && uv pip install git+https://github.com/deepseek-ai/Janus.git
-log_success "Git dependencies installed ✓"
-
-log_success "Virtual environment created and dependencies installed ✓"
-
-# Verify installation
-log_info "Verifying installation..."
-
-# Check if gascli command is available and working in the virtual environment
-if .venv/bin/gascli --help >/dev/null 2>&1; then
-    log_success "gascli command installed and working ✓"
-else
-    log_error "gascli command not found or not working in virtual environment."
-    log_warning "Checking if package was installed correctly..."
-    
-    # Check if the package is installed
-    if pip show gas >/dev/null 2>&1; then
-        log_success "gas package is installed ✓"
-        log_warning "gascli command may need to be reinstalled or virtual environment may need to be recreated."
+    # Check if gascli command is available and working in the virtual environment
+    if .venv/bin/gascli --help >/dev/null 2>&1; then
+        log_success "gascli command installed and working ✓"
     else
-        log_error "gas package is not installed."
+        log_error "gascli command not found or not working in virtual environment."
+        log_warning "Checking if package was installed correctly..."
+        
+        # Check if the package is installed
+        if pip show gas >/dev/null 2>&1; then
+            log_success "gas package is installed ✓"
+            log_warning "gascli command may need to be reinstalled or virtual environment may need to be recreated."
+        else
+            log_error "gas package is not installed."
+        fi
     fi
 fi
 
 echo
-log_success "🎉 GAS installation completed!"
-echo 
-echo -e "${BLUE}═══════════════════ QUICKSTART ════════════════════${NC}"
-echo
-echo -e "${GREEN}1. Activate Virtual Environment:${NC}"
-echo -e "  ${YELLOW}source .venv/bin/activate${NC}"
-echo -e "  or, less conveniently, run gascli with ${YELLOW}.venv/bin/gascli${NC}"
-echo
-echo -e "${GREEN}2. CLI Quick Start:${NC}"
-echo -e "  ${YELLOW}gascli --help${NC}                   Show main help"
-echo -e "  ${YELLOW}gascli validator start${NC}          Start validator services"
-echo -e "  ${YELLOW}gascli miner push-discriminator${NC} Push a model"
-echo
-echo -e "  ${GREEN}Available Aliases:${NC}"
-echo -e "    ${YELLOW}validator${NC} → ${YELLOW}vali${NC}, ${YELLOW}v${NC}"
-echo -e "    ${YELLOW}miner${NC} → ${YELLOW}m${NC}"
-echo
-echo -e "${GREEN}3. Important Notes:${NC}"
-echo -e "  ${YELLOW}Validators:${NC} Make sure to update your .env.validator"
-if [ "$SKIP_SYSTEM_DEPS" = true ]; then
-    echo -e "  ${YELLOW}System Dependencies:${NC} You skipped system dependency installation"
-    echo -e "  ${YELLOW}  Validators: ${NC} Make sure you have: pkg-config, cmake, ffmpeg, Chrome, Node.js, PM2"
+if [ "$SYS_DEPS_ONLY" = true ]; then
+    log_success "🎉 System dependencies installation completed!"
+elif [ "$PY_DEPS_ONLY" = true ]; then
+    log_success "🎉 Python dependencies installation completed!"
+else
+    log_success "🎉 GAS installation completed!"
 fi
-echo
-echo -e "${BLUE}═══════════════════════════════════════════════════${NC}" 
+# Only show quickstart if not doing sys-deps-only
+if [ "$SYS_DEPS_ONLY" = false ]; then
+    echo 
+    echo -e "${BLUE}═══════════════════ QUICKSTART ════════════════════${NC}"
+    echo
+    echo -e "${GREEN}1. Activate Virtual Environment:${NC}"
+    echo -e "  ${YELLOW}source .venv/bin/activate${NC}"
+    echo -e "  or, less conveniently, run gascli with ${YELLOW}.venv/bin/gascli${NC}"
+    echo
+    echo -e "${GREEN}2. CLI Quick Start:${NC}"
+    echo -e "  ${YELLOW}gascli --help${NC}                   Show main help"
+    echo -e "  ${YELLOW}gascli validator start${NC}          Start validator services"
+    echo -e "  ${YELLOW}gascli miner push-discriminator${NC} Push a model"
+    echo
+    echo -e "  ${GREEN}Available Aliases:${NC}"
+    echo -e "    ${YELLOW}validator${NC} → ${YELLOW}vali${NC}, ${YELLOW}v${NC}"
+    echo -e "    ${YELLOW}miner${NC} → ${YELLOW}m${NC}"
+    echo
+    echo -e "${GREEN}3. Important Notes:${NC}"
+    echo -e "  ${YELLOW}Validators:${NC} Make sure to update your .env.validator"
+    if [ "$SKIP_SYSTEM_DEPS" = true ]; then
+        echo -e "  ${YELLOW}System Dependencies:${NC} You skipped system dependency installation"
+        echo -e "  ${YELLOW}  Validators: ${NC} Make sure you have: pkg-config, cmake, ffmpeg, Chrome, Node.js, PM2"
+    fi
+    echo
+    echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+fi 
