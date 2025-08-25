@@ -150,7 +150,7 @@ def add_validator_args(parser):
         "--discriminator-challenge-interval",
         type=int,
         help="How often we send challenges to generative miners, measured in 12 second blocks.",
-        default=16,
+        default=21,
     )
 
     parser.add_argument(
@@ -185,7 +185,7 @@ def add_validator_args(parser):
         "--neuron.miner-total-timeout",
         type=float,
         help="Total timeout for miner requests in seconds",
-        default=180.0,
+        default=240.0,
     )
 
     parser.add_argument(
