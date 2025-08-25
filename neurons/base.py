@@ -1,22 +1,20 @@
 import argparse
 from pathlib import Path
-from threading import Thread
 from typing import Callable, List
 import bittensor as bt
 import copy
 import inspect
 import traceback
+import asyncio
 
 from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
-from nest_asyncio import asyncio
-from substrateinterface import SubstrateInterface
 import signal
 
 from gas import (
     __spec_version__,
     __version__,
 )
-from gas.utils.metagraph import run_block_callback_thread
+from gas.utils.metagraph import SubstrateConnectionManager
 from gas.types import NeuronType
 from gas.utils import ExitContext, on_block_interval
 from gas.config import (
@@ -28,12 +26,17 @@ from gas.config import (
 
 
 class BaseNeuron:
+    """
+    Base neuron class with async substrate support and automatic reconnection.
+    Provides clean async/await coordination throughout the application.
+    """
     config: "bt.config"
     neuron_type: NeuronType
     exit_context = ExitContext()
     next_sync_block = None
     block_callbacks: List[Callable] = []
-    substrate_thread: Thread
+    substrate_manager: SubstrateConnectionManager = None
+    substrate_task = None
 
     def check_registered(self):
         if not self.subtensor.is_hotkey_registered(
@@ -130,15 +133,49 @@ class BaseNeuron:
         self.check_registered()
         self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
 
-        ## Substrate, Subtensor and Metagraph
-        self.substrate = SubstrateInterface(
-            ss58_format=SS58_FORMAT,
-            use_remote_preset=True,
-            url=self.config.subtensor.chain_endpoint,
-            type_registry=TYPE_REGISTRY,
-        )
-
         self.block_callbacks.append(self.maybe_sync_metagraph)
-        self.substrate_thread = run_block_callback_thread(
-            self.substrate, self.run_callbacks
+        self._init_substrate()
+
+    def _init_substrate(self):
+        """Initialize substrate connection manager - task will be started when event loop is running."""
+        self.substrate_manager = SubstrateConnectionManager(
+            url=self.config.subtensor.chain_endpoint,
+            ss58_format=SS58_FORMAT,
+            type_registry=TYPE_REGISTRY
         )
+        self.substrate_task = None  # Will be created when event loop is running
+        bt.logging.info("Substrate connection manager initialized (task will start when event loop runs)")
+
+    async def start_substrate_subscription(self):
+        """Start the async substrate subscription - call this from async context."""
+        if self.substrate_task is None:
+            self.substrate_task = self.substrate_manager.start_subscription_task(self.run_callbacks)
+            bt.logging.info("🚀 Substrate subscription started")
+
+    def check_substrate_connection(self):
+        """Check substrate connection health and restart if needed."""
+        # Only check if task has been created (i.e., we're in async context)
+        if self.substrate_task is not None and self.substrate_task.done():
+            bt.logging.info("Substrate connection lost, restarting...")
+            try:
+                self.substrate_task = self.substrate_manager.start_subscription_task(self.run_callbacks)
+                bt.logging.info("Substrate connection restarted")
+            except Exception as e:
+                bt.logging.error(f"Failed to restart substrate task: {e}")
+                raise
+
+    async def shutdown_substrate(self):
+        """Clean shutdown of substrate connection."""
+        bt.logging.info("Shutting down substrate connection...")
+
+        if hasattr(self, 'substrate_manager') and self.substrate_manager:
+            self.substrate_manager.stop()
+
+        if hasattr(self, 'substrate_task') and self.substrate_task and not self.substrate_task.done():
+            self.substrate_task.cancel()
+            try:
+                await self.substrate_task
+            except asyncio.CancelledError:
+                pass
+
+        bt.logging.info("Substrate shutdown complete")

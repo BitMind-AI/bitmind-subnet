@@ -11,9 +11,6 @@ from .utils import (
 from .metagraph import (
     get_miner_uids,
     create_set_weights,
-    create_subscription_handler,
-    start_subscription,
-    run_block_callback_thread,
 )
 
 from .autoupdater import autoupdate
@@ -46,9 +43,6 @@ __all__ = [
     # Metagraph utilities
     "get_miner_uids",
     "create_set_weights",
-    "create_subscription_handler", 
-    "start_subscription",
-    "run_block_callback_thread",
     # Autoupdater
     "autoupdate",
     # Transforms

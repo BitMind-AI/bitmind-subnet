@@ -9,17 +9,13 @@ from dotenv import load_dotenv
 import aiohttp
 import bittensor as bt
 from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
-from substrateinterface import SubstrateInterface
 from threading import Thread
 
 from gas import __spec_version__ as spec_version
 from gas.protocol import query_orchestrator, media_to_bytes
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
-from gas.utils.metagraph import (
-    create_set_weights,
-    run_block_callback_thread,
-)
+from gas.utils.metagraph import create_set_weights
 from gas.types import (
     NeuronType,
     MediaType,
@@ -73,9 +69,9 @@ class Validator(BaseNeuron):
 
     def init(self):
         self.heartbeat_thread: Thread = None
-        self.lock_waiting = False
-        self.lock_halt = False
         self.step = 0
+
+        self._state_lock = asyncio.Lock()
 
         self.content_manager = ContentManager(self.config.cache.base_dir)
 
@@ -114,6 +110,8 @@ class Validator(BaseNeuron):
             self.heartbeat_thread = Thread(name="heartbeat", target=self.heartbeat)
             self.heartbeat_thread.start()
 
+
+
     async def run(self):
 
         bt.logging.info(
@@ -133,7 +131,6 @@ class Validator(BaseNeuron):
         #)
 
         self.discriminator_tracker = DiscriminatorTracker(store_last_n=200)
-
         # self.generator_tracker = GeneratorTracker()
 
         await self.load_state()
@@ -147,6 +144,8 @@ class Validator(BaseNeuron):
                 f"Found {total_dataset_media} dataset media entries: {dataset_counts}"
             )
 
+        await self.start_substrate_subscription()
+
         self.initialization_complete = True
         bt.logging.success(
             "\N{GRINNING FACE WITH SMILING EYES}",
@@ -159,25 +158,8 @@ class Validator(BaseNeuron):
                 bt.logging.debug("Checking autoupdate")
                 autoupdate(branch="main", install_deps=True)
 
-            # Make sure our substrate thread is alive
-            if not self.substrate_thread.is_alive():
-                bt.logging.info("Restarting substrate interface due to killed node")
-                self.substrate = SubstrateInterface(
-                    ss58_format=SS58_FORMAT,
-                    use_remote_preset=True,
-                    url=self.config.subtensor.chain_endpoint,
-                    type_registry=TYPE_REGISTRY,
-                )
-                self.substrate_thread = run_block_callback_thread(
-                    self.substrate, self.run_callbacks
-                )
+            self.check_substrate_connection()
 
-            if self.lock_halt:
-                self.lock_waiting = True
-                while self.lock_halt:
-                    bt.logging.info("Waiting for lock to release")
-                    sleep(self.config.neuron.lock_sleep_seconds)
-                self.lock_waiting = False
             await asyncio.sleep(1)
 
         await self.shutdown()
@@ -190,6 +172,10 @@ class Validator(BaseNeuron):
 
     @on_block_interval("discriminator_challenge_interval")
     async def issue_discriminator_challenge(self, block, retries=3):
+
+        if self._state_lock.locked():
+            bt.logging.info("Skipping challenge - state is locked for updates")
+            return
 
         bt.logging.info("\033[96m🔍 Starting Discriminator Challenge\033[0m")
 
@@ -238,6 +224,23 @@ class Validator(BaseNeuron):
         bt.logging.info(json.dumps(aug_params, indent=2))
         bt.logging.info(f"Final media shape: {aug_media.shape}")
 
+        media_bytes = media_to_bytes(aug_media)[0]
+        media_size_mb = len(media_bytes) / (1024 * 1024)
+        bt.logging.info(f"Media size: {media_size_mb:.2f} MB")
+
+        if media_size_mb > 99:
+            bt.logging.warning(f"Payload size too large, truncating")
+            try:
+                half_index = aug_media.shape[0] // 2
+                aug_media = aug_media[:half_index]
+                media_bytes = media_to_bytes(aug_media)[0]
+            except Excpetion as e:
+                bt.logging.error(f"Truncation failed: {e}")
+                return
+
+            media_size_mb = len(media_bytes) / (1024 * 1024)
+            bt.logging.info(f"New media size: {media_size_mb:.2f} MB")
+
         bt.logging.info(f"Sending discriminator challenge for {len(miner_uids)} UIDs")
         # query orchestrator
         async with aiohttp.ClientSession() as session:
@@ -246,7 +249,7 @@ class Validator(BaseNeuron):
                 self.wallet.hotkey,
                 miner_uids,
                 modality,
-                media=media_to_bytes(aug_media)[0],
+                media=media_bytes,
                 source_type=media_sample["source_type"],
                 source_name=media_sample["source_name"],
                 label=media_type.int_value,
@@ -284,10 +287,14 @@ class Validator(BaseNeuron):
         discriminator_metrics = discriminator_reward_outputs["metrics"]
         discriminator_correct = discriminator_reward_outputs["correct"]
 
-        self.update_scores(generator_rewards, discriminator_rewards)
+        # Critical section - prevent concurrent state updates
+        async with self._state_lock:
+            self.update_scores(generator_rewards, discriminator_rewards)
+
         await self.save_state()
 
         # Log responses and metrics
+        bt.logging.info(f"Processing {len(results)} results")
         for r in results:
             # update result with metrics, rewards, scores for logging
             uid = r.get("uid")
@@ -306,6 +313,7 @@ class Validator(BaseNeuron):
                 if r.get("status") == 200 
                 else bt.logging.warning
             )
+            #if r.get("status") != 404:
             log_fn(json.dumps(r, indent=2))
 
         self.wandb_logger.log(results, media_sample, aug_params)
@@ -327,51 +335,44 @@ class Validator(BaseNeuron):
         if extend_scores > 0:
             self.scores = np.append(self.scores, np.zeros(extend_scores))
 
-        try:
-            bt.logging.info(
-                f"Waiting to safely set weights at block {block} (epoch length = {self.config.epoch_length})"
-            )
-            self.lock_halt = True
-            while not self.lock_waiting and block != 0:
-                sleep(self.config.neuron.lock_sleep_seconds)
+        async with self._state_lock:
+            bt.logging.debug("set_weights() acquired state lock")
+            try:
+                bt.logging.info(f"Setting weights at block {block}")
+                self.subtensor = bt.subtensor(
+                    config=self.config, network=self.config.subtensor.chain_endpoint
+                )
+                uids = list(range(self.metagraph.n))
 
-            bt.logging.info(f"Setting weights at block {block}")
-            self.subtensor = bt.subtensor(
-                config=self.config, network=self.config.subtensor.chain_endpoint
-            )
-            uids = list(range(self.metagraph.n))
+                if np.isnan(self.scores).any():
+                    bt.logging.warning(
+                        f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
+                    )
 
-            if np.isnan(self.scores).any():
-                bt.logging.warning(
-                    f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
+                norm = np.ones_like(self.scores)
+                norm[generator_uids] = np.linalg.norm(self.scores[generator_uids], ord=1)
+                norm[discriminator_uids] = np.linalg.norm(
+                    self.scores[discriminator_uids], ord=1
                 )
 
-            norm = np.ones_like(self.scores)
-            norm[generator_uids] = np.linalg.norm(self.scores[generator_uids], ord=1)
-            norm[discriminator_uids] = np.linalg.norm(
-                self.scores[discriminator_uids], ord=1
-            )
+                if np.any(norm == 0) or np.isnan(norm).any():
+                    norm = np.ones_like(norm)  # Avoid division by zero or NaN
 
-            if np.any(norm == 0) or np.isnan(norm).any():
-                norm = np.ones_like(norm)  # Avoid division by zero or NaN
+                normed_weights = self.scores / norm
 
-            normed_weights = self.scores / norm
+                # temporary burn
+                normed_weights = np.array([v * 0.1 for v in normed_weights])
+                normed_weights[135] = 0.9
 
-            # temporary burn
-            normed_weights = np.array([v * 0.1 for v in normed_weights])
-            normed_weights[135] = 0.9
+                self.set_weights_fn(
+                    self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
+                )
+                bt.logging.success("Weights set successfully")
 
-            self.set_weights_fn(
-                self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
-            )
-            bt.logging.success("Weights set successfully")
-
-        except Exception as e:
-            bt.logging.error(f"Error in set_weights_on_interval: {e}")
-            bt.logging.error(traceback.format_exc())
-            return False
-        finally:
-            self.lock_halt = False
+            except Exception as e:
+                bt.logging.error(f"Error in set_weights_on_interval: {e}")
+                bt.logging.error(traceback.format_exc())
+                return False
 
         return True
 
@@ -469,29 +470,27 @@ class Validator(BaseNeuron):
         Atomically save validator state (scores + miner history)
         Maintains the current state and one backup.
         """
-        self.lock_halt = True
-        while not self.lock_waiting:
-            sleep(self.config.neuron.lock_sleep_seconds)
+        async with self._state_lock:
+            bt.logging.debug("save_state() acquired state lock")
+            try:
+                state_data = {"scores.npy": self.scores}
+                state_objects = [(self.discriminator_tracker, "discriminator_history.pkl")]
 
-        try:
-            state_data = {"scores.npy": self.scores}
-            state_objects = [(self.discriminator_tracker, "discriminator_history.pkl")]
-
-            success = save_validator_state(
-                base_dir=self.config.neuron.full_path,
-                state_data=state_data,
-                state_objects=state_objects,
-                max_backup_age_hours=self.config.neuron.max_state_backup_hours,
-            )
-            if success:
-                bt.logging.success("Saved validator state")
-            else:
-                bt.logging.error("Failed to save validator state")
-        except Exception as e:
-            bt.logging.error(f"Error during state save: {str(e)}")
-            bt.logging.error(traceback.format_exc())
-        finally:
-            self.lock_halt = False
+                success = save_validator_state(
+                    base_dir=self.config.neuron.full_path,
+                    state_data=state_data,
+                    state_objects=state_objects,
+                    max_backup_age_hours=self.config.neuron.max_state_backup_hours,
+                )
+                if success:
+                    bt.logging.success("Saved validator state")
+                else:
+                    bt.logging.error("Failed to save validator state")
+            except Exception as e:
+                bt.logging.error(f"Error during state save: {str(e)}")
+                bt.logging.error(traceback.format_exc())
+            finally:
+                bt.logging.debug("save_state() releasing state lock")
 
     async def load_state(self):
         """
@@ -523,7 +522,7 @@ class Validator(BaseNeuron):
 
     async def shutdown(self):
         """Shutdown the validator and clean up resources."""
-        pass
+        await self.shutdown_substrate()
         #if self.generative_challenge_manager:
         #   await  self.generative_challenge_manager.shutdown()
 
@@ -532,8 +531,6 @@ class Validator(BaseNeuron):
         last_step = self.step
         stuck_count = 0
         while True:
-            while self.lock_halt:
-                sleep(self.config.neuron.lock_sleep_seconds)
             sleep(self.config.neuron.heartbeat_interval_seconds)
             if last_step == self.step:
                 stuck_count += 1

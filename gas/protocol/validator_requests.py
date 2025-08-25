@@ -229,7 +229,7 @@ async def query_orchestrator(
             f"&type={modality.value}"
             f"&source_type={source_type}"
             f"&source_name={source_name}"
-            f"&label={source_name}"
+            f"&label={label}"
         )
         url = f"{base_url}/challenge-miners?{querystr}"
 

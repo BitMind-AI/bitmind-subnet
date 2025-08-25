@@ -4,10 +4,9 @@ from typing import Callable, List, Tuple
 import numpy as np
 import bittensor as bt
 from bittensor.utils.weight_utils import process_weights_for_netuid
+from async_substrate_interface import AsyncSubstrateInterface
 
 from gas.utils import fail_with_none
-
-import threading
 
 
 def get_miner_uids(
@@ -76,31 +75,68 @@ def create_set_weights(version: int, netuid: int):
     return set_weights
 
 
-def create_subscription_handler(substrate, callback: Callable):
-    def inner(obj, update_nr, _):
-        substrate.get_block(block_number=obj["header"]["number"])
+def create_async_subscription_handler(callback: Callable):
+    """Create async subscription handler - simple version."""
+    async def handler(obj):
+        try:
+            # Extract block number just like sync version
+            block_number = obj["header"]["number"]
+            await callback(block_number)
+        except Exception as e:
+            bt.logging.error(f"Error in async substrate block callback: {e}")
+    
+    return handler
 
-        if update_nr >= 1:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(callback(obj["header"]["number"]))
 
-    return inner
-
-
-def start_subscription(substrate, callback: Callable):
-    return substrate.subscribe_block_headers(
-        create_subscription_handler(substrate, callback)
+async def start_async_subscription(substrate, callback: Callable):
+    """Start async block subscription - mirroring the sync version."""
+    return await substrate.subscribe_block_headers(
+        create_async_subscription_handler(callback)
     )
 
 
-def run_block_callback_thread(substrate, callback: Callable):
-    try:
-        subscription_thread = threading.Thread(
-            target=start_subscription, args=[substrate, callback], daemon=True
-        )
-        subscription_thread.start()
-        bt.logging.info("Block subscription started in background thread.")
-        return subscription_thread
-    except Exception as e:
-        bt.logging.error(f"faaailuuure {callback} - {e}")
+class SubstrateConnectionManager:
+    """Async substrate connection manager with auto-reconnection."""
+
+    def __init__(self, url: str, ss58_format: int, type_registry: dict):
+        self.url = url
+        self.ss58_format = ss58_format
+        self.type_registry = type_registry
+        self.running = False
+        self.task = None
+
+    async def start_subscription(self, callback: Callable):
+        """Start subscription with auto-reconnect."""
+        self.running = True
+
+        while self.running:
+            try:
+                bt.logging.info(f"Connecting to async substrate: {self.url}")
+
+                substrate = AsyncSubstrateInterface(
+                    url=self.url,
+                    ss58_format=self.ss58_format,
+                    type_registry=self.type_registry,
+                )
+
+                async with substrate:
+                    bt.logging.info("Starting async block subscription")
+                    await start_async_subscription(substrate, callback)
+
+            except Exception as e:
+                bt.logging.error(f"Async substrate failed: {e}")
+                if self.running:
+                    bt.logging.info("Reconnecting in 5 seconds...")
+                    await asyncio.sleep(5)
+
+    def start_subscription_task(self, callback: Callable):
+        """Start as background task."""
+        self.task = asyncio.create_task(self.start_subscription(callback))
+        return self.task
+
+    def stop(self):
+        """Stop subscription."""
+        self.running = False
+        if self.task:
+            self.task.cancel()
+

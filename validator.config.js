@@ -47,7 +47,6 @@ const config = {
   
   // Network
   chainEndpoint: process.env.CHAIN_ENDPOINT || '',
-  proxyPort: process.env.PROXY_PORT || '10913',
   
   // Cache
   cacheDir: process.env.SN34_CACHE_DIR || path.join(os.homedir(), '.cache', 'sn34'),
