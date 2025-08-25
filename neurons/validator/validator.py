@@ -226,7 +226,20 @@ class Validator(BaseNeuron):
 
         media_bytes = media_to_bytes(aug_media)[0]
         media_size_mb = len(media_bytes) / (1024 * 1024)
-        bt.logging.info(f"Media bytes size: {media_size_mb:.2f} MB")
+        bt.logging.info(f"Media size: {media_size_mb:.2f} MB")
+
+        if media_size_mb > 99:
+            bt.logging.warning(f"Payload size too large, truncating")
+            try:
+                half_index = aug_media.shape[0] // 2
+                aug_media = aug_media[:half_index]
+                media_bytes = media_to_bytes(aug_media)[0]
+            except Excpetion as e:
+                bt.logging.error(f"Truncation failed: {e}")
+                return
+
+            media_size_mb = len(media_bytes) / (1024 * 1024)
+            bt.logging.info(f"New media size: {media_size_mb:.2f} MB")
 
         bt.logging.info(f"Sending discriminator challenge for {len(miner_uids)} UIDs")
         # query orchestrator
