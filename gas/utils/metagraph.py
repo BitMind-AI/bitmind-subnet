@@ -99,9 +99,6 @@ class SubstrateConnectionManager:
     """Async substrate connection manager with auto-reconnection."""
 
     def __init__(self, url: str, ss58_format: int, type_registry: dict):
-        if AsyncSubstrateInterface is None:
-            raise ImportError("async-substrate-interface not installed")
-
         self.url = url
         self.ss58_format = ss58_format
         self.type_registry = type_registry
