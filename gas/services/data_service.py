@@ -327,11 +327,20 @@ class DataService:
                 bt.logging.warning("[DATA-SERVICE] No datasets need downloading")
                 return
 
-            names = [d.path for d in datasets_to_download]
-            bt.logging.info(f"[DATA-SERVICE] Starting download for {len(datasets_to_download)} datasets: {names}")
+            # Prioritize datasets with zero items first, then by ascending count
+            dataset_with_counts = [
+                (d, self.content_manager.get_source_count(SourceType.DATASET, d.path))
+                for d in datasets_to_download
+            ]
+            prioritized_datasets = [
+                d for d, _ in sorted(dataset_with_counts, key=lambda t: (t[1] != 0, t[1]))
+            ]
+
+            names = [d.path for d in prioritized_datasets]
+            bt.logging.info(f"[DATA-SERVICE] Starting download for {len(prioritized_datasets)} datasets (priority): {names}")
 
             total_saved = 0
-            for dataset in datasets_to_download:
+            for dataset in prioritized_datasets:
                 # Check if we still need data for this dataset
                 if not self.content_manager.needs_more_data(SourceType.DATASET, dataset.path):
                     continue
