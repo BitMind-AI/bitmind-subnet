@@ -17,6 +17,13 @@ def get_image_datasets() -> List[DatasetConfig]:
     return [
         # Real image datasets
         DatasetConfig(
+            path="drawthingsai/megalith-10m",
+            modality=Modality.IMAGE,
+            media_type=MediaType.REAL,
+            tags=["diverse"],
+            source_format="tar",
+        ),
+        DatasetConfig(
             path="bitmind/bm-eidon-image",
             modality=Modality.IMAGE,
             media_type=MediaType.REAL,
