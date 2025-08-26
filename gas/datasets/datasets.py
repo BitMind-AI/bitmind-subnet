@@ -113,6 +113,13 @@ def get_image_datasets() -> List[DatasetConfig]:
             media_type=MediaType.SYNTHETIC,
             tags=["sora"],
         ),
+        DatasetConfig(
+            path="bitmind/bm-imagine",
+            modality=Modality.IMAGE,
+            media_type=MediaType.SYNTHETIC,
+            tags=["grok"],
+            source_format="jpg",
+        ),
         # Semisynthetic image datasets
         DatasetConfig(
             path="bitmind/face-swap",
@@ -178,6 +185,13 @@ def get_video_datasets() -> List[DatasetConfig]:
             media_type=MediaType.SYNTHETIC,
             tags=["veo"],
             source_format="mp4",
+        ),
+        DatasetConfig(
+            path="bitmind/aura-video",
+            modality=Modality.VIDEO,
+            media_type=MediaType.SYNTHETIC,
+            tags=["sora"],
+            source_format="parquet",
         ),
     ]
 
