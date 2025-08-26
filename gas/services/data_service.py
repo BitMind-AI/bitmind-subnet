@@ -2,6 +2,8 @@ import argparse
 import asyncio
 import inspect
 import sys
+import os
+import tempfile
 import time
 import traceback
 from itertools import zip_longest
@@ -36,6 +38,18 @@ class DataService:
             self.config.cache.base_dir = str(
                 Path(self.config.cache.base_dir).expanduser()
             )
+
+        # Ensure temporary files live under the cache directory to avoid /tmp OOM
+        try:
+            tmp_base = Path(self.config.cache.base_dir) / "tmp"
+            tmp_base.mkdir(parents=True, exist_ok=True)
+            os.environ.setdefault("TMPDIR", str(tmp_base))
+            os.environ.setdefault("TEMP", str(tmp_base))
+            os.environ.setdefault("TMP", str(tmp_base))
+            tempfile.tempdir = str(tmp_base)
+            bt.logging.info(f"[DATA-SERVICE] Using temp dir: {tmp_base}")
+        except Exception as e:
+            bt.logging.warning(f"[DATA-SERVICE] Failed to set temp dir under cache: {e}")
 
         # used for filesystem/db writes
         self.content_manager = ContentManager(
@@ -195,21 +209,25 @@ class DataService:
     def _scraper_worker(self):
         """Worker thread that handles scraping operations."""
         try:
-            sources_needing_data = self.content_manager.get_sources_needing_data()
-            scraper_sources_needing_data = sources_needing_data.get('scraper', [])
+            # Determine which scrapers need data by checking counts against thresholds
+            eligible_scrapers = []
+            for s in self.scrapers:
+                name = s.__class__.__name__
+                if self.content_manager.needs_more_data(SourceType.SCRAPER, name):
+                    eligible_scrapers.append(name)
 
-            # If DB is empty (no sources yet), seed all available scrapers
-            if not scraper_sources_needing_data:
-                scraper_sources_needing_data = [s.__class__.__name__ for s in self.scrapers]
+            if not eligible_scrapers:
+                bt.logging.info("[DATA-SERVICE] No scraper sources currently need data")
+                return
 
-            bt.logging.info(f"[DATA-SERVICE] Scraper sources needing data: {scraper_sources_needing_data}")
+            bt.logging.info(f"[DATA-SERVICE] Scraper sources needing data: {eligible_scrapers}")
 
             total_saved = 0
             for scraper in self.scrapers:
                 scraper_name = scraper.__class__.__name__
 
                 # Check if this scraper needs more data
-                if scraper_name not in scraper_sources_needing_data:
+                if scraper_name not in eligible_scrapers:
                     continue
                 if not self.content_manager.needs_more_data(SourceType.SCRAPER, scraper_name):
                     continue
@@ -295,38 +313,34 @@ class DataService:
 
     def _downloader_worker(self):
         try:
-            # Check which sources need more data
-            sources_needing_data = self.content_manager.get_sources_needing_data()
-            dataset_sources_needing_data = sources_needing_data.get('dataset', [])
-
-            # If DB is empty (no sources yet), seed all enabled datasets
-            if not dataset_sources_needing_data:
-                image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
-                video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
-                all_datasets = image_datasets + video_datasets
-                dataset_sources_needing_data = [d.path for d in all_datasets]
-
-            bt.logging.info(f"[DATA-SERVICE] Sources needing data: {dataset_sources_needing_data}")
-
-            # Get datasets that need more data
+            # Build the set of all registered datasets and select those below threshold
             image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
             video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
             all_datasets = image_datasets + video_datasets
 
-            # Filter to only datasets that need data
             datasets_to_download = [
-                dataset for dataset in all_datasets 
-                if dataset.path in dataset_sources_needing_data
+                d for d in all_datasets
+                if self.content_manager.needs_more_data(SourceType.DATASET, d.path)
             ]
 
             if not datasets_to_download:
                 bt.logging.warning("[DATA-SERVICE] No datasets need downloading")
                 return
 
-            bt.logging.info(f"[DATA-SERVICE] Starting download for {len(datasets_to_download)} datasets")
+            # Prioritize datasets with zero items first, then by ascending count
+            dataset_with_counts = [
+                (d, self.content_manager.get_source_count(SourceType.DATASET, d.path))
+                for d in datasets_to_download
+            ]
+            prioritized_datasets = [
+                d for d, _ in sorted(dataset_with_counts, key=lambda t: (t[1] != 0, t[1]))
+            ]
+
+            names = [d.path for d in prioritized_datasets]
+            bt.logging.info(f"[DATA-SERVICE] Starting download for {len(prioritized_datasets)} datasets (priority): {names}")
 
             total_saved = 0
-            for dataset in datasets_to_download:
+            for dataset in prioritized_datasets:
                 # Check if we still need data for this dataset
                 if not self.content_manager.needs_more_data(SourceType.DATASET, dataset.path):
                     continue
@@ -336,7 +350,8 @@ class DataService:
                     images_per_parquet=getattr(self.config, 'dataset_images_per_parquet', 100),
                     videos_per_zip=getattr(self.config, 'dataset_videos_per_zip', 50),
                     parquet_per_dataset=getattr(self.config, 'dataset_parquet_per_dataset', 5),
-                    zips_per_dataset=getattr(self.config, 'dataset_zips_per_dataset', 2)
+                    zips_per_dataset=getattr(self.config, 'dataset_zips_per_dataset', 2),
+                    temp_dir=str(Path(self.config.cache.base_dir) / "tmp"),
                 ):
                     if self.stop_event.is_set():
                         break

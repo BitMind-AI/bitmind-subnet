@@ -17,6 +17,13 @@ def get_image_datasets() -> List[DatasetConfig]:
     return [
         # Real image datasets
         DatasetConfig(
+            path="drawthingsai/megalith-10m",
+            modality=Modality.IMAGE,
+            media_type=MediaType.REAL,
+            tags=["diverse"],
+            source_format="tar",
+        ),
+        DatasetConfig(
             path="bitmind/bm-eidon-image",
             modality=Modality.IMAGE,
             media_type=MediaType.REAL,
@@ -106,6 +113,13 @@ def get_image_datasets() -> List[DatasetConfig]:
             media_type=MediaType.SYNTHETIC,
             tags=["sora"],
         ),
+        DatasetConfig(
+            path="bitmind/bm-imagine",
+            modality=Modality.IMAGE,
+            media_type=MediaType.SYNTHETIC,
+            tags=["grok"],
+            source_format="jpg",
+        ),
         # Semisynthetic image datasets
         DatasetConfig(
             path="bitmind/face-swap",
@@ -143,6 +157,12 @@ def get_video_datasets() -> List[DatasetConfig]:
             tags=["diverse", "large-zips"],
             source_format="zip",
         ),
+        DatasetConfig(
+            path="facebook/PE-Video",
+            modality=Modality.VIDEO,
+            media_type=MediaType.REAL,
+            source_format="tar",
+        ),
         # Semisynthetic video datasets
         DatasetConfig(
             path="bitmind/semisynthetic-video",
@@ -150,6 +170,28 @@ def get_video_datasets() -> List[DatasetConfig]:
             media_type=MediaType.SEMISYNTHETIC,
             tags=["faces"],
             source_format="zip",
+        ),
+        # Synthetic video datasets
+        DatasetConfig(
+            path="Rapidata/text-2-video-human-preferences-veo3",
+            modality=Modality.VIDEO,
+            media_type=MediaType.SYNTHETIC,
+            tags=["veo"],
+            source_format="mp4",
+        ),
+        DatasetConfig(
+            path="Rapidata/text-2-video-human-preferences-veo2",
+            modality=Modality.VIDEO,
+            media_type=MediaType.SYNTHETIC,
+            tags=["veo"],
+            source_format="mp4",
+        ),
+        DatasetConfig(
+            path="bitmind/aura-video",
+            modality=Modality.VIDEO,
+            media_type=MediaType.SYNTHETIC,
+            tags=["sora"],
+            source_format="parquet",
         ),
     ]
 

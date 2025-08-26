@@ -274,9 +274,6 @@ class ContentManager:
 			format=media_data.format,
 		)
 
-		bt.logging.info(
-			f"Saved dataset media to {save_path} with database ID: {media_id}"
-		)
 		return save_path
 
 	def sample_prompts(
