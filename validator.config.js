@@ -140,7 +140,7 @@ if (config.startGenerator) {
     script: generatorScript,
     interpreter: pythonInterpreter,
     args: [
-      '--cache-dir', config.cacheDir,
+      '--cache.base_dir', config.cacheDir,
       '--device', config.device,
       '--batch-size', '1',
       '--log-level', config.loglevel,
@@ -161,7 +161,7 @@ if (config.startData) {
     script: dataScript,
     interpreter: pythonInterpreter,
     args: [
-      '--cache-dir', config.cacheDir,
+      '--cache.base-dir', config.cacheDir,
       '--chain-endpoint', config.chainEndpoint,
       '--scraper-interval', config.scraperInterval,
       '--dataset-interval', config.datasetInterval,
@@ -169,6 +169,9 @@ if (config.startData) {
     ].join(' '),
     env: {
       ...HF_ENV,
+      TMPDIR: path.join(config.cacheDir, 'tmp'),
+      TEMP: path.join(config.cacheDir, 'tmp'),
+      TMP: path.join(config.cacheDir, 'tmp'),
     },
     watch: false,
     instances: 1,

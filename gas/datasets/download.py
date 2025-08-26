@@ -30,6 +30,7 @@ def download_and_extract(
     videos_per_zip: int = 50,
     parquet_per_dataset: int = 5,
     zips_per_dataset: int = 2,
+    temp_dir: Optional[str] = None,
 ) -> Generator[Tuple[bytes, Dict[str, Any]], None, None]:
     """
     Download datasets and yield extracted media as a generator.
@@ -45,7 +46,16 @@ def download_and_extract(
         Tuples of (media_bytes, metadata_dict)
     """
     try:
-        temp_dir = Path(tempfile.mkdtemp())  # temp dir for zip/parquet
+        # temp dir for zip/parquet
+        temp_dir_root = None
+        if temp_dir is not None:
+            try:
+                Path(temp_dir).mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            temp_dir_root = Path(tempfile.mkdtemp(dir=temp_dir))
+        else:
+            temp_dir_root = Path(tempfile.mkdtemp())
 
         try:
             filenames = _list_remote_dataset_files(dataset.path, dataset.source_format)
@@ -64,7 +74,7 @@ def download_and_extract(
             bt.logging.debug(
                 f"Downloading {len(to_download)} files from {dataset.path}"
             )
-            downloaded_files = _download_files(to_download, temp_dir)
+            downloaded_files = _download_files(to_download, temp_dir_root)
 
             for source_file in downloaded_files:
                 if dataset.modality == Modality.IMAGE:
@@ -86,8 +96,8 @@ def download_and_extract(
                             yield media_bytes, metadata
 
         finally:
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir)
+            if temp_dir_root.exists():
+                shutil.rmtree(temp_dir_root)
 
     except Exception as e:
         bt.logging.error(f"Error processing {dataset.path}: {e}")
@@ -97,7 +107,7 @@ def yield_videos_from_zip(
     zip_path: Path,
     num_videos: int,
     dataset: DatasetConfig,
-    file_extensions: set = {".mp4", ".avi", ".mov", ".mkv", ".wmv"},
+    file_extensions: set = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".webm", ".m4v"},
     include_checksums: bool = True,
 ) -> Generator[Tuple[bytes, Dict[str, Any]], None, None]:
     """
@@ -180,7 +190,7 @@ def yield_videos_from_tar(
     tar_path: Path,
     num_videos: int,
     dataset: DatasetConfig,
-    file_extensions: set = {".mp4", ".avi", ".mov", ".mkv", ".wmv"},
+    file_extensions: set = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".webm", ".m4v"},
     include_checksums: bool = True,
 ) -> Generator[Tuple[bytes, Dict[str, Any]], None, None]:
     """
