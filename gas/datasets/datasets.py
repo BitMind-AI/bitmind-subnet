@@ -143,6 +143,12 @@ def get_video_datasets() -> List[DatasetConfig]:
             tags=["diverse", "large-zips"],
             source_format="zip",
         ),
+        DatasetConfig(
+            path="facebook/PE-Video",
+            modality=Modality.VIDEO,
+            media_type=MediaType.REAL,
+            source_format="tar",
+        ),
         # Semisynthetic video datasets
         DatasetConfig(
             path="bitmind/semisynthetic-video",

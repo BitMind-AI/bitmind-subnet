@@ -12,6 +12,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Generator, Tuple
 from zipfile import ZipFile
+import tarfile
 
 import bittensor as bt
 import numpy as np
@@ -72,10 +73,17 @@ def download_and_extract(
                     ):
                         yield media_bytes, metadata
                 elif dataset.modality == Modality.VIDEO:
-                    for media_bytes, metadata in yield_videos_from_zip(
-                        source_file, videos_per_zip, dataset
-                    ):
-                        yield media_bytes, metadata
+                    file_name_lower = str(source_file.name).lower()
+                    if _is_zip_file(file_name_lower):
+                        for media_bytes, metadata in yield_videos_from_zip(
+                            source_file, videos_per_zip, dataset
+                        ):
+                            yield media_bytes, metadata
+                    elif _is_tar_file(file_name_lower):
+                        for media_bytes, metadata in yield_videos_from_tar(
+                            source_file, videos_per_zip, dataset
+                        ):
+                            yield media_bytes, metadata
 
         finally:
             if temp_dir.exists():
@@ -168,6 +176,91 @@ def yield_videos_from_zip(
         bt.logging.warning(f"Error processing zip file {zip_path}: {e}")
 
 
+def yield_videos_from_tar(
+    tar_path: Path,
+    num_videos: int,
+    dataset: DatasetConfig,
+    file_extensions: set = {".mp4", ".avi", ".mov", ".mkv", ".wmv"},
+    include_checksums: bool = True,
+) -> Generator[Tuple[bytes, Dict[str, Any]], None, None]:
+    """
+    Extract random videos from a tar archive (.tar, .tar.gz, .tgz) as a generator.
+
+    Args:
+        tar_path: Path to the tar archive
+        num_videos: Number of videos to extract
+        file_extensions: Set of valid video file extensions
+        include_checksums: Whether to calculate and include file checksums in metadata
+
+    Yields:
+        Tuples of (video_bytes, metadata_dict)
+    """
+    try:
+        with tarfile.open(tar_path, mode="r:*") as tf:
+            members = [
+                m
+                for m in tf.getmembers()
+                if m.isreg()
+                and any(m.name.lower().endswith(ext) for ext in file_extensions)
+                and "MACOSX" not in m.name
+            ]
+
+            if not members:
+                bt.logging.warning(f"No video files found in {tar_path}")
+                return
+
+            bt.logging.debug(f"{len(members)} video files found in {tar_path}")
+            selected_members = random.sample(members, min(num_videos, len(members)))
+
+            bt.logging.debug(
+                f"Extracting {len(selected_members)} randomly sampled video files from {tar_path}"
+            )
+
+            for member in selected_members:
+                try:
+                    extracted = tf.extractfile(member)
+                    if extracted is None:
+                        continue
+                    video_bytes = extracted.read()
+
+                    metadata = {
+                        "dataset": Path(tar_path).parent.name,
+                        "source_tar": str(tar_path),
+                        "path_in_tar": member.name,
+                        "extraction_date": datetime.now().isoformat(),
+                        "file_size": len(video_bytes),
+                        "dataset_path": dataset.path,
+                        "dataset_tags": dataset.tags,
+                        "dataset_priority": dataset.priority,
+                        "modality": dataset.modality,
+                        "media_type": dataset.media_type,
+                        "tar_metadata": {
+                            "size": member.size,
+                            "mtime": datetime.fromtimestamp(member.mtime).isoformat()
+                            if getattr(member, "mtime", None)
+                            else None,
+                            "uid": getattr(member, "uid", None),
+                            "gid": getattr(member, "gid", None),
+                            "type": chr(member.type) if isinstance(member.type, int) else str(member.type),
+                        },
+                    }
+
+                    if include_checksums:
+                        metadata["checksums"] = {
+                            "md5": hashlib.md5(video_bytes).hexdigest(),
+                            "sha256": hashlib.sha256(video_bytes).hexdigest(),
+                        }
+
+                    yield video_bytes, metadata
+
+                except Exception as e:
+                    bt.logging.warning(f"Error extracting {member.name}: {e}")
+                    continue
+
+    except Exception as e:
+        bt.logging.warning(f"Error processing tar file {tar_path}: {e}")
+
+
 def yield_images_from_parquet(
     parquet_path: Path,
     num_images: int,
@@ -254,9 +347,16 @@ def _select_files_to_download(urls: List[str], count: int) -> List[str]:
 def _list_remote_dataset_files(
     dataset_path: str, source_format: str = ".parquet"
 ) -> List[str]:
-    """List available files in a dataset with the parquet extension"""
+    """List available files in a dataset, filtered by source_format.
+
+    Supports single extensions (e.g., .parquet, .zip) and tar variants (.tar, .tar.gz, .tgz).
+    """
     if not source_format.startswith("."):
         source_format = "." + source_format
+
+    if source_format == ".tar":
+        extensions = [".tar", ".tar.gz", ".tgz"]
+        return list_hf_files(repo_id=dataset_path, extension=extensions)
 
     return list_hf_files(repo_id=dataset_path, extension=source_format)
 
@@ -291,10 +391,24 @@ def list_hf_files(repo_id, repo_type="dataset", extension=None):
 
         files = list(hf_hub.list_repo_files(repo_id=repo_id, repo_type=repo_type))
         if extension:
-            files = [f for f in files if f.endswith(extension)]
+            if isinstance(extension, (list, tuple, set)):
+                exts = tuple(extension)
+                files = [f for f in files if f.endswith(exts)]
+            else:
+                files = [f for f in files if f.endswith(extension)]
     except Exception as e:
         bt.logging.error(f"Failed to list files of type {extension} in {repo_id}: {e}")
     return files
+
+
+def _is_zip_file(filename_lower: str) -> bool:
+    """Return True if filename looks like a zip archive."""
+    return filename_lower.endswith(".zip")
+
+
+def _is_tar_file(filename_lower: str) -> bool:
+    """Return True if filename looks like a tar archive (.tar, .tar.gz, .tgz)."""
+    return filename_lower.endswith(".tar") or filename_lower.endswith(".tar.gz") or filename_lower.endswith(".tgz")
 
 
 def download_files_sync(
