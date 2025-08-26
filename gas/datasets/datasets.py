@@ -164,6 +164,21 @@ def get_video_datasets() -> List[DatasetConfig]:
             tags=["faces"],
             source_format="zip",
         ),
+        # Synthetic video datasets
+        DatasetConfig(
+            path="Rapidata/text-2-video-human-preferences-veo3",
+            modality=Modality.VIDEO,
+            media_type=MediaType.SYNTHETIC,
+            tags=["veo"],
+            source_format="mp4",
+        ),
+        DatasetConfig(
+            path="Rapidata/text-2-video-human-preferences-veo2",
+            modality=Modality.VIDEO,
+            media_type=MediaType.SYNTHETIC,
+            tags=["veo"],
+            source_format="mp4",
+        ),
     ]
 
 

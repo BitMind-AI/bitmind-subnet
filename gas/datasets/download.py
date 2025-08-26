@@ -69,11 +69,15 @@ def download_and_extract(
                 return None, None
 
             remote_paths = _get_download_urls(dataset.path, filenames)
-            n_files = (
-                parquet_per_dataset
-                if dataset.modality == Modality.IMAGE
-                else zips_per_dataset
-            )
+
+            if dataset.modality == Modality.IMAGE:
+                n_files = parquet_per_dataset
+            else:
+                # For direct mp4 datasets, download as many files as we would have extracted 
+                # from archives (zips_per_dataset * videos_per_zip).
+                is_mp4_format = str(getattr(dataset, "source_format", "")).lower().lstrip(".") == "mp4"
+                n_files = (zips_per_dataset * videos_per_zip) if is_mp4_format else zips_per_dataset
+
             to_download = _select_files_to_download(remote_paths, n_files)
 
             bt.logging.debug(
@@ -106,10 +110,10 @@ def yield_media_from_source(
     Common metadata: dataset, dataset_path, dataset_tags, dataset_priority, modality, media_type
     """
     try:
-        filename_lower = str(source_path.name).lower()
+        filename = str(source_path.name).lower()
 
         # Image modality from parquet
-        if dataset.modality == Modality.IMAGE and _is_parquet_file(filename_lower):
+        if dataset.modality == Modality.IMAGE and _is_parquet_file(filename):
             table = pq.read_table(source_path)
             df = table.to_pandas()
             sample_df = df.sample(n=min(num_items, len(df)))
@@ -143,8 +147,8 @@ def yield_media_from_source(
                     continue
             return
 
-        if _is_zip_file(filename_lower) or _is_tar_file(filename_lower):
-            is_zip = _is_zip_file(filename_lower)
+        if _is_zip_file(filename) or _is_tar_file(filename):
+            is_zip = _is_zip_file(filename)
             is_tar = not is_zip
             try:
                 # set context manager based on file type
@@ -206,6 +210,25 @@ def yield_media_from_source(
                             continue
             except Exception as e:
                 bt.logging.warning(f"Error processing archive file {source_path}: {e}")
+            return
+
+        # Raw video file case (e.g., direct .mp4 from dataset repo)
+        if dataset.modality == Modality.VIDEO and any(
+            filename.endswith(ext) for ext in VIDEO_FILE_EXTENSIONS
+        ):
+            try:
+                data_bytes = source_path.read_bytes()
+                metadata = {
+                    "dataset": Path(source_path).parent.name,
+                    "dataset_path": dataset.path,
+                    "dataset_tags": dataset.tags,
+                    "dataset_priority": dataset.priority,
+                    "modality": dataset.modality,
+                    "media_type": dataset.media_type,
+                }
+                yield data_bytes, metadata
+            except Exception as e:
+                bt.logging.warning(f"Error reading raw video file {source_path}: {e}")
             return
 
         # Unknown format
