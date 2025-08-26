@@ -70,13 +70,22 @@ def download_and_extract(
 
             remote_paths = _get_download_urls(dataset.path, filenames)
 
+            src_fmt = str(getattr(dataset, "source_format", "")).lower().lstrip(".")
             if dataset.modality == Modality.IMAGE:
-                n_files = parquet_per_dataset
+                # For direct image datasets, download as many files as we would have extracted
+                # from parquets (images_per_parquet * parquet_per_dataset).
+                image_exts_nodot = {ext.lstrip('.') for ext in IMAGE_FILE_EXTENSIONS}
+                is_direct_image_format = src_fmt in image_exts_nodot
+                n_files = (images_per_parquet * parquet_per_dataset) if is_direct_image_format else parquet_per_dataset
             else:
                 # For direct mp4 datasets, download as many files as we would have extracted 
                 # from archives (zips_per_dataset * videos_per_zip).
-                is_mp4_format = str(getattr(dataset, "source_format", "")).lower().lstrip(".") == "mp4"
-                n_files = (zips_per_dataset * videos_per_zip) if is_mp4_format else zips_per_dataset
+                if src_fmt == "mp4":
+                    n_files = zips_per_dataset * videos_per_zip
+                elif src_fmt == "parquet":
+                    n_files = parquet_per_dataset
+                else:
+                    n_files = zips_per_dataset
 
             to_download = _select_files_to_download(remote_paths, n_files)
 
@@ -112,126 +121,18 @@ def yield_media_from_source(
     try:
         filename = str(source_path.name).lower()
 
-        # Image modality from parquet
-        if dataset.modality == Modality.IMAGE and _is_parquet_file(filename):
-            table = pq.read_table(source_path)
-            df = table.to_pandas()
-            sample_df = df.sample(n=min(num_items, len(df)))
-            image_col = next((col for col in sample_df.columns if "image" in col.lower()), None)
-            if not image_col:
-                bt.logging.warning(f"No image column found in {source_path}")
-                return
-            for _, row in sample_df.iterrows():
-                try:
-                    img_data = row[image_col]
-                    if isinstance(img_data, dict):
-                        key = next((k for k in img_data if "bytes" in k.lower() or "image" in k.lower()), None)
-                        img_data = img_data[key]
-                    try:
-                        img = Image.open(BytesIO(img_data))
-                    except Exception:
-                        img_data = base64.b64decode(img_data)
-                        img = Image.open(BytesIO(img_data))
-
-                    metadata = {
-                        "dataset": Path(source_path).parent.name,
-                        "dataset_path": dataset.path,
-                        "dataset_tags": dataset.tags,
-                        "dataset_priority": dataset.priority,
-                        "modality": dataset.modality,
-                        "media_type": dataset.media_type,
-                    }
-                    yield img, metadata
-                except Exception as e:
-                    bt.logging.warning(f"Failed to extract image from {source_path}: {e}")
-                    continue
+        if _is_parquet_file(filename):
+            yield from _process_parquet(source_path, dataset, num_items)
             return
 
         if _is_zip_file(filename) or _is_tar_file(filename):
-            is_zip = _is_zip_file(filename)
-            is_tar = not is_zip
-            try:
-                # set context manager based on file type
-                cm = (ZipFile(source_path) if is_zip else tarfile.open(source_path, mode="r:*"))
-                with cm as archive:
-                    valid_exts = IMAGE_FILE_EXTENSIONS if dataset.modality == Modality.IMAGE else VIDEO_FILE_EXTENSIONS
-
-                    if is_zip:
-                        list_entries = archive.namelist()
-                        get_name = lambda e: e
-                        def open_entry(e):
-                            return archive.open(e)
-                    else:  
-                        # tar file
-                        list_entries = [m for m in archive.getmembers() if m.isreg()]
-                        get_name = lambda m: m.name
-                        def open_entry(m):
-                            return archive.extractfile(m)
-
-                    candidates = [
-                        e for e in list_entries
-                        if any(get_name(e).lower().endswith(ext) for ext in valid_exts)
-                        and "MACOSX" not in get_name(e)
-                    ]
-                    if not candidates:
-                        bt.logging.warning(f"No matching files found in {source_path}")
-                        return
-
-                    selected = random.sample(candidates, min(num_items, len(candidates)))
-
-                    for entry in selected:
-                        try:
-                            src = open_entry(entry)
-                            if src is None:
-                                continue
-                            with closing(src):
-                                data_bytes = src.read()
-
-                            if dataset.modality == Modality.IMAGE:
-                                try:
-                                    media_obj = Image.open(BytesIO(data_bytes))
-                                except Exception:
-                                    bt.logging.warning(f"Failed to open image {get_name(entry)} from {source_path}")
-                                    continue
-                            else:
-                                media_obj = data_bytes
-
-                            metadata = {
-                                "dataset": Path(source_path).parent.name,
-                                "dataset_path": dataset.path,
-                                "dataset_tags": dataset.tags,
-                                "dataset_priority": dataset.priority,
-                                "modality": dataset.modality,
-                                "media_type": dataset.media_type,
-                            }
-                            yield media_obj, metadata
-                        except Exception as e:
-                            bt.logging.warning(f"Error extracting {get_name(entry)} from {source_path}: {e}")
-                            continue
-            except Exception as e:
-                bt.logging.warning(f"Error processing archive file {source_path}: {e}")
+            yield from _process_zip_or_tar(source_path, dataset, num_items)
             return
 
-        # Raw video file case (e.g., direct .mp4 from dataset repo)
-        if dataset.modality == Modality.VIDEO and any(
-            filename.endswith(ext) for ext in VIDEO_FILE_EXTENSIONS
-        ):
-            try:
-                data_bytes = source_path.read_bytes()
-                metadata = {
-                    "dataset": Path(source_path).parent.name,
-                    "dataset_path": dataset.path,
-                    "dataset_tags": dataset.tags,
-                    "dataset_priority": dataset.priority,
-                    "modality": dataset.modality,
-                    "media_type": dataset.media_type,
-                }
-                yield data_bytes, metadata
-            except Exception as e:
-                bt.logging.warning(f"Error reading raw video file {source_path}: {e}")
+        if any(filename.endswith(ext) for ext in (IMAGE_FILE_EXTENSIONS | VIDEO_FILE_EXTENSIONS)):
+            yield from _process_raw(source_path, dataset)
             return
 
-        # Unknown format
         bt.logging.warning(f"Unsupported source format for {source_path}")
         return
     except Exception as e:
@@ -267,6 +168,135 @@ def _get_download_urls(dataset_path: str, filenames: List[str]) -> List[str]:
         f"https://huggingface.co/datasets/{dataset_path}/resolve/main/{f}"
         for f in filenames
     ]
+
+
+def _common_metadata(dataset: DatasetConfig, source_path: Path) -> Dict[str, Any]:
+    return {
+        "dataset": source_path.parent.name,
+        "dataset_path": dataset.path,
+        "dataset_tags": dataset.tags,
+        "dataset_priority": dataset.priority,
+        "modality": dataset.modality,
+        "media_type": dataset.media_type,
+    }
+
+
+def _process_parquet(source_path: Path, dataset: DatasetConfig, num_items: int):
+    table = pq.read_table(source_path)
+    df = table.to_pandas()
+    sample_df = df.sample(n=min(num_items, len(df)))
+
+    if dataset.modality == Modality.IMAGE:
+        media_col = next((c for c in sample_df.columns if "image" in c.lower()), None)
+    else:
+        candidates = ["video", "bytes", "content", "data"]
+        media_col = next((c for c in sample_df.columns if any(k in c.lower() for k in candidates)), None)
+
+    if not media_col:
+        bt.logging.warning(f"No media column found in {source_path} for modality {dataset.modality}")
+        return
+
+    for _, row in sample_df.iterrows():
+        try:
+            media_data = row[media_col]
+            if isinstance(media_data, dict):
+                key = next(
+                    (
+                        k for k in media_data 
+                        if any(s in k.lower() 
+                        for s in ["bytes", "image", "video", "data", "content"])
+                    ), None
+                )
+                media_data = media_data[key]
+
+            if dataset.modality == Modality.IMAGE:
+                try:
+                    img = Image.open(BytesIO(media_data))
+                except Exception:
+                    media_data = base64.b64decode(media_data)
+                    img = Image.open(BytesIO(media_data))
+                yield img, _common_metadata(dataset, source_path)
+            else:
+                if not isinstance(media_data, (bytes, bytearray)):
+                    media_data = base64.b64decode(media_data)
+                yield bytes(media_data), _common_metadata(dataset, source_path)
+        except Exception as e:
+            bt.logging.warning(f"Failed to extract row from {source_path}: {e}")
+            continue
+
+
+def _process_zip_or_tar(source_path: Path, dataset: DatasetConfig, num_items: int):
+    filename = str(source_path.name).lower()
+    is_zip = _is_zip_file(filename)
+    try:
+        cm = (ZipFile(source_path) if is_zip else tarfile.open(source_path, mode="r:*"))
+        with cm as archive:
+            valid_exts = IMAGE_FILE_EXTENSIONS if dataset.modality == Modality.IMAGE else VIDEO_FILE_EXTENSIONS
+
+            if is_zip:
+                list_entries = archive.namelist()
+                get_name = lambda e: e
+                def open_entry(e):
+                    return archive.open(e)
+            else:
+                list_entries = [m for m in archive.getmembers() if m.isreg()]
+                get_name = lambda m: m.name
+                def open_entry(m):
+                    return archive.extractfile(m)
+
+            candidates = [
+                e for e in list_entries
+                if any(get_name(e).lower().endswith(ext) for ext in valid_exts)
+                and "MACOSX" not in get_name(e)
+            ]
+            if not candidates:
+                bt.logging.warning(f"No matching files found in {source_path}")
+                return
+
+            selected = random.sample(candidates, min(num_items, len(candidates)))
+
+            for entry in selected:
+                try:
+                    src = open_entry(entry)
+                    if src is None:
+                        continue
+                    with closing(src):
+                        data_bytes = src.read()
+
+                    if dataset.modality == Modality.IMAGE:
+                        try:
+                            media_obj = Image.open(BytesIO(data_bytes))
+                        except Exception:
+                            bt.logging.warning(f"Failed to open image {get_name(entry)} from {source_path}")
+                            continue
+                    else:
+                        media_obj = data_bytes
+
+                    yield media_obj, _common_metadata(dataset, source_path)
+                except Exception as e:
+                    bt.logging.warning(f"Error extracting {get_name(entry)} from {source_path}: {e}")
+                    continue
+    except Exception as e:
+        bt.logging.warning(f"Error processing archive file {source_path}: {e}")
+        return
+
+
+def _process_raw(source_path: Path, dataset: DatasetConfig):
+    filename = str(source_path.name).lower()
+    try:
+        data_bytes = source_path.read_bytes()
+        if dataset.modality == Modality.IMAGE and any(filename.endswith(ext) for ext in IMAGE_FILE_EXTENSIONS):
+            media_obj = Image.open(BytesIO(data_bytes))
+        elif dataset.modality == Modality.VIDEO and any(filename.endswith(ext) for ext in VIDEO_FILE_EXTENSIONS):
+            media_obj = data_bytes
+        else:
+            bt.logging.warning(f"Direct file {source_path} does not match modality {dataset.modality}")
+            return
+
+        yield media_obj, _common_metadata(dataset, source_path)
+    except Exception as e:
+        bt.logging.warning(f"Error reading direct file {source_path}: {e}")
+        return
 
 
 def list_hf_files(repo_id, repo_type="dataset", extension=None):
