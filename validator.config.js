@@ -89,6 +89,12 @@ const dataScript = path.join(projectRoot, 'gas', 'services', 'data_service.py');
 // Build apps array
 const apps = [];
 
+// Allow optional override of HF cache dir via env. Must be resolved before any Python starts.
+const HF_HOME_RESOLVED = process.env.HF_HOME
+  || process.env.HUGGINGFACE_HOME
+  || process.env.HUGGINGFACE_CACHE_DIR
+  || path.join(os.homedir(), '.cache', 'huggingface');
+
 // Common HF env
 const HF_ENV = {
   TRANSFORMERS_VERBOSITY: 'error',
@@ -97,7 +103,7 @@ const HF_ENV = {
   HF_HUB_VERBOSITY: 'error',
   ACCELERATE_LOG_LEVEL: 'error',
   HUGGINGFACE_HUB_TOKEN: process.env.HUGGINGFACE_HUB_TOKEN || process.env.HF_TOKEN,
-  HF_HOME: path.join(os.homedir(), '.cache', 'huggingface'),
+  HF_HOME: HF_HOME_RESOLVED,
   HF_HUB_DISABLE_TELEMETRY: '1',
 };
 
@@ -140,7 +146,7 @@ if (config.startGenerator) {
     script: generatorScript,
     interpreter: pythonInterpreter,
     args: [
-      '--cache-dir', config.cacheDir,
+      '--cache.base-dir', config.cacheDir,
       '--device', config.device,
       '--batch-size', '1',
       '--log-level', config.loglevel,
@@ -161,7 +167,7 @@ if (config.startData) {
     script: dataScript,
     interpreter: pythonInterpreter,
     args: [
-      '--cache-dir', config.cacheDir,
+      '--cache.base-dir', config.cacheDir,
       '--chain-endpoint', config.chainEndpoint,
       '--scraper-interval', config.scraperInterval,
       '--dataset-interval', config.datasetInterval,
@@ -169,6 +175,9 @@ if (config.startData) {
     ].join(' '),
     env: {
       ...HF_ENV,
+      TMPDIR: path.join(config.cacheDir, 'tmp'),
+      TEMP: path.join(config.cacheDir, 'tmp'),
+      TMP: path.join(config.cacheDir, 'tmp'),
     },
     watch: false,
     instances: 1,
