@@ -104,3 +104,5 @@ Validators are responsible for challenging and scoring both miner types. Generat
     <img src="docs/static/Join-BitMind-Discord.png" alt="Join us on Discord" width="60%">
   </a>
 </p> 
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BitMind-AI/bitmind-subnet)
