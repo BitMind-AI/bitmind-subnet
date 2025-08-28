@@ -389,6 +389,34 @@ def add_generation_service_args(parser):
         default=300,
     )
 
+    parser.add_argument(
+        "--prompt-batch-size",
+        type=int,
+        help="Number of prompts to generate per cycle",
+        default=20,
+    )
+
+    parser.add_argument(
+        "--query-batch-size",
+        type=int,
+        help="Number of search queries to generate per cycle",
+        default=10,
+    )
+
+    parser.add_argument(
+        "--local-batch-size",
+        type=int,
+        help="Number of local generations to run per cycle",
+        default=1,
+    )
+
+    parser.add_argument(
+        "--tps-batch-size",
+        type=int,
+        help="Number of third-party service generations to run per cycle",
+        default=10,
+    )
+
     # Shared source-limit args
     add_source_limit_args(parser)
 

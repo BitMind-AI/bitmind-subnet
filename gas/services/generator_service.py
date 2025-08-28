@@ -210,23 +210,27 @@ class GeneratorService:
         """Main generation work loop."""
         bt.logging.info("[GENERATOR-SERVICE] Starting generation work loop")
 
-        batch_size = 5
+        prompt_batch_size = self.config.prompt_batch_size
+        query_batch_size = self.config.query_batch_size
+        local_batch_size = self.config.local_batch_size
+        tps_batch_size = self.config.tps_batch_size
+
         while not self._stop_requested.is_set():
             try:
                 # Generate search queries
                 start = time.time()
-                self._generate_text("search_query", batch_size)
+                self._generate_text("search_query", query_batch_size)
                 bt.logging.info(
-                    f"[GENERATOR-SERVICE] Generated {batch_size} queries in {time.time()-start:.2f} seconds"
+                    f"[GENERATOR-SERVICE] Generated {query_batch_size} queries in {time.time()-start:.2f} seconds"
                 )
                 if self._stop_requested.is_set():
                     break
 
                 # Generate prompts
                 start = time.time()
-                self._generate_text("prompt", batch_size)
+                self._generate_text("prompt", prompt_batch_size)
                 bt.logging.info(
-                    f"[GENERATOR-SERVICE] Generated {batch_size} prompts in {time.time()-start:.2f} seconds"
+                    f"[GENERATOR-SERVICE] Generated {prompt_batch_size} prompts in {time.time()-start:.2f} seconds"
                 )
                 if self._stop_requested.is_set():
                     break
@@ -234,8 +238,11 @@ class GeneratorService:
                 # Clear GPU memory
                 self.prompt_generator.clear_gpu()
 
-                # Generate media
-                self._generate_media()
+                # Generate media with third party services
+                self._generate_media(use_local=False, k=tps_batch_size)
+
+                # Generate media with local models
+                self._generate_media(use_local=True, k=local_batch_size)
 
                 # Wait before next cycle
                 time.sleep(30)
@@ -312,61 +319,63 @@ class GeneratorService:
 
         return generated
 
-    def _generate_media(self):
+    def _generate_media(self, use_local=True, k=1):
         start = time.time()
         entries = self.content_manager.sample_prompts_with_source_media(
-            k=1,
+            k=k,
             remove=True,
             strategy="least_used",
         )
 
         if entries:
-            prompt = entries[0]['prompt']
-            original_media = entries[0]['media']
-            bt.logging.debug(f"[GENERATOR-SERVICE] Generating media")
-            bt.logging.debug(f"- Prompt: {prompt}")
-            bt.logging.debug(f"- Models: {self.model_names}")
+            for entry in entries:
+                prompt = entry['prompt']
+                original_media = entries[0]['media']
+                bt.logging.debug(f"[GENERATOR-SERVICE] Generating media")
+                bt.logging.debug(f"- Prompt: {prompt}")
+                bt.logging.debug(f"- Models: {self.model_names}")
+
+                # send propmpt to third party services
+                if use_local:
+                    # send prompt to all local models
+                    for gen_output in self.generation_pipeline.generate_media(
+                        prompt=prompt.content, 
+                        model_names=self.model_names, 
+                        image_sample=original_media
+                    ):
+                        if self._stop_requested.is_set():
+                            break
+
+                        if gen_output:
+                            save_path = self._write_media(gen_output, prompt.id)
+                            if save_path:
+                                bt.logging.info(
+                                    f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
+                                )
+                else:
+                    # send prompt to third party services
+                    for service_name, generator_fn in self.tp_generators.items():
+                        bt.logging.info(
+                            f"[GENERATOR-SERVICE] Generating with third party service: {service_name}'"
+                        )
+                        try:
+                            gen_output = generator_fn(prompt.content)
+                        except RuntimeError as e:
+                            bt.logging.warning(e)
+                            continue
+
+                        if gen_output:
+                            save_path = self._write_media(gen_output, prompt.id)
+                            time.sleep(10)
+                            if save_path:
+                                bt.logging.info(
+                                    f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
+                                )
 
 
-            # send propmpt to third party services
-            for service_name, generator_fn in self.tp_generators.items():
                 bt.logging.info(
-                    f"[GENERATOR-SERVICE] Generating with third party service: {service_name}'"
+                    f"[GENERATOR-SERVICE] Completed media generation for prompt '{prompt.id}' in {time.time()-start:.2f} seconds"
                 )
-                try:
-                    gen_output = generator_fn(prompt.content)
-                except RuntimeError as e:
-                    bt.logging.warning(e)
-                    continue
-
-                if gen_output:
-                    save_path = self._write_media(gen_output, prompt.id)
-                    if save_path:
-                        bt.logging.info(
-                            f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
-                        )
-
-
-            # send prompt to all local models
-            for gen_output in self.generation_pipeline.generate_media(
-                prompt=prompt.content, 
-                model_names=self.model_names, 
-                image_sample=original_media
-            ):
-                if self._stop_requested.is_set():
-                    break
-
-                if gen_output:
-                    save_path = self._write_media(gen_output, prompt.id)
-                    if save_path:
-                        bt.logging.info(
-                            f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
-                        )
-
-
-            bt.logging.info(
-                f"[GENERATOR-SERVICE] Completed media generation for prompt '{prompt.id}' in {time.time()-start:.2f} seconds"
-            )
         else:
             bt.logging.warning(
                 "[GENERATOR-SERVICE] No prompts available for media generation"
