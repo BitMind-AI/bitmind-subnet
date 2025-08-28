@@ -335,7 +335,6 @@ class GeneratorService:
                 bt.logging.debug(f"- Prompt: {prompt}")
                 bt.logging.debug(f"- Models: {self.model_names}")
 
-                # send propmpt to third party services
                 if use_local:
                     # send prompt to all local models
                     for gen_output in self.generation_pipeline.generate_media(
@@ -371,7 +370,6 @@ class GeneratorService:
                                 bt.logging.info(
                                     f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
                                 )
-
 
                 bt.logging.info(
                     f"[GENERATOR-SERVICE] Completed media generation for prompt '{prompt.id}' in {time.time()-start:.2f} seconds"
