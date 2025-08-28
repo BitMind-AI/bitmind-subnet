@@ -148,7 +148,6 @@ if (config.startGenerator) {
     args: [
       '--cache.base-dir', config.cacheDir,
       '--device', config.device,
-      '--batch-size', '1',
       '--log-level', config.loglevel,
     ].join(' '),
     env: {
