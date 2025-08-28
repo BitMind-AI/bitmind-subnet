@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image
 
 from gas.config import add_args, add_generation_service_args
+from gas.generation.tps import nano_banana
 from gas.generation import (
     GenerationPipeline,
     initialize_model_registry,
@@ -59,6 +60,11 @@ class GeneratorService:
         self.prompt_generator: Optional[PromptGenerator] = None
         self.model_registry = None
         self.model_names = []
+
+        # third party generative services
+        self.tp_generators = {
+            "nano_banana": nano_banana.generate_image
+        }
 
     @property
     def output_dir(self):
@@ -321,7 +327,27 @@ class GeneratorService:
             bt.logging.debug(f"- Prompt: {prompt}")
             bt.logging.debug(f"- Models: {self.model_names}")
 
-            # generation generator function lol
+
+            # send propmpt to third party services
+            for service_name, generator_fn in self.tp_generators.items():
+                bt.logging.info(
+                    f"[GENERATOR-SERVICE] Generating with third party service: {service_name}'"
+                )
+                try:
+                    gen_output = generator_fn(prompt.content)
+                except RuntimeError as e:
+                    bt.logging.warning(e)
+                    continue
+
+                if gen_output:
+                    save_path = self._write_media(gen_output, prompt.id)
+                    if save_path:
+                        bt.logging.info(
+                            f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
+                        )
+
+
+            # send prompt to all local models
             for gen_output in self.generation_pipeline.generate_media(
                 prompt=prompt.content, 
                 model_names=self.model_names, 
@@ -332,11 +358,11 @@ class GeneratorService:
 
                 if gen_output:
                     save_path = self._write_media(gen_output, prompt.id)
+                    if save_path:
+                        bt.logging.info(
+                            f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
+                        )
 
-                if save_path:
-                    bt.logging.info(
-                        f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
-                    )
 
             bt.logging.info(
                 f"[GENERATOR-SERVICE] Completed media generation for prompt '{prompt.id}' in {time.time()-start:.2f} seconds"
