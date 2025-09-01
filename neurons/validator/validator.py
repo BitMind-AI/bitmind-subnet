@@ -91,7 +91,7 @@ class Validator(BaseNeuron):
             [
                 self.log_on_block,
                 self.start_new_wanbd_run,
-                # self.issue_generator_challenge,
+                self.issue_generator_challenge,
                 self.issue_discriminator_challenge,
                 self.set_weights,
             ]
@@ -122,16 +122,15 @@ class Validator(BaseNeuron):
             self.config, self.wallet, self.metagraph, self.subtensor
         )
 
-        #self.generative_challenge_manager = GenerativeChallengeManager(
-        #    self.config,
-        #    self.wallet,
-        #    self.metagraph,
-        #    self.subtensor,
-        #    self.miner_type_tracker,
-        #)
+        self.generative_challenge_manager = GenerativeChallengeManager(
+            self.config,
+            self.wallet,
+            self.metagraph,
+            self.subtensor,
+            self.miner_type_tracker,
+        )
 
         self.discriminator_tracker = DiscriminatorTracker(store_last_n=200)
-        # self.generator_tracker = GeneratorTracker()
 
         await self.load_state()
 
@@ -167,8 +166,7 @@ class Validator(BaseNeuron):
     @on_block_interval("generator_challenge_interval")
     async def issue_generator_challenge(self, block):
         """Generator challenges coming soon!"""
-        # await self.generative_challenge_manager.issue_generative_challenge()
-        return
+        await self.generative_challenge_manager.issue_generative_challenge()
 
     @on_block_interval("discriminator_challenge_interval")
     async def issue_discriminator_challenge(self, block, retries=3):
@@ -234,7 +232,7 @@ class Validator(BaseNeuron):
                 half_index = aug_media.shape[0] // 2
                 aug_media = aug_media[:half_index]
                 media_bytes = media_to_bytes(aug_media)[0]
-            except Excpetion as e:
+            except Exception as e:
                 bt.logging.error(f"Truncation failed: {e}")
                 return
 
@@ -523,8 +521,8 @@ class Validator(BaseNeuron):
     async def shutdown(self):
         """Shutdown the validator and clean up resources."""
         await self.shutdown_substrate()
-        #if self.generative_challenge_manager:
-        #   await  self.generative_challenge_manager.shutdown()
+        if self.generative_challenge_manager:
+           await self.generative_challenge_manager.shutdown()
 
     def heartbeat(self):
         bt.logging.info("Starting Heartbeat")

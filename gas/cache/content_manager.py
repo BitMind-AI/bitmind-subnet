@@ -10,7 +10,7 @@ import numpy as np
 from gas.cache.content_db import ContentDB, SOURCE_TYPE_TO_DB_NAME_FIELD
 from gas.cache.media_storage import MediaStorage
 from gas.cache.types import Media, MediaEntry, PromptEntry
-from gas.cache.util import extract_media_info, get_format_from_content
+from gas.cache.util import extract_media_info, get_format_from_content, format_to_extension
 from gas.types import MediaType, Modality, SourceType, SOURCE_TYPE_TO_NAME
 
 
@@ -136,6 +136,67 @@ class ContentManager:
 
 		except Exception as e:
 			bt.logging.error(f"Error writing media: {e}")
+			return None
+
+	def write_miner_media(
+		self,
+		modality: Modality,
+		media_type: MediaType,
+		prompt_id: str,
+		uid: int,
+		hotkey: str,
+		media_content: bytes,
+		content_type: str,
+		task_id: str,
+		model_name: Optional[str] = None,
+	) -> Optional[str]:
+		"""
+		Write miner-generated binary media to storage.
+		Follows the same pattern as other write methods.
+
+		Args:
+			uid: Miner UID
+			hotkey: Miner hotkey
+			binary_data: Raw binary media data
+			content_type: MIME content type (e.g., "image/png", "video/mp4")
+			task_id: Unique task identifier for filename
+			model_name: Optional model name
+
+		Returns:
+			Path to saved file if successful, None if failed
+		"""
+		try:
+			media_data = Media(
+				modality=modality,
+				media_type=media_type,
+				prompt_id=prompt_id,
+				media_content=media_content,
+				format=get_format_from_content(media_content, modality),
+				model_name=model_name,
+				metadata={"uid": uid, "task_id": task_id, "source": "miner"}
+			)
+
+			save_path, mask_path = self.media_storage.write_media(media_data)
+			if save_path is None:
+				bt.logging.error("Failed to write miner media to filesystem")
+				return None
+
+			resolution, file_size = extract_media_info(save_path, modality)
+			media_id = self.content_db.add_miner_media_entry(
+				uid=uid,
+				hotkey=hotkey,
+				filepath=str(save_path),
+				model_name=model_name,
+				resolution=resolution,
+				file_size=file_size,
+				format=format,
+			)
+
+			bt.logging.info(f"Saved miner media to {save_path} with database ID: {media_id}")
+			return str(save_path)
+
+		except Exception as e:
+			bt.logging.error(f"Error writing miner media: {e}")
 			return None
 
 	def write_scraped_media(

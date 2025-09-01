@@ -38,7 +38,11 @@ class GenerativeChallengeManager:
 
         self.challenge_tasks = {}
         self.challenge_lock = asyncio.Lock()
-        self.external_ip = requests.get("https://checkip.amazonaws.com").text.strip()
+        try:
+            self.external_ip = requests.get("https://checkip.amazonaws.com", timeout=10).text.strip()
+        except Exception as e:
+            bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
+            self.external_ip = "localhost"
         self.generative_callback_url = f"http://{self.external_ip}:{self.config.neuron.callback_port}/generative_callback"
 
         self.init_fastapi()
@@ -102,6 +106,7 @@ class GenerativeChallengeManager:
                 self.challenge_tasks[miner_task_id] = {
                     "uid": uid,
                     "prompt_id": prompt_entry.id,
+                    "prompt_content": prompt_entry.content,
                     "modality": modality,
                     "media_type": media_type,
                     "status": "pending",
@@ -116,144 +121,97 @@ class GenerativeChallengeManager:
 
     async def generative_callback(self, request: Request):
         """Callback endpoint for generative challenges.
-        The miner will call this endpoint to provide the results of a generative challenge.
+        Only accepts direct binary image and video payloads.
         """
-        data = await request.json()
-        task_id = data.get("task_id")
-
+        content_type = request.headers.get("content-type", "").lower()
+        
+        # Only accept image and video content types
+        if not (content_type.startswith("image/") or content_type.startswith("video/")):
+            bt.logging.error(f"Invalid content type: {content_type}. Only image/* and video/* are supported.")
+            return Response(status_code=400, content="Only image and video content types are supported")
+        
+        # Get task ID from header
+        task_id = request.headers.get("task-id")
+        if not task_id:
+            bt.logging.error("Binary upload missing task-id header")
+            return Response(status_code=400, content="Missing task-id header")
+            
+        # Get binary payload
+        binary_data = await request.body()
+        if not binary_data:
+            bt.logging.error(f"Task {task_id}: Empty binary payload received")
+            return Response(status_code=400, content="Empty binary payload")
+            
         async with self.challenge_lock:
             if task_id not in self.challenge_tasks:
-                bt.logging.warning(f"Received callback for unknown task_id: {task_id}")
+                bt.logging.warning(f"Received binary upload for unknown task_id: {task_id}")
                 return Response(status_code=404, content="Task not found")
 
             challenge_info = self.challenge_tasks[task_id]
             generator_uid = challenge_info["uid"]
             bt.logging.info(
-                f"Received callback for task {task_id}, issued to UID {generator_uid}"
+                f"Received binary upload for task {task_id}, UID {generator_uid}, "
+                f"type: {content_type}, size: {len(binary_data)} bytes"
             )
 
-            status = data.get("status")
-            if status == "completed":
-                download_url = data.get("download_url")
-                if download_url:
-                    bt.logging.success(
-                        f"Task {task_id} completed successfully. Download from: {download_url}"
-                    )
-                    filepath = await self.download_generator_content(
-                        download_url, generator_uid, task_id
-                    )
-                    if filepath:
-                        challenge_info["status"] = "completed"
-                        challenge_info["filepath"] = filepath
-                    else:
-                        challenge_info["status"] = "failed"
-                        challenge_info["error_message"] = "Failed to download content"
-
-                else:
-                    bt.logging.error(f"Task {task_id} completed but no media provided")
-                    challenge_info["status"] = "failed"
-                    challenge_info["error_message"] = "No media provided"
-
-            elif status == "failed":
-                error_message = data.get("error_message")
-                bt.logging.error(f"Task {task_id} failed: {error_message}")
+            filepath = await self.store_binary_content(
+                binary_data, content_type, generator_uid, task_id
+            )
+            if filepath:
+                challenge_info["status"] = "completed"
+                challenge_info["filepath"] = filepath
+                bt.logging.success(f"Task {task_id} completed with binary upload: {filepath}")
+            else:
                 challenge_info["status"] = "failed"
-                challenge_info["error_message"] = error_message
+                challenge_info["error_message"] = "Failed to store binary content"
 
-            # Don't delete the task yet - keep it for evaluation tracking
-            # del self.challenge_tasks[task_id]
+            del self.challenge_tasks[task_id]
+                
+        return Response(status_code=200, content="Binary content received")
 
-        return Response(status_code=200, content="Callback received")
-
-    async def download_generator_content(
-        self, download_url: str, generator_uid: int, task_id: str
-    ) -> str:
+    async def store_binary_content(
+        self, binary_data: bytes, content_type: str, generator_uid: int, task_id: str
+    ) -> Optional[str]:
         """
-        Download and store generator content with proper Epistula authentication
+        Store binary content directly uploaded by miner using ContentManager
         """
         try:
-            bt.logging.trace(f"Attempting to download from: {download_url}")
+            bt.logging.trace(f"Storing binary content for task {task_id}, size: {len(binary_data)} bytes")
 
-            axon_info = self.metagraph.axons[generator_uid]
-            if download_url.startswith("/"):
-                download_url = f"http://{axon_info.ip}:{axon_info.port}" + download_url
+            # Get task info from challenge tracker
+            task_info = self.challenge_tasks.get(task_id)
+            if not task_info:
+                bt.logging.error(f"Task {task_id} not found in challenge tasks")
+                return None
 
-            # need to sign epistula headers if downloading directly from miner
-            headers = {"Content-Type": "application/json"}
-            if axon_info.ip in download_url:
-                epistula_headers = generate_header(
-                    self.wallet.hotkey, b"", axon_info.hotkey
-                )
-                headers.update(epistula_headers)
+            modality = task_info["modality"]
+            media_type = task_info["media_type"] 
+            prompt_id = task_info["prompt_id"]
 
-            modality = self.challenge_tasks[task_id]["modality"]
-            media_type = self.challenge_tasks[task_id]["media_type"]
-
-            cache_path = self.content_manager.get_cache_path(
-                Modality(modality), MediaType(media_type), adversarial=True
+            # Let ContentManager handle all filesystem and database operations
+            filepath = self.content_manager.write_miner_media(
+                modality=modality,
+                media_type=media_type,
+                prompt_id=prompt_id,
+                uid=generator_uid,
+                hotkey=self.metagraph.hotkeys[generator_uid],
+                media_content=binary_data,
+                content_type=content_type,
+                task_id=task_id,
+                model_name=f"miner_{generator_uid}",
             )
-            output_dir = cache_path / str(generator_uid)
-            output_dir.mkdir(exist_ok=True, parents=True)
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(download_url, headers=headers) as response:
-                    if response.status != 200:
-                        bt.logging.error(
-                            f"Failed to download content from {download_url}: HTTP {response.status}"
-                        )
-                        return None
-
-                    content_type = response.headers.get("content-type", "")
-                    if "image" in content_type:
-                        file_ext = ".png"
-                    elif "video" in content_type:
-                        file_ext = ".mp4"
-                    else:
-                        file_ext = ".bin"
-
-                    filename = f"{task_id}{file_ext}"
-                    file_path = output_dir / filename
-                    with open(file_path, "wb") as f:
-                        async for chunk in response.content.iter_chunked(8192):
-                            f.write(chunk)
-
-                    try:
-                        prompt_id = self.challenge_tasks[task_id]["prompt_id"]
-                        combined_metadata = {
-                            "source": f"generator_{generator_uid}_{self.metagraph.hotkeys[generator_uid]}",
-                            "generator_uid": generator_uid,
-                            "task_id": task_id,
-                            "task_sent_at": self.challenge_tasks[task_id]["sent_at"],
-                            "prompt": self.challenge_tasks[task_id]["prompt"],
-                            "download_url": download_url,
-                            "content_type": content_type,
-                            "file_size": file_path.stat().st_size,
-                            "label": MediaType(media_type).int_value,
-                        }
-
-                        media_id = self.content_manager.add_existing_media(
-                            file_path=str(file_path),
-                            modality=modality,
-                            media_type=media_type,
-                            model_name=f"miner_{generator_uid}",
-                            prompt_id=prompt_id,
-                            metadata=combined_metadata,
-                        )
-                        bt.logging.trace(
-                            f"Added media entry to database with ID: {media_id} linked to prompt: {prompt_id}"
-                        )
-                    except Exception as e:
-                        bt.logging.warning(
-                            f"Failed to add media entry to database: {e}"
-                        )
-
-                    bt.logging.success(
-                        f"Downloaded and stored generator content: {file_path} (type: {media_type})"
-                    )
-                    return str(file_path)
+            if filepath:
+                bt.logging.success(
+                    f"Stored binary content: {filepath} (size: {len(binary_data)} bytes)"
+                )
+                return filepath
+            else:
+                bt.logging.error("ContentManager failed to store binary content")
+                return None
 
         except Exception as e:
-            bt.logging.error(f"Error downloading generator content: {e}")
+            bt.logging.error(f"Error storing binary content: {e}")
             return None
 
     async def _get_prompt_from_cache(self, retries=3) -> Optional[PromptEntry]:
