@@ -73,6 +73,7 @@ def add_args(parser):
 
 # Shared source-limit/demand-loading args
 
+
 def add_source_limit_args(parser):
     parser.add_argument(
         "--max-per-source",
@@ -126,6 +127,69 @@ def add_miner_args(parser):
         type=str,
         default="cpu",
         help="Device to use for detection models (cuda/cpu)",
+    )
+
+    # === GENERATIVE MINER SPECIFIC ARGS ===
+    parser.add_argument(
+        "--miner.output-dir",
+        type=str,
+        default="generated_content",
+        help="Directory to store generated content",
+    )
+
+    parser.add_argument(
+        "--miner.max-task-age-hours",
+        type=int,
+        default=24,
+        help="Maximum age (hours) before tasks are cleaned up",
+    )
+
+    parser.add_argument(
+        "--miner.max-concurrent-tasks",
+        type=int,
+        default=5,
+        help="Maximum number of tasks to process concurrently",
+    )
+
+    parser.add_argument(
+        "--miner.task-timeout",
+        type=float,
+        default=300.0,
+        help="Maximum time (seconds) to spend on a single task",
+    )
+
+    parser.add_argument(
+        "--miner.cleanup-interval",
+        type=int,
+        default=3600,
+        help="Interval (seconds) between task cleanup runs",
+    )
+
+    parser.add_argument(
+        "--miner.worker-threads",
+        type=int,
+        default=2,
+        help="Number of worker threads for task processing",
+    )
+    
+    # Webhook configuration
+    parser.add_argument(
+        "--miner.webhook-max-retries",
+        type=int,
+        default=3,
+        help="Maximum number of webhook retry attempts",
+    )
+    parser.add_argument(
+        "--miner.webhook-retry-delay",
+        type=float,
+        default=2.0,
+        help="Base delay between webhook retries (exponential backoff)",
+    )
+    parser.add_argument(
+        "--miner.webhook-timeout",
+        type=float,
+        default=30.0,
+        help="Timeout for webhook requests in seconds",
     )
 
 
@@ -352,7 +416,7 @@ def add_validator_args(parser):
 
 def add_generation_service_args(parser):
     """Add generation service specific arguments to the parser."""
-    
+
     parser.add_argument(
         "--device",
         type=str,
@@ -423,7 +487,7 @@ def add_generation_service_args(parser):
 
 def add_data_service_args(parser):
     """Add data service specific arguments to the parser."""
-    
+
     parser.add_argument(
         "--scraper-interval",
         type=int,
