@@ -352,7 +352,9 @@ if [ "$SYS_DEPS_ONLY" = false ]; then
 
     # Install additional git dependencies
     log_info "Installing additional git dependencies..."
-    source .venv/bin/activate && uv pip install git+https://github.com/deepseek-ai/Janus.git
+    source .venv/bin/activate &&\
+     uv pip install git+https://github.com/deepseek-ai/Janus.git &&\
+     uv pip install git+https://github.com/huggingface/diffusers
     log_success "Git dependencies installed ✓"
 
     log_success "Virtual environment created and dependencies installed ✓"
