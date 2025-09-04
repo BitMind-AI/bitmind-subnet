@@ -370,7 +370,14 @@ def get_text_to_video_models() -> List[ModelConfig]:
             pipeline_cls=WanPipeline,
             pretrained_args={
                 "torch_dtype": torch.bfloat16,
-                "vae": (load_autoencoder_kl_wan,)
+                "vae": (
+                    load_autoencoder_kl_wan,
+                    {
+                        "model_id": "Wan-AI/Wan2.2-T2V-A14B-Diffusers", 
+                        "subfolder": "vae", 
+                        "torch_dtype": torch.float32
+                    }
+                )
             },
             generation_args={
                 "num_frames": 121,
