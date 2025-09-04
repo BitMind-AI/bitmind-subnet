@@ -373,7 +373,7 @@ def get_text_to_video_models() -> List[ModelConfig]:
                 "vae": (
                     load_autoencoder_kl_wan,
                     {
-                        "model_id": "Wan-AI/Wan2.2-T2V-A14B-Diffusers", 
+                        "model_id": "Wan-AI/Wan2.2-TI2V-5B-Diffusers", 
                         "subfolder": "vae", 
                         "torch_dtype": torch.float32
                     }
@@ -383,7 +383,7 @@ def get_text_to_video_models() -> List[ModelConfig]:
                 "num_frames": 121,
                 "guidance_scale": {"min": 4, "max": 6},
                 "num_inference_steps": {"min": 30, "max": 65},
-                "resolution": [1280, 704],
+                "resolution": [704, 1280],
             },
             save_args={"fps": 24},
             tags=["wan"],

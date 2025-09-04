@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional
 
 
 def load_autoencoder_kl_wan(
-    model_id="Wan-AI/Wan2.2-T2V-A14B-Diffusers", 
+    model_id="Wan-AI/Wan2.2-TI2V-5B-Diffusers", 
     subfolder="vae", 
     torch_dtype=torch.float32
 ):
