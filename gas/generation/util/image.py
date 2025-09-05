@@ -68,7 +68,7 @@ def save_images_to_disk(
             print(f"Saved: {file_path}")
         except Exception as e:
             print(f"Failed to save image {i}: {e}")
-            
+
 
 def ensure_mask_3d(mask: np.ndarray) -> np.ndarray:
     """
@@ -140,7 +140,10 @@ def create_random_mask(
                     height = np.random.randint(min_triangle_size, max_triangle_size)
                 x = np.random.randint(0, w - width + 1)
                 y = np.random.randint(0, h - height + 1)
-                jitter = lambda v, maxv: max(0, min(v + np.random.randint(-width//10, width//10+1), maxv-1))
+                jitter = lambda v, maxv: max(
+                    0,
+                    min(v + np.random.randint(-width // 10, width // 10 + 1), maxv - 1),
+                )
                 pt1 = (jitter(x, w), jitter(y, h))
                 pt2 = (jitter(x + width - 1, w), jitter(y, h))
                 pt3 = (jitter(x, w), jitter(y + height - 1, h))
@@ -157,8 +160,56 @@ def is_black_output(
     """
     Returns True if the image or frames are (almost) completely black.
     """
-    if modality == "image":
-        arr = np.array(output[modality].images[0])
-        return np.mean(arr) < threshold
-    elif modality == "video":
-        return np.all([np.mean(np.array(arr)) < threshold for arr in output[modality].frames[0]])
+    try:
+        if modality == "image":
+            # Handle different image output formats
+            if hasattr(output, "images"):
+                arr = np.array(output.images[0])
+            elif isinstance(output, Image.Image):
+                arr = np.array(output)
+            else:
+                arr = np.array(output)
+            return np.mean(arr) < threshold
+        elif modality == "video":
+            # Handle different video output formats
+            if hasattr(output, "frames"):
+                frames = output.frames[0]
+            else:
+                frames = output
+
+            # Check first few frames to avoid processing all frames unnecessarily
+            sample_frames = frames[: min(5, len(frames))] if len(frames) > 5 else frames
+
+            for frame in sample_frames:
+                try:
+                    # Convert frame to numpy array if it's a PIL Image
+                    if hasattr(frame, "mode"):  # PIL Image
+                        arr = np.array(frame)
+                    elif hasattr(frame, "numpy"):  # Tensor
+                        arr = (
+                            frame.numpy()
+                            if hasattr(frame, "numpy")
+                            else np.array(frame)
+                        )
+                    else:
+                        arr = np.array(frame)
+
+                    # Ensure we have numeric data
+                    if arr.dtype.kind not in [
+                        "i",
+                        "u",
+                        "f",
+                    ]:  # not integer, unsigned, or float
+                        continue  # Skip non-numeric frames
+
+                    # If any frame has reasonable brightness, it's not black
+                    if np.mean(arr) >= threshold:
+                        return False
+                except Exception:
+                    # If we can't process a frame, assume it's not black
+                    continue
+
+            return True  # All processable frames are black
+    except Exception:
+        # If we can't analyze the output, assume it's not black to avoid false positives
+        return False
