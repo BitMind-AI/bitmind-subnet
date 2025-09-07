@@ -84,8 +84,8 @@ const pythonInterpreter = getPythonInterpreter();
 // Project paths
 const projectRoot = __dirname;
 const validatorScript = path.join(projectRoot, 'neurons', 'validator', 'validator.py');
-const generatorScript = path.join(projectRoot, 'gas', 'services', 'generator_service.py');
-const dataScript = path.join(projectRoot, 'gas', 'services', 'data_service.py');
+const generatorScript = path.join(projectRoot, 'neurons', 'validator', 'services', 'generator_service.py');
+const dataScript = path.join(projectRoot, 'neurons', 'validator', 'services', 'data_service.py');
 
 // Build apps array
 const apps = [];
