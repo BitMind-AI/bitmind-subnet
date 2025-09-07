@@ -4,6 +4,7 @@ import os
 import aiohttp
 import bittensor as bt
 import numpy as np
+import random
 import uvicorn
 from bittensor.core.axon import FastAPIThreadedServer
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
@@ -43,6 +44,7 @@ class GenerativeChallengeManager:
         except Exception as e:
             bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
             self.external_ip = "localhost"
+        #self.external_ip = "localhost"  # TEMP
         self.generative_callback_url = f"http://{self.external_ip}:{self.config.neuron.callback_port}/generative_callback"
 
         self.init_fastapi()
@@ -62,6 +64,8 @@ class GenerativeChallengeManager:
             bt.logging.trace("No generative miners found to challenge.")
             return
 
+        #miner_uids = [7, 8]
+
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
         prompt_entry = await self._get_prompt_from_cache()
@@ -78,13 +82,8 @@ class GenerativeChallengeManager:
     async def send_generative_request(self, uid: int, prompt_entry):
         """Scoring is handled by the callback in GeneratorEvaluator"""
 
-        parameters = {"width": 1024, "height": 1024}  # dummy params
-
-        # Randomly select modality for this challenge.
-        modality = np.random.choice([Modality.IMAGE.value, Modality.VIDEO.value])
-        media_type = np.random.choice(
-            [MediaType.SYNTHETIC.value, MediaType.SEMISYNTHETIC.value]
-        )
+        #parameters = {"width": 1024, "height": 1024}
+        modality = random.choice([Modality.IMAGE, Modality.VIDEO])
 
         async with aiohttp.ClientSession() as session:
             response_data = await query_generative_miner(
@@ -93,10 +92,9 @@ class GenerativeChallengeManager:
                 session=session,
                 hotkey=self.wallet.hotkey,
                 prompt=prompt_entry.content,
-                modality=Modality(modality),
-                media_type=MediaType(media_type),
+                modality=modality,
                 webhook_url=self.generative_callback_url,
-                parameters=parameters,
+                parameters=None,
                 total_timeout=self.config.neuron.miner_total_timeout,
             )
 
@@ -108,7 +106,7 @@ class GenerativeChallengeManager:
                     "prompt_id": prompt_entry.id,
                     "prompt_content": prompt_entry.content,
                     "modality": modality,
-                    "media_type": media_type,
+                    "media_type": MediaType.SYNTHETIC,
                     "status": "pending",
                     "sent_at": time.time(),
                 }
@@ -296,5 +294,5 @@ class GenerativeChallengeManager:
         """Shutdown the webhook server gracefully"""
         if hasattr(self, "fast_api"):
             bt.logging.info("Shutting down webhook server...")
-            await self.fast_api.stop()
+            self.fast_api.stop()
             bt.logging.info("Webhook server stopped")

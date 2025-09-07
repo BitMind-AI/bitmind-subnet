@@ -29,7 +29,7 @@ class OpenRouterService(BaseGenerationService):
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
         # Default model from nano_banana
-        self.default_model = "google/gemini-2.5-flash-image-preview:free"
+        self.default_model = "google/gemini-2.5-flash-image-preview"
         
         # Timeout and retry settings
         self.timeout = 60.0
@@ -44,13 +44,10 @@ class OpenRouterService(BaseGenerationService):
         """Check if OpenRouter service is available."""
         return self.api_key is not None
     
-    def supports_task(self, task_type: str, modality: str) -> bool:
-        """Check if this service supports the task type and modality."""
+    def supports_modality(self, modality: str) -> bool:
+        """Check if this service supports the given modality."""
         # OpenRouter supports image generation via various models
-        supported_tasks = {
-            "image": ["image_generation"]
-        }
-        return modality in supported_tasks and task_type in supported_tasks[modality]
+        return modality == "image"
     
     def get_supported_tasks(self) -> Dict[str, list]:
         """Return supported tasks by modality."""
@@ -76,19 +73,22 @@ class OpenRouterService(BaseGenerationService):
         """
         if not self.is_available():
             bt.logging.error("OpenRouter service not available")
-            return None
+            raise RuntimeError("OpenRouter service not available")
         
         try:
-            # Extract task parameters
+            # Extract task parameters with enhanced logging
             prompt = task.prompt
             modality = task.modality
-            task_type = task.task_type
             parameters = task.parameters or {}
             
+            bt.logging.info(f"OpenRouter processing task: modality={modality}")
+            bt.logging.debug(f"Task prompt: {prompt[:100]}...")
+            bt.logging.debug(f"Task parameters: {parameters}")
+            
             # Validate task
-            if not self.supports_task(task_type, modality):
-                bt.logging.error(f"OpenRouter service doesn't support {task_type} for {modality}")
-                return None
+            if not self.supports_modality(modality):
+                bt.logging.error(f"OpenRouter service doesn't support modality {modality}")
+                raise ValueError(f"OpenRouter service doesn't support modality {modality}")
             
             # Get model from parameters or use default
             model = parameters.get('model', self.default_model)
@@ -96,18 +96,47 @@ class OpenRouterService(BaseGenerationService):
             bt.logging.info(f"Generating image with OpenRouter model: {model}")
             
             # Call OpenRouter API
-            result = await self._generate_image(prompt, model)
+            api_result = await self._generate_image(prompt, model)
             
-            if result is None:
-                bt.logging.error("OpenRouter image generation failed")
-                return None
+            if api_result is None:
+                bt.logging.error("OpenRouter API returned None")
+                raise RuntimeError("OpenRouter API returned None")
             
-            bt.logging.success(f"OpenRouter generation completed in {result.get('gen_duration', 0):.2f}s")
+            bt.logging.debug(f"OpenRouter API result keys: {list(api_result.keys())}")
+            
+            # Convert PIL image to bytes for miner compatibility
+            pil_image = api_result.get("image")
+            if pil_image is None:
+                bt.logging.error("No image in OpenRouter API result")
+                raise ValueError("No image in OpenRouter API result")
+            
+            # Convert PIL image to PNG bytes
+            img_buffer = io.BytesIO()
+            pil_image.save(img_buffer, format='PNG')
+            image_data = img_buffer.getvalue()
+            
+            bt.logging.info(f"Converted image to {len(image_data)} bytes")
+            
+            # Return in the format expected by miner
+            result = {
+                "data": image_data,  # Binary data for miner compatibility
+                "metadata": {
+                    "model": model,
+                    "provider": "openrouter",
+                    "format": "PNG",
+                    "generation_time": api_result.get('gen_duration', 0),
+                    "width": pil_image.width,
+                    "height": pil_image.height,
+                }
+            }
+            
+            bt.logging.success(f"OpenRouter generation completed in {api_result.get('gen_duration', 0):.2f}s")
             return result
             
         except Exception as e:
             bt.logging.error(f"Error in OpenRouter processing: {e}")
-            return None
+            bt.logging.error(f"OpenRouter processing failed for task {task.task_id}: {type(e).__name__}: {e}")
+            raise  # Re-raise instead of returning None
     
     async def _generate_image(self, prompt: str, model: str) -> Optional[Dict[str, Any]]:
         """
@@ -150,25 +179,38 @@ class OpenRouterService(BaseGenerationService):
             )
             
             if response.status_code != 200:
-                bt.logging.error(f"OpenRouter API error: {response.status_code} - {response.text}")
-                return None
+                error_text = response.text if response.text else "Unknown error"
+                bt.logging.error(f"OpenRouter API error: {response.status_code} - {error_text}")
+                raise Exception(f"OpenRouter API returned {response.status_code}: {error_text}")
 
-            result = response.json()
+            # Safely parse JSON response
+            try:
+                result = response.json()
+                if result is None:
+                    bt.logging.error("OpenRouter API returned null JSON")
+                    raise ValueError("OpenRouter API returned null JSON")
+                if not isinstance(result, dict):
+                    bt.logging.error(f"OpenRouter API returned non-dict JSON: {type(result)}")
+                    raise ValueError(f"OpenRouter API returned non-dict JSON: {type(result)}")
+            except ValueError as e:
+                bt.logging.error(f"OpenRouter API returned invalid JSON: {e}")
+                raise ValueError(f"OpenRouter API returned invalid JSON: {e}")
 
             # Parse response (following nano_banana pattern)
             if 'choices' not in result or not result['choices']:
                 bt.logging.error("OpenRouter response missing choices")
-                return None
+                bt.logging.debug(f"OpenRouter response: {result}")
+                raise ValueError("OpenRouter response missing choices")
 
             choice = result['choices'][0]
             if 'message' not in choice or 'images' not in choice['message']:
                 bt.logging.error("OpenRouter response missing images in message")
-                return None
+                raise ValueError("OpenRouter response missing images in message")
 
             images = choice['message']['images']
             if not images:
                 bt.logging.error("OpenRouter response contains no images")
-                return None
+                raise ValueError("OpenRouter response contains no images")
 
             # Process the first image
             image_url = images[0]['image_url']['url']
@@ -176,7 +218,7 @@ class OpenRouterService(BaseGenerationService):
             # Handle base64 data URL format: "data:image/<fmt>;base64,<data>"
             if ',' not in image_url:
                 bt.logging.error("Invalid image URL format from OpenRouter")
-                return None
+                raise ValueError("Invalid image URL format from OpenRouter")
                 
             base64_data = image_url.split(',')[1]
             image_binary = base64.b64decode(base64_data)
@@ -205,13 +247,13 @@ class OpenRouterService(BaseGenerationService):
             
         except requests.exceptions.Timeout:
             bt.logging.error(f"OpenRouter API timeout after {self.timeout}s")
-            return None
+            raise
         except requests.exceptions.RequestException as e:
             bt.logging.error(f"OpenRouter API request failed: {e}")
-            return None
+            raise
         except Exception as e:
             bt.logging.error(f"OpenRouter image processing failed: {e}")
-            return None
+            raise
     
     def get_service_info(self) -> Dict[str, Any]:
         """Return information about this service."""

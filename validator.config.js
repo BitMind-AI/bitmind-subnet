@@ -47,6 +47,7 @@ const config = {
   
   // Network
   chainEndpoint: process.env.CHAIN_ENDPOINT || '',
+  callbackPort: process.env.CALLBACK_PORT || '10525',
   
   // Cache
   cacheDir: process.env.SN34_CACHE_DIR || path.join(os.homedir(), '.cache', 'sn34'),
@@ -114,7 +115,7 @@ if (config.startValidator) {
     '--wallet.hotkey', config.walletHotkey,
     '--netuid', netuid.toString(),
     '--subtensor.chain_endpoint', config.chainEndpoint,
-    '--proxy.port', config.proxyPort,
+    '--neuron.callback_port', config.callbackPort,
     '--cache.base-dir', config.cacheDir,
     logParam,
     autoUpdateParam,

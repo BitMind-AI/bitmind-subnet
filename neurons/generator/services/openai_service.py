@@ -37,18 +37,15 @@ class OpenAIService(BaseGenerationService):
         """Check if OpenAI service is available."""
         return self.api_key is not None and self.client is not None
     
-    def supports_task(self, task_type: str, modality: str) -> bool:
-        """Check if this service supports the task type and modality."""
-        # OpenAI DALL-E only supports image generation and modification
-        supported_tasks = {
-            "image": ["image_generation", "image_modification"]
-        }
-        return modality in supported_tasks and task_type in supported_tasks[modality]
+    def supports_modality(self, modality: str) -> bool:
+        """Check if this service supports the given modality."""
+        # OpenAI DALL-E only supports image generation
+        return modality == "image"
     
     def get_supported_tasks(self) -> Dict[str, list]:
         """Return supported tasks by modality."""
         return {
-            "image": ["image_generation", "image_modification"],
+            "image": ["image_generation"],
             "video": []  # OpenAI doesn't support video generation yet
         }
     
@@ -60,12 +57,10 @@ class OpenAIService(BaseGenerationService):
     
     def process(self, task: GenerationTask) -> Dict[str, Any]:
         """Process a task using OpenAI API."""
-        if task.task_type == "image_generation":
+        if task.modality == "image":
             return self._generate_image(task)
-        elif task.task_type == "image_modification":
-            return self._modify_image(task)
         else:
-            raise ValueError(f"Unsupported task type: {task.task_type}")
+            raise ValueError(f"Unsupported modality: {task.modality}")
     
     def _generate_image(self, task: GenerationTask) -> Dict[str, Any]:
         """Generate an image using DALL-E."""
@@ -106,42 +101,6 @@ class OpenAIService(BaseGenerationService):
             bt.logging.error(f"OpenAI image generation failed: {e}")
             raise
     
-    def _modify_image(self, task: GenerationTask) -> Dict[str, Any]:
-        """Modify an image using DALL-E (placeholder implementation)."""
-        try:
-            # Note: This is a simplified implementation
-            # Real image modification would use OpenAI's image editing API
-            # which requires uploading the original image and a mask
-            
-            bt.logging.info(f"Modifying image with DALL-E: {task.prompt[:50]}...")
-            
-            # For now, we'll use generation with a modified prompt
-            # In a real implementation, you'd use the image editing endpoint
-            modification_prompt = f"Modify this image: {task.prompt}"
-            
-            response = self.client.images.generate(
-                model="dall-e-3",
-                prompt=modification_prompt,
-                size="1024x1024",
-                quality="standard",
-                n=1,
-            )
-            
-            image_url = response.data[0].url
-            bt.logging.success(f"Image modification completed: {image_url}")
-            
-            return {
-                "url": image_url,
-                "metadata": {
-                    "model": "dall-e-3",
-                    "operation": "modification",
-                    "provider": "openai"
-                }
-            }
-            
-        except Exception as e:
-            bt.logging.error(f"OpenAI image modification failed: {e}")
-            raise
     
     def _get_valid_size(self, width: int, height: int) -> str:
         """Convert width/height to valid DALL-E size."""

@@ -1,4 +1,3 @@
-import json
 import time
 import threading
 from typing import Optional, Dict, Any, TYPE_CHECKING
@@ -22,7 +21,6 @@ def send_success_webhook(
     retry_delay: float = 2.0,
     timeout: float = 30.0
 ):
-    """Send success webhook notification asynchronously."""
     def _send():
         try:
             _send_webhook(task, result, True, hotkey, external_ip, port, max_retries, retry_delay, timeout)
@@ -41,7 +39,6 @@ def send_failure_webhook(
     retry_delay: float = 2.0,
     timeout: float = 30.0
 ):
-    """Send failure webhook notification asynchronously."""
     def _send():
         try:
             _send_webhook(task, {}, False, hotkey, external_ip, port, max_retries, retry_delay, timeout)
@@ -61,13 +58,10 @@ def _send_webhook(
     max_retries: int,
     retry_delay: float,
     timeout: float
-):
-    """Send webhook with retry logic."""
-    payload = _create_payload(task, result, is_success, external_ip, port)
-    
+):    
     for attempt in range(max_retries):
         try:
-            success = _attempt_webhook_send(task.webhook_url, payload, task.signed_by, hotkey, timeout)
+            success = _attempt_webhook_send(task, result, is_success, hotkey, timeout)
             if success:
                 bt.logging.info(f"Webhook sent successfully for task {task.task_id}")
                 return
@@ -78,78 +72,66 @@ def _send_webhook(
             bt.logging.error(f"Webhook attempt {attempt + 1} error for task {task.task_id}: {e}")
         
         if attempt < max_retries - 1:
-            time.sleep(retry_delay ** attempt)  # Exponential backoff
+            time.sleep(retry_delay ** attempt)
     
     bt.logging.error(f"All webhook attempts failed for task {task.task_id}")
 
 
-def _create_payload(
-    task: "GenerationTask", 
+def _attempt_webhook_send(
+    task: "GenerationTask",
     result: Dict[str, Any], 
     is_success: bool,
-    external_ip: str,
-    port: int
-) -> Dict[str, Any]:
-    """Create webhook payload."""
-    payload = {
-        "task_id": task.task_id,
-        "status": task.status.value,
-        "task_type": task.task_type,
-        "modality": task.modality,
-        "prompt": task.prompt,
-        "created_at": task.created_at,
-        "started_at": task.started_at,
-        "completed_at": task.completed_at,
-    }
-    
-    # Add processing time if available
-    if task.started_at and task.completed_at:
-        payload["processing_time"] = task.completed_at - task.started_at
-    
-    if is_success:
-        # For successful tasks, include result information
-        if result.get("url"):
-            # If the service provided a direct URL (e.g., from OpenAI)
-            payload["result_url"] = result["url"]
-        elif task.result_data:
-            # If we have binary data, provide a download endpoint
-            payload["download_url"] = f"http://{external_ip}:{port}/download/{task.task_id}"
-        
-        # Include any additional result metadata
-        if result.get("metadata"):
-            payload["metadata"] = result["metadata"]
-    else:
-        # For failed tasks, include error information
-        payload["error_message"] = task.error_message
-    
-    return payload
-
-
-def _attempt_webhook_send(
-    webhook_url: str, 
-    payload: Dict[str, Any], 
-    signed_by: str,
     hotkey: bt.Keypair,
     timeout: float
 ) -> bool:
-    """Attempt to send a single webhook."""
     try:
-        body_bytes = json.dumps(payload).encode("utf-8")
-        
-        headers = {
-            "Content-Type": "application/json",
-            **generate_header(hotkey, body_bytes, signed_by),
-        }
-        
+        if not is_success:
+            content_type = "application/octet-stream"
+            headers = {
+                "Content-Type": content_type,
+                "task-id": task.task_id,
+                "task-status": "failed",
+                "error-message": task.error_message or "Unknown error",
+                **generate_header(hotkey, b"", task.signed_by),
+            }
+        else:
+            binary_data = result.get("data")
+            if not binary_data:
+                bt.logging.error(f"Task {task.task_id} marked as successful but no binary data in result")
+                return False
+
+            bt.logging.debug(f"Sending webhook for task {task.task_id}: {len(binary_data)} bytes of {task.modality} data")
+
+            if task.modality == "image":
+                content_type = "image/png"
+            elif task.modality == "video":
+                content_type = "video/mp4"
+            else:
+                content_type = "application/octet-stream"
+
+            headers = {
+                "Content-Type": content_type,
+                "task-id": task.task_id,
+                "task-status": "completed",
+                **generate_header(hotkey, binary_data, task.signed_by),
+            }
+
+            if result.get("metadata"):
+                metadata = result["metadata"]
+                for key, value in metadata.items():
+                    header_key = f"x-meta-{key.replace('_', '-')}"
+                    headers[header_key] = str(value)
+
+        bt.logging.info("Sending webhook to:", task.webhook_url)
         response = requests.post(
-            webhook_url, 
-            data=body_bytes, 
+            task.webhook_url, 
+            data=binary_data, 
             headers=headers, 
             timeout=timeout
         )
-        
+
         return response.status_code < 300
-        
+
     except requests.RequestException as e:
         bt.logging.warning(f"Webhook request failed: {e}")
         return False

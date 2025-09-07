@@ -38,6 +38,13 @@ def add_args(parser):
     )
 
     parser.add_argument(
+        "--neuron.callback_port",
+        type=int,
+        help="Port for receiving webhook callbacks from miners",
+        default=10525,
+    )
+
+    parser.add_argument(
         "--epoch-length",
         type=int,
         help="The default epoch length (how often we set weights, measured in 12 second blocks).",

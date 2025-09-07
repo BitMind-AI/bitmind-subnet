@@ -91,7 +91,6 @@ async def query_generative_miner(
     hotkey: bt.Keypair,
     prompt: str,
     modality: Modality,
-    media_type: MediaType,
     webhook_url: str,
     parameters: Dict[str, Any],
     total_timeout: float,
@@ -127,8 +126,7 @@ async def query_generative_miner(
     try:
         base_url = f"http://{axon_info.ip}:{axon_info.port}"
         #action = "gen" if media_type == MediaType.SYNTHETIC else "mod"
-        #url = f"{base_url}/{action}_{modality.value}"
-        url = f"{base_url}/gen_image"
+        url = f"{base_url}/gen_{modality.value}"
 
         payload = {
             "prompt": prompt,
@@ -153,7 +151,7 @@ async def query_generative_miner(
             ),
         ) as res:
             response["status"] = res.status
-            if res.status != 202:
+            if res.status not in [201, 202]:
                 response["error"] = f"HTTP {res.status} error: {await res.text()}"
                 return response
             try:

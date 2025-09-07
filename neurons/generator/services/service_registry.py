@@ -44,14 +44,14 @@ class ServiceRegistry:
         
         bt.logging.info(f"Initialized {len(self.services)} generation services")
     
-    def get_service(self, task_type: str, modality: str) -> Optional[BaseGenerationService]:
-        """Get the best available service for a task type and modality."""
+    def get_service(self, modality: str) -> Optional[BaseGenerationService]:
+        """Get the best available service for a modality."""
         for service in self.services:
-            if service.supports_task(task_type, modality):
-                bt.logging.debug(f"Using {service.name} for {task_type}/{modality}")
+            if service.supports_modality(modality):
+                bt.logging.debug(f"Using {service.name} for modality={modality}")
                 return service
         
-        bt.logging.warning(f"No service available for {task_type}/{modality}")
+        bt.logging.warning(f"No service available for modality={modality}")
         return None
     
     def get_available_services(self) -> List[Dict[str, Any]]:

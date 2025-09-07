@@ -17,7 +17,6 @@ class TaskStatus(Enum):
 class GenerationTask:
     """Represents a generation task with all necessary information."""
     task_id: str
-    task_type: str  # "image_generation", "video_generation", "image_modification", "video_modification"
     modality: str   # "image", "video"
     status: TaskStatus
     prompt: str
@@ -65,7 +64,6 @@ class TaskManager:
     
     def create_task(
         self,
-        task_type: str,
         modality: str,
         prompt: str,
         parameters: Dict[str, Any],
@@ -78,7 +76,6 @@ class TaskManager:
         
         task = GenerationTask(
             task_id=task_id,
-            task_type=task_type,
             modality=modality,
             status=TaskStatus.PENDING,
             prompt=prompt,

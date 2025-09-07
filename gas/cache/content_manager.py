@@ -189,7 +189,7 @@ class ContentManager:
 				model_name=model_name,
 				resolution=resolution,
 				file_size=file_size,
-				format=format,
+				format=media_data.format,
 			)
 
 			bt.logging.info(f"Saved miner media to {save_path} with database ID: {media_id}")

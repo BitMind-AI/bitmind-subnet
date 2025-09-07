@@ -24,8 +24,8 @@ class BaseGenerationService(ABC):
         pass
     
     @abstractmethod
-    def supports_task(self, task_type: str, modality: str) -> bool:
-        """Check if this service supports the given task type and modality."""
+    def supports_modality(self, modality: str) -> bool:
+        """Check if this service supports the given modality (e.g., image, video)."""
         pass
     
     @abstractmethod
