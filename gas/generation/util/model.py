@@ -7,6 +7,7 @@ from diffusers import (
     DiffusionPipeline,
     HunyuanVideoTransformer3DModel,
     MotionAdapter,
+    AutoencoderKLWan
 )
 from huggingface_hub import hf_hub_download
 from janus.models import VLChatProcessor
@@ -14,6 +15,17 @@ from safetensors.torch import load_file
 from transformers import AutoModelForCausalLM
 from typing import Any, Dict, Optional
 
+
+def load_autoencoder_kl_wan(
+    model_id="Wan-AI/Wan2.2-TI2V-5B-Diffusers", 
+    subfolder="vae", 
+    torch_dtype=torch.float32
+):
+    return AutoencoderKLWan.from_pretrained(
+        model_id, 
+        subfolder=subfolder, 
+        torch_dtype=torch_dtype
+    )
 
 def load_hunyuanvideo_transformer(
     model_id: str = "tencent/HunyuanVideo",

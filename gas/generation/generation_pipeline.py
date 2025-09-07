@@ -271,7 +271,7 @@ class GenerationPipeline:
 
         bt.logging.debug("Generating media")
 
-        if model_config.get("use_autocast", True):
+        if model_config.get("use_autocast", False):
             pretrained_args = model_config.get("from_pretrained_args", {})
             torch_dtype = pretrained_args.get("torch_dtype", torch.bfloat16)
 

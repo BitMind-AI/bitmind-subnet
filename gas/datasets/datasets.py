@@ -120,6 +120,13 @@ def get_image_datasets() -> List[DatasetConfig]:
             tags=["grok"],
             source_format="jpg",
         ),
+        DatasetConfig(
+            path="Yejy53/Echo-4o-Image",
+            modality=Modality.IMAGE,
+            media_type=MediaType.SYNTHETIC,
+            tags=["gpt"],
+            source_format="tar",
+        ),
         # Semisynthetic image datasets
         DatasetConfig(
             path="bitmind/face-swap",
@@ -192,6 +199,13 @@ def get_video_datasets() -> List[DatasetConfig]:
             media_type=MediaType.SYNTHETIC,
             tags=["sora"],
             source_format="parquet",
+        ),
+        DatasetConfig(
+            path="bitmind/aislop-videos",
+            modality=Modality.VIDEO,
+            media_type=MediaType.SYNTHETIC,
+            tags=["slop"],
+            source_format="tar",
         ),
     ]
 
