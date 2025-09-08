@@ -105,7 +105,7 @@ class ContentDB:
                     media_type TEXT NOT NULL CHECK (media_type IN ('real', 'synthetic', 'semisynthetic')),
                     
                     -- Source type to distinguish data origins
-                    source_type TEXT DEFAULT 'generated' CHECK (source_type IN ('scraper', 'dataset', 'generated')),
+                    source_type TEXT DEFAULT 'generated' CHECK (source_type IN ('scraper', 'dataset', 'generated', 'miner')),
                     
                     -- For scraped media
                     download_url TEXT,
@@ -119,6 +119,11 @@ class ContentDB:
                     -- For generated media
                     model_name TEXT,
                     generation_args TEXT,  -- JSON string for generation parameters when source_type='generated'
+
+                    -- For miner media
+                    uid INTEGER,
+                    hotkey TEXT,
+                    verified BOOLEAN DEFAULT 0,
 
                     -- Common fields
                     created_at REAL NOT NULL,
@@ -163,6 +168,9 @@ class ContentDB:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_model_name ON media (model_name)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_source_type ON media (source_type)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_created_at ON media (created_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_uid ON media (uid)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_hotkey ON media (hotkey)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_verified ON media (verified)")
             
             # Create indexes for miner_media table
             conn.execute("CREATE INDEX IF NOT EXISTS idx_miner_media_uid ON miner_media (uid)")
@@ -232,6 +240,28 @@ class ContentDB:
                 )
                 return cursor.fetchone()[0]
 
+    def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
+        """
+        Get prompt content by prompt ID.
+        
+        Args:
+            prompt_id: ID of the prompt to retrieve
+            
+        Returns:
+            Prompt content string or None if not found
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT content FROM prompts WHERE id = ?",
+                    (prompt_id,)
+                )
+                result = cursor.fetchone()
+                return result[0] if result else None
+        except Exception as e:
+            bt.logging.error(f"Error retrieving prompt {prompt_id}: {e}")
+            return None
+
     def _row_to_media_entry(self, row) -> MediaEntry:
         """
         Helper method to convert a database row to a MediaEntry object.
@@ -258,6 +288,9 @@ class ContentDB:
             dataset_name=row["dataset_name"],
             dataset_source_file=row["dataset_source_file"],
             dataset_index=row["dataset_index"],
+            uid=row["uid"] if "uid" in row.keys() and row["uid"] is not None else None,
+            hotkey=row["hotkey"] if "hotkey" in row.keys() and row["hotkey"] is not None else None,
+            verified=bool(row["verified"]) if "verified" in row.keys() and row["verified"] is not None else None,
             created_at=row["created_at"],
             generation_args=json.loads(row["generation_args"]) if row["generation_args"] else None,
             resolution=resolution,
@@ -278,6 +311,9 @@ class ContentDB:
         dataset_name: Optional[str] = None,
         dataset_source_file: Optional[str] = None,
         dataset_index: Optional[str] = None,
+        uid: Optional[int] = None,
+        hotkey: Optional[str] = None,
+        verified: Optional[bool] = None,
         generation_args: Optional[Dict] = None,
         mask_path: Optional[str] = None,
         timestamp: Optional[int] = None,
@@ -296,9 +332,9 @@ class ContentDB:
                 """
                 INSERT INTO media (id, prompt_id, file_path, modality, media_type, source_type,
                                  model_name, download_url, scraper_name, dataset_name, 
-                                 dataset_source_file, dataset_index, created_at, generation_args, 
-                                 mask_path, timestamp, resolution, file_size, format)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 dataset_source_file, dataset_index, uid, hotkey, verified,
+                                 created_at, generation_args, mask_path, timestamp, resolution, file_size, format)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     media_id,
@@ -313,6 +349,9 @@ class ContentDB:
                     dataset_name,
                     dataset_source_file,
                     dataset_index,
+                    uid,
+                    hotkey,
+                    verified,
                     created_at,
                     json.dumps(generation_args) if generation_args else None,
                     mask_path,
@@ -377,6 +416,41 @@ class ContentDB:
             conn.commit()
 
         return media_id
+
+    def get_unverified_miner_media(self) -> List[MediaEntry]:
+        with self._get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                """
+                SELECT * FROM media 
+                WHERE source_type = 'miner' AND verified = 0
+                ORDER BY created_at ASC
+                """
+            )            
+            entries = []
+            for row in cursor.fetchall():
+                entries.append(self._row_to_media_entry(row))
+
+            return entries
+
+    def mark_miner_media_verified(self, media_id: str) -> bool:
+        """
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE media SET verified = 1 WHERE id = ? AND source_type = 'miner'
+                    """,
+                    (media_id,)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            bt.logging.error(f"Error marking miner media as verified: {e}")
+            return False
 
     def get_media_entries(
         self, 

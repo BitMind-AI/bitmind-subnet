@@ -54,12 +54,14 @@ class SourceType(str, Enum):
     SCRAPER = "scraper"
     DATASET = "dataset"
     GENERATED = "generated"
+    MINER = "miner"
 
 
 SOURCE_TYPE_TO_NAME: Dict[SourceType, str] = {
     SourceType.GENERATED: "model_name",
     SourceType.DATASET: "dataset_name",
     SourceType.SCRAPER: "download_url",
+    SourceType.MINER: "hotkey",
 }
 
 
@@ -67,6 +69,7 @@ SOURCE_TYPE_TO_DB_NAME_FIELD: Dict[SourceType, str] = {
     SourceType.GENERATED: "model_name",
     SourceType.DATASET: "dataset_name",
     SourceType.SCRAPER: "scraper_name",
+    SourceType.MINER: "hotkey",
 }
 
 

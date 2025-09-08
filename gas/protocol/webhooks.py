@@ -84,6 +84,8 @@ def _attempt_webhook_send(
     hotkey: bt.Keypair,
     timeout: float
 ) -> bool:
+
+    binary_data = b""
     try:
         if not is_success:
             content_type = "application/octet-stream"
@@ -92,7 +94,7 @@ def _attempt_webhook_send(
                 "task-id": task.task_id,
                 "task-status": "failed",
                 "error-message": task.error_message or "Unknown error",
-                **generate_header(hotkey, b"", task.signed_by),
+                **generate_header(hotkey, binary_data, task.signed_by),
             }
         else:
             binary_data = result.get("data")

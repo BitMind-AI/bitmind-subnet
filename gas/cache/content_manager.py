@@ -182,11 +182,17 @@ class ContentManager:
 				return None
 
 			resolution, file_size = extract_media_info(save_path, modality)
-			media_id = self.content_db.add_miner_media_entry(
+			media_id = self.content_db.add_media_entry(
+				prompt_id=prompt_id,
+				file_path=save_path,
+				modality=modality,
+				media_type=media_type,
+				source_type=SourceType.MINER,
 				uid=uid,
 				hotkey=hotkey,
-				filepath=str(save_path),
 				model_name=model_name,
+				verified=False,  # Initially unverified
+				timestamp=int(time.time()),
 				resolution=resolution,
 				file_size=file_size,
 				format=media_data.format,
@@ -340,7 +346,7 @@ class ContentManager:
 	def sample_prompts(
         self, k: 
         int = 1, 
-        remove: bool = True, 
+        remove: bool = False, 
         strategy: str = "random") -> List[PromptEntry]:
 		return self.content_db.sample_prompt_entries(k=k, remove=remove, strategy=strategy, content_type="prompt")
 
@@ -350,6 +356,18 @@ class ContentManager:
         remove: bool = False, 
         strategy: str = "random") -> List[PromptEntry]:
 		return self.content_db.sample_prompt_entries(k=k, remove=remove, strategy=strategy, content_type="search_query")
+
+	def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
+		"""
+		Get prompt content by prompt ID.
+		
+		Args:
+			prompt_id: ID of the prompt to retrieve
+			
+		Returns:
+			Prompt content string or None if not found
+		"""
+		return self.content_db.get_prompt_by_id(prompt_id)
 
 	def sample_media(
 		self,
@@ -555,6 +573,27 @@ class ContentManager:
 
 	def delete_media_by_file_path(self, file_path: str) -> bool:
 		return self.delete_media(file_path=file_path)
+
+	def get_unverified_miner_media(self) -> List[MediaEntry]:
+		"""
+		Get all unverified miner media entries.
+		
+		Returns:
+			List of MediaEntry objects where verified=False
+		"""
+		return self.content_db.get_unverified_miner_media()
+
+	def mark_miner_media_verified(self, media_id: str) -> bool:
+		"""
+		Mark a miner media entry as verified.
+		
+		Args:
+			media_id: ID of the miner media entry to mark as verified
+			
+		Returns:
+			True if successful, False otherwise
+		"""
+		return self.content_db.mark_miner_media_verified(media_id)
 
 	def get_stats(self) -> Dict[str, Any]:
 		return self.content_db.get_stats()

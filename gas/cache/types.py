@@ -68,6 +68,11 @@ class MediaEntry:
     dataset_source_file: Optional[str] = None
     dataset_index: Optional[str] = None
 
+    # For miner media
+    uid: Optional[int] = None
+    hotkey: Optional[str] = None
+    verified: Optional[bool] = False
+
     # Common fields
     created_at: float = None
     generation_args: Optional[Dict[str, Any]] = None  # Generation parameters when source_type='generated'

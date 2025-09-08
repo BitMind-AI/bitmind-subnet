@@ -121,39 +121,32 @@ def get_dataset_media_breakdown(db: ContentDB) -> dict:
 
 
 def get_media_by_source_type(db: ContentDB) -> dict:
-    """Get media breakdown by source type: scraper, model, or dataset."""
+    """Get media breakdown by source type: scraper, generated, dataset, or miner."""
     import sqlite3
 
     breakdown = {
         "scraper": {"image": 0, "video": 0},
-        "model": {"image": 0, "video": 0},
+        "generated": {"image": 0, "video": 0},
         "dataset": {"image": 0, "video": 0},
+        "miner": {"image": 0, "video": 0},
     }
 
     try:
         with sqlite3.connect(db.db_path) as conn:
-            # Get media with their associated prompt types
+            # Get media directly by source_type column
             cursor = conn.execute(
                 """
-                SELECT m.modality, p.content_type, COUNT(*) as count
-                FROM media m
-                LEFT JOIN prompts p ON m.prompt_id = p.id
-                WHERE m.modality IN ('image', 'video')
-                GROUP BY m.modality, p.content_type
+                SELECT source_type, modality, COUNT(*) as count
+                FROM media 
+                WHERE modality IN ('image', 'video') 
+                AND source_type IN ('scraper', 'generated', 'dataset', 'miner')
+                GROUP BY source_type, modality
             """
             )
 
-            for modality, content_type, count in cursor.fetchall():
-                if modality in ["image", "video"]:
-                    if content_type == "search_query":
-                        # Media from scraper (has search query associated)
-                        breakdown["scraper"][modality] += count
-                    elif content_type == "prompt":
-                        # Media from model (has prompt associated)
-                        breakdown["model"][modality] += count
-                    elif content_type is None:
-                        # Media from dataset (no prompt associated)
-                        breakdown["dataset"][modality] += count
+            for source_type, modality, count in cursor.fetchall():
+                if modality in ["image", "video"] and source_type in breakdown:
+                    breakdown[source_type][modality] = count
 
     except Exception as e:
         print(f"Warning: Could not get media by source type: {e}")
@@ -219,6 +212,78 @@ def get_dataset_name_breakdown(db: ContentDB) -> dict:
     return breakdown, total_dataset
 
 
+def get_miner_breakdown(db: ContentDB) -> dict:
+    """Get detailed breakdown of miner hotkeys for miner media (source_type='miner')."""
+    import sqlite3
+
+    breakdown = {}
+    total_miner = 0
+
+    try:
+        with sqlite3.connect(db.db_path) as conn:
+            cursor = conn.execute(
+                """
+                SELECT hotkey, uid, verified, COUNT(*) as count
+                FROM media 
+                WHERE source_type = 'miner' AND hotkey IS NOT NULL
+                GROUP BY hotkey, uid, verified
+                ORDER BY uid, verified DESC
+            """
+            )
+
+            for hotkey, uid, verified, count in cursor.fetchall():
+                # Truncate hotkey for display (first 8 and last 8 characters)
+                if len(hotkey) > 16:
+                    display_hotkey = f"{hotkey[:8]}...{hotkey[-8:]}"
+                else:
+                    display_hotkey = hotkey
+                
+                verification_status = "✅ verified" if verified else "⏳ unverified"
+                key = f"UID {uid} ({display_hotkey}) - {verification_status}"
+                breakdown[key] = count
+                total_miner += count
+
+    except Exception as e:
+        print(f"Warning: Could not get miner breakdown: {e}")
+
+    return breakdown, total_miner
+
+
+def get_miner_verification_stats(db: ContentDB) -> dict:
+    """Get verification statistics for miner media."""
+    import sqlite3
+    
+    stats = {
+        "verified": {"image": 0, "video": 0, "total": 0},
+        "unverified": {"image": 0, "video": 0, "total": 0},
+        "total": {"image": 0, "video": 0, "total": 0}
+    }
+    
+    try:
+        with sqlite3.connect(db.db_path) as conn:
+            cursor = conn.execute(
+                """
+                SELECT modality, verified, COUNT(*) as count
+                FROM media 
+                WHERE source_type = 'miner'
+                GROUP BY modality, verified
+            """
+            )
+            
+            for modality, verified, count in cursor.fetchall():
+                if modality in ["image", "video"]:
+                    status = "verified" if verified else "unverified"
+                    stats[status][modality] = count
+                    stats[status]["total"] += count
+                    stats["total"][modality] += count
+                    stats["total"]["total"] += count
+                    
+    except Exception as e:
+        print(f"Warning: Could not get miner verification stats: {e}")
+        
+    return stats
+
+
 def print_detailed_breakdowns(db: ContentDB):
     """Print detailed breakdowns of model names and dataset names."""
     print(f"\n{Colors.BOLD}{Colors.YELLOW}🔍 Detailed Breakdowns{Colors.END}")
@@ -256,6 +321,46 @@ def print_detailed_breakdowns(db: ContentDB):
         print(f"\n{Colors.CYAN}📊 Dataset Names (Source Type: Dataset){Colors.END}")
         print(f"{Colors.YELLOW}No dataset media found{Colors.END}")
 
+    # Get miner breakdown
+    miner_breakdown, total_miner = get_miner_breakdown(db)
+
+    if miner_breakdown:
+        print(f"\n{Colors.CYAN}👨‍💼 Miners (Source Type: Miner){Colors.END}")
+        print("-" * 50)
+        for miner_key, count in miner_breakdown.items():
+            percentage = (count / total_miner * 100) if total_miner > 0 else 0
+            print(
+                f"{Colors.GREEN}• {miner_key}:{Colors.END} {count:,} ({percentage:.1f}%)"
+            )
+        print(f"{Colors.BOLD}Total Miner:{Colors.END} {total_miner:,}")
+    else:
+        print(f"\n{Colors.CYAN}👨‍💼 Miners (Source Type: Miner){Colors.END}")
+        print(f"{Colors.YELLOW}No miner media found{Colors.END}")
+
+    # Get miner verification stats
+    verification_stats = get_miner_verification_stats(db)
+    
+    if verification_stats["total"]["total"] > 0:
+        print(f"\n{Colors.CYAN}🔍 Miner Media Verification Status{Colors.END}")
+        print("-" * 50)
+        
+        verified_total = verification_stats["verified"]["total"]
+        unverified_total = verification_stats["unverified"]["total"]
+        total_total = verification_stats["total"]["total"]
+        
+        verified_pct = (verified_total / total_total * 100) if total_total > 0 else 0
+        unverified_pct = (unverified_total / total_total * 100) if total_total > 0 else 0
+        
+        print(f"{Colors.GREEN}✅ Verified:{Colors.END} {verified_total:,} ({verified_pct:.1f}%)")
+        print(f"   • Images: {verification_stats['verified']['image']:,}")
+        print(f"   • Videos: {verification_stats['verified']['video']:,}")
+        
+        print(f"{Colors.YELLOW}⏳ Unverified:{Colors.END} {unverified_total:,} ({unverified_pct:.1f}%)")
+        print(f"   • Images: {verification_stats['unverified']['image']:,}")
+        print(f"   • Videos: {verification_stats['unverified']['video']:,}")
+        
+        print(f"{Colors.BOLD}Total Miner Media:{Colors.END} {total_total:,}")
+
 
 def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
     """Print a clean, colored, tabular output of database statistics."""
@@ -270,6 +375,9 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
 
         total_media = stats["total_media"]
 
+        # Get miner verification stats for the table
+        verification_stats = get_miner_verification_stats(db)
+        
         # Calculate totals for each category
         totals = {
             "image": {
@@ -278,7 +386,10 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
                 "semisynthetic": 0,
                 "dataset": 0,
                 "scraper": 0,
-                "model": 0,
+                "generated": 0,
+                "miner": 0,
+                "miner_verified": 0,
+                "miner_unverified": 0,
                 "total": 0,
             },
             "video": {
@@ -287,7 +398,10 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
                 "semisynthetic": 0,
                 "dataset": 0,
                 "scraper": 0,
-                "model": 0,
+                "generated": 0,
+                "miner": 0,
+                "miner_verified": 0,
+                "miner_unverified": 0,
                 "total": 0,
             },
         }
@@ -300,16 +414,15 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
                     media_type, 0
                 )
 
-            # Source type breakdown (dataset, scraper, model)
-            totals[modality]["dataset"] = (
-                dataset_breakdown[modality].get("real", 0)
-                + dataset_breakdown[modality].get("synthetic", 0)
-                + dataset_breakdown[modality].get("semisynthetic", 0)
-            )
-            totals[modality]["scraper"] = source_type_breakdown["scraper"].get(
-                modality, 0
-            )
-            totals[modality]["model"] = source_type_breakdown["model"].get(modality, 0)
+            # Source type breakdown (dataset, scraper, generated, miner)
+            totals[modality]["dataset"] = source_type_breakdown["dataset"].get(modality, 0)
+            totals[modality]["scraper"] = source_type_breakdown["scraper"].get(modality, 0)
+            totals[modality]["generated"] = source_type_breakdown["generated"].get(modality, 0)
+            totals[modality]["miner"] = source_type_breakdown["miner"].get(modality, 0)
+            
+            # Miner verification breakdown
+            totals[modality]["miner_verified"] = verification_stats["verified"].get(modality, 0)
+            totals[modality]["miner_unverified"] = verification_stats["unverified"].get(modality, 0)
 
             # Calculate total for this modality
             totals[modality]["total"] = sum(
@@ -319,7 +432,7 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
         # Print header
         print(f"{Colors.BOLD}{Colors.HEADER}📊 GAS Database Statistics{Colors.END}")
         print(f"{Colors.CYAN}📍 Database: {db_path}{Colors.END}")
-        print("╔" + "═" * 111 + "╗")
+        print("╔" + "═" * 155 + "╗")
 
         # Print table header
         columns = [
@@ -328,20 +441,24 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
             "semisynthetic",
             "dataset",
             "scraper",
-            "model",
+            "generated",
+            "miner_verified",
+            "miner_unverified",
             "total",
         ]
         header = f"║ {Colors.BOLD}{'Modality':<10}{Colors.END}"
         for i, col in enumerate(columns):
             if col == "total":
                 header += f"{Colors.BOLD}{col.title():<8}"
-            elif col == "dataset":
-                header += f" {Colors.BOLD}{'  ' + col.title():<15}"
+            elif col == "miner_verified":
+                header += f" {Colors.BOLD}{'Miner ✅':<12}"
+            elif col == "miner_unverified":
+                header += f" {Colors.BOLD}{'Miner ⏳':<12}"
             else:
-                header += f"{Colors.BOLD}{'  ' + col.title():<15}"
+                header += f" {Colors.BOLD}{col.title():<12}"
         header += f" ║"
         print(header)
-        print("╟" + "─" * 111 + "╢")
+        print("╟" + "─" * 155 + "╢")
 
         # Print table rows
         for modality in ["image", "video"]:
@@ -352,22 +469,19 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
                     cell = f"{count:<7,}"
                 else:
                     percentage = (count / total_media * 100) if total_media > 0 else 0
-                    if col == "real":
-                        cell = f"{count:>4,} | {percentage:.1f}%"
-                    else:
-                        cell = f"{count:>5,} | {percentage:.1f}%"
-                # Format cell to be 16 characters long
-                cell = f"{cell:<13}"
-
+                    cell = f"{count:>4,} | {percentage:.1f}%"
+                
+                # Format cell consistently
                 if col == "total":
-                    row += f"   {cell:>6}"
+                    row += f"   {cell:>8}"
                 else:
-                    row += f" {cell:<12}"
+                    cell = f"{cell:<11}"
+                    row += f" {cell:<11}"
 
-            row += f"║"
+            row += f" ║"
             print(row)
 
-        print("╚" + "═" * 111 + "╝")
+        print("╚" + "═" * 155 + "╝")
 
         # Print summary statistics
         print(f"\n{Colors.BOLD}{Colors.GREEN}📈 Summary Statistics{Colors.END}")

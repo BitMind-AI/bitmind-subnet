@@ -92,7 +92,7 @@ class Validator(BaseNeuron):
                 self.log_on_block,
                 self.start_new_wanbd_run,
                 self.issue_generator_challenge,
-                self.issue_discriminator_challenge,
+                #self.issue_discriminator_challenge,
                 self.set_weights,
             ]
         )

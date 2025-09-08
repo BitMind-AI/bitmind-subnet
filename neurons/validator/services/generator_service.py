@@ -22,6 +22,7 @@ from gas.generation import (
 from gas.cache.content_manager import ContentManager
 from gas.utils import get_file_modality
 from gas.types import Modality, MediaType
+from gas.evaluation.verification_pipeline import run_verification_batch, get_verification_summary
 
 
 class GeneratorService:
@@ -217,6 +218,10 @@ class GeneratorService:
 
         while not self._stop_requested.is_set():
             try:
+
+                # Verify miner media
+                self._verify_miner_media(batch_size=5)
+
                 # Generate search queries
                 start = time.time()
                 self._generate_text("search_query", query_batch_size)
@@ -379,6 +384,70 @@ class GeneratorService:
                 "[GENERATOR-SERVICE] No prompts available for media generation"
             )
 
+    def _verify_miner_media(self, batch_size: int = 5, threshold: float = 0.5):
+        """
+        Verify miner-submitted media using caption generation and similarity scoring.
+        
+        Args:
+            batch_size: Number of media entries to process in this batch
+            threshold: Threshold for determining pass/fail (default: 0.5)
+        """
+        try:
+            bt.logging.info("[GENERATOR-SERVICE] Starting miner media verification")
+
+            # Ensure prompt generator is loaded for caption generation
+            if not hasattr(self, 'prompt_generator') or self.prompt_generator is None:
+                bt.logging.info("[GENERATOR-SERVICE] Loading prompt generator for verification")
+                self.prompt_generator = PromptGenerator()
+                self.prompt_generator.load_models()
+
+            # Run verification batch
+            results = run_verification_batch(
+                content_manager=self.content_manager,
+                prompt_generator=self.prompt_generator,
+                batch_size=batch_size,
+                threshold=threshold
+            )
+
+            if not results:
+                bt.logging.info("[GENERATOR-SERVICE] No media to verify")
+                return
+
+            # Generate and log summary
+            summary = get_verification_summary(results)
+            bt.logging.info(
+                f"[GENERATOR-SERVICE] Verification complete: "
+                f"{summary['successful']}/{summary['total']} processed, "
+                f"{summary['passed']} passed verification "
+                f"(pass rate: {summary['pass_rate']:.1%}, "
+                f"avg score: {summary['average_score']:.3f})"
+            )
+
+            failed_results = [r for r in results if r.verification_score is None]
+            if failed_results:
+                bt.logging.warning(f"[GENERATOR-SERVICE] {len(failed_results)} verification failures")
+
+            successful_results = [r for r in results if r.verification_score is not None]
+            if successful_results:
+                bt.logging.debug("[GENERATOR-SERVICE] Sample verification results:")
+                for result in successful_results[:3]:  # Log first 3 successes
+                    score = result.verification_score.get('score', 0)
+                    bt.logging.debug(
+                        f"  Media {result.media_entry.id}: "
+                        f"score={score:.3f}, passed={result.passed}"
+                    )
+        except Exception as e:
+            bt.logging.error(f"[GENERATOR-SERVICE] Error in verification pipeline: {e}")
+            bt.logging.error(traceback.format_exc())
+
+        finally:
+            if self.prompt_generator:
+                try:
+                    self.prompt_generator.clear_gpu()
+                    bt.logging.debug("[GENERATOR-SERVICE] Cleared prompt generator GPU memory after verification")
+                except Exception as e:
+                    bt.logging.warning(f"Error clearing prompt generator GPU memory: {e}")
+
     def _write_media(self, media_sample, prompt_id: str):
         """
         Args:
@@ -395,7 +464,6 @@ class GeneratorService:
             if "mask_image" in media_sample:
                 mask_content = np.array(media_sample["mask_image"])
 
-            # Use ContentManager to write media
             save_path = self.content_manager.write_generated_media(
                 modality=modality,
                 media_type=media_type,
@@ -405,7 +473,6 @@ class GeneratorService:
                 mask_content=mask_content,
                 generation_args=media_sample.get("generation_args")
             )
-
             return save_path
 
         except Exception as e:

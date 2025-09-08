@@ -44,7 +44,7 @@ class GenerativeChallengeManager:
         except Exception as e:
             bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
             self.external_ip = "localhost"
-        #self.external_ip = "localhost"  # TEMP
+        self.external_ip = "localhost"  # TEMP
         self.generative_callback_url = f"http://{self.external_ip}:{self.config.neuron.callback_port}/generative_callback"
 
         self.init_fastapi()
@@ -64,11 +64,17 @@ class GenerativeChallengeManager:
             bt.logging.trace("No generative miners found to challenge.")
             return
 
-        #miner_uids = [7, 8]
+        miner_uids = [7, 8]
 
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
-        prompt_entry = await self._get_prompt_from_cache()
+        retries = 3
+        prompt_entry = None
+        for _ in range(retries):
+            prompts = self.content_manager.sample_prompts(k=1)
+            if len(prompts) > 0:
+                prompt_entry = prompts[0]
+
         if not prompt_entry:
             bt.logging.info(
                 "Waiting for prompt cache to be populated. Skipping generative challenge."
@@ -212,45 +218,6 @@ class GenerativeChallengeManager:
             bt.logging.error(f"Error storing binary content: {e}")
             return None
 
-    async def _get_prompt_from_cache(self, retries=3) -> Optional[PromptEntry]:
-        """Get a prompt from generated prompt files"""
-        try:
-            for _ in range(retries):
-
-                prompts = self.content_manager.sample_prompts(k=1)
-                if len(prompts) > 0:
-                    return prompts[0]
-
-                # Fallback: try to get prompt from media metadata
-                media_entries = self.content_manager.sample_media(
-                    k=1,
-                    modality="image",
-                    media_type="synthetic",
-                    remove=False,
-                    strategy="random",
-                )
-                if not media_entries:
-                    continue
-
-                metadata = media_entries[0].metadata or {}
-                if metadata.get("prompt"):
-                    # fallback
-                    return PromptEntry(
-                        id=f"fallback_{int(time.time())}",
-                        content=metadata.get("prompt"),
-                        content_type="prompt",
-                        created_at=time.time(),
-                        used_count=0,
-                        last_used=None,
-                        metadata={"source": "fallback_metadata"},
-                    )
-
-        except Exception as e:
-            bt.logging.warning(f"Error getting prompt from cache: {e}")
-
-        bt.logging.warning(f"Failed to retrieve prompt after {retries} retries")
-
-        return None
 
     def init_fastapi(self):
         """Initialize the FastAPI server for generative challenge callbacks."""
