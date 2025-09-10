@@ -111,7 +111,6 @@ class Validator(BaseNeuron):
             self.heartbeat_thread.start()
 
 
-
     async def run(self):
 
         bt.logging.info(

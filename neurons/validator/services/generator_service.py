@@ -249,8 +249,6 @@ class GeneratorService:
                 # Generate media with local models
                 self._generate_media(use_local=True, k=local_batch_size)
 
-                # Wait before next cycle
-                time.sleep(30)
 
             except Exception as e:
                 bt.logging.error(
@@ -384,27 +382,21 @@ class GeneratorService:
                 "[GENERATOR-SERVICE] No prompts available for media generation"
             )
 
-    def _verify_miner_media(self, batch_size: int = 5, threshold: float = 0.5):
+    def _verify_miner_media(self, batch_size: int = 5, threshold: float = 0.25):
         """
         Verify miner-submitted media using caption generation and similarity scoring.
         
         Args:
             batch_size: Number of media entries to process in this batch
-            threshold: Threshold for determining pass/fail (default: 0.5)
+            threshold: Threshold for determining pass/fail (default: 0.25, raw CLIP score)
         """
         try:
             bt.logging.info("[GENERATOR-SERVICE] Starting miner media verification")
 
-            # Ensure prompt generator is loaded for caption generation
-            if not hasattr(self, 'prompt_generator') or self.prompt_generator is None:
-                bt.logging.info("[GENERATOR-SERVICE] Loading prompt generator for verification")
-                self.prompt_generator = PromptGenerator()
-                self.prompt_generator.load_models()
 
             # Run verification batch
             results = run_verification_batch(
                 content_manager=self.content_manager,
-                prompt_generator=self.prompt_generator,
                 batch_size=batch_size,
                 threshold=threshold
             )
