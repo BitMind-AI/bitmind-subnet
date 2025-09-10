@@ -66,38 +66,34 @@ class WandbLogger:
             )
         return self.run
 
-    def _check_media_exists(self, filepath):
+    def _check_media_exists(self, metadata_dict):
         """
-        Check if a media file has already been logged to WandB using only UUID lookup.
+        Check if a media file has already been logged to WandB using UUID from metadata.
 
         Args:
-            filepath: Path to the media file to check
+            metadata_dict: Dictionary containing metadata with potential media_uuid
 
         Returns:
             tuple: (exists (bool), media_uuid (str or None))
         """
-        metadata_path = os.path.splitext(filepath)[0] + ".json"
-        if os.path.exists(metadata_path):
-            try:
-                with open(metadata_path, "r") as f:
-                    metadata = json.load(f)
+        if not metadata_dict:
+            return False, None
 
-                media_uuid = metadata.get("media_uuid")
-                if media_uuid:
-                    api = wandb.Api()
-                    project = f"subnet-{self.config.netuid}-validator"
-                    artifact_path = f"{self.config.wandb.entity}/{project}/media-{media_uuid}:latest"
-                    try:
-                        artifact = api.artifact(artifact_path)
-                        return True, media_uuid
-                    except wandb.errors.CommError:
-                        pass
-            except (json.JSONDecodeError, IOError) as e:
-                bt.logging.warning(f"Error reading metadata file: {e}")
+        media_uuid = metadata_dict.get("media_uuid")
+        if media_uuid:
+            try:
+                api = wandb.Api()
+                project = f"subnet-{self.config.netuid}-validator"
+                artifact_path = f"{self.config.wandb.entity}/{project}/media-{media_uuid}:latest"
+                artifact = api.artifact(artifact_path)
+                return True, media_uuid
+            except wandb.errors.CommError:
+                # Artifact doesn't exist in W&B
+                pass
 
         return False, None
 
-    def _maybe_log_media(self, media_path, metadata_path):
+    def _maybe_log_media(self, media_path, metadata_dict):
         """
         Log media as a WandB Artifact, with simple UUID-based deduplication.
         Only logs media that hasn't been logged yet.
@@ -105,38 +101,32 @@ class WandbLogger:
 
         Args:
             media_path: Path to the media file
-            metadata_path: Path to the metadata JSON file
+            metadata_dict: Dictionary containing metadata from database
 
         Returns:
             str or None: UUID assigned to the media if logged, None if not logged
         """
-        exists, existing_uuid = self._check_media_exists(media_path)
+        exists, existing_uuid = self._check_media_exists(metadata_dict)
         if exists:
             bt.logging.info(f"Media already exists in WandB with UUID: {existing_uuid}")
             return existing_uuid
 
         run = self._ensure_run()
 
-        metadata = {}
-        if os.path.exists(metadata_path):
-            try:
-                with open(metadata_path, "r") as f:
-                    metadata = json.load(f)
-            except json.JSONDecodeError:
-                bt.logging.warning(f"Error parsing metadata file: {metadata_path}")
+        if not metadata_dict:
+            bt.logging.warning("No metadata provided for media logging")
+            return None
+
+        metadata = metadata_dict.copy()
 
         # Only create uuids for and log locally generated synthetic media.
         # All other media are already stored on Huggingface
         if not metadata.get("model_name"):
+            bt.logging.debug(f"WandB: Skipping media logging - no model_name in metadata")
             return None
 
         if not metadata.get("media_uuid"):
             metadata["media_uuid"] = str(uuid.uuid4())
-            try:
-                with open(metadata_path, "w") as f:
-                    json.dump(metadata, f, indent=2)
-            except IOError as e:
-                bt.logging.warning(f"Error writing metadata file: {e}")
 
         media_uuid = metadata["media_uuid"]
         media_artifact = wandb.Artifact(
@@ -223,16 +213,23 @@ class WandbLogger:
         # Step 1: Log media if applicable
         # Only locally generated synthetic media are logged
         media_path = media_sample.get("path")
-        metadata_path = media_sample.get("metadata_path")
-        if media_path and metadata_path:
-            media_uuids = [self._maybe_log_media(media_path, metadata_path)]
+        metadata_dict = media_sample.get("metadata")
+
+        bt.logging.debug(f"WandB media logging: media_path={media_path}, metadata_present={metadata_dict is not None}")
+
+        if media_path and metadata_dict:
+            media_uuid = self._maybe_log_media(media_path, metadata_dict)
+            media_uuids = [media_uuid] if media_uuid else []
         else:
             media_uuids = []
             for i in range(1):
-                media_path = media_sample.get(f"sample_{i}", {}).get("path")
-                metadata_path = media_sample.get(f"sample_{i}", {}).get("metadata_path")
-                if media_path and metadata_path:
-                    media_uuids.append(self._maybe_log_media(media_path, metadata_path))
+                sample = media_sample.get(f"sample_{i}", {})
+                media_path = sample.get("path")
+                metadata_dict = sample.get("metadata")
+                if media_path and metadata_dict:
+                    media_uuid = self._maybe_log_media(media_path, metadata_dict)
+                    if media_uuid:
+                        media_uuids.append(media_uuid)
 
         # Step 2: Log challenge results with reference to logged media uuid if available
         self._log_challenge_results(challenge_results, media_sample, media_uuids, aug_params)
