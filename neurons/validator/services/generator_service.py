@@ -22,7 +22,12 @@ from gas.generation import (
 from gas.cache.content_manager import ContentManager
 from gas.utils import get_file_modality
 from gas.types import Modality, MediaType
-from gas.evaluation.verification_pipeline import run_verification_batch, get_verification_summary
+from gas.verification import (
+    run_verification,
+    get_verification_summary, 
+    preload_clip_models,
+    clear_clip_models,
+)
 
 
 class GeneratorService:
@@ -136,7 +141,6 @@ class GeneratorService:
             )
             self._generation_thread.start()
             self._generation_running = True
-            bt.logging.info("[GENERATOR-SERVICE] Generation process started")
             return True
 
     def _service_loop(self):
@@ -152,10 +156,6 @@ class GeneratorService:
                     )
                     time.sleep(60)  # Wait before retry
                     continue
-
-                bt.logging.success(
-                    "[GENERATOR-SERVICE] Generation process started successfully"
-                )
 
                 # Monitor generation process
                 while self._generation_running and self._service_running:
@@ -219,8 +219,7 @@ class GeneratorService:
         while not self._stop_requested.is_set():
             try:
 
-                # Verify miner media
-                self._verify_miner_media(batch_size=5)
+                self._verify_miner_media(clip_batch_size=32)
 
                 # Generate search queries
                 start = time.time()
@@ -248,7 +247,6 @@ class GeneratorService:
 
                 # Generate media with local models
                 self._generate_media(use_local=True, k=local_batch_size)
-
 
             except Exception as e:
                 bt.logging.error(
@@ -382,37 +380,38 @@ class GeneratorService:
                 "[GENERATOR-SERVICE] No prompts available for media generation"
             )
 
-    def _verify_miner_media(self, batch_size: int = 5, threshold: float = 0.25):
+    def _verify_miner_media(self, threshold: float = 0.25, clip_batch_size: int = 32):
         """
-        Verify miner-submitted media using caption generation and similarity scoring.
-        
+        Verify all unverified miner-submitted media using batched CLIP processing with consensus voting.
+
         Args:
-            batch_size: Number of media entries to process in this batch
             threshold: Threshold for determining pass/fail (default: 0.25, raw CLIP score)
+            clip_batch_size: Batch size for CLIP operations (default: 32, adjust based on GPU memory)
         """
         try:
-            bt.logging.info("[GENERATOR-SERVICE] Starting miner media verification")
+            bt.logging.info(f"[GENERATOR-SERVICE] Starting verification of all unverified media (clip_batch_size={clip_batch_size})")
 
+            preload_clip_models()
 
-            # Run verification batch
-            results = run_verification_batch(
+            results = run_verification(
                 content_manager=self.content_manager,
-                batch_size=batch_size,
-                threshold=threshold
+                threshold=threshold,
+                clip_batch_size=clip_batch_size
             )
 
             if not results:
                 bt.logging.info("[GENERATOR-SERVICE] No media to verify")
                 return
 
-            # Generate and log summary
+            # Generate and log summary with performance metrics
             summary = get_verification_summary(results)
             bt.logging.info(
-                f"[GENERATOR-SERVICE] Verification complete: "
+                f"[GENERATOR-SERVICE] Optimized batched verification complete: "
                 f"{summary['successful']}/{summary['total']} processed, "
                 f"{summary['passed']} passed verification "
                 f"(pass rate: {summary['pass_rate']:.1%}, "
-                f"avg score: {summary['average_score']:.3f})"
+                f"avg score: {summary['average_score']:.3f}, "
+                f"batched processing enabled)"
             )
 
             failed_results = [r for r in results if r.verification_score is None]
@@ -433,12 +432,7 @@ class GeneratorService:
             bt.logging.error(traceback.format_exc())
 
         finally:
-            if self.prompt_generator:
-                try:
-                    self.prompt_generator.clear_gpu()
-                    bt.logging.debug("[GENERATOR-SERVICE] Cleared prompt generator GPU memory after verification")
-                except Exception as e:
-                    bt.logging.warning(f"Error clearing prompt generator GPU memory: {e}")
+            clear_clip_models()
 
     def _write_media(self, media_sample, prompt_id: str):
         """
