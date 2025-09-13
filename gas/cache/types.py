@@ -73,6 +73,8 @@ class MediaEntry:
     hotkey: Optional[str] = None
     verified: Optional[bool] = False
 
+    uploaded: Optional[bool] = False
+
     # Common fields
     created_at: float = None
     resolution: Optional[tuple[int, int]] = None  # (width, height)

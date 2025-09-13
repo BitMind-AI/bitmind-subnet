@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import time
 import traceback
@@ -20,12 +21,10 @@ from gas.generation import (
     PromptGenerator,
 )
 from gas.cache.content_manager import ContentManager
-from gas.utils import get_file_modality
 from gas.types import Modality, MediaType
 from gas.verification import (
     run_verification,
     get_verification_summary, 
-    preload_clip_models,
     clear_clip_models,
 )
 
@@ -66,6 +65,20 @@ class GeneratorService:
         self.prompt_generator: Optional[PromptGenerator] = None
         self.model_registry = None
         self.model_names = []
+
+        self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        if self.hf_token:
+            bt.logging.info(f"[GENERATOR-SERVICE] HuggingFace token loaded: {self.hf_token[:10]}...")
+        else:
+            bt.logging.warning("[GENERATOR-SERVICE] No HuggingFace token found in environment")
+
+        self.hf_org = "gasstation"
+        self.hf_dataset_repos = {
+            "image": f"{self.hf_org}/generated-images",
+            "video": f"{self.hf_org}/generated-videos"
+        }
+        self.upload_batch_size = getattr(config, 'upload_batch_size', 50)
+        self.videos_per_archive = getattr(config, 'videos_per_archive', 25)
 
         # third party generative services
         self.tp_generators = {
@@ -154,10 +167,9 @@ class GeneratorService:
                     bt.logging.error(
                         "[GENERATOR-SERVICE] Failed to start generation process"
                     )
-                    time.sleep(60)  # Wait before retry
+                    time.sleep(60)
                     continue
 
-                # Monitor generation process
                 while self._generation_running and self._service_running:
                     time.sleep(30)
                     bt.logging.info("[GENERATOR-SERVICE] Service heartbeat")
@@ -220,7 +232,8 @@ class GeneratorService:
             try:
 
                 self._verify_miner_media(clip_batch_size=32)
-
+                time.sleep(10)
+                """
                 # Generate search queries
                 start = time.time()
                 self._generate_text("search_query", query_batch_size)
@@ -247,6 +260,16 @@ class GeneratorService:
 
                 # Generate media with local models
                 self._generate_media(use_local=True, k=local_batch_size)
+                """
+
+                # Upload batch of miner/validator generated media to HuggingFace
+                bt.logging.info("Beginning hf batch upload")
+                self.content_manager.upload_batch_to_huggingface(
+                    hf_token=self.hf_token,
+                    hf_dataset_repos=self.hf_dataset_repos,
+                    upload_batch_size=self.upload_batch_size,
+                    videos_per_archive=self.videos_per_archive
+                )
 
             except Exception as e:
                 bt.logging.error(
@@ -391,8 +414,6 @@ class GeneratorService:
         try:
             bt.logging.info(f"[GENERATOR-SERVICE] Starting verification of all unverified media (clip_batch_size={clip_batch_size})")
 
-            preload_clip_models()
-
             results = run_verification(
                 content_manager=self.content_manager,
                 threshold=threshold,
@@ -459,6 +480,7 @@ class GeneratorService:
                 mask_content=mask_content,
                 generation_args=media_sample.get("generation_args")
             )
+            
             return save_path
 
         except Exception as e:
@@ -467,6 +489,8 @@ class GeneratorService:
             )
             bt.logging.error(traceback.format_exc())
             return None
+
+    
 
     def _cleanup(self):
         """Clean up resources."""

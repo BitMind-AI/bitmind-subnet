@@ -488,6 +488,20 @@ def add_generation_service_args(parser):
         default=10,
     )
 
+    parser.add_argument(
+        "--upload-batch-size",
+        type=int,
+        help="Maximum number of media files to upload to HuggingFace per batch",
+        default=50,
+    )
+
+    parser.add_argument(
+        "--videos-per-archive",
+        type=int,
+        help="Maximum number of videos per archive file (keeps archive size manageable)",
+        default=25,
+    )
+
     # Shared source-limit args
     add_source_limit_args(parser)
 

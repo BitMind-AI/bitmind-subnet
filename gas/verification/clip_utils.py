@@ -329,7 +329,7 @@ def calculate_clip_alignment(
         final_scores = similarities.cpu().numpy().tolist()
 
         bt.logging.info(
-            f"CLIP processing complete: {len(final_scores)} scores computed"
+            f"CLIP model {model_name} processing complete: {len(final_scores)} scores computed"
         )
         return final_scores
 
@@ -362,8 +362,8 @@ def calculate_clip_alignment_consensus(
         if len(media_paths) == 0:
             return []
 
-        bt.logging.info(
-            f"Starting consensus CLIP alignment for {len(media_paths)} samples (with temporal video processing)"
+        bt.logging.debug(
+            f"Starting consensus CLIP alignment for {len(media_paths)} samples"
         )
 
         all_model_scores = {}

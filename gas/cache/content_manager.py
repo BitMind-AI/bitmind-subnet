@@ -1,6 +1,4 @@
-import json
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -10,8 +8,9 @@ import numpy as np
 from gas.cache.content_db import ContentDB, SOURCE_TYPE_TO_DB_NAME_FIELD
 from gas.cache.media_storage import MediaStorage
 from gas.cache.types import Media, MediaEntry, PromptEntry
-from gas.cache.util import extract_media_info, get_format_from_content, format_to_extension
+from gas.cache.util import extract_media_info, get_format_from_content
 from gas.types import MediaType, Modality, SourceType, SOURCE_TYPE_TO_NAME
+from gas.utils.huggingface_uploads import upload_images_to_hf, upload_videos_to_hf
 
 
 class ContentManager:
@@ -115,7 +114,6 @@ class ContentManager:
 
 			resolution, file_size = extract_media_info(save_path, media_data.modality)
 
-			# Add entry to database
 			media_id = self.content_db.add_media_entry(
 				prompt_id=media_data.prompt_id,
 				file_path=save_path,
@@ -254,7 +252,6 @@ class ContentManager:
 		else:
 			file_size = extract_media_info(save_path, media_data.modality)[1]
 
-		# Add entry to database with source_type='scraper'
 		media_id = self.content_db.add_media_entry(
 			prompt_id=media_data.prompt_id,
 			file_path=save_path,
@@ -358,15 +355,6 @@ class ContentManager:
 		return self.content_db.sample_prompt_entries(k=k, remove=remove, strategy=strategy, content_type="search_query")
 
 	def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
-		"""
-		Get prompt content by prompt ID.
-		
-		Args:
-			prompt_id: ID of the prompt to retrieve
-			
-		Returns:
-			Prompt content string or None if not found
-		"""
 		return self.content_db.get_prompt_by_id(prompt_id)
 
 	def sample_media(
@@ -408,8 +396,14 @@ class ContentManager:
 			return {'count': 0, 'items': []}
 
 		# Split by source_type so we only remove dataset/scraper on sample
-		generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) == SourceType.GENERATED]
-		non_generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) != SourceType.GENERATED]
+		generated_entries: List[MediaEntry] = [
+			e for e in media_entries 
+			if getattr(e, 'source_type', None) == SourceType.GENERATED
+		]
+		non_generated_entries: List[MediaEntry] = [
+			e for e in media_entries
+			if getattr(e, 'source_type', None) != SourceType.GENERATED
+		]
 
 		items: List[Dict[str, Any]] = []
 		if non_generated_entries:
@@ -575,40 +569,74 @@ class ContentManager:
 		return self.delete_media(file_path=file_path)
 
 	def get_unverified_miner_media(self) -> List[MediaEntry]:
-		"""
-		Get all unverified miner media entries.
-		
-		Returns:
-			List of MediaEntry objects where verified=False
-		"""
 		return self.content_db.get_unverified_miner_media()
 
 	def mark_miner_media_verified(self, media_id: str) -> bool:
-		"""
-		Mark a miner media entry as verified.
-		
-		Args:
-			media_id: ID of the miner media entry to mark as verified
-			
-		Returns:
-			True if successful, False otherwise
-		"""
 		return self.content_db.mark_miner_media_verified(media_id)
 
-	def get_stats(self) -> Dict[str, Any]:
-		return self.content_db.get_stats()
+	def get_unuploaded_media(self, limit: int = 100, modality: str = None) -> List[MediaEntry]:
+		return self.content_db.get_unuploaded_media(limit=limit, modality=modality)
 
-	def get_source_stats(self) -> Dict[str, Dict[str, int]]:
+	def mark_media_uploaded(self, media_ids: List[str]) -> bool:
+		return self.content_db.mark_media_uploaded(media_ids)
+
+	def upload_batch_to_huggingface(self, hf_token: str, hf_dataset_repos: dict, upload_batch_size: int, videos_per_archive: int):
 		"""
-		Returns:
-			Dictionary with counts for each source type and source name
+		Upload unuploaded media from database to HuggingFace, separated by modality.
+		Only uploads verified miner media or validator-generated media.
 		"""
-		return self.content_db.get_source_counts()
+		try:			
+			# Get unuploaded media from database
+			media_by_modality = {}
+			total_found = 0
+			
+			for modality in ["image", "video"]:
+				unuploaded_media = self.get_unuploaded_media(limit=upload_batch_size, modality=modality)
+				media_by_modality[modality] = unuploaded_media
+				total_found += len(unuploaded_media)
+			
+			if total_found == 0:
+				bt.logging.debug("No unuploaded media found in database")
+				return
+
+			bt.logging.info(f"Found {total_found} unuploaded media files to upload to HuggingFace ({len(media_by_modality['image'])} images, {len(media_by_modality['video'])} videos)")
+
+			all_successfully_processed_ids = []
+			
+			# Upload images
+			if media_by_modality['image']:
+				uploaded_ids = upload_images_to_hf(
+					media_entries=media_by_modality['image'],
+					hf_token=hf_token,
+					dataset_repo=hf_dataset_repos['image']
+				)
+				all_successfully_processed_ids.extend(uploaded_ids)
+			
+			# Upload videos 
+			if media_by_modality['video']:
+				uploaded_ids = upload_videos_to_hf(
+					media_entries=media_by_modality['video'],
+					hf_token=hf_token,
+					dataset_repo=hf_dataset_repos['video'],
+					videos_per_archive=videos_per_archive
+				)
+				all_successfully_processed_ids.extend(uploaded_ids)
+
+			# Mark all successfully uploaded media as uploaded in database
+			if all_successfully_processed_ids:
+				success = self.mark_media_uploaded(all_successfully_processed_ids)
+				if success:
+					bt.logging.info(f"Marked {len(all_successfully_processed_ids)} entries as uploaded in database")
+				else:
+					bt.logging.warning("Failed to mark media as uploaded in database")
+
+		except Exception as e:
+			bt.logging.error(f"Error uploading batch to HuggingFace: {e}")
+			import traceback
+			bt.logging.error(traceback.format_exc())
 
 	def get_dataset_media_counts(self) -> Dict[str, int]:
 		"""
-		Get counts of dataset media entries (NULL prompt_id) by modality and media type.
-
 		Returns:
 			Dictionary with counts for each modality/media_type combination
 		"""

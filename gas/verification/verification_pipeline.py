@@ -3,12 +3,12 @@ import bittensor as bt
 
 from gas.cache.content_manager import ContentManager
 from gas.cache.types import MediaEntry, VerificationResult
-from .clip_utils import calculate_clip_alignment_consensus
+from .clip_utils import calculate_clip_alignment_consensus, preload_clip_models
 
 
 def run_verification(
     content_manager: ContentManager,
-    batch_size: Optional[int] = None,
+    batch_size: Optional[int] = 10,
     threshold: float = 0.25,
     clip_batch_size: int = 32,
 ) -> List[VerificationResult]:
@@ -30,13 +30,15 @@ def run_verification(
     if not unverified_media:
         bt.logging.info("No unverified miner media found")
         return []
+            
+    preload_clip_models()
 
     if batch_size is None:
         batch = unverified_media
-        bt.logging.info(f"Processing all {len(batch)} unverified media entries")
+        bt.logging.debug(f"Processing all {len(batch)} unverified media entries")
     else:
         batch = unverified_media[:batch_size]
-        bt.logging.info(f"Processing {len(batch)} of {len(unverified_media)} unverified media entries")
+        bt.logging.debug(f"Processing {len(batch)} of {len(unverified_media)} unverified media entries")
 
     results = verify_media(
         content_manager=content_manager,
@@ -45,6 +47,7 @@ def run_verification(
         batch_size=clip_batch_size,
     )
 
+    bt.logging.debug("Writing verification results to db")
     # Mark successful verifications in database
     for result in results:
         if result.passed and result.verification_score:
@@ -89,7 +92,7 @@ def verify_media(
         if not media_entries:
             return []
 
-        bt.logging.info(
+        bt.logging.debug(
             f"Starting batch verification of {len(media_entries)} media entries"
         )
 
@@ -119,7 +122,7 @@ def verify_media(
             bt.logging.warning("No valid media entries found for batch verification")
             return []
 
-        bt.logging.info(
+        bt.logging.debug(
             f"Processing {len(valid_entries)} valid entries in batched mode"
         )
 

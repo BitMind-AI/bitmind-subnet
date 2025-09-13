@@ -44,7 +44,7 @@ class ContentDB:
                     self.db_path,
                     timeout=30.0,
                     check_same_thread=False,
-                    isolation_level=None 
+                    isolation_level=None,
                 )
                 # Enable WAL mode for better concurrency
                 conn.execute("PRAGMA journal_mode=WAL")
@@ -57,14 +57,20 @@ class ContentDB:
                 conn.close()
                 return
             except sqlite3.OperationalError as e:
-                if "unable to open database file" in str(e) or "database is locked" in str(e):
+                if "unable to open database file" in str(
+                    e
+                ) or "database is locked" in str(e):
                     if attempt < max_retries - 1:
-                        bt.logging.warning(f"Database locked, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                        bt.logging.warning(
+                            f"Database locked, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})"
+                        )
                         time.sleep(retry_delay)
                         retry_delay *= 2  # Exponential backoff
                         continue
                     else:
-                        bt.logging.error(f"Failed to open database after {max_retries} attempts: {e}")
+                        bt.logging.error(
+                            f"Failed to open database after {max_retries} attempts: {e}"
+                        )
                         raise
                 else:
                     raise
@@ -157,27 +163,104 @@ class ContentDB:
             )
 
             # Create indexes for better performance
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_prompts_content_type ON prompts (content_type)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_prompts_used_count ON prompts (used_count)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_prompts_created_at ON prompts (created_at)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_prompts_source_media_id ON prompts (source_media_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_prompt_id ON media (prompt_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_modality ON media (modality)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_media_type ON media (media_type)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_file_path ON media (file_path)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_model_name ON media (model_name)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_source_type ON media (source_type)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_created_at ON media (created_at)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_prompts_content_type ON prompts (content_type)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_prompts_used_count ON prompts (used_count)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_prompts_created_at ON prompts (created_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_prompts_source_media_id ON prompts (source_media_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_prompt_id ON media (prompt_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_modality ON media (modality)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_media_type ON media (media_type)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_file_path ON media (file_path)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_model_name ON media (model_name)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_source_type ON media (source_type)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_created_at ON media (created_at)"
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_media_uid ON media (uid)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_hotkey ON media (hotkey)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_media_verified ON media (verified)")
-            
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_hotkey ON media (hotkey)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_verified ON media (verified)"
+            )
+
             # Create indexes for miner_media table
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_miner_media_uid ON miner_media (uid)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_miner_media_hotkey ON miner_media (hotkey)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_miner_media_verified ON miner_media (verified)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_miner_media_filepath ON miner_media (filepath)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_miner_media_created_at ON miner_media (created_at)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_miner_media_uid ON miner_media (uid)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_miner_media_hotkey ON miner_media (hotkey)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_miner_media_verified ON miner_media (verified)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_miner_media_filepath ON miner_media (filepath)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_miner_media_created_at ON miner_media (created_at)"
+            )
+
+            # Add 'uploaded' column to media table if it doesn't exist (conditional migration)
+            try:
+                # Try to add the column directly - SQLite will error if it already exists
+                conn.execute("ALTER TABLE media ADD COLUMN uploaded BOOLEAN DEFAULT 0")
+                bt.logging.info("Added 'uploaded' column to media table")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_media_uploaded ON media (uploaded)"
+                )
+                conn.commit()
+            except Exception as e:
+                # Check if it's the expected "duplicate column" error
+                if (
+                    "duplicate column name" in str(e).lower()
+                    or "already exists" in str(e).lower()
+                ):
+                    # Column already exists, just ensure the index exists
+                    try:
+                        conn.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_media_uploaded ON media (uploaded)"
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass  # Index creation might also fail if it exists
+                else:
+                    # Unexpected error
+                    bt.logging.error(f"Unexpected error adding 'uploaded' column: {e}")
+
+            # Ensure existing NULL values in uploaded column are set to 0
+            try:
+                cursor = conn.execute(
+                    "UPDATE media SET uploaded = 0 WHERE uploaded IS NULL"
+                )
+                updated_count = cursor.rowcount
+                if updated_count > 0:
+                    bt.logging.info(
+                        f"Updated {updated_count} NULL uploaded values to 0"
+                    )
+                conn.commit()
+            except Exception as e:
+                bt.logging.error(f"Error updating NULL uploaded values: {e}")
 
             # Temporary data hygiene: prune prompts whose source_media_id no longer exists in media table
             # Note: This only checks DB-level association, not filesystem existence.
@@ -243,18 +326,17 @@ class ContentDB:
     def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
         """
         Get prompt content by prompt ID.
-        
+
         Args:
             prompt_id: ID of the prompt to retrieve
-            
+
         Returns:
             Prompt content string or None if not found
         """
         try:
             with self._get_db_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT content FROM prompts WHERE id = ?",
-                    (prompt_id,)
+                    "SELECT content FROM prompts WHERE id = ?", (prompt_id,)
                 )
                 result = cursor.fetchone()
                 return result[0] if result else None
@@ -274,7 +356,7 @@ class ContentDB:
                 resolution = tuple(resolution_data)
             except (json.JSONDecodeError, TypeError):
                 resolution = None
-        
+
         return MediaEntry(
             id=row["id"],
             prompt_id=row["prompt_id"],
@@ -289,10 +371,25 @@ class ContentDB:
             dataset_source_file=row["dataset_source_file"],
             dataset_index=row["dataset_index"],
             uid=row["uid"] if "uid" in row.keys() and row["uid"] is not None else None,
-            hotkey=row["hotkey"] if "hotkey" in row.keys() and row["hotkey"] is not None else None,
-            verified=bool(row["verified"]) if "verified" in row.keys() and row["verified"] is not None else None,
+            hotkey=(
+                row["hotkey"]
+                if "hotkey" in row.keys() and row["hotkey"] is not None
+                else None
+            ),
+            verified=(
+                bool(row["verified"])
+                if "verified" in row.keys() and row["verified"] is not None
+                else None
+            ),
+            uploaded=(
+                bool(row["uploaded"])
+                if "uploaded" in row.keys() and row["uploaded"] is not None
+                else False
+            ),
             created_at=row["created_at"],
-            generation_args=json.loads(row["generation_args"]) if row["generation_args"] else None,
+            generation_args=(
+                json.loads(row["generation_args"]) if row["generation_args"] else None
+            ),
             resolution=resolution,
             file_size=row["file_size"],
             format=row["format"],
@@ -377,7 +474,7 @@ class ContentDB:
     ) -> str:
         """
         Add a miner media entry to the database.
-        
+
         Args:
             uid: Miner UID
             hotkey: Miner hotkey
@@ -386,7 +483,7 @@ class ContentDB:
             resolution: Optional (width, height) tuple
             file_size: Optional file size in bytes
             format: Optional file format (e.g., "PNG", "MP4")
-            
+
         Returns:
             The generated media ID
         """
@@ -426,7 +523,7 @@ class ContentDB:
                 WHERE source_type = 'miner' AND verified = 0
                 ORDER BY created_at ASC
                 """
-            )            
+            )
             entries = []
             for row in cursor.fetchall():
                 entries.append(self._row_to_media_entry(row))
@@ -444,7 +541,7 @@ class ContentDB:
                     """
                     UPDATE media SET verified = 1 WHERE id = ? AND source_type = 'miner'
                     """,
-                    (media_id,)
+                    (media_id,),
                 )
                 conn.commit()
                 return cursor.rowcount > 0
@@ -453,9 +550,7 @@ class ContentDB:
             return False
 
     def get_media_entries(
-        self, 
-        prompt_id: Optional[str] = None, 
-        media_id: Optional[str] = None
+        self, prompt_id: Optional[str] = None, media_id: Optional[str] = None
     ) -> List[MediaEntry]:
         """
         Get all media entries associated with a prompt.
@@ -467,10 +562,10 @@ class ContentDB:
             List of MediaEntry objects
         """
         if prompt_id is not None:
-            col = 'prompt_id'
+            col = "prompt_id"
             val = prompt_id
         elif media_id is not None:
-            col = 'id'
+            col = "id"
             val = media_id
         else:
             raise ValueError("Must provide either prompt_id or media_id")
@@ -478,7 +573,7 @@ class ContentDB:
         with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
-            f"""
+                f"""
                 SELECT * FROM media WHERE {col} = ?
             """,
                 (val,),
@@ -708,7 +803,11 @@ class ContentDB:
         Returns:
             { 'dataset': {dataset_name: count, ...}, 'scraper': {...}, 'generated': {...} }
         """
-        results: Dict[str, Dict[str, int]] = { 'dataset': {}, 'scraper': {}, 'generated': {} }
+        results: Dict[str, Dict[str, int]] = {
+            "dataset": {},
+            "scraper": {},
+            "generated": {},
+        }
         with self._get_db_connection() as conn:
             # Dataset counts
             cursor = conn.execute(
@@ -720,7 +819,7 @@ class ContentDB:
                 ORDER BY cnt DESC
                 """
             )
-            results['dataset'] = { name: cnt for name, cnt in cursor.fetchall() }
+            results["dataset"] = {name: cnt for name, cnt in cursor.fetchall()}
 
             # Scraper counts
             cursor = conn.execute(
@@ -732,7 +831,7 @@ class ContentDB:
                 ORDER BY cnt DESC
                 """
             )
-            results['scraper'] = { name: cnt for name, cnt in cursor.fetchall() }
+            results["scraper"] = {name: cnt for name, cnt in cursor.fetchall()}
 
             # Generated/model counts
             cursor = conn.execute(
@@ -744,7 +843,7 @@ class ContentDB:
                 ORDER BY cnt DESC
                 """
             )
-            results['generated'] = { name: cnt for name, cnt in cursor.fetchall() }
+            results["generated"] = {name: cnt for name, cnt in cursor.fetchall()}
 
         return results
 
@@ -764,7 +863,100 @@ class ContentDB:
             row = cursor.fetchone()
             return int(row[0]) if row and row[0] is not None else 0
 
-    def prune_source_media(self, source_type: SourceType, source_name: str, max_count: int, strategy: str = 'oldest') -> int:
+    def get_unuploaded_media(
+        self, limit: int = 100, modality: str = None
+    ) -> List[MediaEntry]:
+        """
+        Get media entries that haven't been uploaded to HuggingFace yet.
+        Only includes verified miner media or generated media (validator-generated).
+
+        Args:
+            limit: Maximum number of entries to return
+            modality: Optional filter by modality ('image' or 'video'). If None, returns all.
+
+        Returns:
+            List of MediaEntry objects where uploaded=0 and ready for upload
+        """
+        try:
+            if limit is None:
+                limit = 100
+            limit = int(limit)
+
+            bt.logging.debug(
+                f"[DEBUG] Getting unuploaded media with limit {limit}, modality filter: {modality}"
+            )
+            with self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                query = """
+                    SELECT * FROM media 
+                    WHERE (uploaded = 0 OR uploaded IS NULL)
+                    AND (
+                        source_type = 'generated' 
+                        OR (source_type = 'miner' AND verified = 1)
+                    )
+                """
+                if modality:
+                    query += f" AND modality = '{modality}'"
+                query += f" ORDER BY created_at ASC LIMIT {limit}"
+
+                cursor = conn.execute(query)
+                rows = cursor.fetchall()
+
+                entries = []
+                for i, row in enumerate(rows):
+                    try:
+                        entry = self._row_to_media_entry(row)
+                        entries.append(entry)
+                    except Exception as row_error:
+                        bt.logging.error(
+                            f"[DEBUG] Error converting row {i} ({row['id']}): {row_error}"
+                        )
+                        bt.logging.error(
+                            f"[DEBUG] Row data: uploaded={row.get('uploaded')} (type: {type(row.get('uploaded'))})"
+                        )
+                        raise
+
+                return entries
+        except Exception as e:
+            bt.logging.error(f"Error getting unuploaded media: {e}")
+            import traceback
+
+            bt.logging.error(f"Full traceback: {traceback.format_exc()}")
+            return []
+
+    def mark_media_uploaded(self, media_ids: List[str]) -> bool:
+        """
+        Mark media entries as uploaded to HuggingFace.
+
+        Args:
+            media_ids: List of media IDs to mark as uploaded
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not media_ids:
+            return True
+
+        try:
+            with self._get_db_connection() as conn:
+                placeholders = ",".join("?" * len(media_ids))
+                cursor = conn.execute(
+                    f"UPDATE media SET uploaded = 1 WHERE id IN ({placeholders})",
+                    media_ids,
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            bt.logging.error(f"Error marking media as uploaded: {e}")
+            return False
+
+    def prune_source_media(
+        self,
+        source_type: SourceType,
+        source_name: str,
+        max_count: int,
+        strategy: str = "oldest",
+    ) -> int:
         """
         Prune items for a source so that the total count is <= max_count.
         Deletes database rows for the oldest (or random) items.
@@ -782,7 +974,9 @@ class ContentDB:
             return 0
 
         to_remove = current - max_count
-        order_clause = 'created_at ASC' if strategy in ('oldest', 'least_used') else 'RANDOM()'
+        order_clause = (
+            "created_at ASC" if strategy in ("oldest", "least_used") else "RANDOM()"
+        )
 
         with self._get_db_connection() as conn:
             # Select ids and file_paths to delete so we can clear FK references from prompts
@@ -834,21 +1028,13 @@ class ContentDB:
             conn.row_factory = sqlite3.Row
 
             if strategy == "random":
-                query = (
-                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY RANDOM() LIMIT ?"
-                )
+                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY RANDOM() LIMIT ?"
             elif strategy == "least_used":
-                query = (
-                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY used_count ASC, RANDOM() LIMIT ?"
-                )
+                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY used_count ASC, RANDOM() LIMIT ?"
             elif strategy == "oldest":
-                query = (
-                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at ASC, RANDOM() LIMIT ?"
-                )
+                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at ASC, RANDOM() LIMIT ?"
             elif strategy == "newest":
-                query = (
-                    "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at DESC, RANDOM() LIMIT ?"
-                )
+                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at DESC, RANDOM() LIMIT ?"
             else:
                 raise ValueError(f"Unknown sampling strategy: {strategy}")
 
@@ -903,8 +1089,7 @@ class ContentDB:
                 return items
 
             if strategy == "random":
-                query = (
-                    """
+                query = """
                     SELECT m.*
                     FROM media m
                     LEFT JOIN prompts p ON m.prompt_id = p.id
@@ -912,13 +1097,13 @@ class ContentDB:
                     ORDER BY RANDOM()
                     LIMIT ?
                     """
-                )
-                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                rows = conn.execute(
+                    query, (modality.value, media_type.value, k)
+                ).fetchall()
                 return rows_to_entries(rows)
 
             if strategy == "least_used":
-                query = (
-                    """
+                query = """
                     SELECT m.*
                     FROM media m
                     LEFT JOIN prompts p ON m.prompt_id = p.id
@@ -926,13 +1111,13 @@ class ContentDB:
                     ORDER BY COALESCE(p.used_count, 0) ASC, RANDOM()
                     LIMIT ?
                     """
-                )
-                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                rows = conn.execute(
+                    query, (modality.value, media_type.value, k)
+                ).fetchall()
                 return rows_to_entries(rows)
 
             if strategy == "oldest":
-                query = (
-                    """
+                query = """
                     SELECT m.*
                     FROM media m
                     LEFT JOIN prompts p ON m.prompt_id = p.id
@@ -940,13 +1125,13 @@ class ContentDB:
                     ORDER BY m.created_at ASC, RANDOM()
                     LIMIT ?
                     """
-                )
-                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                rows = conn.execute(
+                    query, (modality.value, media_type.value, k)
+                ).fetchall()
                 return rows_to_entries(rows)
 
             if strategy == "newest":
-                query = (
-                    """
+                query = """
                     SELECT m.*
                     FROM media m
                     LEFT JOIN prompts p ON m.prompt_id = p.id
@@ -954,8 +1139,9 @@ class ContentDB:
                     ORDER BY m.created_at DESC, RANDOM()
                     LIMIT ?
                     """
-                )
-                rows = conn.execute(query, (modality.value, media_type.value, k)).fetchall()
+                rows = conn.execute(
+                    query, (modality.value, media_type.value, k)
+                ).fetchall()
                 return rows_to_entries(rows)
 
             if strategy == "random_source":
@@ -1004,7 +1190,9 @@ class ContentDB:
                         continue
 
                     source_type, source_name = random.choice(sources)
-                    source_column = SOURCE_TYPE_TO_DB_NAME_FIELD.get(SourceType(source_type))
+                    source_column = SOURCE_TYPE_TO_DB_NAME_FIELD.get(
+                        SourceType(source_type)
+                    )
                     if not source_column or not source_name:
                         continue
 
@@ -1031,4 +1219,3 @@ class ContentDB:
                 return items
 
             raise ValueError(f"Unknown sampling strategy: {strategy}")
-
