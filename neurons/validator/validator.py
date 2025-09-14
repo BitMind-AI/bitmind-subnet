@@ -6,9 +6,7 @@ from time import sleep
 
 import numpy as np
 from dotenv import load_dotenv
-import aiohttp
 import bittensor as bt
-from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from threading import Thread
 
 from gas import __spec_version__ as spec_version
@@ -18,10 +16,7 @@ from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
 from gas.types import (
     NeuronType,
-    MediaType,
     MinerType,
-    Modality,
-    SourceType
 )
 
 from gas.utils import (
@@ -33,7 +28,6 @@ from neurons.base import BaseNeuron
 from gas.evaluation import (
     GenerativeChallengeManager,
     MinerTypeTracker,
-    get_discriminator_rewards,
     get_generator_base_rewards,
     get_generator_reward_multipliers,
 )
@@ -143,7 +137,7 @@ class Validator(BaseNeuron):
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}",
         )
 
-        self.set_weights(0)
+        await self.set_weights(0)
 
         while not self.exit_context.isExiting:
             self.step += 1
@@ -167,6 +161,7 @@ class Validator(BaseNeuron):
         """
         Query orchestrator for results, computes rewards, updates scores, set weights
         """
+        bt.logging.info(f"Updating scores at block {block}")
         generator_uids = self.miner_type_tracker.get_miners_by_type(MinerType.GENERATOR)
         await self.update_scores()
 
@@ -198,13 +193,13 @@ class Validator(BaseNeuron):
                 discriminator_reward_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=discriminator_reward_hotkey, netuid=self.config.netuid, block=block)
 
+                # .7 to discriminators, .3 to generators for now
                 normed_weights[discriminator_reward_uid] = .7
                 normed_weights = np.array([v * 0.3 for v in normed_weights])
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
                 )
-                bt.logging.success("Weights set successfully")
 
             except Exception as e:
                 bt.logging.error(f"Error in set_weights_on_interval: {e}")

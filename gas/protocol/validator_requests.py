@@ -208,7 +208,11 @@ async def get_benchmark_results(
             benchmark_url = f"{base_url}/api/benchmark-runs?start_date={start_date_str}&end_date={end_date_str}"
             async with session.get(benchmark_url) as response:
                 if response.status == 200:
-                    discriminator_results = await response.json().get("runs", [])
+                    discriminator_results = await response.json()
+                    discriminator_results = (
+                        discriminator_results.get("runs", [])
+                        if discriminator_results else []
+                    )
                 else:
                     bt.logging.warning(
                         f"Failed to fetch benchmark runs: {response.status}"
@@ -218,8 +222,10 @@ async def get_benchmark_results(
             generator_url = f"{base_url}/api/generator-results?start_date={start_date_str}&end_date={end_date_str}"
             async with session.get(generator_url) as response:
                 if response.status == 200:
-                    generator_results = await response.json().get(
-                        "generator_results", []
+                    generator_results = await response.json()
+                    generator_results = (
+                        generator_results.get("generator_results", [])
+                        if generator_results else []
                     )
                 else:
                     bt.logging.warning(
@@ -228,6 +234,6 @@ async def get_benchmark_results(
 
     except Exception as e:
         bt.logging.error(f"Error fetching benchmark results: {e}")
-        bt.logging.error(traceback.format_exc())
+        #bt.logging.error(traceback.format_exc())
 
     return generator_results, discriminator_results
