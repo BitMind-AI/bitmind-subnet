@@ -130,6 +130,8 @@ class ContentDB:
                     uid INTEGER,
                     hotkey TEXT,
                     verified BOOLEAN DEFAULT 0,
+                    failed_verification BOOLEAN DEFAULT 0,
+                    rewarded BOOLEAN DEFAULT 0,
 
                     -- Common fields
                     created_at REAL NOT NULL,
@@ -202,6 +204,12 @@ class ContentDB:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_media_verified ON media (verified)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_failed_verification ON media (failed_verification)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_media_rewarded ON media (rewarded)"
             )
 
             # Create indexes for miner_media table
@@ -381,9 +389,19 @@ class ContentDB:
                 if "verified" in row.keys() and row["verified"] is not None
                 else None
             ),
+            failed_verification=(
+                bool(row["failed_verification"])
+                if "failed_verification" in row.keys() and row["failed_verification"] is not None
+                else False
+            ),
             uploaded=(
                 bool(row["uploaded"])
                 if "uploaded" in row.keys() and row["uploaded"] is not None
+                else False
+            ),
+            rewarded=(
+                bool(row["rewarded"])
+                if "rewarded" in row.keys() and row["rewarded"] is not None
                 else False
             ),
             created_at=row["created_at"],
@@ -514,13 +532,37 @@ class ContentDB:
 
         return media_id
 
-    def get_unverified_miner_media(self) -> List[MediaEntry]:
+    def get_miner_media(self, verification_status: Optional[str] = None) -> List[MediaEntry]:
+        """
+        Get miner media by verification status.
+
+        Args:
+            verification_status: Optional verification status filter:
+                - 'pending': Not verified yet (verified=0, failed_verification=0)
+                - 'verified': Passed verification (verified=1, failed_verification=0)
+                - 'failed': Failed verification (verified=0, failed_verification=1)
+                - None: Return all miner media regardless of verification status
+
+        Returns:
+            List of MediaEntry objects matching the verification status
+        """
+        if verification_status == "pending":
+            where_clause = "verified = 0 AND failed_verification = 0"
+        elif verification_status == "verified":
+            where_clause = "verified = 1 AND failed_verification = 0"
+        elif verification_status == "failed":
+            where_clause = "verified = 0 AND failed_verification = 1"
+        elif verification_status is None:
+            where_clause = "1=1"  # No filtering, return all
+        else:
+            raise ValueError(f"Invalid verification_status: {verification_status}. Must be 'pending', 'verified', 'failed', or None")
+
         with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
-                """
+                f"""
                 SELECT * FROM media 
-                WHERE source_type = 'miner' AND verified = 0
+                WHERE source_type = 'miner' AND {where_clause}
                 ORDER BY created_at ASC
                 """
             )
@@ -531,15 +573,11 @@ class ContentDB:
             return entries
 
     def mark_miner_media_verified(self, media_id: str) -> bool:
-        """
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             with self._get_db_connection() as conn:
                 cursor = conn.execute(
                     """
-                    UPDATE media SET verified = 1 WHERE id = ? AND source_type = 'miner'
+                    UPDATE media SET verified = 1, failed_verification = 0 WHERE id = ? AND source_type = 'miner'
                     """,
                     (media_id,),
                 )
@@ -547,6 +585,21 @@ class ContentDB:
                 return cursor.rowcount > 0
         except Exception as e:
             bt.logging.error(f"Error marking miner media as verified: {e}")
+            return False
+
+    def mark_miner_media_failed_verification(self, media_id: str) -> bool:
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE media SET verified = 0, failed_verification = 1 WHERE id = ? AND source_type = 'miner'
+                    """,
+                    (media_id,),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            bt.logging.error(f"Error marking miner media as failed verification: {e}")
             return False
 
     def get_media_entries(
@@ -949,6 +1002,71 @@ class ContentDB:
         except Exception as e:
             bt.logging.error(f"Error marking media as uploaded: {e}")
             return False
+
+    def mark_media_rewarded(self, media_ids: List[str]) -> bool:
+        """
+        Mark media entries as rewarded.
+
+        Args:
+            media_ids: List of media IDs to mark as rewarded
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not media_ids:
+            return True
+
+        try:
+            with self._get_db_connection() as conn:
+                placeholders = ",".join("?" * len(media_ids))
+                cursor = conn.execute(
+                    f"UPDATE media SET rewarded = 1 WHERE id IN ({placeholders})",
+                    media_ids,
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            bt.logging.error(f"Error marking media as rewarded: {e}")
+            return False
+
+    def get_unrewarded_verified_miner_media(self, limit: int = 100) -> List[MediaEntry]:
+        """
+        Get verified miner media entries that haven't been rewarded yet.
+
+        Args:
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of MediaEntry objects where source_type='miner', verified=1, rewarded=0
+        """
+        try:
+            if limit is None:
+                limit = 100
+            limit = int(limit)
+
+            with self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                query = """
+                    SELECT * FROM media 
+                    WHERE source_type = 'miner' 
+                    AND verified = 1 
+                    AND (rewarded = 0 OR rewarded IS NULL)
+                    ORDER BY created_at ASC 
+                    LIMIT ?
+                """
+
+                cursor = conn.execute(query, (limit,))
+                rows = cursor.fetchall()
+
+                entries = []
+                for row in rows:
+                    entry = self._row_to_media_entry(row)
+                    entries.append(entry)
+
+                return entries
+        except Exception as e:
+            bt.logging.error(f"Error getting unrewarded verified miner media: {e}")
+            return []
 
     def prune_source_media(
         self,

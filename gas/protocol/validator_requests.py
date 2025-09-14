@@ -1,8 +1,10 @@
 import json
 import asyncio
 import aiohttp
+import traceback
 import bittensor as bt
 from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
 
 from gas.protocol.epistula import generate_header
 from gas.types import Modality, MediaType
@@ -32,12 +34,7 @@ async def get_miner_type(
     Returns:
         The miner's type as a string, or None if the request fails
     """
-    response = {
-        "uid": uid,
-        "status": 500,
-        "error": "",
-        "miner_type": None
-    }
+    response = {"uid": uid, "status": 500, "error": "", "miner_type": None}
 
     try:
         base_url = f"http://{axon_info.ip}:{axon_info.port}"
@@ -47,7 +44,7 @@ async def get_miner_type(
         timeout = aiohttp.ClientTimeout(
             total=total_timeout,
             connect=connect_timeout,
-            sock_connect=sock_connect_timeout
+            sock_connect=sock_connect_timeout,
         )
 
         async with session.get(url, headers=headers, timeout=timeout) as res:
@@ -125,14 +122,14 @@ async def query_generative_miner(
 
     try:
         base_url = f"http://{axon_info.ip}:{axon_info.port}"
-        #action = "gen" if media_type == MediaType.SYNTHETIC else "mod"
+        # action = "gen" if media_type == MediaType.SYNTHETIC else "mod"
         url = f"{base_url}/gen_{modality.value}"
 
         payload = {
             "prompt": prompt,
             "parameters": parameters,
         }
-        body_bytes = json.dumps(payload).encode('utf-8')
+        body_bytes = json.dumps(payload).encode("utf-8")
 
         headers = {
             "Content-Type": "application/json",
@@ -182,92 +179,55 @@ async def query_generative_miner(
     return response
 
 
-async def query_orchestrator(
-    session: aiohttp.ClientSession,
-    hotkey: bt.Keypair,
-    miner_uids: str,
-    modality: Modality,
-    media: bytes,
-    source_type: str,
-    source_name: str,
-    label: int,
-    total_timeout: float,
-    connect_timeout: Optional[float] = None,
-    sock_connect_timeout: Optional[float] = None,
-) -> Dict[str, Any]:
+async def get_benchmark_results(
+    metagraph: bt.metagraph, base_url: str = "http://localhost:8000"
+):
     """
-    Query the Orchestrator's challenge-miners endpoint to challenge specific miners.
+    Query the remote benchmark API for discriminator MCC scores and generator fool rates.
 
     Args:
-        session: aiohttp client session
-        hotkey: validator hotkey Keypair for signing the request
-        miner_uids: Comma-separated string of miner UIDs to challenge
-        modality: Modality.IMAGE or Modality.VIDEO
-        source_type: generated, dataset, or scraped
-        source_name: model name, dataset name, or source url
-        media: Binary file data (image or video)
-        total_timeout: Total timeout for the request
-        connect_timeout: Connection timeout
-        sock_connect_timeout: Socket connection timeout
+        metagraph: Bittensor metagraph for SS58 to UID mapping
+        base_url: Base URL for the benchmark API
 
     Returns:
-        Dictionary containing the response.
+        tuple: (generator_rewards, discriminator_rewards) - dicts mapping UID to results
     """
-    response = {
-        "status": 500,
-        "error": "",
-        "result": {}
-    }
+    generator_results = []
+    discriminator_results = []
 
     try:
-        base_url = f"https://orchestrator.bitmind.workers.dev"
+        # Calculate date range (last 7 days)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=7)
 
-        querystr = (
-            f"minerUids={miner_uids}"
-            f"&type={modality.value}"
-            f"&source_type={source_type}"
-            f"&source_name={source_name}"
-            f"&label={label}"
-        )
-        url = f"{base_url}/challenge-miners?{querystr}"
+        start_date_str = start_date.strftime("%Y-%m-%d")
+        end_date_str = end_date.strftime("%Y-%m-%d")
 
-        headers = generate_header(
-            hotkey,
-            media,
-            signed_for=None
-        )
+        async with aiohttp.ClientSession() as session:
+            # Get benchmark runs for discriminator results
+            benchmark_url = f"{base_url}/api/benchmark-runs?start_date={start_date_str}&end_date={end_date_str}"
+            async with session.get(benchmark_url) as response:
+                if response.status == 200:
+                    discriminator_results = await response.json().get("runs", [])
+                else:
+                    bt.logging.warning(
+                        f"Failed to fetch benchmark runs: {response.status}"
+                    )
 
-        async with session.post(
-            url,
-            headers=headers,
-            data=media,
-            timeout=aiohttp.ClientTimeout(
-                total=total_timeout,
-                connect=connect_timeout,
-                sock_connect=sock_connect_timeout,
-            ),
-        ) as res:
-            response["status"] = res.status
-            if res.status != 200:
-                response["error"] = f"HTTP {res.status} error: {await res.text()}"
-                return response
-            try:
-                return await res.json()
+            # Get generator results
+            generator_url = f"{base_url}/api/generator-results?start_date={start_date_str}&end_date={end_date_str}"
+            async with session.get(generator_url) as response:
+                if response.status == 200:
+                    generator_results = await response.json().get(
+                        "generator_results", []
+                    )
+                else:
+                    bt.logging.warning(
+                        f"Failed to fetch generator results: {response.status}"
+                    )
 
-            except json.JSONDecodeError:
-                response["error"] = "Failed to decode JSON response"
-                return response
-
-    except asyncio.TimeoutError:
-        response["status"] = 408
-        response["error"] = "Request timed out"
-    except aiohttp.ClientConnectorError as e:
-        response["status"] = 503
-        response["error"] = f"Connection error: {str(e)}"
-    except aiohttp.ClientError as e:
-        response["status"] = 400
-        response["error"] = f"Network error: {str(e)}"
     except Exception as e:
-        response["error"] = f"Unknown error: {str(e)}"
+        bt.logging.error(f"Error fetching benchmark results: {e}")
+        bt.logging.error(traceback.format_exc())
 
-    return response 
+    return generator_results, discriminator_results

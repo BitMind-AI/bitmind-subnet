@@ -72,8 +72,10 @@ class MediaEntry:
     uid: Optional[int] = None
     hotkey: Optional[str] = None
     verified: Optional[bool] = False
+    failed_verification: Optional[bool] = False
 
     uploaded: Optional[bool] = False
+    rewarded: Optional[bool] = False
 
     # Common fields
     created_at: float = None

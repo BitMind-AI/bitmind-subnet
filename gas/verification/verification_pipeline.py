@@ -25,20 +25,20 @@ def run_verification(
         f"Starting verification batch (batch_size={batch_size}, clip_batch_size={clip_batch_size})"
     )
 
-    unverified_media = content_manager.get_unverified_miner_media()
-    bt.logging.info(f"Found {len(unverified_media)} unverified miner media entries")
-    if not unverified_media:
-        bt.logging.info("No unverified miner media found")
+    pending_media = content_manager.get_miner_media(verification_status="pending")
+    bt.logging.info(f"Found {len(pending_media)} pending verification miner media entries")
+    if not pending_media:
+        bt.logging.info("No pending verification miner media found")
         return []
             
     preload_clip_models()
 
     if batch_size is None:
-        batch = unverified_media
-        bt.logging.debug(f"Processing all {len(batch)} unverified media entries")
+        batch = pending_media
+        bt.logging.debug(f"Processing all {len(batch)} pending media entries")
     else:
-        batch = unverified_media[:batch_size]
-        bt.logging.debug(f"Processing {len(batch)} of {len(unverified_media)} unverified media entries")
+        batch = pending_media[:batch_size]
+        bt.logging.debug(f"Processing {len(batch)} of {len(pending_media)} pending media entries")
 
     results = verify_media(
         content_manager=content_manager,
@@ -48,23 +48,27 @@ def run_verification(
     )
 
     bt.logging.debug("Writing verification results to db")
-    # Mark successful verifications in database
     for result in results:
-        if result.passed and result.verification_score:
+        if result.verification_score:  # Only process if verification actually ran
             try:
-                content_manager.mark_miner_media_verified(result.media_entry.id)
-                bt.logging.debug(f"Marked media {result.media_entry.id} as verified")
+                if result.passed:
+                    content_manager.mark_miner_media_verified(result.media_entry.id)
+                    bt.logging.debug(f"Marked media {result.media_entry.id} as verified")
+                else:
+                    content_manager.mark_miner_media_failed_verification(result.media_entry.id)
+                    bt.logging.debug(f"Marked media {result.media_entry.id} as failed verification")
             except Exception as e:
-                bt.logging.error(f"Error marking media as verified: {e}")
+                bt.logging.error(f"Error marking media verification status: {e}")
 
     successful_verifications = sum(
         1 for r in results if r.verification_score is not None
     )
     passed_verifications = sum(1 for r in results if r.passed)
+    failed_verifications = sum(1 for r in results if r.verification_score is not None and not r.passed)
 
     bt.logging.info(
-        f"Verification batch complete: {successful_verifications}/{len(results)} successful, "
-        f"{passed_verifications}/{len(results)} passed verification"
+        f"Verification batch complete: {successful_verifications}/{len(results)} processed, "
+        f"{passed_verifications} passed, {failed_verifications} failed verification"
     )
 
     return results
@@ -212,13 +216,18 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
             "successful": 0,
             "passed": 0,
             "failed": 0,
+            "errors": 0,
             "error_rate": 0.0,
+            "pass_rate": 0.0,
+            "fail_rate": 0.0,
+            "average_score": 0.0,
         }
 
     total = len(results)
     successful = sum(1 for r in results if r.verification_score is not None)
     passed = sum(1 for r in results if r.passed)
-    failed = sum(1 for r in results if r.verification_score is None)
+    failed = sum(1 for r in results if r.verification_score is not None and not r.passed)
+    errors = sum(1 for r in results if r.verification_score is None)
 
     scores = [
         (
@@ -233,11 +242,13 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
 
     return {
         "total": total,
-        "successful": successful,
-        "passed": passed,
-        "failed": failed,
-        "error_rate": failed / total if total > 0 else 0.0,
+        "successful": successful,  # Successfully processed (passed + failed)
+        "passed": passed,          # Passed verification threshold
+        "failed": failed,          # Failed verification threshold  
+        "errors": errors,          # Errors during verification process
+        "error_rate": errors / total if total > 0 else 0.0,
         "pass_rate": passed / successful if successful > 0 else 0.0,
+        "fail_rate": failed / successful if successful > 0 else 0.0,
         "average_score": avg_score,
     }
 

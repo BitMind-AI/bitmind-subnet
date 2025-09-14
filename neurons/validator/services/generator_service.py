@@ -24,7 +24,7 @@ from gas.cache.content_manager import ContentManager
 from gas.types import Modality, MediaType
 from gas.verification import (
     run_verification,
-    get_verification_summary, 
+    get_verification_summary,
     clear_clip_models,
 )
 
@@ -37,22 +37,20 @@ class GeneratorService:
 
     def __init__(self, config):
         self.config = config
-        
-        if hasattr(self.config, 'cache') and hasattr(self.config.cache, 'base_dir'):
-            self.config.cache.base_dir = str(Path(self.config.cache.base_dir).expanduser())
-            
+
+        if hasattr(self.config, "cache") and hasattr(self.config.cache, "base_dir"):
+            self.config.cache.base_dir = str(
+                Path(self.config.cache.base_dir).expanduser()
+            )
+
         self._output_dir = Path(self.config.cache.base_dir)
 
-        # Service state management
         self._service_running = False
         self._generation_running = False
         self._stop_requested = Event()
         self._lock = Lock()
 
-        # Threading
         self._generation_thread: Optional[Thread] = None
-
-        # Components
         self.content_manager = ContentManager(
             base_dir=self.config.cache.base_dir,
             max_per_source=self.config.max_per_source,
@@ -68,22 +66,24 @@ class GeneratorService:
 
         self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
         if self.hf_token:
-            bt.logging.info(f"[GENERATOR-SERVICE] HuggingFace token loaded: {self.hf_token[:10]}...")
+            bt.logging.info(
+                f"[GENERATOR-SERVICE] HuggingFace token loaded: {self.hf_token[:10]}..."
+            )
         else:
-            bt.logging.warning("[GENERATOR-SERVICE] No HuggingFace token found in environment")
+            bt.logging.warning(
+                "[GENERATOR-SERVICE] No HuggingFace token found in environment"
+            )
 
         self.hf_org = "gasstation"
         self.hf_dataset_repos = {
             "image": f"{self.hf_org}/generated-images",
-            "video": f"{self.hf_org}/generated-videos"
+            "video": f"{self.hf_org}/generated-videos",
         }
-        self.upload_batch_size = getattr(config, 'upload_batch_size', 50)
-        self.videos_per_archive = getattr(config, 'videos_per_archive', 25)
+        self.upload_batch_size = getattr(config, "upload_batch_size", 50)
+        self.videos_per_archive = getattr(config, "videos_per_archive", 25)
 
         # third party generative services
-        self.tp_generators = {
-            "nano_banana": nano_banana.generate_image
-        }
+        self.tp_generators = {"nano_banana": nano_banana.generate_image}
 
     @property
     def output_dir(self):
@@ -268,7 +268,7 @@ class GeneratorService:
                     hf_token=self.hf_token,
                     hf_dataset_repos=self.hf_dataset_repos,
                     upload_batch_size=self.upload_batch_size,
-                    videos_per_archive=self.videos_per_archive
+                    videos_per_archive=self.videos_per_archive,
                 )
 
             except Exception as e:
@@ -300,31 +300,31 @@ class GeneratorService:
                 if content_type == "search_query":
                     search_query = self.prompt_generator.generate_search_query()
                     self.content_manager.write_prompt(
-                        content=search_query, 
-                        content_type=content_type, 
-                        source_media_id=None
+                        content=search_query,
+                        content_type=content_type,
+                        source_media_id=None,
                     )
                     generated += 1
 
                 elif content_type == "prompt":
                     cache_result = self.content_manager.sample_media_with_content(
-                        Modality.IMAGE, MediaType.REAL)
+                        Modality.IMAGE, MediaType.REAL
+                    )
 
                     if not cache_result or not cache_result["count"]:
-                        bt.logging.warning('No images available for prompt generation')
+                        bt.logging.warning("No images available for prompt generation")
                         continue
 
                     item = cache_result["items"][0]
                     for modality in Modality:
                         prompt = self.prompt_generator.generate_prompt_from_image(
-                            Image.fromarray(item['image']),
-                            intended_modality=modality
+                            Image.fromarray(item["image"]), intended_modality=modality
                         )
 
                         self.content_manager.write_prompt(
-                            content=prompt, 
-                            content_type=content_type, 
-                            source_media_id=item['id']
+                            content=prompt,
+                            content_type=content_type,
+                            source_media_id=item["id"],
                         )
                         generated += 1
 
@@ -353,8 +353,8 @@ class GeneratorService:
 
         if entries:
             for entry in entries:
-                prompt = entry['prompt']
-                original_media = entries[0]['media']
+                prompt = entry["prompt"]
+                original_media = entries[0]["media"]
                 bt.logging.debug(f"[GENERATOR-SERVICE] Generating media")
                 bt.logging.debug(f"- Prompt: {prompt}")
                 bt.logging.debug(f"- Models: {self.model_names}")
@@ -362,9 +362,9 @@ class GeneratorService:
                 if use_local:
                     # send prompt to all local models
                     for gen_output in self.generation_pipeline.generate_media(
-                        prompt=prompt.content, 
-                        model_names=self.model_names, 
-                        image_sample=original_media
+                        prompt=prompt.content,
+                        model_names=self.model_names,
+                        image_sample=original_media,
                     ):
                         if self._stop_requested.is_set():
                             break
@@ -405,19 +405,21 @@ class GeneratorService:
 
     def _verify_miner_media(self, threshold: float = 0.25, clip_batch_size: int = 32):
         """
-        Verify all unverified miner-submitted media using batched CLIP processing with consensus voting.
+        Verify all pending miner-submitted media using batched CLIP processing with consensus voting.
 
         Args:
             threshold: Threshold for determining pass/fail (default: 0.25, raw CLIP score)
             clip_batch_size: Batch size for CLIP operations (default: 32, adjust based on GPU memory)
         """
         try:
-            bt.logging.info(f"[GENERATOR-SERVICE] Starting verification of all unverified media (clip_batch_size={clip_batch_size})")
+            bt.logging.info(
+                f"[GENERATOR-SERVICE] Starting verification of all pending media (clip_batch_size={clip_batch_size})"
+            )
 
             results = run_verification(
                 content_manager=self.content_manager,
                 threshold=threshold,
-                clip_batch_size=clip_batch_size
+                clip_batch_size=clip_batch_size,
             )
 
             if not results:
@@ -427,23 +429,34 @@ class GeneratorService:
             # Generate and log summary with performance metrics
             summary = get_verification_summary(results)
             bt.logging.info(
-                f"[GENERATOR-SERVICE] Optimized batched verification complete: "
+                f"[GENERATOR-SERVICE] Batched verification complete: "
                 f"{summary['successful']}/{summary['total']} processed, "
-                f"{summary['passed']} passed verification "
+                f"{summary['passed']} passed, {summary['failed']} failed, {summary['errors']} errors "
                 f"(pass rate: {summary['pass_rate']:.1%}, "
-                f"avg score: {summary['average_score']:.3f}, "
-                f"batched processing enabled)"
+                f"avg score: {summary['average_score']:.3f})"
             )
 
-            failed_results = [r for r in results if r.verification_score is None]
-            if failed_results:
-                bt.logging.warning(f"[GENERATOR-SERVICE] {len(failed_results)} verification failures")
+            error_results = [r for r in results if r.verification_score is None]
+            if error_results:
+                bt.logging.warning(
+                    f"[GENERATOR-SEdRVICE] {len(error_results)} verification processing errors"
+                )
 
-            successful_results = [r for r in results if r.verification_score is not None]
+            failed_results = [
+                r for r in results if r.verification_score is not None and not r.passed
+            ]
+            if failed_results:
+                bt.logging.debug(
+                    f"[GENERATOR-SERVICE] {len(failed_results)} media failed verification threshold"
+                )
+
+            successful_results = [
+                r for r in results if r.verification_score is not None
+            ]
             if successful_results:
                 bt.logging.debug("[GENERATOR-SERVICE] Sample verification results:")
                 for result in successful_results[:3]:  # Log first 3 successes
-                    score = result.verification_score.get('score', 0)
+                    score = result.verification_score.get("score", 0)
                     bt.logging.debug(
                         f"  Media {result.media_entry.id}: "
                         f"score={score:.3f}, passed={result.passed}"
@@ -478,9 +491,9 @@ class GeneratorService:
                 prompt_id=prompt_id,
                 media_content=media_sample[modality],
                 mask_content=mask_content,
-                generation_args=media_sample.get("generation_args")
+                generation_args=media_sample.get("generation_args"),
             )
-            
+
             return save_path
 
         except Exception as e:
@@ -489,8 +502,6 @@ class GeneratorService:
             )
             bt.logging.error(traceback.format_exc())
             return None
-
-    
 
     def _cleanup(self):
         """Clean up resources."""

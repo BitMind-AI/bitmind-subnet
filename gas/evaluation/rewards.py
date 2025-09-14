@@ -1,135 +1,155 @@
-from typing import Dict, List, Optional, Tuple
-import bittensor as bt
-import numpy as np
-from sklearn.metrics import matthews_corrcoef
-
-from gas.types import Modality, MinerType
-
-
 def get_discriminator_rewards(
-    label: int,
-    predictions: List[np.ndarray],
-    uids: List[int], 
-    hotkeys: List[str],
-    challenge_modality: Modality,
-    discriminator_tracker: 'DiscriminatorTracker',
-    window: Optional[int] = 200,
-    image_score_weight: float = 0.6,
-    video_score_weight: float = 0.4,
+    runs,
+    metagraph,
+    image_score_weight: float = 0.5,
+    video_score_weight: float = 0.5,
     binary_score_weight: float = 0.5,
-    multiclass_score_weight: float = 0.5
-) -> Tuple[Dict[int, float], Dict[int, Dict[str, Dict[str, float]]], Dict[int, bool]]:
+    multiclass_score_weight: float = 0.5,
+):
     """
-    Calculate rewards for detection challenge
+    Process benchmark runs to extract discriminator rewards from MCC scores.
+    Handles separate image and video detection models per miner.
 
     Args:
-        label: The true label (0 for real, 1 for synthetic, 2 for semi-synthetic)
-        predictions: List of probability vectors from miners, each shape (3,)
-        uids: List of miner UIDs
-        hotkeys: List of miner hotkeys
-        challenge_modality: Type of challenge (Modality.VIDEO or Modality.IMAGE)
-        discriminator_tracker: Tracker object for storing miner predictions
-        window: Number of recent predictions to consider, defaults to 200
-        image_score_weight: Weight for image modality rewards, defaults to 0.6
-        video_score_weight: Weight for video modality rewards, defaults to 0.4
-        binary_score_weight: Weight for binary classification rewards, defaults to 0.5
-        multiclass_score_weight: Weight for multiclass classification rewards, defaults to 0.5
+        runs: List of benchmark run data from API
+        metagraph: Bittensor metagraph for SS58 to UID mapping
+        image_score_weight: Weight for image modality rewards
+        video_score_weight: Weight for video modality rewards
+        binary_score_weight: Weight for binary MCC
+        multiclass_score_weight: Weight for multiclass MCC
 
     Returns:
-        Dict containing:
-            - rewards: Dict mapping UIDs to reward values
-            - metrics: Dict mapping UIDs to modality metrics
-            - correct: Dict mapping UIDs to correctness booleans
+        dict: Mapping of UID to combined reward score for discriminators
     """
-    miner_predictions = {}
-    miner_rewards = {}
-    miner_metrics = {}
-    miner_correct = {}
+    # Store rewards by UID and modality
+    miner_modality_rewards = {}
+    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
 
-    for hotkey, uid, pred_probs in zip(hotkeys, uids, predictions):
-        miner_modality_rewards = {}
-        miner_modality_metrics = {}
+    for run in runs:
+        if run.get("status") != "success":
+            continue
 
-        for modality in Modality:
-            try:
-                # update tracker with prediction for current challenge for appropriate modality
-                if modality == challenge_modality:
-                    if pred_probs is not None and isinstance(pred_probs[0], (list, tuple, np.ndarray)):
-                        pred_probs = pred_probs[0]
+        for result in run.get("results", []):
+            ss58_address = result.get("ss58_address")
+            if ss58_address not in ss58_to_uid:
+                continue
 
-                    discriminator_tracker.update(
-                        uid=uid,
-                        prediction=pred_probs,
-                        label=label,
-                        modality=challenge_modality,
-                        miner_hotkey=hotkey,
-                    )
+            uid = ss58_to_uid[ss58_address]
+            modality = result["modality"]
 
-                # get current valid/invalid prediction counts, skip if there are no valid preds
-                invalid_count = discriminator_tracker.get_invalid_prediction_count(uid, modality, window)
-                preds, labels = discriminator_tracker.get_predictions_and_labels(uid, modality, window)
-                if not len(preds) or not len(labels):
-                    continue
+            if uid not in miner_modality_rewards:
+                miner_modality_rewards[uid] = {}
 
-                # take argmax of stored probabilities 
-                predictions = np.argmax(preds, axis=1)
+            miner_modality_rewards[uid][modality] = binary_score_weight * max(
+                0, result.get("binary_mcc", 0)
+            ) + multiclass_score_weight * max(0, result.get("multiclass_mcc", 0))
 
-                # compute correctness of last prediction if evaluating current challenge modality
-                if modality == challenge_modality:
-                    miner_correct[uid] = predictions[-1] == label
-                    miner_predictions[uid] = int(predictions[-1])
+    # Combine image and video rewards for each miner
+    final_rewards = {}
+    for uid, modality_rewards in miner_modality_rewards.items():
+        final_rewards[uid] = image_score_weight * modality_rewards.get(
+            "image", 0.0
+        ) + video_score_weight * modality_rewards.get("video", 0.0)
 
-                # Always compute MCC for both modalities if > 5 preds made with > 2 unique labels
-                pred_count = len(preds)
-                if pred_count < 5 or len(np.unique(labels)) < 2:
-                    continue
+    return final_rewards
 
-                # multi-class MCC (real vs synthetic vs semi-synthetic)
-                multi_class_mcc = matthews_corrcoef(labels, predictions)
 
-                # Binary MCC (real vs any synthetic)
-                binary_labels = (labels > 0).astype(int)
-                binary_preds = (predictions > 0).astype(int)
-                binary_mcc = matthews_corrcoef(binary_labels, binary_preds)
+def get_generator_base_rewards(verification_stats):
+    """
+    Compute base rewards for generators based on their verification pass rates.
 
-                # penalize for invalid predictions by reducing MCC
-                total_attempts = pred_count + invalid_count
-                invalid_penalty = invalid_count / total_attempts if total_attempts > 0 else 0
-
-                modality_reward = (
-                    binary_score_weight * max(0, binary_mcc) * (1 - invalid_penalty)
-                    + multiclass_score_weight * max(0,  multi_class_mcc) * (1 - invalid_penalty)
-                )
-
-                miner_modality_rewards[modality.value] = modality_reward
-                miner_modality_metrics[modality.value] = {
-                    'binary_mcc': binary_mcc,
-                    'multi_class_mcc': multi_class_mcc,
-                    'sample_size': len(preds),
-                    'invalid_count': invalid_count,
-                    'total_attempts': total_attempts
+    Args:
+        verification_stats: Dict mapping hotkey to verification stats from
+                            ContentManager.get_unrewarded_verification_stats()
+            Expected format:
+            {
+                "hotkey": {
+                    "uid": int,
+                    "total_verified": int,
+                    "total_failed": int,
+                    "total_evaluated": int,
+                    "pass_rate": float,
+                    "media_ids": List[str]
                 }
- 
-            except Exception as e:
-                bt.logging.error(
-                    f"Couldn't compute detection rewards for miner {uid}, "
-                    f"prediction: {pred_probs}, label: {label}, modality: {modality.value}"
-                )
-                bt.logging.exception(e)
+            }
 
-        image_rewards = miner_modality_rewards.get(Modality.IMAGE, 0.0)
-        video_rewards = miner_modality_rewards.get(Modality.VIDEO, 0.0)
-        total_reward = (
-            image_score_weight * image_rewards + 
-            video_score_weight * video_rewards
-        )
+    Returns:
+        tuple: (uid_rewards_dict, media_ids_to_mark)
+            - uid_rewards_dict: Mapping of UID to base reward score
+            - media_ids_to_mark: List of media IDs to mark as rewarded
+    """
+    try:
+        if not verification_stats:
+            return {}, []
 
-        miner_rewards[uid] = total_reward
-        miner_metrics[uid] = miner_modality_metrics
+        # Convert to UID-based rewards and collect media IDs
+        uid_rewards = {}
+        all_media_ids = []
 
-    return {
-       'rewards': miner_rewards, 
-       'metrics': miner_metrics, 
-       'correct': miner_correct,
-       'predictions': miner_predictions
-    }
+        for hotkey, stats in verification_stats.items():
+            uid = stats["uid"]
+            pass_rate = stats["pass_rate"]
+            verified_count = stats["total_verified"]
+
+            # Simple base reward calculation (can be customized)
+            # Higher pass rate = higher reward, with bonus for volume
+            base_reward = pass_rate * min(verified_count, 10)  # Cap volume bonus at 10
+
+            uid_rewards[uid] = base_reward
+            all_media_ids.extend(stats["media_ids"])
+
+        import bittensor as bt
+
+        bt.logging.info(f"Computed base rewards for {len(uid_rewards)} miners")
+
+        return uid_rewards, all_media_ids
+
+    except Exception as e:
+        import bittensor as bt
+
+        bt.logging.error(f"Error in get_generator_base_rewards: {e}")
+        import traceback
+
+        bt.logging.error(traceback.format_exc())
+        return {}, []
+
+
+def get_generator_reward_multipliers(generator_results, metagraph):
+    """
+    Process generator results to extract rewards from fool rates.
+
+    Args:
+        generator_results: List of generator result data from API
+        metagraph: Bittensor metagraph for SS58 to UID mapping
+
+    Returns:
+        dict: Mapping of UID to reward score for generators
+    """
+    rewards = {}
+    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
+
+    # Aggregate fool rates by generator (ss58_address)
+    generator_scores = {}
+    generator_counts = {}
+
+    for result in generator_results:
+        ss58_address = result.get("ss58_address")
+        if ss58_address in ss58_to_uid:
+            fool_rate = result.get("fool_rate", 0)
+
+            if ss58_address not in generator_scores:
+                generator_scores[ss58_address] = 0
+                generator_counts[ss58_address] = 0
+
+            generator_scores[ss58_address] += fool_rate
+            generator_counts[ss58_address] += 1
+
+    # Calculate average fool rate for each generator
+    for ss58_address, total_score in generator_scores.items():
+        if ss58_address in ss58_to_uid:
+            uid = ss58_to_uid[ss58_address]
+            avg_fool_rate = total_score / generator_counts[ss58_address]
+
+            rewards[uid] = max(0, min(1.0, avg_fool_rate))
+
+    return rewards
