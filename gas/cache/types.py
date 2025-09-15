@@ -77,6 +77,8 @@ class MediaEntry:
     uploaded: Optional[bool] = False
     rewarded: Optional[bool] = False
 
+    prompt_content: Optional[str] = None  # for hf uploads
+
     # Common fields
     created_at: float = None
     resolution: Optional[tuple[int, int]] = None  # (width, height)

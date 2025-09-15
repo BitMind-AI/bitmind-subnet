@@ -391,7 +391,8 @@ class ContentDB:
             ),
             failed_verification=(
                 bool(row["failed_verification"])
-                if "failed_verification" in row.keys() and row["failed_verification"] is not None
+                if "failed_verification" in row.keys()
+                and row["failed_verification"] is not None
                 else False
             ),
             uploaded=(
@@ -532,7 +533,9 @@ class ContentDB:
 
         return media_id
 
-    def get_miner_media(self, verification_status: Optional[str] = None) -> List[MediaEntry]:
+    def get_miner_media(
+        self, verification_status: Optional[str] = None
+    ) -> List[MediaEntry]:
         """
         Get miner media by verification status.
 
@@ -555,7 +558,9 @@ class ContentDB:
         elif verification_status is None:
             where_clause = "1=1"  # No filtering, return all
         else:
-            raise ValueError(f"Invalid verification_status: {verification_status}. Must be 'pending', 'verified', 'failed', or None")
+            raise ValueError(
+                f"Invalid verification_status: {verification_status}. Must be 'pending', 'verified', 'failed', or None"
+            )
 
         with self._get_db_connection() as conn:
             conn.row_factory = sqlite3.Row
@@ -922,13 +927,14 @@ class ContentDB:
         """
         Get media entries that haven't been uploaded to HuggingFace yet.
         Only includes verified miner media or generated media (validator-generated).
+        MediaEntry objects are enriched with prompt_content for HuggingFace metadata.
 
         Args:
             limit: Maximum number of entries to return
             modality: Optional filter by modality ('image' or 'video'). If None, returns all.
 
         Returns:
-            List of MediaEntry objects where uploaded=0 and ready for upload
+            List of MediaEntry objects where uploaded=0 and ready for upload, with prompt_content populated
         """
         try:
             if limit is None:
@@ -959,7 +965,18 @@ class ContentDB:
                 for i, row in enumerate(rows):
                     try:
                         entry = self._row_to_media_entry(row)
+                        entry.prompt_content = ""
+                        if entry.prompt_id:
+                            try:
+                                prompt_content = self.get_prompt_by_id(entry.prompt_id)
+                                entry.prompt_content = prompt_content or ""
+                            except Exception as e:
+                                bt.logging.warning(
+                                    f"Failed to fetch prompt content for {entry.prompt_id}: {e}"
+                                )
+
                         entries.append(entry)
+
                     except Exception as row_error:
                         bt.logging.error(
                             f"[DEBUG] Error converting row {i} ({row['id']}): {row_error}"

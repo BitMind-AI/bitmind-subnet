@@ -202,7 +202,7 @@ class GenerativeChallengeManager:
                 media_content=binary_data,
                 content_type=content_type,
                 task_id=task_id,
-                model_name=f"miner_{generator_uid}",
+                model_name=None,
             )
 
             if filepath:
