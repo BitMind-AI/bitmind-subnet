@@ -45,6 +45,8 @@ class GeneratorService:
 
         self._output_dir = Path(self.config.cache.base_dir)
 
+        self.validator_wallet = bt.wallet(config=self.config)
+
         self._service_running = False
         self._generation_running = False
         self._stop_requested = Event()
@@ -230,10 +232,8 @@ class GeneratorService:
 
         while not self._stop_requested.is_set():
             try:
-
                 self._verify_miner_media(clip_batch_size=32)
-                time.sleep(10)
-                """
+
                 # Generate search queries
                 start = time.time()
                 self._generate_text("search_query", query_batch_size)
@@ -260,7 +260,6 @@ class GeneratorService:
 
                 # Generate media with local models
                 self._generate_media(use_local=True, k=local_batch_size)
-                """
 
                 # Upload batch of miner/validator generated media to HuggingFace
                 bt.logging.info("Beginning hf batch upload")
@@ -269,6 +268,7 @@ class GeneratorService:
                     hf_dataset_repos=self.hf_dataset_repos,
                     upload_batch_size=self.upload_batch_size,
                     videos_per_archive=self.videos_per_archive,
+                    validator_hotkey=self.validator_wallet.hotkey.ss58_address,
                 )
 
             except Exception as e:
@@ -521,6 +521,7 @@ def main():
     add_args(parser)
     add_generation_service_args(parser)
     bt.subtensor.add_args(parser)
+    bt.wallet.add_args(parser)
     bt.logging.add_args(parser)
     config = bt.config(parser)
 

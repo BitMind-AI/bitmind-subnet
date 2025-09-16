@@ -703,7 +703,8 @@ class ContentManager:
 		hf_token: str, 
 		hf_dataset_repos: dict, 
 		upload_batch_size: int, 
-		videos_per_archive: int
+		videos_per_archive: int,
+		validator_hotkey: str = None
 	):
 		"""
 		Upload unuploaded media from database to HuggingFace, separated by modality.
@@ -735,7 +736,8 @@ class ContentManager:
 				uploaded_ids = upload_images_to_hf(
 					media_entries=media_by_modality['image'],
 					hf_token=hf_token,
-					dataset_repo=hf_dataset_repos['image']
+					dataset_repo=hf_dataset_repos['image'],
+					validator_hotkey=validator_hotkey
 				)
 				all_successfully_processed_ids.extend(uploaded_ids)
 			
@@ -745,7 +747,8 @@ class ContentManager:
 					media_entries=media_by_modality['video'],
 					hf_token=hf_token,
 					dataset_repo=hf_dataset_repos['video'],
-					videos_per_archive=videos_per_archive
+					videos_per_archive=videos_per_archive,
+					validator_hotkey=validator_hotkey
 				)
 				all_successfully_processed_ids.extend(uploaded_ids)
 

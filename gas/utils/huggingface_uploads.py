@@ -9,36 +9,53 @@ from datetime import datetime, timezone
 
 import bittensor as bt
 import pandas as pd
-from huggingface_hub import HfApi, create_repo, CommitOperationAdd, hf_hub_download
+from huggingface_hub import HfApi, create_repo, CommitOperationAdd
+from datasets import Dataset, Features, Value, Image as HFImage
+from PIL import Image
 
 from gas.utils.model_zips import calculate_sha256
 
 
 def get_current_time_split() -> str:
     """
-    Uses ISO week format: train_2025_W03, train_2025_W04, etc.
+    Uses ISO week format for subset/config names: 2025W03, 2025W04, etc.
 
-    Note: HuggingFace split names must match regex ^\w+(\.\w+)*$
-    (word characters and dots only), so we use underscores instead of hyphens.
+    This creates weekly dataset subsets/configs, not splits.
+    Users load them like: load_dataset('repo', '2025W36')
+
+    Note: HF split names must match ^\w+(\.\w+)*$ (no hyphens allowed)
 
     Returns:
-        str: Time-based split name (e.g., "train_2025_W03")
+        str: Weekly subset/config name (e.g., "2025W03")
     """
     now = datetime.now(timezone.utc)
     year = now.year
     iso_week = now.isocalendar()[1]  # (1-53)
-    return f"train_{year}_W{iso_week:02d}"
+    return f"{year}W{iso_week:02d}"
 
 
 def upload_images_to_hf(
-    media_entries: List[Any], hf_token: str, dataset_repo: str
+    media_entries: List[Any],
+    hf_token: str,
+    dataset_repo: str,
+    validator_hotkey: str = None,
 ) -> List[str]:
     """Upload images and metadata to hf"""
-    return upload_media_to_hf(media_entries, hf_token, dataset_repo, "image")
+    return upload_media_to_hf(
+        media_entries,
+        hf_token,
+        dataset_repo,
+        "image",
+        validator_hotkey=validator_hotkey,
+    )
 
 
 def upload_videos_to_hf(
-    media_entries: List[Any], hf_token: str, dataset_repo: str, videos_per_archive: int
+    media_entries: List[Any],
+    hf_token: str,
+    dataset_repo: str,
+    videos_per_archive: int,
+    validator_hotkey: str = None,
 ) -> List[str]:
     """Upload video .tar.gz files and metadata to hf"""
     return upload_media_to_hf(
@@ -47,14 +64,19 @@ def upload_videos_to_hf(
         dataset_repo,
         "video",
         videos_per_archive=videos_per_archive,
+        validator_hotkey=validator_hotkey,
     )
 
 
 def upload_media_to_hf(
-    media_entries: List[Any], hf_token: str, dataset_repo: str, modality: str, **kwargs
+    media_entries: List[Any],
+    hf_token: str,
+    dataset_repo: str,
+    modality: str,
+    **kwargs
 ) -> List[str]:
     """
-    Common upload logic for media files to HuggingFace dataset repository.
+    Core hf dataset upload logic
 
     Returns:
         List of successfully uploaded media IDs
@@ -62,12 +84,13 @@ def upload_media_to_hf(
     try:
         hf_api = HfApi(token=hf_token)
 
-        bt.logging.info(
-            f"Preparing to upload {len(media_entries)} {modality} files to {dataset_repo}"
-        )
+        bt.logging.info(f"Preparing to upload {len(media_entries)} {modality} files to {dataset_repo}")
         try:
             create_repo(
-                repo_id=dataset_repo, repo_type="dataset", exist_ok=True, token=hf_token
+                repo_id=dataset_repo,
+                repo_type="dataset",
+                exist_ok=True,
+                token=hf_token
             )
         except Exception as e:
             if (
@@ -89,40 +112,96 @@ def upload_media_to_hf(
             bt.logging.warning(f"No valid {modality} files to upload in batch")
             return []
 
-        # prep upload operations
         if modality == "image":
-            operations = _prepare_image_operations(upload_files, metadata_entries)
-        elif modality == "video":
-            operations, temp_files = _prepare_video_operations(
-                upload_files, metadata_entries, kwargs.get("videos_per_archive", 25)
+            dataset, config_name = _prepare_image_operations(
+                upload_files, metadata_entries
             )
+            if not dataset:
+                return []
+
+            try:
+                create_repo(
+                    dataset_repo, 
+                    repo_type="dataset", 
+                    exist_ok=True, 
+                    token=hf_token
+                )
+            except:
+                pass  # Repo exists
+
+            operations, temp_files = _prepare_shard_operations(
+                dataset,
+                config_name,
+                kwargs.get("validator_hotkey")
+            )
+
+            if operations:
+                commit_info = hf_api.create_commit(
+                    repo_id=dataset_repo,
+                    repo_type="dataset",
+                    operations=operations,
+                    commit_message=f"Add new image shard to {config_name}",
+                )
+                bt.logging.info(
+                    f"Successfully added {len(dataset)} images as new shard to {dataset_repo} "
+                    f"config {config_name} (commit: {commit_info.oid[:8]})"
+                )
+
+                # Cleanup temp files
+                for temp_file in temp_files:
+                    try:
+                        os.unlink(temp_file)
+                    except:
+                        pass
+
+        elif modality == "video":
+            # Create archives and metadata dataset together
+            dataset, config_name, archive_operations, temp_files = (
+                _prepare_video_dataset_and_archives(
+                    upload_files,
+                    metadata_entries,
+                    kwargs.get("videos_per_archive", 25),
+                    kwargs.get("validator_hotkey"),
+                )
+            )
+            if not dataset:
+                return []
+
+            try:
+                create_repo(
+                    dataset_repo, repo_type="dataset", exist_ok=True, token=hf_token
+                )
+            except:
+                pass  # Repo exists
+
+            metadata_operations, metadata_temp_files = _prepare_shard_operations(
+                dataset, config_name, kwargs.get("validator_hotkey")
+            )
+
+            # Combine metadata and archive operations
+            all_operations = metadata_operations + archive_operations
+            all_temp_files = metadata_temp_files + temp_files
+
+            if all_operations:
+                commit_info = hf_api.create_commit(
+                    repo_id=dataset_repo,
+                    repo_type="dataset",
+                    operations=all_operations,
+                    commit_message=f"Add new video shard and archives to {config_name}",
+                )
+                bt.logging.info(
+                    f"Successfully added {len(dataset)} video metadata as new shard and {len(upload_files)} "
+                    f"archives to {dataset_repo} config {config_name} (commit: {commit_info.oid[:8]})"
+                )
+
+                # Cleanup temp files
+                for temp_file in all_temp_files:
+                    try:
+                        os.unlink(temp_file)
+                    except:
+                        pass
         else:
             raise ValueError(f"Unsupported modality: {modality}")
-
-        if not operations:
-            return []
-
-        # upload
-        commit_info = hf_api.create_commit(
-            repo_id=dataset_repo,
-            repo_type="dataset",
-            operations=operations,
-            commit_message=f"Upload batch of {len(upload_files)} {modality} files and metadata",
-        )
-
-        bt.logging.info(
-            f"Successfully uploaded {len(upload_files)} {modality} files to {dataset_repo} (commit: {commit_info.oid[:8]})"
-        )
-
-        # Cleanup
-        if modality == "video" and "temp_files" in locals():
-            for temp_file in temp_files:
-                try:
-                    os.unlink(temp_file)
-                except Exception as cleanup_error:
-                    bt.logging.warning(
-                        f"Failed to cleanup temp file {temp_file}: {cleanup_error}"
-                    )
 
         return successfully_processed_ids
 
@@ -133,7 +212,8 @@ def upload_media_to_hf(
             or "too many requests" in str(e).lower()
         ):
             bt.logging.warning(
-                f"Hit HuggingFace rate limit during {modality} upload. Stopping upload and will retry next cycle."
+                f"Hit HuggingFace rate limit during {modality} upload. "
+                "Stopping upload and will retry next cycle."
             )
             return []
         bt.logging.error(f"Failed to upload {modality} files: {e}")
@@ -157,7 +237,7 @@ def _process_media_entries(
         file_extension = media_path.suffix
         timestamp = int(time.time())
         filename = f"{timestamp}_{media_entry.id[:8]}{file_extension}"
-        repo_path = f"{modality}s/{filename}"  # images/ or videos/
+        repo_path = f"{modality}s/{filename}"
 
         upload_files.append((media_path, repo_path))
 
@@ -178,7 +258,7 @@ def _process_media_entries(
                 "model_name": media_entry.model_name,
                 "media_hash": media_hash,
                 "timestamp": str(timestamp),
-                "media_type": file_extension,
+                "media_type": media_entry.media_type.value,
                 "modality": media_entry.modality.value,
                 "source_type": media_entry.source_type.value,
                 "verified": getattr(media_entry, "verified", None),
@@ -192,96 +272,147 @@ def _process_media_entries(
 
 def _prepare_image_operations(
     upload_files: List[Tuple], metadata_entries: List[Dict]
-) -> List[CommitOperationAdd]:
-    """Prepare operations for chunked Parquet with embedded images"""
-    operations = []
-    images_per_chunk = 25
-    timestamp = int(time.time())
-    time_split = get_current_time_split()  # e.g., "train-2025-W03"
+) -> tuple:
+    """Create weekly config using push_to_hub approach"""
+    time_split = get_current_time_split()  # e.g., "2025W38"
 
-    bt.logging.info(f"Uploading images to time-based split: {time_split}")
+    bt.logging.info(f"Creating weekly config: {time_split}")
+    dataset_dict = {
+        "media_hash": [],
+        "model_name": [],
+        "generator_hotkey": [],
+        "generator_uid": [],
+        "prompt_str": [],
+        "timestamp": [],
+        "media_type": [],
+        "image": [],  # PIL Images
+    }
 
-    for chunk_idx in range(0, len(upload_files), images_per_chunk):
-        chunk_files = upload_files[chunk_idx : chunk_idx + images_per_chunk]
-        chunk_metadata = metadata_entries[chunk_idx : chunk_idx + images_per_chunk]
+    for (local_path, repo_path), metadata in zip(upload_files, metadata_entries):
+        try:
+            # Load as PIL Image (like working code)
+            img = Image.open(local_path)
+            if img.mode != "RGB":
+                img = img.convert("RGB")
 
-        # Create chunk entries with embedded image bytes
-        chunk_entries = []
-        for (local_path, repo_path), metadata in zip(chunk_files, chunk_metadata):
-            try:
-                with open(local_path, "rb") as f:
-                    image_bytes = f.read()
+            # Add to dataset following working format
+            dataset_dict["media_hash"].append(metadata["media_hash"])
+            dataset_dict["model_name"].append(metadata["model_name"])
+            dataset_dict["generator_hotkey"].append(
+                metadata.get("generator_hotkey", "validator")
+            )
+            dataset_dict["generator_uid"].append(metadata.get("generator_uid", 0))
+            dataset_dict["prompt_str"].append(metadata.get("prompt_content", ""))
+            dataset_dict["timestamp"].append(int(metadata["timestamp"]))
+            dataset_dict["media_type"].append(metadata["media_type"])
+            dataset_dict["image"].append(img)
 
-                entry = metadata.copy()
-                entry["image"] = (
-                    image_bytes  # HF will auto-detect bytes and convert to PIL
-                )
-                entry["file_name"] = metadata["filename"]
-                entry["file_path"] = repo_path
-                entry["time_split"] = time_split
-                entry["upload_timestamp"] = timestamp
-
-                chunk_entries.append(entry)
-
-            except Exception as e:
-                bt.logging.error(f"Failed to process image {local_path}: {e}")
-                continue
-
-        if not chunk_entries:
-            bt.logging.warning(f"No valid images in chunk {chunk_idx}")
+        except Exception as e:
+            bt.logging.error(f"Failed to process image {local_path}: {e}")
             continue
 
-        # Create time-organized Parquet chunk with standard HuggingFace naming
-        total_chunks = (len(upload_files) - 1) // images_per_chunk + 1
-        chunk_number = chunk_idx // images_per_chunk
+    if not dataset_dict["image"]:
+        bt.logging.warning("No valid image data to upload")
+        return None, None
 
-        # Organize by time split: data/{time_split}/{chunk_filename}
-        chunk_filename = f"data/{time_split}/{time_split}_{timestamp:010d}_{chunk_number:05d}_of_{total_chunks:05d}.parquet"
+    # Create Dataset with proper features (like working code)
+    features = Features(
+        {
+            "media_hash": Value("string"),
+            "model_name": Value("string"),
+            "generator_hotkey": Value("string"),
+            "generator_uid": Value("int64"),
+            "prompt_str": Value("string"),
+            "timestamp": Value("int64"),
+            "media_type": Value("string"),
+            "image": HFImage(),
+        }
+    )
 
-        df = pd.DataFrame(chunk_entries)
-        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
-            temp_parquet_path = temp_file.name
-            df.to_parquet(temp_parquet_path, index=False)
+    dataset = Dataset.from_dict(dataset_dict, features=features)
+    bt.logging.info(
+        f"Created weekly dataset with {len(dataset_dict['image'])} images for config {time_split}"
+    )
 
-        operations.append(
-            CommitOperationAdd(
-                path_in_repo=chunk_filename, path_or_fileobj=temp_parquet_path
-            )
+    return dataset, time_split
+
+
+def _prepare_shard_operations(
+    dataset: Dataset, config_name: str, validator_hotkey: str = None
+) -> tuple:
+    """Create shard operations for any dataset (adds new shards instead of overwriting)"""
+    import tempfile
+    from huggingface_hub import CommitOperationAdd
+
+    # Create unique shard filename with validator hotkey + timestamp
+    timestamp = int(time.time())
+    split_name = f"data_{config_name}"  # e.g., "data_2025W38"
+
+    if validator_hotkey:
+        hotkey_prefix = (
+            validator_hotkey[:8] if len(validator_hotkey) >= 8 else validator_hotkey
         )
+        shard_filename = f"{split_name}/shard-{hotkey_prefix}-{timestamp}.parquet"
+        bt.logging.info(f"Creating shard with validator hotkey prefix: {shard_filename}")
+    else:
+        shard_filename = f"{split_name}/shard-{timestamp}.parquet"
+        bt.logging.warning(f"No validator hotkey provided for shard: {shard_filename}")
 
-        bt.logging.info(
-            f"Created self-contained image chunk {chunk_filename} with {len(chunk_entries)} images + metadata"
-        )
+    # Create temporary parquet file
+    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
+        temp_path = tmp_file.name
 
-    return operations
+    # Save dataset as parquet
+    dataset.to_parquet(temp_path)
+
+    # Create commit operation
+    operation = CommitOperationAdd(
+        path_in_repo=shard_filename, path_or_fileobj=temp_path
+    )
+
+    bt.logging.info(f"Created shard: {shard_filename}")
+
+    return [operation], [temp_path]
 
 
-def _prepare_video_operations(
-    upload_files: List[Tuple], metadata_entries: List[Dict], videos_per_archive: int
-) -> Tuple[List[CommitOperationAdd], List[str]]:
-    """Prepare operations for video archive upload with time-based splits."""
+def _prepare_video_dataset_and_archives(
+    upload_files: List[Tuple],
+    metadata_entries: List[Dict],
+    videos_per_archive: int,
+    validator_hotkey: str = None,
+) -> tuple:
+    """Create video metadata dataset with configs AND archive operations together"""
+    time_split = get_current_time_split()  # e.g., "2025W38"
+
+    bt.logging.info(f"Creating video dataset and archives for config: {time_split}")
     archive_uploads = create_video_archives(
-        upload_files, metadata_entries, videos_per_archive
+        upload_files, metadata_entries, videos_per_archive, validator_hotkey
     )
 
     if not archive_uploads:
         bt.logging.warning("No video archives created")
-        return [], []
+        return None, None, [], []
 
     operations = []
     temp_files = []
-    time_split = get_current_time_split()  # e.g., "train-2025-W03"
+    dataset_dict = {
+        "media_hash": [],
+        "model_name": [],
+        "generator_hotkey": [],
+        "generator_uid": [],
+        "prompt_str": [],
+        "timestamp": [],
+        "media_type": [],
+        "archive_filename": [],
+        "video_path_in_archive": [],
+    }
 
-    bt.logging.info(f"Uploading videos to time-based split: {time_split}")
-
+    # Process each archive and its metadata
     for archive_path, archive_metadata_list in archive_uploads:
         temp_files.append(archive_path)
-        for entry in archive_metadata_list:
-            entry["time_split"] = time_split
-            entry["upload_timestamp"] = int(time.time())
-
-        # Organize archives by time split: archives/{time_split}/{archive_name}
         archive_name = Path(archive_path).name
+
+        # Add archive operation
         archive_filename = f"archives/{time_split}/{archive_name}"
         operations.append(
             CommitOperationAdd(
@@ -289,26 +420,54 @@ def _prepare_video_operations(
             )
         )
 
-        # Organize metadata by time split: metadata/{time_split}/{metadata_name}
-        metadata_name = f"{Path(archive_path).stem}_metadata.json"
-        metadata_filename = f"metadata/{time_split}/{metadata_name}"
-        metadata_content = json.dumps(archive_metadata_list, indent=2)
-        operations.append(
-            CommitOperationAdd(
-                path_in_repo=metadata_filename,
-                path_or_fileobj=metadata_content.encode(),
+        # Add each video's metadata to the dataset
+        for metadata in archive_metadata_list:
+            dataset_dict["media_hash"].append(metadata["media_hash"])
+            dataset_dict["model_name"].append(metadata["model_name"])
+            dataset_dict["generator_hotkey"].append(
+                metadata.get("generator_hotkey", "validator")
             )
-        )
+            dataset_dict["generator_uid"].append(metadata.get("generator_uid", 0))
+            dataset_dict["prompt_str"].append(metadata.get("prompt_content", ""))
+            dataset_dict["timestamp"].append(int(metadata["timestamp"]))
+            dataset_dict["media_type"].append(metadata["media_type"])
+            dataset_dict["archive_filename"].append(archive_name)  # Just filename
+            dataset_dict["video_path_in_archive"].append(
+                metadata["video_path_in_archive"]
+            )
 
-        bt.logging.info(f"Created time-organized video archive {archive_filename}")
+    if not dataset_dict["media_hash"]:
+        bt.logging.warning("No valid video metadata to upload")
+        return None, None, [], []
 
-    return operations, temp_files
+    features = Features(
+        {
+            "media_hash": Value("string"),
+            "model_name": Value("string"),
+            "generator_hotkey": Value("string"),
+            "generator_uid": Value("int64"),
+            "prompt_str": Value("string"),
+            "timestamp": Value("int64"),
+            "media_type": Value("string"),
+            "archive_filename": Value("string"),
+            "video_path_in_archive": Value("string"),
+        }
+    )
+
+    dataset = Dataset.from_dict(dataset_dict, features=features)
+
+    bt.logging.info(
+        f"Created video metadata dataset with {len(dataset_dict['media_hash'])} entries for config {time_split}"
+    )
+
+    return dataset, time_split, operations, temp_files
 
 
 def create_video_archives(
     upload_files: List[Tuple[str, str]],
     metadata_entries: List[Dict[str, Any]],
     videos_per_archive: int,
+    validator_hotkey: str = None,
 ) -> List[Tuple[str, List[Dict[str, Any]]]]:
     """
     Create tar.gz archives containing videos with their metadata.
@@ -344,25 +503,33 @@ def create_video_archives(
     temp_files_to_cleanup = []
     timestamp = int(time.time())
 
-    bt.logging.info(
-        f"Creating video archives with max {videos_per_archive} videos per archive"
-    )
+    bt.logging.info(f"Creating video archives with max {videos_per_archive} videos per archive")
 
     try:
         for i in range(0, len(upload_files), videos_per_archive):
             batch_files = upload_files[i : i + videos_per_archive]
             batch_metadata = metadata_entries[i : i + videos_per_archive]
-
-            archive_fd, archive_path = tempfile.mkstemp(
-                suffix=f"_video_batch_{i//videos_per_archive + 1}_{timestamp}.tar.gz"
-            )
-            temp_files_to_cleanup.append(archive_path)
-
-            os.close(
-                archive_fd
-            )  # Close the file descriptor since tarfile will handle the file
+            if validator_hotkey:
+                # Use first 8 chars of hotkey + timestamp
+                hotkey_prefix = (
+                    validator_hotkey[:8]
+                    if len(validator_hotkey) >= 8
+                    else validator_hotkey
+                )
+                archive_filename = f"{hotkey_prefix}_{timestamp}.tar.gz"
+                bt.logging.info(
+                    f"Creating video archive with validator hotkey prefix: {archive_filename}"
+                )
+            else:
+                # Fallback to batch naming if no hotkey available
+                archive_filename = f"validator_{i//videos_per_archive + 1}_{timestamp}.tar.gz"
+                bt.logging.warning(f"No validator hotkey provided, using fallback naming: {archive_filename}")
 
             # Create tar.gz archive
+            temp_dir = tempfile.gettempdir()
+            archive_path = os.path.join(temp_dir, archive_filename)
+            temp_files_to_cleanup.append(archive_path)
+
             with tarfile.open(archive_path, "w:gz") as tar:
                 archive_metadata_list = []
 

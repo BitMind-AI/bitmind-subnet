@@ -147,6 +147,8 @@ if (config.startGenerator) {
     script: generatorScript,
     interpreter: pythonInterpreter,
     args: [
+      '--wallet.name', config.walletName,
+      '--wallet.hotkey', config.walletHotkey,
       '--cache.base-dir', config.cacheDir,
       '--device', config.device,
       '--log-level', config.loglevel,
