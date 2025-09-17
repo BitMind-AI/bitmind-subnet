@@ -595,8 +595,19 @@ class ContentManager:
 		"""Mark miner media as failed verification."""
 		return self.content_db.mark_miner_media_failed_verification(media_id)
 
-	def get_unuploaded_media(self, limit: int = 100, modality: str = None) -> List[MediaEntry]:
-		return self.content_db.get_unuploaded_media(limit=limit, modality=modality)
+	def get_unuploaded_media(
+		self, 
+		limit: int = 100, 
+		modality: str = None, 
+		verified_only: bool = False, 
+		skip_verified: bool = False
+	) -> List[MediaEntry]:
+		return self.content_db.get_unuploaded_media(
+			limit=limit,
+			modality=modality,
+			verified_only=verified_only,
+			skip_verified=skip_verified
+		)
 
 	def mark_media_uploaded(self, media_ids: List[str]) -> bool:
 		return self.content_db.mark_media_uploaded(media_ids)
@@ -711,14 +722,36 @@ class ContentManager:
 		Only uploads verified miner media or validator-generated media.
 		"""
 		try:			
-			# Get unuploaded media from database
+			#  prioritize verified miner media, then fill with validator media
 			media_by_modality = {}
 			total_found = 0
 			
 			for modality in ["image", "video"]:
-				unuploaded_media = self.get_unuploaded_media(limit=upload_batch_size, modality=modality)
+				# prioritize all verified miner media
+				verified_miner_media = self.content_db.get_unuploaded_media(
+					limit=None, 
+					modality=modality, 
+					verified_only=True
+				)
+				
+				# Fill remaining slots with any unuploaded validator media
+				remaining_slots = max(0, upload_batch_size - len(verified_miner_media))
+				remaining_media = []
+				if remaining_slots > 0:
+					remaining_media = self.content_db.get_unuploaded_media(
+						limit=remaining_slots, 
+						modality=modality, 
+						skip_verified=True
+					)
+
+				unuploaded_media = verified_miner_media + remaining_media
 				media_by_modality[modality] = unuploaded_media
 				total_found += len(unuploaded_media)
+
+				bt.logging.info(
+					f"{modality}: {len(verified_miner_media)} verified miner + "
+					f"{len(remaining_media)} validator = {len(unuploaded_media)} total"
+				)
 			
 			if total_found == 0:
 				bt.logging.debug("No unuploaded media found in database")
@@ -730,8 +763,7 @@ class ContentManager:
 			)
 
 			all_successfully_processed_ids = []
-			
-			# Upload images
+
 			if media_by_modality['image']:
 				uploaded_ids = upload_images_to_hf(
 					media_entries=media_by_modality['image'],
@@ -740,8 +772,7 @@ class ContentManager:
 					validator_hotkey=validator_hotkey
 				)
 				all_successfully_processed_ids.extend(uploaded_ids)
-			
-			# Upload videos 
+
 			if media_by_modality['video']:
 				uploaded_ids = upload_videos_to_hf(
 					media_entries=media_by_modality['video'],
@@ -752,7 +783,7 @@ class ContentManager:
 				)
 				all_successfully_processed_ids.extend(uploaded_ids)
 
-			# Mark all successfully uploaded media as uploaded in database
+			# Mark all successfully uploaded media as uploaded in db
 			if all_successfully_processed_ids:
 				success = self.mark_media_uploaded(all_successfully_processed_ids)
 				if success:

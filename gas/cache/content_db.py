@@ -922,41 +922,53 @@ class ContentDB:
             return int(row[0]) if row and row[0] is not None else 0
 
     def get_unuploaded_media(
-        self, limit: int = 100, modality: str = None
+        self, limit: int = 100, modality: str = None, verified_only: bool = False, skip_verified: bool = False
     ) -> List[MediaEntry]:
         """
         Get media entries that haven't been uploaded to HuggingFace yet.
-        Only includes verified miner media or generated media (validator-generated).
+        Smart selection prioritizes verified miner media over validator-generated media.
         MediaEntry objects are enriched with prompt_content for HuggingFace metadata.
 
         Args:
-            limit: Maximum number of entries to return
+            limit: Maximum number of entries to return (None = no limit)
             modality: Optional filter by modality ('image' or 'video'). If None, returns all.
+            verified_only: If True, only return verified miner media
+            skip_verified: If True, only return validator-generated media (skip verified miner media)
 
         Returns:
             List of MediaEntry objects where uploaded=0 and ready for upload, with prompt_content populated
         """
         try:
-            if limit is None:
-                limit = 100
-            limit = int(limit)
+            if limit is not None:
+                limit = int(limit)
 
             bt.logging.debug(
                 f"[DEBUG] Getting unuploaded media with limit {limit}, modality filter: {modality}"
             )
             with self._get_db_connection() as conn:
                 conn.row_factory = sqlite3.Row
-                query = """
-                    SELECT * FROM media 
-                    WHERE (uploaded = 0 OR uploaded IS NULL)
-                    AND (
-                        source_type = 'generated' 
-                        OR (source_type = 'miner' AND verified = 1)
-                    )
-                """
+                base_where = "(uploaded = 0 OR uploaded IS NULL)"
+
+                if verified_only:
+                    # Only verified miner media
+                    source_filter = "(source_type = 'miner' AND verified = 1)"
+                elif skip_verified:
+                    # Only validator-generated media (skip verified miner media)
+                    source_filter = "source_type = 'generated'"
+                else:
+                    # Default: both verified miner and validator-generated
+                    source_filter = "(source_type = 'generated' OR (source_type = 'miner' AND verified = 1))"
+
+                query = f"SELECT * FROM media WHERE {base_where} AND {source_filter}"
+
                 if modality:
                     query += f" AND modality = '{modality}'"
-                query += f" ORDER BY created_at ASC LIMIT {limit}"
+
+                # Order by verified miner first, then creation time
+                query += " ORDER BY (source_type = 'miner' AND verified = 1) DESC, created_at ASC"
+
+                if limit is not None:
+                    query += f" LIMIT {limit}"
 
                 cursor = conn.execute(query)
                 rows = cursor.fetchall()
