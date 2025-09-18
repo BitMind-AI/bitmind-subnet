@@ -163,8 +163,7 @@ class Validator(BaseNeuron):
         Query orchestrator for results, computes rewards, updates scores, set weights
         """
         bt.logging.info(f"Updating scores at block {block}")
-        generator_uids = self.miner_type_tracker.get_miners_by_type(MinerType.GENERATOR)
-        await self.update_scores()
+        generator_uids = await self.update_scores()
 
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
@@ -190,13 +189,36 @@ class Validator(BaseNeuron):
                 normed_weights = self.scores / norm
 
                 # discriminator rewards distributed only upon performance improvements on benchmark exam
-                discriminator_reward_hotkey = "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ"
-                discriminator_reward_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=discriminator_reward_hotkey, netuid=self.config.netuid, block=block)
+                burn_pct = .5
+                burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58="5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
+                    netuid=self.config.netuid, 
+                    block=block
+                )
+
+                d_pct = 1. # .7
+                d_fee_pct = .3
+                fee_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58="5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",  # TODO
+                     netuid=self.config.netuid, 
+                     block=block)
+                escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58="5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",  # TODO
+                     netuid=self.config.netuid, 
+                     block=block)
 
                 # .7 to discriminators, .3 to generators for now
-                normed_weights[discriminator_reward_uid] = .7
-                normed_weights = np.array([v * 0.3 for v in normed_weights])
+                g_pct = 0 # (1 - d_pct)
+                normed_weights[burn_uid] = burn_pct
+                normed_weights[fee_uid] = burn_pct * d_pct * d_fee_pct 
+                normed_weights[escrow_uid] = burn_pct * d_pct * (1 - d_fee_pct)
+                normed_weights = np.array([
+                    v * burn_pct * g_pct 
+                    for v in normed_weights
+                ])
+                bt.logging.info(f"Discriminator rewards UID: {escrow_uid}")
+                bt.logging.info(f"UIDs: {uids}")
+                bt.logging.info(f"NORMED WEIGHTS: {normed_weights}")
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
@@ -215,22 +237,25 @@ class Validator(BaseNeuron):
         """
         verification_stats = self.content_manager.get_unrewarded_verification_stats()
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
-        generator_uids = self.miner_type_tracker.get_miners_by_type(MinerType.GENERATOR)
 
         generator_results, discriminator_results = await get_benchmark_results(
             self.metagraph, base_url=self.config.benchmark.api_url
         )
+
+        bt.logging.info(f"generator_results: {json.dumps(generator_results, indent=2)}")
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
         rewards = {
-            generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)
-            for uid in generator_uids 
+            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)
+            for uid in reward_multipliers 
         }
+
+        bt.logging.info("KEYS")
+        bt.logging.info(rewards.keys(), generator_base_rewards.keys(),reward_multipliers.keys() )
+        bt.logging.info(f"Rewards:\n{json.dumps(rewards, indent=2)}")
 
         if len(rewards) == 0:
             bt.logging.trace("No rewards available for score update")
             return
-
-        bt.logging.info(f"Rewards:\n{json.dumps(rewards, indent=2)}")
 
         extend_scores = max(list(rewards.keys())) - len(self.scores) + 1
         if extend_scores > 0:

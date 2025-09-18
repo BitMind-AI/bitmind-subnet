@@ -76,13 +76,13 @@ def get_discriminator_rewards(
         bt.logging.error(traceback.format_exc())
 
     # Combine image and video rewards for each miner
-    final_rewards = {}
+    final_multipliers = {}
     for uid, modality_rewards in miner_modality_rewards.items():
-        final_rewards[uid] = image_score_weight * modality_rewards.get(
+        final_multipliers[uid] = image_score_weight * modality_rewards.get(
             "image", 0.0
         ) + video_score_weight * modality_rewards.get("video", 0.0)
 
-    return final_rewards
+    return final_multipliers
 
 
 def get_generator_base_rewards(verification_stats):
@@ -118,7 +118,7 @@ def get_generator_base_rewards(verification_stats):
         all_media_ids = []
 
         for hotkey, stats in verification_stats.items():
-            uid = stats["uid"]
+            uid = int(stats["uid"])
             pass_rate = stats["pass_rate"]
             verified_count = stats["total_verified"]
 
@@ -129,7 +129,7 @@ def get_generator_base_rewards(verification_stats):
             uid_rewards[uid] = base_reward
             all_media_ids.extend(stats["media_ids"])
 
-        bt.logging.info(f"Computed base rewards for {len(uid_rewards)} miners")
+        bt.logging.info(f"Computed base rewards for {len(uid_rewards)} miners: {uid_rewards}")
 
         return uid_rewards, all_media_ids
 
@@ -219,8 +219,8 @@ def get_generator_reward_multipliers(generator_results, metagraph):
                     rewards[uid] = max(0, min(2.0, base_reward))  # Allow rewards up to 2.0 for high sample sizes
 
                     bt.logging.debug(f"Generator {ss58_address[:8]}... UID {uid}: fool_rate={fool_rate:.3f}, "
-                                   f"sample_size={total_count}, multiplier={sample_size_multiplier:.3f}, "
-                                   f"final_reward={rewards[uid]:.3f}")
+                                   f"sample_size={total_count}, sample_size_multiplier={sample_size_multiplier:.3f}, "
+                                   f"final_multiplier={rewards[uid]:.3f}")
                 else:
                     bt.logging.warning(f"Zero total count for generator {ss58_address}")
 

@@ -184,6 +184,7 @@ async def get_benchmark_results(
 ):
     """
     Query the remote benchmark API for discriminator MCC scores and generator fool rates.
+    Only returns results from the last week based on the finished_at field.
 
     Args:
         metagraph: Bittensor metagraph for SS58 to UID mapping
@@ -195,6 +196,22 @@ async def get_benchmark_results(
     generator_results = []
     discriminator_results = []
 
+    one_week_ago = datetime.now() - timedelta(weeks=1)
+
+    def filter_recent_results(results):
+        """Filter results to only include those from the last week"""
+        filtered = []
+        for result in results:
+            try:
+                finished_at = datetime.fromisoformat(result['finished_at'].replace('Z', '+00:00'))
+                if finished_at.tzinfo is not None:
+                    finished_at = finished_at.replace(tzinfo=None)
+                if finished_at >= one_week_ago:
+                    filtered.append(result)
+            except (ValueError, TypeError) as e:
+                bt.logging.warning(f"Failed to parse finished_at timestamp: {result.get('finished_at')}, error: {e}")
+        return filtered
+
     try:
         bt.logging.info(f"Fetching benchmark results from {base_url}")
 
@@ -205,8 +222,9 @@ async def get_benchmark_results(
 
             async with session.get(discriminator_url) as response:
                 if response.status == 200:
-                    discriminator_results = await response.json()
-                    bt.logging.info(f"Successfully fetched {len(discriminator_results)} discriminator results")
+                    all_discriminator_results = await response.json()
+                    discriminator_results = filter_recent_results(all_discriminator_results)
+                    bt.logging.info(f"Successfully fetched {len(all_discriminator_results)} discriminator results, {len(discriminator_results)} from last week")
                 else:
                     error_text = await response.text()
                     bt.logging.warning(
@@ -218,8 +236,9 @@ async def get_benchmark_results(
 
             async with session.get(generator_url) as response:
                 if response.status == 200:
-                    generator_results = await response.json()
-                    bt.logging.info(f"Successfully fetched {len(generator_results)} generator results")
+                    all_generator_results = await response.json()
+                    generator_results = filter_recent_results(all_generator_results)
+                    bt.logging.info(f"Successfully fetched {len(all_generator_results)} generator results, {len(generator_results)} from last week")
                 else:
                     error_text = await response.text()
                     bt.logging.warning(
