@@ -194,7 +194,7 @@ class Validator(BaseNeuron):
                     block=block
                 )
 
-                d_pct = 1. # .7
+                d_pct = 1. # .8
                 d_fee_pct = .3
                 fee_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58="5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",  # TODO
@@ -206,7 +206,7 @@ class Validator(BaseNeuron):
                      block=block)
 
                 # .7 to discriminators, .3 to generators for now
-                g_pct = 0 # (1 - d_pct)
+                g_pct = (1 - d_pct)
                 normed_weights[burn_uid] = burn_pct
                 normed_weights[fee_uid] = (1 - burn_pct) * d_pct * d_fee_pct 
                 normed_weights[escrow_uid] = (1 - burn_pct) * d_pct * (1 - d_fee_pct)
