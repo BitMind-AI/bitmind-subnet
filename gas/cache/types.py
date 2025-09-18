@@ -9,10 +9,9 @@ from gas.types import Modality, MediaType, SourceType
 
 @dataclass
 class Media:
-    """Input data for creating media - what you want to write"""
-
-    modality: Modality  # Modality.IMAGE or Modality.VIDEO
-    media_type: MediaType  # MediaType.REAL, MediaType.SYNTHETIC, or MediaType.SEMISYNTHETIC
+    """Media representation for db writes"""
+    modality: Modality
+    media_type: MediaType
     media_content: Any  # PIL Image, video frames, etc.
     format: str  # "JPEG", "PNG", "MP4", etc.
     prompt_id: Optional[str] = None  # None for dataset media, str for generated media
@@ -52,12 +51,13 @@ class MediaEntry:
     id: str
     prompt_id: str
     file_path: str
-    modality: Modality  # image or video
-    media_type: MediaType  # real, synthetic, semisynthetic
+    modality: Modality
+    media_type: MediaType
     source_type: SourceType = SourceType.GENERATED  # "scraper", "dataset", "generated"
 
     # For synthetic media (generated content)
     model_name: Optional[str] = None
+    generation_args: Optional[Dict[str, Any]] = None 
 
     # For real media (downloaded content)
     download_url: Optional[str] = None
@@ -68,12 +68,22 @@ class MediaEntry:
     dataset_source_file: Optional[str] = None
     dataset_index: Optional[str] = None
 
+    # For miner media
+    uid: Optional[int] = None
+    hotkey: Optional[str] = None
+    verified: Optional[bool] = False
+    failed_verification: Optional[bool] = False
+
+    uploaded: Optional[bool] = False
+    rewarded: Optional[bool] = False
+
+    prompt_content: Optional[str] = None  # for hf uploads
+
     # Common fields
     created_at: float = None
-    generation_args: Optional[Dict[str, Any]] = None  # Generation parameters when source_type='generated'
     resolution: Optional[tuple[int, int]] = None  # (width, height)
-    file_size: Optional[int] = None  # in bytes
-    format: Optional[str] = None  # File format (e.g., "PNG", "JPEG", "MP4")
+    file_size: Optional[int] = None               # in bytes
+    format: Optional[str] = None                  # File format (e.g., "PNG", "JPEG", "MP4")
 
     def __post_init__(self):
         if self.created_at is None:
@@ -88,3 +98,20 @@ class MediaEntry:
         if isinstance(data.get("source_type"), SourceType):
             data["source_type"] = data["source_type"].value
         return data
+
+
+class VerificationResult:
+    """Miner-generated data verification"""
+    def __init__(
+        self,
+        media_entry: MediaEntry,
+        original_prompt: Optional[str] = None,
+        generated_caption: Optional[str] = None,
+        verification_score: Optional[Dict[str, Any]] = None,
+        passed: bool = False,
+    ):
+        self.media_entry = media_entry
+        self.original_prompt = original_prompt
+        self.generated_caption = generated_caption
+        self.verification_score = verification_score
+        self.passed = passed
