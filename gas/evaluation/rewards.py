@@ -1,3 +1,5 @@
+import math
+
 import bittensor as bt
 
 
@@ -127,15 +129,11 @@ def get_generator_base_rewards(verification_stats):
             uid_rewards[uid] = base_reward
             all_media_ids.extend(stats["media_ids"])
 
-        import bittensor as bt
-
         bt.logging.info(f"Computed base rewards for {len(uid_rewards)} miners")
 
         return uid_rewards, all_media_ids
 
     except Exception as e:
-        import bittensor as bt
-
         bt.logging.error(f"Error in get_generator_base_rewards: {e}")
         import traceback
 
@@ -145,7 +143,7 @@ def get_generator_base_rewards(verification_stats):
 
 def get_generator_reward_multipliers(generator_results, metagraph):
     """
-    Process generator results to extract rewards from fool rates.
+    Process generator results to extract rewards from fool counts.
 
     Args:
         generator_results: List of GeneratorResult objects from API
@@ -153,9 +151,7 @@ def get_generator_reward_multipliers(generator_results, metagraph):
 
     Returns:
         dict: Mapping of UID to reward score for generators
-    """
-    import bittensor as bt
-    
+    """    
     rewards = {}
     ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
 
@@ -163,9 +159,9 @@ def get_generator_reward_multipliers(generator_results, metagraph):
         bt.logging.warning("No generator results data provided")
         return {}
 
-    # Aggregate fool rates by generator (ss58_address)
-    generator_scores = {}
-    generator_counts = {}
+    # Aggregate fool counts by generator (ss58_address)
+    generator_fooled_counts = {}
+    generator_not_fooled_counts = {}
 
     try:
         for result in generator_results:
@@ -176,31 +172,57 @@ def get_generator_reward_multipliers(generator_results, metagraph):
             if not ss58_address or ss58_address not in ss58_to_uid:
                 continue
 
-            fool_rate = result.get("fool_rate", 0)
+            fooled_count = result.get("fooled_count", 0)
+            not_fooled_count = result.get("not_fooled_count", 0)
+            
             try:
-                fool_rate = float(fool_rate) if fool_rate is not None else 0
+                fooled_count = int(fooled_count) if fooled_count is not None else 0
+                not_fooled_count = int(not_fooled_count) if not_fooled_count is not None else 0
             except (ValueError, TypeError):
-                bt.logging.warning(f"Invalid fool_rate for {ss58_address}: {fool_rate}")
-                fool_rate = 0
+                bt.logging.warning(f"Invalid counts for {ss58_address}: fooled={fooled_count}, not_fooled={not_fooled_count}")
+                fooled_count = 0
+                not_fooled_count = 0
 
-            if ss58_address not in generator_scores:
-                generator_scores[ss58_address] = 0
-                generator_counts[ss58_address] = 0
+            if ss58_address not in generator_fooled_counts:
+                generator_fooled_counts[ss58_address] = 0
+                generator_not_fooled_counts[ss58_address] = 0
 
-            generator_scores[ss58_address] += fool_rate
-            generator_counts[ss58_address] += 1
+            generator_fooled_counts[ss58_address] += fooled_count
+            generator_not_fooled_counts[ss58_address] += not_fooled_count
 
-        # Calculate average fool rate for each generator
-        for ss58_address, total_score in generator_scores.items():
+        # Calculate fool rate for each generator from accumulated counts with sample size bonus
+        for ss58_address in generator_fooled_counts:
             if ss58_address in ss58_to_uid:
                 uid = ss58_to_uid[ss58_address]
-                count = generator_counts[ss58_address]
+                total_fooled = generator_fooled_counts[ss58_address]
+                total_not_fooled = generator_not_fooled_counts[ss58_address]
+                total_count = total_fooled + total_not_fooled
 
-                if count > 0:
-                    avg_fool_rate = total_score / count
-                    rewards[uid] = max(0, min(1.0, avg_fool_rate))
+                if total_count > 0:
+                    # Base fool rate
+                    fool_rate = total_fooled / total_count
+
+                    # Sample size multiplier: rewards higher sample sizes
+                    # Uses logarithmic scaling to provide diminishing returns
+                    # Reference count of 20 gives multiplier of 1.0, higher counts get bonus
+                    reference_count = 20
+                    max_multiplier = 2.0  # Cap the maximum multiplier
+
+                    if total_count >= reference_count:
+                        sample_size_multiplier = min(max_multiplier, 1.0 + math.log(total_count / reference_count))
+                    else:
+                        # Penalize very small sample sizes
+                        sample_size_multiplier = max(0.5, total_count / reference_count)
+
+                    # Final reward combines fool rate with sample size bonus
+                    base_reward = fool_rate * sample_size_multiplier
+                    rewards[uid] = max(0, min(2.0, base_reward))  # Allow rewards up to 2.0 for high sample sizes
+
+                    bt.logging.debug(f"Generator {ss58_address[:8]}... UID {uid}: fool_rate={fool_rate:.3f}, "
+                                   f"sample_size={total_count}, multiplier={sample_size_multiplier:.3f}, "
+                                   f"final_reward={rewards[uid]:.3f}")
                 else:
-                    bt.logging.warning(f"Zero count for generator {ss58_address}")
+                    bt.logging.warning(f"Zero total count for generator {ss58_address}")
 
         bt.logging.info(f"Processed {len(generator_results)} generator results, computed rewards for {len(rewards)} generators")
 
