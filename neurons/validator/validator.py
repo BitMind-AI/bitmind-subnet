@@ -23,6 +23,7 @@ from gas.utils import (
     on_block_interval,
     print_info,
 )
+from gas.utils.state_manager import load_validator_state, save_validator_state
 from gas.utils.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
 from gas.evaluation import (
@@ -277,6 +278,60 @@ class Validator(BaseNeuron):
         except Exception as e:
             bt.logging.warning(f"Error in log_on_block: {e}")
 
+    async def save_state(self):
+        """
+        Atomically save validator state (scores + miner history)
+        Maintains the current state and one backup.
+        """
+        async with self._state_lock:
+            bt.logging.debug("save_state() acquired state lock")
+            try:
+                state_data = {"scores.npy": self.scores}
+                state_objects = [(self.miner_type_tracker, "miner_type_tracker.pkl")]
+
+                success = save_validator_state(
+                    base_dir=self.config.neuron.full_path,
+                    state_data=state_data,
+                    state_objects=state_objects,
+                    max_backup_age_hours=24,
+                )
+                if success:
+                    bt.logging.success("Saved validator state")
+                else:
+                    bt.logging.error("Failed to save validator state")
+            except Exception as e:
+                bt.logging.error(f"Error during state save: {str(e)}")
+                bt.logging.error(traceback.format_exc())
+            finally:
+                bt.logging.debug("save_state() releasing state lock")
+
+    async def load_state(self):
+        """
+        Load validator state, falling back to backup if needed.
+        """
+        try:
+            state_data_keys = ["scores.npy"]
+            state_objects = [(self.discriminator_tracker, "discriminator_history.pkl")]
+
+            loaded_state = load_validator_state(
+                base_dir=self.config.neuron.full_path,
+                state_data_keys=state_data_keys,
+                state_objects=state_objects,
+                max_backup_age_hours=24,
+            )
+
+            if loaded_state is not None and "scores.npy" in loaded_state:
+                self.scores = loaded_state["scores.npy"]
+                bt.logging.info(f"Loaded scores vector for {len(self.scores)} miners")
+                return True
+            else:
+                bt.logging.warning("No valid state found")
+                return False
+
+        except Exception as e:
+            bt.logging.error(f"Error during state load: {str(e)}")
+            bt.logging.error(traceback.format_exc())
+            return False
 
     async def shutdown(self):
         """Shutdown the validator and clean up resources."""
