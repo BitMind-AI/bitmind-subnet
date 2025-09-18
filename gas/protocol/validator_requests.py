@@ -180,7 +180,7 @@ async def query_generative_miner(
 
 
 async def get_benchmark_results(
-    metagraph: bt.metagraph, base_url: str = "http://localhost:8000"
+    metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai"
 ):
     """
     Query the remote benchmark API for discriminator MCC scores and generator fool rates.
@@ -190,46 +190,40 @@ async def get_benchmark_results(
         base_url: Base URL for the benchmark API
 
     Returns:
-        tuple: (generator_rewards, discriminator_rewards) - dicts mapping UID to results
+        tuple: (generator_results, discriminator_results) - lists containing API response data
     """
     generator_results = []
     discriminator_results = []
 
     try:
-        # Calculate date range (last 7 days)
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=7)
+        bt.logging.info(f"Fetching benchmark results from {base_url}")
 
-        start_date_str = start_date.strftime("%Y-%m-%d")
-        end_date_str = end_date.strftime("%Y-%m-%d")
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            discriminator_url = f"{base_url}/api/v1/validator/discriminator-results"
+            bt.logging.debug(f"Requesting discriminator results from: {discriminator_url}")
 
-        async with aiohttp.ClientSession() as session:
-            # Get benchmark runs for discriminator results
-            benchmark_url = f"{base_url}/api/benchmark-runs?start_date={start_date_str}&end_date={end_date_str}"
-            async with session.get(benchmark_url) as response:
+            async with session.get(discriminator_url) as response:
                 if response.status == 200:
                     discriminator_results = await response.json()
-                    discriminator_results = (
-                        discriminator_results.get("runs", [])
-                        if discriminator_results else []
-                    )
+                    bt.logging.info(f"Successfully fetched {len(discriminator_results)} discriminator results")
                 else:
+                    error_text = await response.text()
                     bt.logging.warning(
-                        f"Failed to fetch benchmark runs: {response.status}"
+                        f"Failed to fetch discriminator results: HTTP {response.status}, response: {error_text}"
                     )
 
-            # Get generator results
-            generator_url = f"{base_url}/api/generator-results?start_date={start_date_str}&end_date={end_date_str}"
+            generator_url = f"{base_url}/api/v1/validator/generator-results"
+            bt.logging.debug(f"Requesting generator results from: {generator_url}")
+
             async with session.get(generator_url) as response:
                 if response.status == 200:
                     generator_results = await response.json()
-                    generator_results = (
-                        generator_results.get("generator_results", [])
-                        if generator_results else []
-                    )
+                    bt.logging.info(f"Successfully fetched {len(generator_results)} generator results")
                 else:
+                    error_text = await response.text()
                     bt.logging.warning(
-                        f"Failed to fetch generator results: {response.status}"
+                        f"Failed to fetch generator results: HTTP {response.status}, response: {error_text}"
                     )
 
     except Exception as e:

@@ -66,6 +66,9 @@ const config = {
   scraperInterval: process.env.SCRAPER_INTERVAL || '300',
   datasetInterval: process.env.DATASET_INTERVAL || '1800',
   
+  // API configuration
+  benchmarkApiUrl: process.env.BENCHMARK_API_URL || 'https://gas.bitmind.ai',
+  
   // Service selection
   startValidator: process.env.START_VALIDATOR !== 'false',
   startGenerator: process.env.START_GENERATOR !== 'false',
@@ -117,6 +120,7 @@ if (config.startValidator) {
     '--subtensor.chain_endpoint', config.chainEndpoint,
     '--neuron.callback_port', config.callbackPort,
     '--cache.base-dir', config.cacheDir,
+    '--benchmark.api-url', config.benchmarkApiUrl,
     logParam,
     autoUpdateParam,
   ];

@@ -1,3 +1,6 @@
+import bittensor as bt
+
+
 def get_discriminator_rewards(
     runs,
     metagraph,
@@ -7,11 +10,11 @@ def get_discriminator_rewards(
     multiclass_score_weight: float = 0.5,
 ):
     """
-    Process benchmark runs to extract discriminator rewards from MCC scores.
+    Process discriminator results to extract rewards from MCC scores.
     Handles separate image and video detection models per miner.
 
     Args:
-        runs: List of benchmark run data from API
+        runs: List of DiscriminatorResult objects from API
         metagraph: Bittensor metagraph for SS58 to UID mapping
         image_score_weight: Weight for image modality rewards
         video_score_weight: Weight for video modality rewards
@@ -21,28 +24,54 @@ def get_discriminator_rewards(
     Returns:
         dict: Mapping of UID to combined reward score for discriminators
     """
+    
     # Store rewards by UID and modality
     miner_modality_rewards = {}
     ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
 
-    for run in runs:
-        if run.get("status") != "success":
-            continue
+    if not runs:
+        bt.logging.warning("No discriminator runs data provided")
+        return {}
 
-        for result in run.get("results", []):
-            ss58_address = result.get("ss58_address")
-            if ss58_address not in ss58_to_uid:
+    try:
+        for result in runs:
+            if not isinstance(result, dict):
+                bt.logging.warning(f"Invalid result format: {type(result)}")
+                continue
+
+            ss58_address = result.get("discriminator_address")
+            if not ss58_address or ss58_address not in ss58_to_uid:
                 continue
 
             uid = ss58_to_uid[ss58_address]
-            modality = result["modality"]
+            modality = result.get("modality")
+            if not modality:
+                bt.logging.warning(f"Missing modality for UID {uid}")
+                continue
 
             if uid not in miner_modality_rewards:
                 miner_modality_rewards[uid] = {}
 
+            # Handle potential None or non-numeric values
+            binary_mcc = result.get("binary_mcc", 0)
+            multiclass_mcc = result.get("multiclass_mcc", 0)
+
+            try:
+                binary_mcc = float(binary_mcc) if binary_mcc is not None else 0
+                multiclass_mcc = float(multiclass_mcc) if multiclass_mcc is not None else 0
+            except (ValueError, TypeError):
+                bt.logging.warning(f"Invalid MCC values for UID {uid}: binary={binary_mcc}, multiclass={multiclass_mcc}")
+                binary_mcc = 0
+                multiclass_mcc = 0
+
             miner_modality_rewards[uid][modality] = binary_score_weight * max(
-                0, result.get("binary_mcc", 0)
-            ) + multiclass_score_weight * max(0, result.get("multiclass_mcc", 0))
+                0, binary_mcc
+            ) + multiclass_score_weight * max(0, multiclass_mcc)
+
+    except Exception as e:
+        bt.logging.error(f"Error processing discriminator rewards: {e}")
+        import traceback
+        bt.logging.error(traceback.format_exc())
 
     # Combine image and video rewards for each miner
     final_rewards = {}
@@ -119,23 +148,40 @@ def get_generator_reward_multipliers(generator_results, metagraph):
     Process generator results to extract rewards from fool rates.
 
     Args:
-        generator_results: List of generator result data from API
+        generator_results: List of GeneratorResult objects from API
         metagraph: Bittensor metagraph for SS58 to UID mapping
 
     Returns:
         dict: Mapping of UID to reward score for generators
     """
+    import bittensor as bt
+    
     rewards = {}
     ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
+
+    if not generator_results:
+        bt.logging.warning("No generator results data provided")
+        return {}
 
     # Aggregate fool rates by generator (ss58_address)
     generator_scores = {}
     generator_counts = {}
 
-    for result in generator_results:
-        ss58_address = result.get("ss58_address")
-        if ss58_address in ss58_to_uid:
+    try:
+        for result in generator_results:
+            if not isinstance(result, dict):
+                bt.logging.warning(f"Invalid result format: {type(result)}")
+                continue                
+            ss58_address = result.get("ss58_address")
+            if not ss58_address or ss58_address not in ss58_to_uid:
+                continue
+
             fool_rate = result.get("fool_rate", 0)
+            try:
+                fool_rate = float(fool_rate) if fool_rate is not None else 0
+            except (ValueError, TypeError):
+                bt.logging.warning(f"Invalid fool_rate for {ss58_address}: {fool_rate}")
+                fool_rate = 0
 
             if ss58_address not in generator_scores:
                 generator_scores[ss58_address] = 0
@@ -144,12 +190,23 @@ def get_generator_reward_multipliers(generator_results, metagraph):
             generator_scores[ss58_address] += fool_rate
             generator_counts[ss58_address] += 1
 
-    # Calculate average fool rate for each generator
-    for ss58_address, total_score in generator_scores.items():
-        if ss58_address in ss58_to_uid:
-            uid = ss58_to_uid[ss58_address]
-            avg_fool_rate = total_score / generator_counts[ss58_address]
+        # Calculate average fool rate for each generator
+        for ss58_address, total_score in generator_scores.items():
+            if ss58_address in ss58_to_uid:
+                uid = ss58_to_uid[ss58_address]
+                count = generator_counts[ss58_address]
 
-            rewards[uid] = max(0, min(1.0, avg_fool_rate))
+                if count > 0:
+                    avg_fool_rate = total_score / count
+                    rewards[uid] = max(0, min(1.0, avg_fool_rate))
+                else:
+                    bt.logging.warning(f"Zero count for generator {ss58_address}")
+
+        bt.logging.info(f"Processed {len(generator_results)} generator results, computed rewards for {len(rewards)} generators")
+
+    except Exception as e:
+        bt.logging.error(f"Error processing generator rewards: {e}")
+        import traceback
+        bt.logging.error(traceback.format_exc())
 
     return rewards

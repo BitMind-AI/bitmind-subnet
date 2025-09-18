@@ -216,7 +216,9 @@ class Validator(BaseNeuron):
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
         generator_uids = self.miner_type_tracker.get_miners_by_type(MinerType.GENERATOR)
 
-        generator_results, discriminator_results = await get_benchmark_results(self.metagraph)
+        generator_results, discriminator_results = await get_benchmark_results(
+            self.metagraph, base_url=self.config.benchmark.api_url
+        )
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
         rewards = {
             generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)

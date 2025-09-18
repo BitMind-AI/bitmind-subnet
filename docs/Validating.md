@@ -28,6 +28,9 @@ CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
 # OTF public finney endpoint:  wss://entrypoint-finney.opentensor.ai:443
 # OTF public testnet endpoint: wss://test.finney.opentensor.ai:443/
 
+# Benchmark API (optional - defaults to https://gas.bitmind.ai)
+BENCHMARK_API_URL=https://gas.bitmind.ai
+
 # Cache config
 SN34_CACHE_DIR=~/.cache/sn34
 HEARTBEAT=true
