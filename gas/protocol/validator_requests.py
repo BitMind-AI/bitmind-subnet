@@ -180,7 +180,7 @@ async def query_generative_miner(
 
 
 async def get_benchmark_results(
-    metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai"
+    hotkey, metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai", 
 ):
     """
     Query the remote benchmark API for discriminator MCC scores and generator fool rates.
@@ -220,7 +220,7 @@ async def get_benchmark_results(
             discriminator_url = f"{base_url}/api/v1/validator/discriminator-results"
             bt.logging.debug(f"Requesting discriminator results from: {discriminator_url}")
 
-            async with session.get(discriminator_url) as response:
+            async with session.get(discriminator_url, headers=generate_header(hotkey, b"", None)) as response:
                 if response.status == 200:
                     all_discriminator_results = await response.json()
                     discriminator_results = filter_recent_results(all_discriminator_results)
@@ -234,7 +234,7 @@ async def get_benchmark_results(
             generator_url = f"{base_url}/api/v1/validator/generator-results"
             bt.logging.debug(f"Requesting generator results from: {generator_url}")
 
-            async with session.get(generator_url) as response:
+            async with session.get(generator_url, headers=generate_header(hotkey, b"", None)) as response:
                 if response.status == 200:
                     all_generator_results = await response.json()
                     generator_results = filter_recent_results(all_generator_results)

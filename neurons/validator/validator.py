@@ -237,7 +237,7 @@ class Validator(BaseNeuron):
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
 
         generator_results, discriminator_results = await get_benchmark_results(
-            self.metagraph, base_url=self.config.benchmark.api_url
+            self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
         )
         bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
         bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
