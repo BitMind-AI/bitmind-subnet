@@ -241,17 +241,14 @@ class Validator(BaseNeuron):
         generator_results, discriminator_results = await get_benchmark_results(
             self.metagraph, base_url=self.config.benchmark.api_url
         )
+        bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
+        bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
-        bt.logging.info(f"generator_results: {json.dumps(generator_results, indent=2)}")
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
         rewards = {
             uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)
             for uid in reward_multipliers 
         }
-
-        bt.logging.info("KEYS")
-        bt.logging.info(rewards.keys(), generator_base_rewards.keys(),reward_multipliers.keys() )
-        bt.logging.info(f"Rewards:\n{json.dumps(rewards, indent=2)}")
 
         if len(rewards) == 0:
             bt.logging.trace("No rewards available for score update")
