@@ -71,14 +71,14 @@ def restart_pm2_services(base_path):
     return success
 
 
-def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv: bool = False) -> bool:
+def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv: bool = True) -> bool:
     """
     Run gascli installation commands.
     
     Args:
         base_path: Path to the project root
         install_type: Type of installation ("py-deps", "sys-deps", or "full")
-        clear_venv: Whether to clear existing .venv directory (default False for safe autoupdate)
+        clear_venv: Whether to clear existing .venv directory (default False for safe operation)
     
     Returns:
         bool: True if installation succeeded, False otherwise
@@ -131,7 +131,7 @@ def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv
         return False
 
 
-def autoupdate(branch: str = "main", force=False, install_deps: bool = False, install_type: str = "py-deps"):
+def autoupdate(branch: str = "main", force=False, install_deps: bool = False, install_type: str = "py-deps", clear_venv: bool = True):
     """
     Automatically updates the codebase to the latest version available on the specified branch.
 
@@ -144,13 +144,14 @@ def autoupdate(branch: str = "main", force=False, install_deps: bool = False, in
     - force (bool): Force update even if versions are the same. Defaults to False.
     - install_deps (bool): Whether to run dependency installation after update. Defaults to False.
     - install_type (str): Type of installation to run ("py-deps", "sys-deps", or "full"). Defaults to "py-deps".
+    - clear_venv (bool): Whether to clear existing .venv directory during installation. Defaults to True.
 
     Note:
     - The function assumes that the local codebase is a git repository and has the same structure as the remote repository.
     - It requires git to be installed and accessible from the command line.
     - The function will restart the application using PM2 services defined in validator.config.js.
     - If install_deps is True, it will run gascli installation commands after update but before restart.
-    - When install_deps is True, the existing .venv is preserved by default during installation to avoid disrupting running services.
+    - When install_deps is True, the existing .venv is cleared by default during installation to ensure a clean environment.
     - If the update fails, manual intervention is required to resolve the issue and restart the application.
     """
     bt.logging.info("Checking for updates...")
@@ -189,7 +190,7 @@ def autoupdate(branch: str = "main", force=False, install_deps: bool = False, in
 
                     # Install dependencies if requested
                     if install_deps:
-                        dependency_install_success = run_gascli_install(base_path, install_type)
+                        dependency_install_success = run_gascli_install(base_path, install_type, clear_venv)
                         if not dependency_install_success:
                             bt.logging.warning("Dependency installation failed, but continuing with restart...")
 
