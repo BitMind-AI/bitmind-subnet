@@ -63,8 +63,6 @@ class GenerativeChallengeManager:
             bt.logging.trace("No generative miners found to challenge.")
             return
 
-        miner_uids = [7, 8]
-
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
         retries = 3
