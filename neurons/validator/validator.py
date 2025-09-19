@@ -207,13 +207,14 @@ class Validator(BaseNeuron):
 
                 # .7 to discriminators, .3 to generators for now
                 g_pct = (1 - d_pct)
-                normed_weights[burn_uid] = burn_pct
-                normed_weights[fee_uid] = (1 - burn_pct) * d_pct * d_fee_pct 
-                normed_weights[escrow_uid] = (1 - burn_pct) * d_pct * (1 - d_fee_pct)
                 normed_weights = np.array([
                     (1 - burn_pct) * g_pct  * v
                     for v in normed_weights
                 ])
+                
+                normed_weights[burn_uid] = burn_pct
+                normed_weights[fee_uid] = (1 - burn_pct) * d_pct * d_fee_pct 
+                normed_weights[escrow_uid] = (1 - burn_pct) * d_pct * (1 - d_fee_pct)
                 bt.logging.info(f"Discriminator rewards UID: {escrow_uid}")
                 bt.logging.info(f"UIDs: {uids}")
                 bt.logging.info(f"NORMED WEIGHTS: {normed_weights}")
