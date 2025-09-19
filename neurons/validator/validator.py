@@ -24,7 +24,7 @@ from gas.utils import (
     print_info,
 )
 from gas.utils.state_manager import load_validator_state, save_validator_state
-from gas.utils.wandb_utils import WandbLogger
+from gas.utils.wandb_utils import init_wandb, clean_wandb_cache
 from neurons.base import BaseNeuron
 from gas.evaluation import (
     GenerativeChallengeManager,
@@ -74,7 +74,14 @@ class Validator(BaseNeuron):
         bt.logging.info(f"Initialized scores vector for {len(self.scores)} miners")
 
         if not self.config.wandb_off:
-            self.wandb_logger = WandbLogger(self.config, self.uid, self.wallet.hotkey)
+            wandb_dir = self.config.neuron.full_path
+            clean_wandb_cache(wandb_dir)
+            self.wandb_run = init_wandb(
+                self.config,
+                "validator",
+                self.uid,self.wallet.hotkey,
+                wandb_dir
+            )
 
         bt.logging.info(self.config)
         bt.logging.info(f"Last updated at block {self.metagraph.last_update[self.uid]}")
@@ -83,7 +90,6 @@ class Validator(BaseNeuron):
         self.block_callbacks.extend(
             [
                 self.log_on_block,
-                self.start_new_wanbd_run,
                 self.issue_generator_challenge,
                 self.set_weights,
             ]
@@ -104,8 +110,6 @@ class Validator(BaseNeuron):
 
 
     async def run(self):
-
-        await self.start_new_wanbd_run(block=0)
 
         bt.logging.info(
             f"Running validator {self.uid} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
@@ -242,8 +246,8 @@ class Validator(BaseNeuron):
         generator_results, discriminator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
         )
-        bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
-        bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
+        #bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
+        #bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
         rewards = {
@@ -274,14 +278,6 @@ class Validator(BaseNeuron):
                 bt.logging.info(f"Marked {len(media_ids)} media entries as rewarded")
             else:
                 bt.logging.warning("Failed to mark media as rewarded")
-
-
-    @on_block_interval("wandb_restart_interval")
-    async def start_new_wanbd_run(self, block):
-        try:
-            self.wandb_logger.start_new_run()
-        except Exception as e:
-            bt.logging.error(f"Not able to start new W&B run: {e}")
 
     async def log_on_block(self, block):
         """

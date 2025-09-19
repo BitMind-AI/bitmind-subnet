@@ -44,7 +44,6 @@ class GenerativeChallengeManager:
         except Exception as e:
             bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
             self.external_ip = "localhost"
-        self.external_ip = "localhost"  # TEMP
         self.generative_callback_url = f"http://{self.external_ip}:{self.config.neuron.callback_port}/generative_callback"
 
         self.init_fastapi()
@@ -63,8 +62,6 @@ class GenerativeChallengeManager:
         if not miner_uids:
             bt.logging.trace("No generative miners found to challenge.")
             return
-
-        miner_uids = [7, 8]
 
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 

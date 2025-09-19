@@ -29,8 +29,6 @@ from .state_manager import (
     load_validator_state,
 )
 
-from .wandb_utils import WandbLogger
-
 __all__ = [
     # Core utilities
     "print_info",
@@ -55,6 +53,4 @@ __all__ = [
     "StateManager",
     "save_validator_state",
     "load_validator_state",
-    # wandb
-    "WandbLogger",
 ] 
