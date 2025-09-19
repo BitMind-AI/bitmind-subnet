@@ -79,7 +79,8 @@ class Validator(BaseNeuron):
             self.wandb_run = init_wandb(
                 self.config,
                 "validator",
-                self.uid,self.wallet.hotkey, wandb_dir
+                self.uid,self.wallet.hotkey,
+                wandb_dir
             )
 
         bt.logging.info(self.config)
