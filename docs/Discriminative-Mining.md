@@ -31,18 +31,18 @@ Once you have your ONNX models ready, push them to the network using the `push-d
 
 ```bash
 # Push from a directory containing ONNX files
-gascli miner push-discriminator --onnx-dir models/ 
+gascli discriminator push --onnx-dir models/ 
 
 # Or push from a pre-existing zip file
-gascli m push-discriminator --model-zip models.zip
+gascli d push --model-zip models.zip
 ```
 
 ### Command Options
 
-The `push-discriminator` command accepts several parameters:
+The `push` command accepts several parameters:
 
 ```bash
-gascli miner push-discriminator \
+gascli d push \
   --onnx-dir models/ \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name \
@@ -69,8 +69,8 @@ gascli miner push-discriminator \
 ### Getting Help
 
 ```bash
-gascli miner --help              # Miner help
-gascli miner push-discriminator --help  # Push command help
+gascli discriminator --help        # Miner help
+gascli d push --help               # Push command help
 ```
 
 **Note**: Remember to activate the virtual environment first with `source .venv/bin/activate` before running any `gascli` commands.

@@ -121,6 +121,10 @@ class MediaStorage:
         elif hasattr(media_data.media_content, "images"):
             # Diffusers pipeline output
             media_data.media_content.images[0].save(str(save_path), format=media_data.format)
+        elif isinstance(media_data.media_content, bytes):
+            # Raw image bytes (from miners) - write directly to file
+            with open(save_path, 'wb') as f:
+                f.write(media_data.media_content)
         else:
             # numpy array
             cv2.imwrite(str(save_path), media_data.media_content)

@@ -87,19 +87,28 @@ class AliasedGroup(click.Group):
                 formatter.write_dl(commands)
 
 
+# Path constants
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+
 # Service names
 VALIDATOR = "sn34-validator"
-GENERATOR = "sn34-generator"
+GENERATOR = "sn34-generator" 
 DATA = "sn34-data"
+GENERATIVE_MINER = "bitmind-generative-miner"
 ALL_SERVICES = [VALIDATOR, GENERATOR, DATA]
+
+# Config file paths
+VALIDATOR_CONFIG = "validator.config.js"
+MINER_CONFIG = "gen_miner.config.js"
+ENV_VALIDATOR = ".env.validator"
+ENV_MINER = ".env.gen_miner"
 
 
 def get_python_interpreter():
     """Get the appropriate Python interpreter path"""
     python_interpreter = "python3"
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent  # Go up one level from gas/ to project root
-    venv_python = project_root / ".venv" / "bin" / "python"
+    venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
     if venv_python.exists():
         python_interpreter = str(venv_python)
     click.echo(f"Using python interpreter: {python_interpreter}")
@@ -109,9 +118,7 @@ def get_python_interpreter():
 def load_env():
     """Load environment variables from .env.validator"""
     # Get the absolute path to the .env.validator file
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent  # Go up one level from gas/ to project root
-    env_file = project_root / ".env.validator"
+    env_file = PROJECT_ROOT / ENV_VALIDATOR
     if env_file.exists():
         with open(env_file) as f:
             for line in f:
@@ -161,9 +168,9 @@ def start_validator_services(no_generation=False, no_data_downloads=False):
         subprocess.run(["wandb", "login", wandb_key])
 
     # Use ecosystem config to start services
-    ecosystem_path = Path(__file__).parent.parent / "validator.config.js"
+    ecosystem_path = PROJECT_ROOT / VALIDATOR_CONFIG
     if not ecosystem_path.exists():
-        click.echo("Error: validator.config.js not found in project root.", err=True)
+        click.echo(f"Error: {VALIDATOR_CONFIG} not found in project root.", err=True)
         return False
 
     # Set environment variables for service selection
@@ -325,8 +332,7 @@ def db_stats(db_path, base_dir, detailed):
         db_path = os.path.join(base_dir, "prompts.db")
 
     # Get the absolute path to the db_stats script
-    script_dir = Path(__file__).parent
-    db_stats_script = script_dir / "cache" / "util" / "db_stats.py"
+    db_stats_script = SCRIPT_DIR / "cache" / "util" / "db_stats.py"
 
     # Use virtual environment Python if available
     python_interpreter = get_python_interpreter()
@@ -387,8 +393,7 @@ def db_rows(db_path, table, rows, source_type):
         db_path = os.path.join(DEFAULT_CACHE_DIR, "prompts.db")
 
     # Get the absolute path to the db_rows script
-    script_dir = Path(__file__).parent
-    db_rows_script = script_dir / "cache" / "util" / "db_rows.py"
+    db_rows_script = SCRIPT_DIR / "cache" / "util" / "db_rows.py"
 
     # Use virtual environment Python if available
     python_interpreter = get_python_interpreter()
@@ -429,17 +434,17 @@ def db_rows(db_path, table, rows, source_type):
 # =============================================================================
 
 
-@cli.group(cls=AliasedGroup, name="miner")
-def miner():
-    """Miner management commands"""
+@cli.group(cls=AliasedGroup, name="discriminator")
+def discriminator():
+    """Discriminator miner management commands"""
     pass
 
 
-# Add alias for miner group
-cli.add_command(miner, name="m")
+# Add alias for discriminator group
+cli.add_command(discriminator, name="d")
 
 
-@miner.command()
+@discriminator.command()
 @click.option("--onnx-dir", help="Path to directory containing ONNX files")
 @click.option("--model-zip", help="Path to pre-existing model zip file")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
@@ -482,11 +487,11 @@ def push_discriminator(
         sys.exit(1)
 
 
-miner.add_command(push_discriminator, name="push")
+discriminator.add_command(push_discriminator, name="push")
 
 
 # Benchmark discriminator models against BitMind datasets
-@miner.command(name="benchmark")
+@discriminator.command(name="benchmark")
 @click.option("--image-model", help="Path to image detector ONNX model")
 @click.option("--video-model", help="Path to video detector ONNX model")
 @click.option("-v", count=True, help="Increase verbosity (-v, -vv, -vvv)")
@@ -526,6 +531,165 @@ def benchmark(image_model, video_model, v, no_stream_images, hf_home, temp_dir, 
         sys.exit(1)
 
 # =============================================================================
+# GENERATOR COMMANDS
+# =============================================================================
+
+
+@cli.group(cls=AliasedGroup, name="generator")
+def generator():
+    """Generative miner management commands"""
+    pass
+
+
+# Add aliases for generator group
+cli.add_command(generator, name="gen")
+cli.add_command(generator, name="g")
+
+
+def load_miner_env():
+    """Load environment variables from .env.gen_miner"""
+    # Get the absolute path to the .env.gen_miner file
+    env_file = PROJECT_ROOT / ENV_MINER
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    if "=" in line:
+                        key, value = line.split("=", 1)
+                        os.environ[key] = value
+
+
+def start_miner_services():
+    """Start generative miner using ecosystem config"""
+    click.echo("Starting generative miner...")
+
+    # Load miner environment variables
+    load_miner_env()
+
+    # Use ecosystem config to start miner
+    ecosystem_path = PROJECT_ROOT / MINER_CONFIG
+    if not ecosystem_path.exists():
+        click.echo(f"Error: {MINER_CONFIG} not found in project root.", err=True)
+        return False
+
+    # Clean up existing miner service
+    result = subprocess.run(["pm2", "list"], capture_output=True, text=True)
+    if GENERATIVE_MINER in result.stdout:
+        click.echo(f"Deleting existing {GENERATIVE_MINER}...")
+        subprocess.run(["pm2", "delete", GENERATIVE_MINER])
+        import time
+        time.sleep(1)
+
+    # Start miner using ecosystem config
+    result = subprocess.run(["pm2", "start", str(ecosystem_path)])
+    
+    if result.returncode == 0:
+        click.echo("✅ Generative miner started successfully!")
+        # Show status
+        subprocess.run(["pm2", "show", GENERATIVE_MINER])
+    else:
+        click.echo("❌ Generative miner failed to start", err=True)
+    
+    return result.returncode == 0
+
+
+@generator.command()
+def start():
+    """Start the generative miner"""
+    load_miner_env()
+    return start_miner_services()
+
+
+@generator.command()
+def stop():
+    """Stop the generative miner"""
+    click.echo("Stopping generative miner...")
+    run_pm2_command("stop", GENERATIVE_MINER)
+
+
+@generator.command()
+def delete():
+    """Delete the generative miner"""
+    click.echo("Deleting generative miner...")
+    run_pm2_command("delete", GENERATIVE_MINER)
+
+
+@generator.command()
+def restart():
+    """Restart the generative miner"""
+    click.echo("Restarting generative miner...")
+    run_pm2_command("restart", GENERATIVE_MINER)
+
+
+@generator.command()
+def status():
+    """Show status of the generative miner"""
+    result = subprocess.run(["pm2", "show", GENERATIVE_MINER], capture_output=True, text=True)
+    if result.stdout:
+        click.echo(result.stdout)
+    else:
+        click.echo("Generative miner not found")
+
+
+@generator.command()
+@click.option("--lines", "-n", default=50, help="Number of log lines to show")
+@click.option("--follow", "-f", is_flag=True, help="Follow log output")
+def logs(lines, follow):
+    """Show generative miner logs"""
+    
+    if follow:
+        # Follow logs in real-time
+        subprocess.run(["pm2", "logs", GENERATIVE_MINER, "--lines", str(lines)])
+    else:
+        # Show recent logs
+        result = subprocess.run(["pm2", "logs", GENERATIVE_MINER, "--lines", str(lines), "--nostream"], 
+                              capture_output=True, text=True)
+        if result.stdout:
+            click.echo(result.stdout)
+        else:
+            click.echo("No logs found for generative miner")
+
+
+@generator.command()
+def info():
+    """Show generative miner information and configuration"""
+    load_miner_env()
+    
+    click.echo("=== Generative Miner Configuration ===")
+    click.echo(f"Wallet Name: {os.environ.get('BT_WALLET_NAME', 'miner1')}")
+    click.echo(f"Wallet Hotkey: {os.environ.get('BT_WALLET_HOTKEY', 'default')}")
+    click.echo(f"Network: {os.environ.get('BT_CHAIN_ENDPOINT', 'wss://test.finney.opentensor.ai:443')}")
+    click.echo(f"NetUID: {os.environ.get('BT_NETUID', '379')}")
+    click.echo(f"Axon Port: {os.environ.get('BT_AXON_PORT', '8093')}")
+    click.echo(f"Device: {os.environ.get('MINER_DEVICE', 'auto')}")
+    click.echo(f"Output Directory: {os.environ.get('MINER_OUTPUT_DIR', '/tmp/generated_content')}")
+    click.echo(f"Max Concurrent Tasks: {os.environ.get('MINER_MAX_CONCURRENT_TASKS', '5')}")
+    
+    click.echo("\n=== API Keys Status ===")
+    
+    # Dynamically get API key requirements from all available services
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from neurons.generator.services.service_registry import ServiceRegistry
+        
+        registry = ServiceRegistry()
+        api_keys = registry.get_all_api_key_requirements()
+        
+        if api_keys:
+            for key, description in api_keys.items():
+                status = "✅ Configured" if os.environ.get(key) else "❌ Not configured"
+                click.echo(f"{description}: {status}")
+        else:
+            click.echo("No API key requirements found from services")
+            
+    except Exception as e:
+        click.echo(f"❌ Could not load service API key requirements: {e}")
+        # Fallback to basic message
+        click.echo("Run the generator to see API key status")
+
+
+# =============================================================================
 # GLOBAL COMMANDS (for backward compatibility and convenience)
 # =============================================================================
 
@@ -547,9 +711,7 @@ def install_py_deps(clear_venv):
     click.echo("Installing Python dependencies...")
     
     # Get the path to install.sh in the project root
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent
-    install_script = project_root / "install.sh"
+    install_script = PROJECT_ROOT / "install.sh"
     
     if not install_script.exists():
         click.echo("Error: install.sh not found in project root.", err=True)
@@ -580,9 +742,7 @@ def install_sys_deps(clear_venv):
     click.echo("Installing system dependencies...")
     
     # Get the path to install.sh in the project root
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent
-    install_script = project_root / "install.sh"
+    install_script = PROJECT_ROOT / "install.sh"
     
     if not install_script.exists():
         click.echo("Error: install.sh not found in project root.", err=True)
@@ -613,9 +773,7 @@ def install(clear_venv):
     click.echo("Running full installation...")
     
     # Get the path to install.sh in the project root
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent
-    install_script = project_root / "install.sh"
+    install_script = PROJECT_ROOT / "install.sh"
     
     if not install_script.exists():
         click.echo("Error: install.sh not found in project root.", err=True)
@@ -645,7 +803,7 @@ if __name__ == "__main__":
         hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
     ):
         # Not in a virtual environment, try to use the project's venv
-        venv_python = Path(__file__).parent.parent / ".venv" / "bin" / "python"
+        venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
         if venv_python.exists():
             # Re-execute with the venv Python interpreter
             os.execv(str(venv_python), [str(venv_python)] + sys.argv)

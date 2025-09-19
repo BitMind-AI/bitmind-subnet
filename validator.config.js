@@ -47,6 +47,7 @@ const config = {
   
   // Network
   chainEndpoint: process.env.CHAIN_ENDPOINT || '',
+  callbackPort: process.env.CALLBACK_PORT || '10525',
   
   // Cache
   cacheDir: process.env.SN34_CACHE_DIR || path.join(os.homedir(), '.cache', 'sn34'),
@@ -64,6 +65,9 @@ const config = {
   // Service intervals
   scraperInterval: process.env.SCRAPER_INTERVAL || '300',
   datasetInterval: process.env.DATASET_INTERVAL || '1800',
+  
+  // API configuration
+  benchmarkApiUrl: process.env.BENCHMARK_API_URL || 'https://gas.bitmind.ai',
   
   // Service selection
   startValidator: process.env.START_VALIDATOR !== 'false',
@@ -83,8 +87,8 @@ const pythonInterpreter = getPythonInterpreter();
 // Project paths
 const projectRoot = __dirname;
 const validatorScript = path.join(projectRoot, 'neurons', 'validator', 'validator.py');
-const generatorScript = path.join(projectRoot, 'gas', 'services', 'generator_service.py');
-const dataScript = path.join(projectRoot, 'gas', 'services', 'data_service.py');
+const generatorScript = path.join(projectRoot, 'neurons', 'validator', 'services', 'generator_service.py');
+const dataScript = path.join(projectRoot, 'neurons', 'validator', 'services', 'data_service.py');
 
 // Build apps array
 const apps = [];
@@ -114,8 +118,9 @@ if (config.startValidator) {
     '--wallet.hotkey', config.walletHotkey,
     '--netuid', netuid.toString(),
     '--subtensor.chain_endpoint', config.chainEndpoint,
-    '--proxy.port', config.proxyPort,
+    '--neuron.callback_port', config.callbackPort,
     '--cache.base-dir', config.cacheDir,
+    '--benchmark.api-url', config.benchmarkApiUrl,
     logParam,
     autoUpdateParam,
   ];
@@ -146,6 +151,8 @@ if (config.startGenerator) {
     script: generatorScript,
     interpreter: pythonInterpreter,
     args: [
+      '--wallet.name', config.walletName,
+      '--wallet.hotkey', config.walletHotkey,
       '--cache.base-dir', config.cacheDir,
       '--device', config.device,
       '--log-level', config.loglevel,

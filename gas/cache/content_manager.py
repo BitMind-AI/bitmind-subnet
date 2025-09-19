@@ -1,6 +1,4 @@
-import json
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -12,6 +10,7 @@ from gas.cache.media_storage import MediaStorage
 from gas.cache.types import Media, MediaEntry, PromptEntry
 from gas.cache.util import extract_media_info, get_format_from_content
 from gas.types import MediaType, Modality, SourceType, SOURCE_TYPE_TO_NAME
+from gas.utils.huggingface_uploads import upload_images_to_hf, upload_videos_to_hf
 
 
 class ContentManager:
@@ -115,7 +114,6 @@ class ContentManager:
 
 			resolution, file_size = extract_media_info(save_path, media_data.modality)
 
-			# Add entry to database
 			media_id = self.content_db.add_media_entry(
 				prompt_id=media_data.prompt_id,
 				file_path=save_path,
@@ -136,6 +134,73 @@ class ContentManager:
 
 		except Exception as e:
 			bt.logging.error(f"Error writing media: {e}")
+			return None
+
+	def write_miner_media(
+		self,
+		modality: Modality,
+		media_type: MediaType,
+		prompt_id: str,
+		uid: int,
+		hotkey: str,
+		media_content: bytes,
+		content_type: str,
+		task_id: str,
+		model_name: Optional[str] = None,
+	) -> Optional[str]:
+		"""
+		Write miner-generated binary media to storage.
+		Follows the same pattern as other write methods.
+
+		Args:
+			uid: Miner UID
+			hotkey: Miner hotkey
+			binary_data: Raw binary media data
+			content_type: MIME content type (e.g., "image/png", "video/mp4")
+			task_id: Unique task identifier for filename
+			model_name: Optional model name
+
+		Returns:
+			Path to saved file if successful, None if failed
+		"""
+		try:
+			media_data = Media(
+				modality=modality,
+				media_type=media_type,
+				prompt_id=prompt_id,
+				media_content=media_content,
+				format=get_format_from_content(media_content, modality),
+				model_name=model_name,
+				metadata={"uid": uid, "task_id": task_id, "source": "miner"}
+			)
+
+			save_path, mask_path = self.media_storage.write_media(media_data)
+			if save_path is None:
+				bt.logging.error("Failed to write miner media to filesystem")
+				return None
+
+			resolution, file_size = extract_media_info(save_path, modality)
+			media_id = self.content_db.add_media_entry(
+				prompt_id=prompt_id,
+				file_path=save_path,
+				modality=modality,
+				media_type=media_type,
+				source_type=SourceType.MINER,
+				uid=uid,
+				hotkey=hotkey,
+				model_name=model_name,
+				verified=False,  # Initially unverified
+				timestamp=int(time.time()),
+				resolution=resolution,
+				file_size=file_size,
+				format=media_data.format,
+			)
+
+			bt.logging.info(f"Saved miner media to {save_path} with database ID: {media_id}")
+			return str(save_path)
+
+		except Exception as e:
+			bt.logging.error(f"Error writing miner media: {e}")
 			return None
 
 	def write_scraped_media(
@@ -187,7 +252,6 @@ class ContentManager:
 		else:
 			file_size = extract_media_info(save_path, media_data.modality)[1]
 
-		# Add entry to database with source_type='scraper'
 		media_id = self.content_db.add_media_entry(
 			prompt_id=media_data.prompt_id,
 			file_path=save_path,
@@ -279,16 +343,23 @@ class ContentManager:
 	def sample_prompts(
         self, k: 
         int = 1, 
-        remove: bool = True, 
-        strategy: str = "random") -> List[PromptEntry]:
-		return self.content_db.sample_prompt_entries(k=k, remove=remove, strategy=strategy, content_type="prompt")
+        remove: bool = False, 
+        strategy: str = "random"
+	) -> List[PromptEntry]:
+		return self.content_db.sample_prompt_entries(
+			k=k, remove=remove, strategy=strategy, content_type="prompt")
 
 	def sample_search_queries(
         self, 
         k: int = 1, 
         remove: bool = False, 
-        strategy: str = "random") -> List[PromptEntry]:
-		return self.content_db.sample_prompt_entries(k=k, remove=remove, strategy=strategy, content_type="search_query")
+        strategy: str = "random"
+	) -> List[PromptEntry]:
+		return self.content_db.sample_prompt_entries(
+			k=k, remove=remove, strategy=strategy, content_type="search_query")
+
+	def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
+		return self.content_db.get_prompt_by_id(prompt_id)
 
 	def sample_media(
 		self,
@@ -298,7 +369,6 @@ class ContentManager:
 		remove: bool = False,
 		strategy: str = "random"
 	) -> List[MediaEntry]:
-
 		return self.content_db.sample_media_entries(
 			k=k,
 			modality=modality,
@@ -329,8 +399,14 @@ class ContentManager:
 			return {'count': 0, 'items': []}
 
 		# Split by source_type so we only remove dataset/scraper on sample
-		generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) == SourceType.GENERATED]
-		non_generated_entries: List[MediaEntry] = [e for e in media_entries if getattr(e, 'source_type', None) != SourceType.GENERATED]
+		generated_entries: List[MediaEntry] = [
+			e for e in media_entries 
+			if getattr(e, 'source_type', None) == SourceType.GENERATED
+		]
+		non_generated_entries: List[MediaEntry] = [
+			e for e in media_entries
+			if getattr(e, 'source_type', None) != SourceType.GENERATED
+		]
 
 		items: List[Dict[str, Any]] = []
 		if non_generated_entries:
@@ -428,7 +504,8 @@ class ContentManager:
 							key = f"{st.value}:{source_name}"
 							results[key] = pruned
 							bt.logging.info(
-								f"[CONTENT] Enforced cap: pruned {pruned} from {st.value} '{source_name}' (count {count} -> ≤ {self.max_per_source})"
+								f"[CONTENT] Enforced cap: pruned {pruned} from {st.value} '{source_name}' "
+								f"(count {count} -> ≤ {self.max_per_source})"
 							)
 		except Exception as e:
 			bt.logging.error(f"Error enforcing source caps: {e}")
@@ -495,20 +572,232 @@ class ContentManager:
 	def delete_media_by_file_path(self, file_path: str) -> bool:
 		return self.delete_media(file_path=file_path)
 
-	def get_stats(self) -> Dict[str, Any]:
-		return self.content_db.get_stats()
-
-	def get_source_stats(self) -> Dict[str, Dict[str, int]]:
+	def get_miner_media(self, verification_status: Optional[str] = None) -> List[MediaEntry]:
 		"""
+		Get miner media by verification status.
+		
+		Args:
+			verification_status: Optional verification status filter:
+				- 'pending': Not verified yet (verified=0, failed_verification=0)
+				- 'verified': Passed verification (verified=1, failed_verification=0)  
+				- 'failed': Failed verification (verified=0, failed_verification=1)
+				- None: Return all miner media regardless of verification status
+		
 		Returns:
-			Dictionary with counts for each source type and source name
+			List of MediaEntry objects matching the verification status
 		"""
-		return self.content_db.get_source_counts()
+		return self.content_db.get_miner_media(verification_status=verification_status)
+
+	def mark_miner_media_verified(self, media_id: str) -> bool:
+		return self.content_db.mark_miner_media_verified(media_id)
+
+	def mark_miner_media_failed_verification(self, media_id: str) -> bool:
+		"""Mark miner media as failed verification."""
+		return self.content_db.mark_miner_media_failed_verification(media_id)
+
+	def get_unuploaded_media(
+		self, 
+		limit: int = 100, 
+		modality: str = None, 
+		verified_only: bool = False, 
+		skip_verified: bool = False
+	) -> List[MediaEntry]:
+		return self.content_db.get_unuploaded_media(
+			limit=limit,
+			modality=modality,
+			verified_only=verified_only,
+			skip_verified=skip_verified
+		)
+
+	def mark_media_uploaded(self, media_ids: List[str]) -> bool:
+		return self.content_db.mark_media_uploaded(media_ids)
+
+	def mark_media_rewarded(self, media_ids: List[str]) -> bool:
+		"""Mark media entries as rewarded."""
+		return self.content_db.mark_media_rewarded(media_ids)
+
+	def get_unrewarded_verified_miner_media(self, limit: int = 100) -> List[MediaEntry]:
+		"""Get verified miner media entries that haven't been rewarded yet."""
+		return self.content_db.get_unrewarded_verified_miner_media(limit=limit)
+
+	def get_unrewarded_verification_stats(self, limit: int = None) -> Dict[str, Dict[str, Any]]:
+		"""
+		Get verification statistics for unrewarded miner media (pass rates, etc.).
+		Returns raw statistics without computing rewards - that's done in rewards.py.
+
+		Args:
+			limit: Maximum number of unrewarded entries to consider per miner
+
+		Returns:
+			Dict mapping miner hotkey to verification stats:
+			{
+				"hotkey": {
+					"uid": int,
+					"total_verified": int,        # Count of verified media
+					"total_submissions": int,     # Count of all submissions (verified + failed + pending)
+					"total_failed": int,         # Count of failed verification media
+					"total_evaluated": int,      # Count of evaluated media (verified + failed)
+					"pass_rate": float,          # verified / (verified + failed)
+					"media_ids": List[str]       # IDs of verified media to mark as rewarded
+				}
+			}
+		"""
+		try:
+			verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
+			if not verified_media:
+				bt.logging.debug("No unrewarded verified miner media found")
+				return {}
+
+			miner_stats = {}
+			for media in verified_media:
+				if not media.hotkey or not media.uid:
+					continue
+				
+				hotkey = media.hotkey
+				if hotkey not in miner_stats:
+					miner_stats[hotkey] = {
+						"uid": media.uid,
+						"verified_media_ids": [],
+						"total_verified": 0,
+						"total_submissions": 0,
+						"total_failed": 0
+					}
+				
+				miner_stats[hotkey]["verified_media_ids"].append(media.id)
+				miner_stats[hotkey]["total_verified"] += 1
+
+			# Get total submission counts per miner (verified + failed + pending)
+			for hotkey, stats in miner_stats.items():
+				uid = stats["uid"]
+				
+				# Get all miner media for this hotkey/uid
+				all_miner_media = self.get_miner_media(verification_status=None)
+				miner_media = [m for m in all_miner_media if m.hotkey == hotkey and m.uid == uid]
+				
+				stats["total_submissions"] = len(miner_media)
+				stats["total_failed"] = len([m for m in miner_media if m.failed_verification])
+
+			# Calculate pass rates
+			verification_stats = {}
+			for hotkey, stats in miner_stats.items():
+				verified = stats["total_verified"]
+				failed = stats["total_failed"]
+				total_evaluated = verified + failed
+				
+				# pass rate verified media
+				if total_evaluated > 0:
+					pass_rate = verified / total_evaluated
+				else:
+					pass_rate = 0.0
+				
+				verification_stats[hotkey] = {
+					"uid": stats["uid"],
+					"total_verified": verified,
+					"total_submissions": stats["total_submissions"],
+					"total_failed": failed,
+					"total_evaluated": total_evaluated,
+					"pass_rate": pass_rate,
+					"media_ids": stats["verified_media_ids"]
+				}
+
+			bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
+			return verification_stats
+
+		except Exception as e:
+			bt.logging.error(f"Error getting unrewarded verification stats: {e}")
+			import traceback
+			bt.logging.error(traceback.format_exc())
+			return {}
+
+	def upload_batch_to_huggingface(
+		self, 
+		hf_token: str, 
+		hf_dataset_repos: dict, 
+		upload_batch_size: int, 
+		videos_per_archive: int,
+		validator_hotkey: str = None
+	):
+		"""
+		Upload unuploaded media from database to HuggingFace, separated by modality.
+		Only uploads verified miner media or validator-generated media.
+		"""
+		try:			
+			#  prioritize verified miner media, then fill with validator media
+			media_by_modality = {}
+			total_found = 0
+			
+			for modality in ["image", "video"]:
+				# prioritize all verified miner media
+				verified_miner_media = self.content_db.get_unuploaded_media(
+					limit=None, 
+					modality=modality, 
+					verified_only=True
+				)
+				
+				# Fill remaining slots with any unuploaded validator media
+				remaining_slots = max(0, upload_batch_size - len(verified_miner_media))
+				remaining_media = []
+				if remaining_slots > 0:
+					remaining_media = self.content_db.get_unuploaded_media(
+						limit=remaining_slots, 
+						modality=modality, 
+						skip_verified=True
+					)
+
+				unuploaded_media = verified_miner_media + remaining_media
+				media_by_modality[modality] = unuploaded_media
+				total_found += len(unuploaded_media)
+
+				bt.logging.info(
+					f"{modality}: {len(verified_miner_media)} verified miner + "
+					f"{len(remaining_media)} validator = {len(unuploaded_media)} total"
+				)
+			
+			if total_found == 0:
+				bt.logging.debug("No unuploaded media found in database")
+				return
+
+			bt.logging.info(
+				f"Found {total_found} unuploaded media files to upload to HuggingFace "
+				f"({len(media_by_modality['image'])} images, {len(media_by_modality['video'])} videos)"
+			)
+
+			all_successfully_processed_ids = []
+
+			if media_by_modality['image']:
+				uploaded_ids = upload_images_to_hf(
+					media_entries=media_by_modality['image'],
+					hf_token=hf_token,
+					dataset_repo=hf_dataset_repos['image'],
+					validator_hotkey=validator_hotkey
+				)
+				all_successfully_processed_ids.extend(uploaded_ids)
+
+			if media_by_modality['video']:
+				uploaded_ids = upload_videos_to_hf(
+					media_entries=media_by_modality['video'],
+					hf_token=hf_token,
+					dataset_repo=hf_dataset_repos['video'],
+					videos_per_archive=videos_per_archive,
+					validator_hotkey=validator_hotkey
+				)
+				all_successfully_processed_ids.extend(uploaded_ids)
+
+			# Mark all successfully uploaded media as uploaded in db
+			if all_successfully_processed_ids:
+				success = self.mark_media_uploaded(all_successfully_processed_ids)
+				if success:
+					bt.logging.info(f"Marked {len(all_successfully_processed_ids)} entries as uploaded in database")
+				else:
+					bt.logging.warning("Failed to mark media as uploaded in database")
+
+		except Exception as e:
+			bt.logging.error(f"Error uploading batch to HuggingFace: {e}")
+			import traceback
+			bt.logging.error(traceback.format_exc())
 
 	def get_dataset_media_counts(self) -> Dict[str, int]:
 		"""
-		Get counts of dataset media entries (NULL prompt_id) by modality and media type.
-
 		Returns:
 			Dictionary with counts for each modality/media_type combination
 		"""

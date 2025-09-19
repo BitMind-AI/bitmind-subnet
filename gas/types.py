@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Dict, List, Any, Optional, Union
 import json
 
+
 class NeuronType(Enum):
     VALIDATOR = "VALIDATOR"
     MINER = "MINER"
@@ -54,12 +55,14 @@ class SourceType(str, Enum):
     SCRAPER = "scraper"
     DATASET = "dataset"
     GENERATED = "generated"
+    MINER = "miner"
 
 
 SOURCE_TYPE_TO_NAME: Dict[SourceType, str] = {
     SourceType.GENERATED: "model_name",
     SourceType.DATASET: "dataset_name",
     SourceType.SCRAPER: "download_url",
+    SourceType.MINER: "hotkey",
 }
 
 
@@ -67,11 +70,13 @@ SOURCE_TYPE_TO_DB_NAME_FIELD: Dict[SourceType, str] = {
     SourceType.GENERATED: "model_name",
     SourceType.DATASET: "dataset_name",
     SourceType.SCRAPER: "scraper_name",
+    SourceType.MINER: "hotkey",
 }
 
 
 @dataclass
 class DatasetConfig:
+    """For datasets used by the Validator"""
     path: str  # HuggingFace path
     modality: Modality
     media_type: MediaType
@@ -100,8 +105,7 @@ class DatasetConfig:
 
 
 class ModelTask(str, Enum):
-    """Type of task the model is designed for"""
-
+    "Tasks supported by validator models"
     TEXT_TO_IMAGE = "t2i"
     TEXT_TO_VIDEO = "t2v"
     IMAGE_TO_IMAGE = "i2i"

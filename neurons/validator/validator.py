@@ -6,38 +6,31 @@ from time import sleep
 
 import numpy as np
 from dotenv import load_dotenv
-import aiohttp
 import bittensor as bt
-from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from threading import Thread
 
 from gas import __spec_version__ as spec_version
-from gas.protocol import query_orchestrator, media_to_bytes
+from gas.protocol.validator_requests import get_benchmark_results
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
 from gas.types import (
     NeuronType,
-    MediaType,
     MinerType,
-    Modality,
-    SourceType
 )
 
 from gas.utils import (
     on_block_interval,
     print_info,
-    save_validator_state,
-    load_validator_state,
-    apply_random_augmentations,
 )
+from gas.utils.state_manager import load_validator_state, save_validator_state
 from gas.utils.wandb_utils import WandbLogger
 from neurons.base import BaseNeuron
 from gas.evaluation import (
     GenerativeChallengeManager,
     MinerTypeTracker,
-    DiscriminatorTracker,
-    get_discriminator_rewards,
+    get_generator_base_rewards,
+    get_generator_reward_multipliers,
 )
 
 try:
@@ -91,8 +84,7 @@ class Validator(BaseNeuron):
             [
                 self.log_on_block,
                 self.start_new_wanbd_run,
-                # self.issue_generator_challenge,
-                self.issue_discriminator_challenge,
+                self.issue_generator_challenge,
                 self.set_weights,
             ]
         )
@@ -111,7 +103,6 @@ class Validator(BaseNeuron):
             self.heartbeat_thread.start()
 
 
-
     async def run(self):
 
         bt.logging.info(
@@ -122,18 +113,13 @@ class Validator(BaseNeuron):
             self.config, self.wallet, self.metagraph, self.subtensor
         )
 
-        #self.generative_challenge_manager = GenerativeChallengeManager(
-        #    self.config,
-        #    self.wallet,
-        #    self.metagraph,
-        #    self.subtensor,
-        #    self.miner_type_tracker,
-        #)
-
-        self.discriminator_tracker = DiscriminatorTracker(store_last_n=200)
-        # self.generator_tracker = GeneratorTracker()
-
-        await self.load_state()
+        self.generative_challenge_manager = GenerativeChallengeManager(
+            self.config,
+            self.wallet,
+            self.metagraph,
+            self.subtensor,
+            self.miner_type_tracker,
+        )
 
         dataset_counts = self.content_manager.get_dataset_media_counts()
         total_dataset_media = sum(dataset_counts.values())
@@ -167,173 +153,15 @@ class Validator(BaseNeuron):
     @on_block_interval("generator_challenge_interval")
     async def issue_generator_challenge(self, block):
         """Generator challenges coming soon!"""
-        # await self.generative_challenge_manager.issue_generative_challenge()
-        return
-
-    @on_block_interval("discriminator_challenge_interval")
-    async def issue_discriminator_challenge(self, block, retries=3):
-
-        if self._state_lock.locked():
-            bt.logging.info("Skipping challenge - state is locked for updates")
-            return
-
-        bt.logging.info("\033[96m🔍 Starting Discriminator Challenge\033[0m")
-
-        # get miners
-        await self.miner_type_tracker.update_miner_types()
-        miner_uids = self.miner_type_tracker.get_miners_by_type(MinerType.DISCRIMINATOR)
-        if len(miner_uids) > self.config.neuron.sample_size:
-            miner_uids = np.random.choice(
-                miner_uids,
-                size=self.config.neuron.sample_size,
-                replace=False,
-            ).tolist()
-
-        if not miner_uids:
-            bt.logging.trace("No dscriminative miners found to challenge.")
-            return
-
-        # sample media
-        for attempt in range(retries):
-            modality, media_type, _ = self.determine_challenge_type()
-            bt.logging.debug(
-                f"Sampling attempt {attempt + 1}/{retries}: {modality}/{media_type}"
-            )
-            cache_result = self.content_manager.sample_media_with_content(
-                modality, media_type, strategy="random_source"
-            )
-            if cache_result is not None and cache_result.get("count", 0):
-                break
-
-        if cache_result is None or not cache_result.get("count", 0):
-            bt.logging.warning(
-                f"Failed to sample data after {retries} attempts. Discriminator challenge skipped."
-            )
-            return
-
-        # extract and augment media
-        media_sample = cache_result["items"][0]
-
-        media = media_sample[modality.value]
-        aug_media, _, level, aug_params = apply_random_augmentations(media)
-
-        bt.logging.success(f"Sampled {media_type} {modality} from cache:")
-        bt.logging.info(json.dumps(media_sample.get("metadata"), indent=2))
-
-        bt.logging.info(f"Applied level {level} augmentations:")
-        bt.logging.info(json.dumps(aug_params, indent=2))
-        bt.logging.info(f"Final media shape: {aug_media.shape}")
-
-        media_bytes = media_to_bytes(aug_media)[0]
-        media_size_mb = len(media_bytes) / (1024 * 1024)
-        bt.logging.info(f"Media size: {media_size_mb:.2f} MB")
-
-        if media_size_mb > 99:
-            bt.logging.warning(f"Payload size too large, truncating")
-            try:
-                half_index = aug_media.shape[0] // 2
-                aug_media = aug_media[:half_index]
-                media_bytes = media_to_bytes(aug_media)[0]
-            except Excpetion as e:
-                bt.logging.error(f"Truncation failed: {e}")
-                return
-
-            media_size_mb = len(media_bytes) / (1024 * 1024)
-            bt.logging.info(f"New media size: {media_size_mb:.2f} MB")
-
-        bt.logging.info(f"Sending discriminator challenge for {len(miner_uids)} UIDs")
-        # query orchestrator
-        async with aiohttp.ClientSession() as session:
-            results = await query_orchestrator(
-                session,
-                self.wallet.hotkey,
-                miner_uids,
-                modality,
-                media=media_bytes,
-                source_type=media_sample["source_type"],
-                source_name=media_sample["source_name"],
-                label=media_type.int_value,
-                total_timeout=self.config.neuron.miner_total_timeout,
-                connect_timeout=self.config.neuron.miner_connect_timeout,
-                sock_connect_timeout=self.config.neuron.miner_sock_connect_timeout,
-            )
-
-        # process responses
-        if isinstance(results, dict) and results.get("status") != 200:
-            bt.logging.error(
-                f"Orchestrator request failed: {results.get('error', 'Unknown error')}"
-            )
-            return  # no penalty is applied to any miner if orchestrator call fails altogether
-
-        bt.logging.info(f"Received {len(results)} results from orchestrator")
-        probabilities = [
-            r["result"]["probabilities"] if r.get("result") is not None else None
-            for r in results
-        ]
-
-        # compute rewards, update scores, save state, & log
-        generator_rewards = {}  # placeholder for GAS Phase II
-        discriminator_reward_outputs = get_discriminator_rewards(
-            label=media_type.int_value,
-            predictions=probabilities,
-            uids=[r.get("uid") for r in results],
-            hotkeys=[r.get("hotkey") for r in results],
-            challenge_modality=modality,
-            discriminator_tracker=self.discriminator_tracker,
-            **self.reward_config,
-        )
-        discriminator_preds = discriminator_reward_outputs["predictions"]
-        discriminator_rewards = discriminator_reward_outputs["rewards"]
-        discriminator_metrics = discriminator_reward_outputs["metrics"]
-        discriminator_correct = discriminator_reward_outputs["correct"]
-
-        # Critical section - prevent concurrent state updates
-        async with self._state_lock:
-            self.update_scores(generator_rewards, discriminator_rewards)
-
-        await self.save_state()
-
-        # Log responses and metrics
-        bt.logging.info(f"Processing {len(results)} results")
-        for r in results:
-            # update result with metrics, rewards, scores for logging
-            uid = r.get("uid")
-            r["result"] = {} if r.get("result") is None else r["result"]
-            r["prediction"] = discriminator_preds.get(uid)
-            r["reward"] = discriminator_rewards.get(uid, {})
-            r["correct"] = int(discriminator_correct.get(uid, False))
-            r["score"] = self.scores[uid]
-            r.update({
-                f"{k}_metrics": v 
-                for k, v in discriminator_metrics.get(uid, {}).items()
-            })
-
-            log_fn = (
-                bt.logging.success
-                if r.get("status") == 200 
-                else bt.logging.warning
-            )
-            #if r.get("status") != 404:
-            log_fn(json.dumps(r, indent=2))
-
-        self.wandb_logger.log(results, media_sample, aug_params)
+        await self.generative_challenge_manager.issue_generative_challenge()
 
     @on_block_interval("epoch_length")
     async def set_weights(self, block):
         """
         Query orchestrator for results, computes rewards, updates scores, set weights
         """
-        generator_uids = self.miner_type_tracker.get_miners_by_type(MinerType.GENERATOR)
-        discriminator_uids = self.miner_type_tracker.get_miners_by_type(
-            MinerType.DISCRIMINATOR
-        )
-        if not len(generator_uids + discriminator_uids):
-            bt.logging.warning(f"No miners currently being tracked")
-            return
-
-        extend_scores = max(discriminator_uids + generator_uids) - len(self.scores) + 1
-        if extend_scores > 0:
-            self.scores = np.append(self.scores, np.zeros(extend_scores))
+        bt.logging.info(f"Updating scores at block {block}")
+        generator_uids = await self.update_scores()
 
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
@@ -346,28 +174,54 @@ class Validator(BaseNeuron):
 
                 if np.isnan(self.scores).any():
                     bt.logging.warning(
-                        f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
+                        "Scores contain NaN values. This may be due to a lack of "
+                        "responses from miners, or a bug in your reward functions."
                     )
 
                 norm = np.ones_like(self.scores)
                 norm[generator_uids] = np.linalg.norm(self.scores[generator_uids], ord=1)
-                norm[discriminator_uids] = np.linalg.norm(
-                    self.scores[discriminator_uids], ord=1
-                )
 
                 if np.any(norm == 0) or np.isnan(norm).any():
                     norm = np.ones_like(norm)  # Avoid division by zero or NaN
 
                 normed_weights = self.scores / norm
 
-                # temporary burn
-                normed_weights = np.array([v * 0.1 for v in normed_weights])
-                normed_weights[135] = 0.9
+                # discriminator rewards distributed only upon performance improvements on benchmark exam
+                burn_pct = .5
+                burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58="5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
+                    netuid=self.config.netuid, 
+                    block=block
+                )
+
+                d_pct = 1. # .8
+                d_fee_pct = .3
+                fee_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58="5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",  # TODO
+                     netuid=self.config.netuid, 
+                     block=block)
+                escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58="5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",  # TODO
+                     netuid=self.config.netuid, 
+                     block=block)
+
+                # .7 to discriminators, .3 to generators for now
+                g_pct = (1 - d_pct)
+                normed_weights = np.array([
+                    (1 - burn_pct) * g_pct  * v
+                    for v in normed_weights
+                ])
+                
+                normed_weights[burn_uid] = burn_pct
+                normed_weights[fee_uid] = (1 - burn_pct) * d_pct * d_fee_pct 
+                normed_weights[escrow_uid] = (1 - burn_pct) * d_pct * (1 - d_fee_pct)
+                bt.logging.info(f"Discriminator rewards UID: {escrow_uid}")
+                bt.logging.info(f"UIDs: {uids}")
+                bt.logging.info(f"NORMED WEIGHTS: {normed_weights}")
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
                 )
-                bt.logging.success("Weights set successfully")
 
             except Exception as e:
                 bt.logging.error(f"Error in set_weights_on_interval: {e}")
@@ -376,17 +230,24 @@ class Validator(BaseNeuron):
 
         return True
 
-    def update_scores(self, generator_rewards: dict, discriminator_rewards: dict):
+    async def update_scores(self):
         """
         Update self.scores with exponential moving average of rewards.
-
-        Args:
-            generator_rewards: Dict mapping generator UID to reward score
-            discriminator_rewards: Dict mapping discriminator UID to reward score
         """
-        rewards = {}
-        rewards.update(generator_rewards)
-        rewards.update(discriminator_rewards)
+        verification_stats = self.content_manager.get_unrewarded_verification_stats()
+        generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
+
+        generator_results, discriminator_results = await get_benchmark_results(
+            self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
+        )
+        bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
+        bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
+
+        reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
+        rewards = {
+            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)
+            for uid in reward_multipliers 
+        }
 
         if len(rewards) == 0:
             bt.logging.trace("No rewards available for score update")
@@ -405,40 +266,13 @@ class Validator(BaseNeuron):
             f"Updated scores for {len(rewards)} miners with EMA (alpha={alpha})"
         )
 
-    def determine_challenge_type(self):
-        """
-        Randomly selects a modality (image, video) and media type (real, synthetic, semisynthetic)
-        based on configured probabiltiies
-        """
-        modalities = [Modality.IMAGE.value, Modality.VIDEO.value]
-        modality = np.random.choice(
-            modalities,
-            p=[
-                self.config.challenge.image_prob,
-                self.config.challenge.video_prob,
-            ],
-        )
+        if media_ids:
+            success = self.content_manager.mark_media_rewarded(media_ids)
+            if success:
+                bt.logging.info(f"Marked {len(media_ids)} media entries as rewarded")
+            else:
+                bt.logging.warning("Failed to mark media as rewarded")
 
-        media_types = [
-            MediaType.REAL.value,
-            MediaType.SYNTHETIC.value,
-            MediaType.SEMISYNTHETIC.value,
-        ]
-        media_type = np.random.choice(
-            media_types,
-            p=[
-                self.config.challenge.real_prob,
-                self.config.challenge.synthetic_prob,
-                self.config.challenge.semisynthetic_prob,
-            ],
-        )
-
-        multi_video = (
-            modality == Modality.VIDEO
-            and np.random.rand() < self.config.challenge.multi_video_prob
-        )
-
-        return Modality(modality), MediaType(media_type), multi_video
 
     @on_block_interval("wandb_restart_interval")
     async def start_new_wanbd_run(self, block):
@@ -461,7 +295,7 @@ class Validator(BaseNeuron):
                 self.wallet.hotkey.ss58_address,
                 block,
             )
-
+        
         except Exception as e:
             bt.logging.warning(f"Error in log_on_block: {e}")
 
@@ -474,13 +308,13 @@ class Validator(BaseNeuron):
             bt.logging.debug("save_state() acquired state lock")
             try:
                 state_data = {"scores.npy": self.scores}
-                state_objects = [(self.discriminator_tracker, "discriminator_history.pkl")]
+                state_objects = [(self.miner_type_tracker, "miner_type_tracker.pkl")]
 
                 success = save_validator_state(
                     base_dir=self.config.neuron.full_path,
                     state_data=state_data,
                     state_objects=state_objects,
-                    max_backup_age_hours=self.config.neuron.max_state_backup_hours,
+                    max_backup_age_hours=24,
                 )
                 if success:
                     bt.logging.success("Saved validator state")
@@ -504,7 +338,7 @@ class Validator(BaseNeuron):
                 base_dir=self.config.neuron.full_path,
                 state_data_keys=state_data_keys,
                 state_objects=state_objects,
-                max_backup_age_hours=self.config.neuron.max_state_backup_hours,
+                max_backup_age_hours=24,
             )
 
             if loaded_state is not None and "scores.npy" in loaded_state:
@@ -523,8 +357,8 @@ class Validator(BaseNeuron):
     async def shutdown(self):
         """Shutdown the validator and clean up resources."""
         await self.shutdown_substrate()
-        #if self.generative_challenge_manager:
-        #   await  self.generative_challenge_manager.shutdown()
+        if self.generative_challenge_manager:
+           await self.generative_challenge_manager.shutdown()
 
     def heartbeat(self):
         bt.logging.info("Starting Heartbeat")

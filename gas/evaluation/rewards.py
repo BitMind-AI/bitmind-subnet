@@ -1,135 +1,234 @@
-from typing import Dict, List, Optional, Tuple
-import bittensor as bt
-import numpy as np
-from sklearn.metrics import matthews_corrcoef
+import math
 
-from gas.types import Modality, MinerType
+import bittensor as bt
 
 
 def get_discriminator_rewards(
-    label: int,
-    predictions: List[np.ndarray],
-    uids: List[int], 
-    hotkeys: List[str],
-    challenge_modality: Modality,
-    discriminator_tracker: 'DiscriminatorTracker',
-    window: Optional[int] = 200,
-    image_score_weight: float = 0.6,
-    video_score_weight: float = 0.4,
+    runs,
+    metagraph,
+    image_score_weight: float = 0.5,
+    video_score_weight: float = 0.5,
     binary_score_weight: float = 0.5,
-    multiclass_score_weight: float = 0.5
-) -> Tuple[Dict[int, float], Dict[int, Dict[str, Dict[str, float]]], Dict[int, bool]]:
+    multiclass_score_weight: float = 0.5,
+):
     """
-    Calculate rewards for detection challenge
+    Process discriminator results to extract rewards from MCC scores.
+    Handles separate image and video detection models per miner.
 
     Args:
-        label: The true label (0 for real, 1 for synthetic, 2 for semi-synthetic)
-        predictions: List of probability vectors from miners, each shape (3,)
-        uids: List of miner UIDs
-        hotkeys: List of miner hotkeys
-        challenge_modality: Type of challenge (Modality.VIDEO or Modality.IMAGE)
-        discriminator_tracker: Tracker object for storing miner predictions
-        window: Number of recent predictions to consider, defaults to 200
-        image_score_weight: Weight for image modality rewards, defaults to 0.6
-        video_score_weight: Weight for video modality rewards, defaults to 0.4
-        binary_score_weight: Weight for binary classification rewards, defaults to 0.5
-        multiclass_score_weight: Weight for multiclass classification rewards, defaults to 0.5
+        runs: List of DiscriminatorResult objects from API
+        metagraph: Bittensor metagraph for SS58 to UID mapping
+        image_score_weight: Weight for image modality rewards
+        video_score_weight: Weight for video modality rewards
+        binary_score_weight: Weight for binary MCC
+        multiclass_score_weight: Weight for multiclass MCC
 
     Returns:
-        Dict containing:
-            - rewards: Dict mapping UIDs to reward values
-            - metrics: Dict mapping UIDs to modality metrics
-            - correct: Dict mapping UIDs to correctness booleans
+        dict: Mapping of UID to combined reward score for discriminators
     """
-    miner_predictions = {}
-    miner_rewards = {}
-    miner_metrics = {}
-    miner_correct = {}
+    
+    # Store rewards by UID and modality
+    miner_modality_rewards = {}
+    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
 
-    for hotkey, uid, pred_probs in zip(hotkeys, uids, predictions):
-        miner_modality_rewards = {}
-        miner_modality_metrics = {}
+    if not runs:
+        bt.logging.warning("No discriminator runs data provided")
+        return {}
 
-        for modality in Modality:
+    try:
+        for result in runs:
+            if not isinstance(result, dict):
+                bt.logging.warning(f"Invalid result format: {type(result)}")
+                continue
+
+            ss58_address = result.get("discriminator_address")
+            if not ss58_address or ss58_address not in ss58_to_uid:
+                continue
+
+            uid = ss58_to_uid[ss58_address]
+            modality = result.get("modality")
+            if not modality:
+                bt.logging.warning(f"Missing modality for UID {uid}")
+                continue
+
+            if uid not in miner_modality_rewards:
+                miner_modality_rewards[uid] = {}
+
+            # Handle potential None or non-numeric values
+            binary_mcc = result.get("binary_mcc", 0)
+            multiclass_mcc = result.get("multiclass_mcc", 0)
+
             try:
-                # update tracker with prediction for current challenge for appropriate modality
-                if modality == challenge_modality:
-                    if pred_probs is not None and isinstance(pred_probs[0], (list, tuple, np.ndarray)):
-                        pred_probs = pred_probs[0]
+                binary_mcc = float(binary_mcc) if binary_mcc is not None else 0
+                multiclass_mcc = float(multiclass_mcc) if multiclass_mcc is not None else 0
+            except (ValueError, TypeError):
+                bt.logging.warning(f"Invalid MCC values for UID {uid}: binary={binary_mcc}, multiclass={multiclass_mcc}")
+                binary_mcc = 0
+                multiclass_mcc = 0
 
-                    discriminator_tracker.update(
-                        uid=uid,
-                        prediction=pred_probs,
-                        label=label,
-                        modality=challenge_modality,
-                        miner_hotkey=hotkey,
-                    )
+            miner_modality_rewards[uid][modality] = binary_score_weight * max(
+                0, binary_mcc
+            ) + multiclass_score_weight * max(0, multiclass_mcc)
 
-                # get current valid/invalid prediction counts, skip if there are no valid preds
-                invalid_count = discriminator_tracker.get_invalid_prediction_count(uid, modality, window)
-                preds, labels = discriminator_tracker.get_predictions_and_labels(uid, modality, window)
-                if not len(preds) or not len(labels):
-                    continue
+    except Exception as e:
+        bt.logging.error(f"Error processing discriminator rewards: {e}")
+        import traceback
+        bt.logging.error(traceback.format_exc())
 
-                # take argmax of stored probabilities 
-                predictions = np.argmax(preds, axis=1)
+    # Combine image and video rewards for each miner
+    final_multipliers = {}
+    for uid, modality_rewards in miner_modality_rewards.items():
+        final_multipliers[uid] = image_score_weight * modality_rewards.get(
+            "image", 0.0
+        ) + video_score_weight * modality_rewards.get("video", 0.0)
 
-                # compute correctness of last prediction if evaluating current challenge modality
-                if modality == challenge_modality:
-                    miner_correct[uid] = predictions[-1] == label
-                    miner_predictions[uid] = int(predictions[-1])
+    return final_multipliers
 
-                # Always compute MCC for both modalities if > 5 preds made with > 2 unique labels
-                pred_count = len(preds)
-                if pred_count < 5 or len(np.unique(labels)) < 2:
-                    continue
 
-                # multi-class MCC (real vs synthetic vs semi-synthetic)
-                multi_class_mcc = matthews_corrcoef(labels, predictions)
+def get_generator_base_rewards(verification_stats):
+    """
+    Compute base rewards for generators based on their verification pass rates.
 
-                # Binary MCC (real vs any synthetic)
-                binary_labels = (labels > 0).astype(int)
-                binary_preds = (predictions > 0).astype(int)
-                binary_mcc = matthews_corrcoef(binary_labels, binary_preds)
-
-                # penalize for invalid predictions by reducing MCC
-                total_attempts = pred_count + invalid_count
-                invalid_penalty = invalid_count / total_attempts if total_attempts > 0 else 0
-
-                modality_reward = (
-                    binary_score_weight * max(0, binary_mcc) * (1 - invalid_penalty)
-                    + multiclass_score_weight * max(0,  multi_class_mcc) * (1 - invalid_penalty)
-                )
-
-                miner_modality_rewards[modality.value] = modality_reward
-                miner_modality_metrics[modality.value] = {
-                    'binary_mcc': binary_mcc,
-                    'multi_class_mcc': multi_class_mcc,
-                    'sample_size': len(preds),
-                    'invalid_count': invalid_count,
-                    'total_attempts': total_attempts
+    Args:
+        verification_stats: Dict mapping hotkey to verification stats from
+                            ContentManager.get_unrewarded_verification_stats()
+            Expected format:
+            {
+                "hotkey": {
+                    "uid": int,
+                    "total_verified": int,
+                    "total_failed": int,
+                    "total_evaluated": int,
+                    "pass_rate": float,
+                    "media_ids": List[str]
                 }
- 
-            except Exception as e:
-                bt.logging.error(
-                    f"Couldn't compute detection rewards for miner {uid}, "
-                    f"prediction: {pred_probs}, label: {label}, modality: {modality.value}"
-                )
-                bt.logging.exception(e)
+            }
 
-        image_rewards = miner_modality_rewards.get(Modality.IMAGE, 0.0)
-        video_rewards = miner_modality_rewards.get(Modality.VIDEO, 0.0)
-        total_reward = (
-            image_score_weight * image_rewards + 
-            video_score_weight * video_rewards
-        )
+    Returns:
+        tuple: (uid_rewards_dict, media_ids_to_mark)
+            - uid_rewards_dict: Mapping of UID to base reward score
+            - media_ids_to_mark: List of media IDs to mark as rewarded
+    """
+    try:
+        if not verification_stats:
+            return {}, []
 
-        miner_rewards[uid] = total_reward
-        miner_metrics[uid] = miner_modality_metrics
+        # Convert to UID-based rewards and collect media IDs
+        uid_rewards = {}
+        all_media_ids = []
 
-    return {
-       'rewards': miner_rewards, 
-       'metrics': miner_metrics, 
-       'correct': miner_correct,
-       'predictions': miner_predictions
-    }
+        for hotkey, stats in verification_stats.items():
+            uid = int(stats["uid"])
+            pass_rate = stats["pass_rate"]
+            verified_count = stats["total_verified"]
+
+            # Simple base reward calculation (can be customized)
+            # Higher pass rate = higher reward, with bonus for volume
+            base_reward = pass_rate * min(verified_count, 10)  # Cap volume bonus at 10
+
+            uid_rewards[uid] = base_reward
+            all_media_ids.extend(stats["media_ids"])
+
+        bt.logging.info(f"Computed base rewards for {len(uid_rewards)} miners: {uid_rewards}")
+
+        return uid_rewards, all_media_ids
+
+    except Exception as e:
+        bt.logging.error(f"Error in get_generator_base_rewards: {e}")
+        import traceback
+
+        bt.logging.error(traceback.format_exc())
+        return {}, []
+
+
+def get_generator_reward_multipliers(generator_results, metagraph):
+    """
+    Process generator results to extract rewards from fool counts.
+
+    Args:
+        generator_results: List of GeneratorResult objects from API
+        metagraph: Bittensor metagraph for SS58 to UID mapping
+
+    Returns:
+        dict: Mapping of UID to reward score for generators
+    """    
+    rewards = {}
+    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
+
+    if not generator_results:
+        bt.logging.warning("No generator results data provided")
+        return {}
+
+    # Aggregate fool counts by generator (ss58_address)
+    generator_fooled_counts = {}
+    generator_not_fooled_counts = {}
+
+    try:
+        for result in generator_results:
+            if not isinstance(result, dict):
+                bt.logging.warning(f"Invalid result format: {type(result)}")
+                continue                
+            ss58_address = result.get("ss58_address")
+            if not ss58_address or ss58_address not in ss58_to_uid:
+                continue
+
+            fooled_count = result.get("fooled_count", 0)
+            not_fooled_count = result.get("not_fooled_count", 0)
+            
+            try:
+                fooled_count = int(fooled_count) if fooled_count is not None else 0
+                not_fooled_count = int(not_fooled_count) if not_fooled_count is not None else 0
+            except (ValueError, TypeError):
+                bt.logging.warning(f"Invalid counts for {ss58_address}: fooled={fooled_count}, not_fooled={not_fooled_count}")
+                fooled_count = 0
+                not_fooled_count = 0
+
+            if ss58_address not in generator_fooled_counts:
+                generator_fooled_counts[ss58_address] = 0
+                generator_not_fooled_counts[ss58_address] = 0
+
+            generator_fooled_counts[ss58_address] += fooled_count
+            generator_not_fooled_counts[ss58_address] += not_fooled_count
+
+        # Calculate fool rate for each generator from accumulated counts with sample size bonus
+        for ss58_address in generator_fooled_counts:
+            if ss58_address in ss58_to_uid:
+                uid = ss58_to_uid[ss58_address]
+                total_fooled = generator_fooled_counts[ss58_address]
+                total_not_fooled = generator_not_fooled_counts[ss58_address]
+                total_count = total_fooled + total_not_fooled
+
+                if total_count > 0:
+                    # Base fool rate
+                    fool_rate = total_fooled / total_count
+
+                    # Sample size multiplier: rewards higher sample sizes
+                    # Uses logarithmic scaling to provide diminishing returns
+                    # Reference count of 20 gives multiplier of 1.0, higher counts get bonus
+                    reference_count = 20
+                    max_multiplier = 2.0  # Cap the maximum multiplier
+
+                    if total_count >= reference_count:
+                        sample_size_multiplier = min(max_multiplier, 1.0 + math.log(total_count / reference_count))
+                    else:
+                        # Penalize very small sample sizes
+                        sample_size_multiplier = max(0.5, total_count / reference_count)
+
+                    # Final reward combines fool rate with sample size bonus
+                    base_reward = fool_rate * sample_size_multiplier
+                    rewards[uid] = max(0, min(2.0, base_reward))  # Allow rewards up to 2.0 for high sample sizes
+
+                    bt.logging.debug(f"Generator {ss58_address[:8]}... UID {uid}: fool_rate={fool_rate:.3f}, "
+                                   f"sample_size={total_count}, sample_size_multiplier={sample_size_multiplier:.3f}, "
+                                   f"final_multiplier={rewards[uid]:.3f}")
+                else:
+                    bt.logging.warning(f"Zero total count for generator {ss58_address}")
+
+        bt.logging.info(f"Processed {len(generator_results)} generator results, computed rewards for {len(rewards)} generators")
+
+    except Exception as e:
+        bt.logging.error(f"Error processing generator rewards: {e}")
+        import traceback
+        bt.logging.error(traceback.format_exc())
+
+    return rewards
