@@ -105,6 +105,8 @@ class Validator(BaseNeuron):
 
     async def run(self):
 
+        await self.start_new_wanbd_run(block=0)
+
         bt.logging.info(
             f"Running validator {self.uid} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
         )
