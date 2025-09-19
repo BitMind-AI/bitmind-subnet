@@ -39,12 +39,18 @@ class GenerativeChallengeManager:
 
         self.challenge_tasks = {}
         self.challenge_lock = asyncio.Lock()
+
+        self.external_port = (
+            getattr(self.config.neuron, 'external_callback_port', None) or 
+            self.config.neuron.callback_port
+        )
+
         try:
             self.external_ip = requests.get("https://checkip.amazonaws.com", timeout=10).text.strip()
         except Exception as e:
             bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
             self.external_ip = "localhost"
-        self.generative_callback_url = f"http://{self.external_ip}:{self.config.neuron.callback_port}/generative_callback"
+        self.generative_callback_url = f"http://{self.external_ip}:{self.external_port}/generative_callback"
 
         self.init_fastapi()
 
@@ -254,6 +260,13 @@ class GenerativeChallengeManager:
 
         bt.logging.info(
             f"FastAPI server started on port {self.config.neuron.callback_port}"
+        )
+        if self.external_port != self.config.neuron.callback_port:
+            bt.logging.info(
+                f"Advertising external port {self.external_port} to miners"
+            )
+        bt.logging.info(
+            f"Callback URL for miners: {self.generative_callback_url}"
         )
 
     async def shutdown(self):
