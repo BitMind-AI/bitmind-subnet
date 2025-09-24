@@ -39,7 +39,7 @@ class LocalService(BaseGenerationService):
             raise RuntimeError("CUDA is not available. A CUDA-capable device is required.")
 
         self.device = 'cuda'
-        if self.config.device and self.config.device.startswith("cuda"):
+        if self.config and hasattr(self.config, 'device') and self.config.device and self.config.device.startswith("cuda"):
             self.device = self.config.device
         
         self._load_models()
