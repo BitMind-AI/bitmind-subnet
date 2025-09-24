@@ -131,7 +131,7 @@ class LocalService(BaseGenerationService):
         """Check if this service supports the given modality."""
         if modality == "image":
             return self.image_model is not None
-        if modality == "video":
+        elif modality == "video":
             return self.video_model is not None
         return False
     
@@ -171,6 +171,10 @@ class LocalService(BaseGenerationService):
         try:
             bt.logging.info(f"Generating image locally: {task.prompt[:50]}...")
             
+            # Check if image model is loaded
+            if self.image_model is None:
+                raise RuntimeError("Image model is not loaded. Cannot generate images.")
+            
             # Ensure parameters is not None
             params = task.parameters or {}
             
@@ -181,14 +185,14 @@ class LocalService(BaseGenerationService):
             guidance_scale = params.get("guidance_scale", 7.5)
             
             # Generate image
-            with bt.logging.debug("Running Stable Diffusion inference..."):
-                image = self.image_model(
-                    prompt=task.prompt,
-                    width=width,
-                    height=height,
-                    num_inference_steps=num_inference_steps,
-                    guidance_scale=guidance_scale,
-                ).images[0]
+            bt.logging.debug("Running Stable Diffusion inference...")
+            image = self.image_model(
+                prompt=task.prompt,
+                width=width,
+                height=height,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+            ).images[0]
             
             # Convert to bytes
             img_bytes = self._pil_to_bytes(image)

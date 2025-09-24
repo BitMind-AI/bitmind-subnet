@@ -69,8 +69,6 @@ class GenerativeChallengeManager:
             bt.logging.trace("No generative miners found to challenge.")
             return
 
-        miner_uids = [7, 8]
-
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
         retries = 3
@@ -130,30 +128,43 @@ class GenerativeChallengeManager:
 
     async def generative_callback(self, request: Request):
         """Callback endpoint for generative challenges.
-        Only accepts direct binary image and video payloads.
+        Accepts direct binary image, video, and application/octet-stream payloads.
         """
         content_type = request.headers.get("content-type", "").lower()
         
-        # Only accept image and video content types
-        if not (content_type.startswith("image/") or content_type.startswith("video/")):
-            bt.logging.error(f"Invalid content type: {content_type}. Only image/* and video/* are supported.")
-            return Response(status_code=400, content="Only image and video content types are supported")
-        
-        # Get task ID from header
+        # Get task ID from header early for UID logging in error cases
         task_id = request.headers.get("task-id")
+        
+        # Helper function to get UID for logging
+        def get_uid_for_logging():
+            if task_id and task_id in self.challenge_tasks:
+                return self.challenge_tasks[task_id].get("uid", "unknown")
+            return "unknown"
+
+        # Accept image, video, and application/octet-stream content types
+        if not (
+            content_type.startswith("image/") or 
+            content_type.startswith("video/") or 
+            content_type == "application/octet-stream"
+        ):
+            uid = get_uid_for_logging()
+            bt.logging.error(f"Invalid content type: {content_type} from UID {uid}. Only image/*, video/*, and application/octet-stream are supported.")
+            return Response(status_code=400, content="Only image, video, and application/octet-stream content types are supported")
+        
         if not task_id:
-            bt.logging.error("Binary upload missing task-id header")
+            bt.logging.error("Binary upload missing task-id header from unknown UID")
             return Response(status_code=400, content="Missing task-id header")
             
         # Get binary payload
         binary_data = await request.body()
         if not binary_data:
-            bt.logging.error(f"Task {task_id}: Empty binary payload received")
+            uid = get_uid_for_logging()
+            bt.logging.error(f"Task {task_id} from UID {uid}: Empty binary payload received")
             return Response(status_code=400, content="Empty binary payload")
             
         async with self.challenge_lock:
             if task_id not in self.challenge_tasks:
-                bt.logging.warning(f"Received binary upload for unknown task_id: {task_id}")
+                bt.logging.warning(f"Received binary upload for unknown task_id: {task_id} from unknown UID")
                 return Response(status_code=404, content="Task not found")
 
             challenge_info = self.challenge_tasks[task_id]
