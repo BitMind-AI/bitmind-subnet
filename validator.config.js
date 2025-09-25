@@ -48,6 +48,7 @@ const config = {
   // Network
   chainEndpoint: process.env.CHAIN_ENDPOINT || '',
   callbackPort: process.env.CALLBACK_PORT || '10525',
+  externalCallbackPort: process.env.EXTERNAL_CALLBACK_PORT || null,
   
   // Cache
   cacheDir: process.env.SN34_CACHE_DIR || path.join(os.homedir(), '.cache', 'sn34'),
@@ -124,6 +125,11 @@ if (config.startValidator) {
     logParam,
     autoUpdateParam,
   ];
+  
+  // Add external callback port if provided
+  if (config.externalCallbackPort) {
+    validatorArgs.push('--neuron.external-callback-port', config.externalCallbackPort);
+  }
   
   if (heartbeatParam) {
     validatorArgs.push(heartbeatParam);

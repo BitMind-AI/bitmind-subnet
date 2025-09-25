@@ -241,8 +241,15 @@ def add_validator_args(parser):
     parser.add_argument(
         "--neuron.callback-port",
         type=int,
-        help="Port for generative challenge callbacks",
+        help="Port for generative challenge callbacks (internal binding)",
         default=10525,
+    )
+
+    parser.add_argument(
+        "--neuron.external-callback-port",
+        type=int,
+        help="External port to advertise to miners for callbacks (defaults to callback-port)",
+        default=None,
     )
 
     parser.add_argument(

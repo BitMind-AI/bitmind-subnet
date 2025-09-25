@@ -41,6 +41,7 @@ class ServiceRegistry:
                     bt.logging.info(f"❌ {service.name} is not available")
             except Exception as e:
                 bt.logging.warning(f"Failed to initialize {service_class.__name__}: {e}")
+                bt.logging.debug(f"Full error for {service_class.__name__}: {e}", exc_info=True)
         
         bt.logging.info(f"Initialized {len(self.services)} generation services")
     
