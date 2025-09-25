@@ -71,7 +71,7 @@ BT_NETUID=379
 
 ## Generation Services
 
-Generative miners support multiple generation approaches. You can choose between external API services or local open source models:
+Generative miners support multiple generation approaches. You can choose between external API services or local open source models. The default options are listed below, but miners are free to add any service they want. This is where generative miners can build an edge -- pick models that generate tough-to-classify examples to boost your fool-rates and your incentive. 
 
 ### OpenAI Service (DALL-E)
 - **API Key**: `OPENAI_API_KEY`

@@ -35,7 +35,9 @@ class OpenAIService(BaseGenerationService):
     
     def is_available(self) -> bool:
         """Check if OpenAI service is available."""
-        return self.api_key is not None and self.client is not None
+        return (self.api_key is not None and 
+                self.api_key.strip() != "" and 
+                self.client is not None)
     
     def supports_modality(self, modality: str) -> bool:
         """Check if this service supports the given modality."""

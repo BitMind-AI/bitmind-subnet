@@ -39,12 +39,18 @@ class GenerativeChallengeManager:
 
         self.challenge_tasks = {}
         self.challenge_lock = asyncio.Lock()
+
+        self.external_port = (
+            getattr(self.config.neuron, 'external_callback_port', None) or 
+            self.config.neuron.callback_port
+        )
+
         try:
             self.external_ip = requests.get("https://checkip.amazonaws.com", timeout=10).text.strip()
         except Exception as e:
             bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
             self.external_ip = "localhost"
-        self.generative_callback_url = f"http://{self.external_ip}:{self.config.neuron.callback_port}/generative_callback"
+        self.generative_callback_url = f"http://{self.external_ip}:{self.external_port}/generative_callback"
 
         self.init_fastapi()
 
@@ -122,30 +128,43 @@ class GenerativeChallengeManager:
 
     async def generative_callback(self, request: Request):
         """Callback endpoint for generative challenges.
-        Only accepts direct binary image and video payloads.
+        Accepts direct binary image, video, and application/octet-stream payloads.
         """
         content_type = request.headers.get("content-type", "").lower()
         
-        # Only accept image and video content types
-        if not (content_type.startswith("image/") or content_type.startswith("video/")):
-            bt.logging.error(f"Invalid content type: {content_type}. Only image/* and video/* are supported.")
-            return Response(status_code=400, content="Only image and video content types are supported")
-        
-        # Get task ID from header
+        # Get task ID from header early for UID logging in error cases
         task_id = request.headers.get("task-id")
+        
+        # Helper function to get UID for logging
+        def get_uid_for_logging():
+            if task_id and task_id in self.challenge_tasks:
+                return self.challenge_tasks[task_id].get("uid", "unknown")
+            return "unknown"
+
+        # Accept image, video, and application/octet-stream content types
+        if not (
+            content_type.startswith("image/") or 
+            content_type.startswith("video/") or 
+            content_type == "application/octet-stream"
+        ):
+            uid = get_uid_for_logging()
+            bt.logging.error(f"Invalid content type: {content_type} from UID {uid}. Only image/*, video/*, and application/octet-stream are supported.")
+            return Response(status_code=400, content="Only image, video, and application/octet-stream content types are supported")
+        
         if not task_id:
-            bt.logging.error("Binary upload missing task-id header")
+            bt.logging.error("Binary upload missing task-id header from unknown UID")
             return Response(status_code=400, content="Missing task-id header")
             
         # Get binary payload
         binary_data = await request.body()
         if not binary_data:
-            bt.logging.error(f"Task {task_id}: Empty binary payload received")
+            uid = get_uid_for_logging()
+            bt.logging.error(f"Task {task_id} from UID {uid}: Empty binary payload received")
             return Response(status_code=400, content="Empty binary payload")
             
         async with self.challenge_lock:
             if task_id not in self.challenge_tasks:
-                bt.logging.warning(f"Received binary upload for unknown task_id: {task_id}")
+                bt.logging.warning(f"Received binary upload for unknown task_id: {task_id} from unknown UID")
                 return Response(status_code=404, content="Task not found")
 
             challenge_info = self.challenge_tasks[task_id]
@@ -252,6 +271,13 @@ class GenerativeChallengeManager:
 
         bt.logging.info(
             f"FastAPI server started on port {self.config.neuron.callback_port}"
+        )
+        if self.external_port != self.config.neuron.callback_port:
+            bt.logging.info(
+                f"Advertising external port {self.external_port} to miners"
+            )
+        bt.logging.info(
+            f"Callback URL for miners: {self.generative_callback_url}"
         )
 
     async def shutdown(self):
