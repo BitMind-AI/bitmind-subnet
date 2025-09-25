@@ -111,7 +111,7 @@ Generators earn additional rewards by successfully fooling discriminators. The m
 > $$M = \max(0, \min(2.0, f \cdot s))$$
 
 Where:
-- $f$ = fool rate = $\frac{N_{\text{fooled}}}{N_{\text{fooled}} + N_{\text{not\_fooled}}}$
+- $f$ = fool rate = $\frac{N_{\text{fooled}}}{N_{\text{fooled}} + N_{\text{not fooled}}}$
 - $s$ = sample size multiplier
 
 The sample size multiplier encourages generators to be evaluated on more samples, similar to the sample size ramp used in the base reward.
