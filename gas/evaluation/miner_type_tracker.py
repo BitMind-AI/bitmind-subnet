@@ -18,10 +18,8 @@ class MinerTypeTracker:
         self.metagraph = metagraph
         self.subtensor = subtensor
 
-        # Storage for miner types
         self.miner_types: Dict[int, MinerType] = {}
         self.last_update: Dict[int, float] = {}
-        self.recheck_miner_type = set([])
 
     async def initialize_miner_types(self):
         """Initialize miner types for all registered miners"""
@@ -32,21 +30,10 @@ class MinerTypeTracker:
 
     async def update_miner_types(self, miner_uids: Optional[List[int]] = None):
         """Update miner types for specified miners"""
-        # first filter to only unknown miners or those needing recheck
         if miner_uids is None:
             miner_uids = list(range(self.metagraph.n))
 
-        unk_miners = [
-            uid
-            for uid in miner_uids
-            if uid not in self.miner_types or uid in self.recheck_miner_type
-        ]
-
-        if not unk_miners:
-            bt.logging.debug("All miner types known.")
-            return
-
-        bt.logging.trace(f"Updating miner types for {unk_miners}")
+        bt.logging.trace(f"Updating miner types for {miner_uids}")
         async with aiohttp.ClientSession() as session:
             responses = await asyncio.gather(
                 *[
@@ -57,17 +44,13 @@ class MinerTypeTracker:
                         self.wallet.hotkey,
                         self.config.neuron.miner_total_timeout,
                     )
-                    for uid in unk_miners
+                    for uid in miner_uids
                 ],
                 return_exceptions=True,
             )
 
         current_time = time.time()
-        for uid, response in zip(unk_miners, responses):
-            # Remove from recheck queue
-            if uid in self.recheck_miner_type:
-                self.recheck_miner_type.remove(uid)
-
+        for uid, response in zip(miner_uids, responses):
             # We assume a miner is a discriminator (which does not run any endpoint/hardware)
             # until we successfully get a response from a generator get_miner_info endpoint
             miner_type = MinerType.DISCRIMINATOR

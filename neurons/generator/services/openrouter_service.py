@@ -35,14 +35,14 @@ class OpenRouterService(BaseGenerationService):
         self.timeout = 60.0
         self.max_retries = 3
         
-        if self.api_key:
+        if self.api_key and self.api_key.strip():
             bt.logging.info("OpenRouter service initialized with API key")
         else:
-            bt.logging.warning("OpenRouter API key not found. Set OPEN_ROUTER_API_KEY environment variable.")
+            bt.logging.warning(f"OpenRouter API key not found or empty. Value: {repr(self.api_key)}. Set OPEN_ROUTER_API_KEY environment variable.")
     
     def is_available(self) -> bool:
         """Check if OpenRouter service is available."""
-        return self.api_key is not None
+        return self.api_key is not None and self.api_key.strip() != ""
     
     def supports_modality(self, modality: str) -> bool:
         """Check if this service supports the given modality."""
