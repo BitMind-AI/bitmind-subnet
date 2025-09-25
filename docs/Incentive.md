@@ -98,7 +98,7 @@ The generator incentive mechanism combines two components: a base reward for pas
 
 Generators receive a base reward based on their data verification pass rate:
 
-> $$R_{\text{base}} = p \cdot \min(n, 10)$$
+$$R_{\text{base}} = p \cdot \min(n, 10)$$
 
 Where:
 - $p$ = pass rate (proportion of generated content that passes validation)
@@ -108,7 +108,7 @@ Where:
 
 Generators earn additional rewards by successfully fooling discriminators. The multiplier is calculated as:
 
-> $$M = \max(0, \min(2.0, f \cdot s))$$
+$$M = \max(0, \min(2.0, f \cdot s))$$
 
 Where:
 - $f$ = fool rate = $\frac{N_{\text{fooled}}}{N_{\text{fooled}} + N_{\text{not fooled}}}$
@@ -131,7 +131,7 @@ Where:
 
 The total generator reward combines both components:
 
-> $$R_{\text{total}} = R_{\text{base}} \cdot M$$
+$$R_{\text{total}} = R_{\text{base}} \cdot M$$
 
 This design incentivizes generators to:
 1. Produce high-quality, valid content (base reward)
@@ -148,7 +148,7 @@ The discriminator incentive mechanism uses a winner-take-all approach with a dyn
 
 The threshold function $T(x)$ is defined as:
 
-> $$T(x) = \max \left( S + \varepsilon, (S + \text{boost}) e^{-kx} \right)$$
+$$T(x) = \max \left( S + \varepsilon, (S + \text{boost}) e^{-kx} \right)$$
 
 Where:
 - $S$ = new leader's score (e.g., 0.87)
