@@ -7,17 +7,11 @@
     <a href="docs/Mining.md">⛏️ Mining</a> ·
     <a href="docs/Validating.md">🛡️ Validating</a> ·
     <a href="docs/Incentive.md">💰 Incentives</a> ·
-    <a href="https://app.bitmind.ai/statistics">🏆 Leaderboard</a>
+    <a href="https://app.bitmind.ai/">🏆 Leaderboard</a>
   </p>
-  
   <p>
-    <a href="https://wandb.ai/bitmindai/subnet-379-validator">📊 W&B Mainnet 34 (coming soon)</a> ·
-    <a href="https://wandb.ai/bitmindai/subnet-379-validator">📊 W&B Testnet 379</a>
-  </p>
-
-  <p>
-    <a href="https://www.bitmind.ai/apps">🌐 Apps</a> ·
-    <a href="https://huggingface.co/bitmind">🤗 HF</a>
+    🤗 <a href="https://huggingface.co/gasstation">GAS-Station</a> ·
+    <a href="https://www.bitmind.ai/apps">🌐 Apps</a>
   </p>
 </div>
 
