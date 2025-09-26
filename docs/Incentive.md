@@ -85,7 +85,7 @@ The following models run by validators to produce a continual, fresh stream of s
 
 ### Image-to-Video Models
 
-- [THUDM/CogVideoX1.5-5B-I2V](https://huggingface.co/THUDM/CogVideoX1.5-5B-I2V)
+- [THUDM/CogVideoX1.5-5B-I2V](https://huggingface.co/THUDM/CogVideoX1.5-5B-I2V) 
 
 </details> 
 
@@ -170,3 +170,8 @@ Using the scenario from the threshold calculation:
 - $\varepsilon = 0.01 \Rightarrow$ floor $= 0.88$
 - $k = \frac{1}{140} \ln(0.92/0.88) \approx 3.17 \times 10^{-4}$
 - Then $T(x)$ decays smoothly: $\sim 0.900$ around 70 epochs, and clamps to 0.88 at 140.
+
+
+The following plot illustrates how the threshold function decays over time using the example parameters above:
+
+![Threshold Decay Function](static/threshold_decay.png)
