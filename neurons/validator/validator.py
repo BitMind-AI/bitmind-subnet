@@ -238,6 +238,7 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
+        # Get verification stats for only unrewarded media to quickly slash for submissions that fail verification
         verification_stats = self.content_manager.get_unrewarded_verification_stats()
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
 
@@ -249,7 +250,7 @@ class Validator(BaseNeuron):
 
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
         rewards = {
-            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)
+            uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, 1e-4)
             for uid in reward_multipliers 
         }
 
