@@ -638,7 +638,8 @@ class ContentManager:
 					"total_failed": int,         # Count of failed verification media
 					"total_evaluated": int,      # Count of evaluated media (verified + failed)
 					"pass_rate": float,          # verified / (verified + failed)
-					"media_ids": List[str]       # IDs of verified media to mark as rewarded
+					"media_ids": List[str],      # IDs of verified media to mark as rewarded
+					"last_timestamp": float      # Creation timestamp of most recent verified media sample
 				}
 			}
 		"""
@@ -660,11 +661,14 @@ class ContentManager:
 						"verified_media_ids": [],
 						"total_verified": 0,
 						"total_submissions": 0,
-						"total_failed": 0
+						"total_failed": 0,
+						"last_timestamp": media.created_at
 					}
 				
 				miner_stats[hotkey]["verified_media_ids"].append(media.id)
 				miner_stats[hotkey]["total_verified"] += 1
+				if media.created_at > miner_stats[hotkey]["last_timestamp"]:
+					miner_stats[hotkey]["last_timestamp"] = media.created_at
 
 			# Get total submission counts per miner (verified + failed + pending)
 			for hotkey, stats in miner_stats.items():
@@ -697,7 +701,8 @@ class ContentManager:
 					"total_failed": failed,
 					"total_evaluated": total_evaluated,
 					"pass_rate": pass_rate,
-					"media_ids": stats["verified_media_ids"]
+					"media_ids": stats["verified_media_ids"],
+					"last_timestamp": stats["last_timestamp"]
 				}
 
 			bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
