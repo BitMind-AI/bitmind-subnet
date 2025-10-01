@@ -193,37 +193,35 @@ class Validator(BaseNeuron):
                 normed_weights = self.scores / norm
 
                 # discriminator rewards distributed only upon performance improvements on benchmark exam
-                burn_pct = .5
+                burn_pct = 0.
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58="5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
                     netuid=self.config.netuid, 
                     block=block
                 )
 
-                d_pct = 1. # .8
-                d_fee_pct = .3
-                fee_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                d_pct = .8
+                video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58="5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",  # TODO
                      netuid=self.config.netuid, 
                      block=block)
-                escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58="5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",  # TODO
                      netuid=self.config.netuid, 
                      block=block)
 
-                # .7 to discriminators, .3 to generators for now
-                g_pct = (1 - d_pct)
+                # .8 to discriminators, .2 to generators for now
+                g_pct = (1. - d_pct)
                 normed_weights = np.array([
                     (1 - burn_pct) * g_pct  * v
                     for v in normed_weights
                 ])
                 
                 normed_weights[burn_uid] = burn_pct
-                normed_weights[fee_uid] = (1 - burn_pct) * d_pct * d_fee_pct 
-                normed_weights[escrow_uid] = (1 - burn_pct) * d_pct * (1 - d_fee_pct)
-                bt.logging.info(f"Discriminator rewards UID: {escrow_uid}")
-                bt.logging.info(f"UIDs: {uids}")
-                bt.logging.info(f"NORMED WEIGHTS: {normed_weights}")
+                normed_weights[image_escrow_uid] = (1 - burn_pct) * d_pct / 2
+                normed_weights[video_escrow_uid] = (1 - burn_pct) * d_pct / 2
+                bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
+                bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
@@ -240,6 +238,7 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
+        # Get verification stats for only unrewarded media to quickly slash for submissions that fail verification
         verification_stats = self.content_manager.get_unrewarded_verification_stats()
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
 
@@ -251,7 +250,7 @@ class Validator(BaseNeuron):
 
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
         rewards = {
-            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)
+            uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, 1e-4)
             for uid in reward_multipliers 
         }
 

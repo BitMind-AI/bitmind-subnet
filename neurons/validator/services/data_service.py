@@ -93,7 +93,7 @@ class DataService:
 
         self.block_callbacks = [
             self.log_on_block,
-            self.start_scraper_cycle,
+            #self.start_scraper_cycle,
             self.start_dataset_download,
         ]
 
@@ -115,7 +115,7 @@ class DataService:
         bt.logging.success("[DATA-SERVICE] Data service started successfully")
 
         await self.start_dataset_download(0)
-        await self.start_scraper_cycle(0)
+        #await self.start_scraper_cycle(0)
 
         # Start substrate subscription
         self.substrate_task = self.substrate_manager.start_subscription_task(self.run_callbacks)
