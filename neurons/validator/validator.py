@@ -143,7 +143,8 @@ class Validator(BaseNeuron):
             "\N{GRINNING FACE WITH SMILING EYES}",
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}",
         )
-        #await self.set_weights(0)
+        await self.set_weights(0)
+
         while not self.exit_context.isExiting:
             self.step += 1
             if self.config.autoupdate and (self.step == 0 or not self.step % 300):
@@ -248,9 +249,10 @@ class Validator(BaseNeuron):
         #bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
+        all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
         rewards = {
-            uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, 1e-4)
-            for uid in reward_multipliers 
+            uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, .01)
+            for uid in all_generator_uids 
         }
 
         if len(rewards) == 0:
@@ -276,6 +278,8 @@ class Validator(BaseNeuron):
                 bt.logging.info(f"Marked {len(media_ids)} media entries as rewarded")
             else:
                 bt.logging.warning("Failed to mark media as rewarded")
+
+        return list(all_generator_uids)
 
     async def log_on_block(self, block):
         """
