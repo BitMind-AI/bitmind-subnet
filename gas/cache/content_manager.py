@@ -620,13 +620,15 @@ class ContentManager:
 		"""Get verified miner media entries that haven't been rewarded yet."""
 		return self.content_db.get_unrewarded_verified_miner_media(limit=limit)
 
-	def get_unrewarded_verification_stats(self, limit: int = None) -> Dict[str, Dict[str, Any]]:
+	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False) -> Dict[str, Dict[str, Any]]:
 		"""
-		Get verification statistics for unrewarded miner media (pass rates, etc.).
+		Get verification statistics for miner media (pass rates, etc.).
 		Returns raw statistics without computing rewards - that's done in rewards.py.
 
 		Args:
-			limit: Maximum number of unrewarded entries to consider per miner
+			limit: Maximum number of entries to consider per miner
+			include_all: If False (default), only return stats for unrewarded media.
+						If True, return stats for ALL verified media (rewarded + unrewarded)
 
 		Returns:
 			Dict mapping miner hotkey to verification stats:
@@ -644,9 +646,15 @@ class ContentManager:
 			}
 		"""
 		try:
-			verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
+			if include_all:
+				verified_media = self.get_miner_media(verification_status="verified")
+				if limit and len(verified_media) > limit:
+					verified_media = verified_media[:limit]
+			else:
+				verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
 			if not verified_media:
-				bt.logging.debug("No unrewarded verified miner media found")
+				media_type = "verified miner media" if include_all else "unrewarded verified miner media"
+				bt.logging.debug(f"No {media_type} found")
 				return {}
 
 			miner_stats = {}
