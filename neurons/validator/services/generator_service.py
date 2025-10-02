@@ -234,6 +234,16 @@ class GeneratorService:
             try:
                 self._verify_miner_media(clip_batch_size=32)
 
+                # Upload batch of miner/validator generated media to HuggingFace
+                bt.logging.info("Beginning hf batch upload")
+                self.content_manager.upload_batch_to_huggingface(
+                    hf_token=self.hf_token,
+                    hf_dataset_repos=self.hf_dataset_repos,
+                    upload_batch_size=self.upload_batch_size,
+                    videos_per_archive=self.videos_per_archive,
+                    validator_hotkey=self.validator_wallet.hotkey.ss58_address,
+                )
+
                 # Generate search queries
                 start = time.time()
                 self._generate_text("search_query", query_batch_size)
@@ -260,16 +270,6 @@ class GeneratorService:
 
                 # Generate media with local models
                 self._generate_media(use_local=True, k=local_batch_size)
-
-                # Upload batch of miner/validator generated media to HuggingFace
-                bt.logging.info("Beginning hf batch upload")
-                self.content_manager.upload_batch_to_huggingface(
-                    hf_token=self.hf_token,
-                    hf_dataset_repos=self.hf_dataset_repos,
-                    upload_batch_size=self.upload_batch_size,
-                    videos_per_archive=self.videos_per_archive,
-                    validator_hotkey=self.validator_wallet.hotkey.ss58_address,
-                )
 
             except Exception as e:
                 bt.logging.error(
@@ -418,6 +418,7 @@ class GeneratorService:
 
             results = run_verification(
                 content_manager=self.content_manager,
+                batch_size=None,  # Process all available miner media
                 threshold=threshold,
                 clip_batch_size=clip_batch_size,
             )
