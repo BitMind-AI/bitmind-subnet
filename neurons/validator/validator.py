@@ -144,6 +144,7 @@ class Validator(BaseNeuron):
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}",
         )
         await self.set_weights(0)
+
         while not self.exit_context.isExiting:
             self.step += 1
             if self.config.autoupdate and (self.step == 0 or not self.step % 300):
