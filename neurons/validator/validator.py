@@ -143,7 +143,7 @@ class Validator(BaseNeuron):
             "\N{GRINNING FACE WITH SMILING EYES}",
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}",
         )
-
+        #await self.set_weights(0)
         while not self.exit_context.isExiting:
             self.step += 1
             if self.config.autoupdate and (self.step == 0 or not self.step % 300):
@@ -239,9 +239,8 @@ class Validator(BaseNeuron):
         Update self.scores with exponential moving average of rewards.
         """
         # Get verification stats for only unrewarded media to quickly slash for submissions that fail verification
-        verification_stats = self.content_manager.get_unrewarded_verification_stats()
+        verification_stats = self.content_manager.get_unrewarded_verification_stats(include_all=True)
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
-
         generator_results, discriminator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
         )
