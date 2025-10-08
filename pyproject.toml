@@ -58,6 +58,7 @@ dependencies = [
     "async-substrate-interface==1.5.1",
     "ftfy==6.3.1",
     "huggingface_hub>=0.17.0",
+    "gasbench @ git+https://github.com/BitMind-AI/gasbench.git",
 ]
 
 [project.scripts]
