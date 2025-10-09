@@ -490,32 +490,23 @@ def push_discriminator(
 discriminator.add_command(push_discriminator, name="push")
 
 
-# Benchmark discriminator models against BitMind datasets
-@discriminator.command(name="benchmark")
+@discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.option("--image-model", help="Path to image detector ONNX model")
 @click.option("--video-model", help="Path to video detector ONNX model")
-@click.option("--debug", is_flag=True, help="Use debug mode (faster, smaller datasets)")
-@click.option("--gasstation-only", is_flag=True, help="Use only gasstation datasets")
-@click.option("--cache-dir", help="Directory for caching datasets")
-@click.option("--output-dir", help="Directory for saving benchmark results")
-def benchmark(image_model, video_model, debug, gasstation_only, cache_dir, output_dir):
-    """Run image/video benchmarks for provided ONNX models using gasbench"""
+@click.pass_context
+def benchmark(ctx, image_model, video_model):
+    """Run image/video benchmarks for provided ONNX models using gasbench.
+    All other options are passed directly to gasbench. Use 'gasbench --help' to see available options.
+    Common options: --debug, --small, --full, --gasstation-only, --cache-dir, --output-dir
+    """
     if not image_model and not video_model:
         click.echo("Error: Either --image-model or --video-model must be provided", err=True)
         return
-
+ 
     def run_gasbench(model_path, modality):
         click.echo(f"Running {modality} benchmark on {model_path}...")
-        cmd = ["gasbench", model_path, modality]
-        if debug:
-            cmd.append("--debug")
-        if gasstation_only:
-            cmd.append("--gasstation-only")
-        if cache_dir:
-            cmd.extend(["--cache-dir", cache_dir])
-        if output_dir:
-            cmd.extend(["--output-dir", output_dir])
- 
+        cmd = ["gasbench", model_path, modality] + ctx.args
+  
         try:
             result = subprocess.run(cmd, check=True)
             if result.returncode == 0:
@@ -525,10 +516,11 @@ def benchmark(image_model, video_model, debug, gasstation_only, cache_dir, outpu
             sys.exit(e.returncode)
         except Exception as e:
             click.echo(f"❌ Error running {modality} benchmark: {e}", err=True)
-
+            sys.exit(1)
+ 
     if image_model:
         run_gasbench(image_model, "image")
-
+ 
     if video_model:
         run_gasbench(video_model, "video")
 
