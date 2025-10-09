@@ -194,7 +194,7 @@ class Validator(BaseNeuron):
                 normed_weights = self.scores / norm
 
                 # discriminator rewards distributed only upon performance improvements on benchmark exam
-                burn_pct = 0.
+                burn_pct = 0.9
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58="5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
                     netuid=self.config.netuid, 
