@@ -490,45 +490,39 @@ def push_discriminator(
 discriminator.add_command(push_discriminator, name="push")
 
 
-# Benchmark discriminator models against BitMind datasets
-@discriminator.command(name="benchmark")
+@discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.option("--image-model", help="Path to image detector ONNX model")
 @click.option("--video-model", help="Path to video detector ONNX model")
-@click.option("-v", count=True, help="Increase verbosity (-v, -vv, -vvv)")
-@click.option("--no-stream-images", is_flag=True, help="Disable streaming images; download locally")
-@click.option("--hf-home", help="Override Hugging Face cache root (sets HF_HOME)")
-@click.option("--temp-dir", help="Directory for temporary video extraction (overrides TMPDIR)")
-@click.option("--max-samples", type=int, default=None, help="Maximum number of samples to evaluate per modality (use all if omitted)")
-def benchmark(image_model, video_model, v, no_stream_images, hf_home, temp_dir, max_samples):
-    """Run image/video benchmarks for provided ONNX models"""
+@click.pass_context
+def benchmark(ctx, image_model, video_model):
+    """Run image/video benchmarks for provided ONNX models using gasbench.
+    All other options are passed directly to gasbench. Use 'gasbench --help' to see available options.
+    Common options: --debug, --small, --full, --gasstation-only, --cache-dir, --output-dir
+    """
     if not image_model and not video_model:
         click.echo("Error: Either --image-model or --video-model must be provided", err=True)
         return
-
-    # Build command to invoke the benchmark runner
-    cmd = [sys.executable, "-m", "neurons.discriminator.local_eval.run_benchmark"]
+ 
+    def run_gasbench(model_path, modality):
+        click.echo(f"Running {modality} benchmark on {model_path}...")
+        cmd = ["gasbench", model_path, modality] + ctx.args
+  
+        try:
+            result = subprocess.run(cmd, check=True)
+            if result.returncode == 0:
+                click.echo(f"✅ {modality.capitalize()} benchmark completed successfully!")
+        except subprocess.CalledProcessError as e:
+            click.echo(f"❌ {modality.capitalize()} benchmark failed with exit code {e.returncode}", err=True)
+            sys.exit(e.returncode)
+        except Exception as e:
+            click.echo(f"❌ Error running {modality} benchmark: {e}", err=True)
+            sys.exit(1)
+ 
     if image_model:
-        cmd.extend(["--image_model", image_model])
+        run_gasbench(image_model, "image")
+ 
     if video_model:
-        cmd.extend(["--video_model", video_model])
-    if v:
-        cmd.extend(["-" + "v" * v])
-    # Stream by default; pass disable flag if requested
-    if no_stream_images:
-        cmd.append("--no-stream-images")
-    if hf_home:
-        cmd.extend(["--hf-home", hf_home])
-    if temp_dir:
-        cmd.extend(["--temp-dir", temp_dir])
-    if max_samples is not None:
-        cmd.extend(["--max-samples", str(max_samples)])
-
-    try:
-        result = subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        sys.exit(e.returncode)
-    except Exception as e:
-        sys.exit(1)
+        run_gasbench(video_model, "video")
 
 # =============================================================================
 # GENERATOR COMMANDS
