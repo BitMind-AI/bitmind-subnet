@@ -127,6 +127,8 @@ class Validator(BaseNeuron):
             self.miner_type_tracker,
         )
 
+        await self.load_state()
+
         dataset_counts = self.content_manager.get_dataset_media_counts()
         total_dataset_media = sum(dataset_counts.values())
         if total_dataset_media == 0:
@@ -159,8 +161,9 @@ class Validator(BaseNeuron):
 
     @on_block_interval("generator_challenge_interval")
     async def issue_generator_challenge(self, block):
-        """Generator challenges coming soon!"""
+        """Issue generative challenges and save state to preserve active tasks"""
         await self.generative_challenge_manager.issue_generative_challenge()
+        await self.save_state()
 
     @on_block_interval("epoch_length")
     async def set_weights(self, block):
@@ -301,14 +304,16 @@ class Validator(BaseNeuron):
 
     async def save_state(self):
         """
-        Atomically save validator state (scores + miner history)
+        Atomically save validator state (scores + challenge tasks)
         Maintains the current state and one backup.
         """
         async with self._state_lock:
             bt.logging.debug("save_state() acquired state lock")
             try:
                 state_data = {"scores.npy": self.scores}
-                state_objects = [(self.miner_type_tracker, "miner_type_tracker.pkl")]
+                state_objects = [
+                    (self.generative_challenge_manager, "challenge_tasks.pkl")
+                ]
 
                 success = save_validator_state(
                     base_dir=self.config.neuron.full_path,
@@ -332,7 +337,9 @@ class Validator(BaseNeuron):
         """
         try:
             state_data_keys = ["scores.npy"]
-            state_objects = [(self.discriminator_tracker, "discriminator_history.pkl")]
+            state_objects = [
+                (self.generative_challenge_manager, "challenge_tasks.pkl")
+            ]
 
             loaded_state = load_validator_state(
                 base_dir=self.config.neuron.full_path,
