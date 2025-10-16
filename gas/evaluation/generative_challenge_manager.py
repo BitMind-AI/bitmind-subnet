@@ -29,12 +29,14 @@ class GenerativeChallengeManager:
         metagraph,
         subtensor,
         miner_type_tracker,
+        save_state_callback=None,
     ):
         self.config = config
         self.wallet = wallet
         self.metagraph = metagraph
         self.subtensor = subtensor
         self.miner_type_tracker = miner_type_tracker
+        self._save_state_callback = save_state_callback
 
         self.content_manager = ContentManager(self.config.cache.base_dir)
 
@@ -173,8 +175,11 @@ class GenerativeChallengeManager:
         async with self.challenge_lock:
             bt.logging.debug(f"Callback for task {task_id}: Current active tasks: {list(self.challenge_tasks.keys())}")
             if task_id not in self.challenge_tasks:
-                bt.logging.warning(f"Received binary upload for unknown task_id: {task_id} from {format_uid_info()} (IP: {client_ip})")
-                return Response(status_code=404, content="Task not found")
+                # Check if this might be a stale task from a previous session
+                bt.logging.debug(f"Received binary upload for unknown task_id: {task_id} from {format_uid_info()} (IP: {client_ip}), content_type: {content_type}, size: {len(binary_data)} bytes")
+                # Accept the upload gracefully but don't process it - this reduces 404 spam
+                # while still indicating the task wasn't found in our debug logs
+                return Response(status_code=200, content="Task not found in current session")
 
             challenge_info = self.challenge_tasks[task_id]
             generator_uid = challenge_info["uid"]
@@ -197,6 +202,13 @@ class GenerativeChallengeManager:
                 challenge_info["error_message"] = "Failed to store binary content"
 
             del self.challenge_tasks[task_id]
+            
+        # Save state after task completion to persist the deletion
+        if self._save_state_callback:
+            try:
+                await self._save_state_callback()
+            except Exception as e:
+                bt.logging.warning(f"Failed to save state after task completion: {e}")
                 
         return Response(status_code=200, content="Binary content received")
 
@@ -326,7 +338,7 @@ class GenerativeChallengeManager:
             filepath = os.path.join(save_dir, filename)
             if not os.path.exists(filepath):
                 bt.logging.debug(f"No challenge tasks state file found at {filepath}")
-                return
+                return True  # Not an error - just no state to load
 
             with open(filepath, 'rb') as f:
                 loaded_tasks = pickle.load(f)
@@ -339,6 +351,8 @@ class GenerativeChallengeManager:
 
             self.challenge_tasks = valid_tasks
             bt.logging.info(f"Loaded {len(self.challenge_tasks)} active challenge tasks from {filepath}")
+            return True  # Success
         except Exception as e:
             bt.logging.error(f"Failed to load challenge tasks state: {e}")
             self.challenge_tasks = {}
+            return False  # Failure

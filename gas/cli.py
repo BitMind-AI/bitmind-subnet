@@ -378,14 +378,54 @@ def db_stats(db_path, base_dir, detailed):
 )
 @click.option(
     "--source-type",
-    type=click.Choice(["scraper", "dataset", "generated"]),
+    type=click.Choice(["scraper", "dataset", "generated", "miner"]),
     help="Filter media table by source type (only applies to media table)",
 )
-def db_rows(db_path, table, rows, source_type):
+@click.option(
+    "--miner-uid",
+    type=int,
+    help="Filter media table by specific miner UID (only applies to media table with source-type=miner)",
+)
+@click.option(
+    "--last-24h",
+    is_flag=True,
+    help="Filter media table to show only entries from the last 24 hours (only applies to media table)",
+)
+@click.option(
+    "--filepaths-only",
+    is_flag=True,
+    help="Display only file paths (only applies to media table)",
+)
+@click.option(
+    "--include-prompts",
+    is_flag=True,
+    help="Include associated prompt content with file paths (only applies to media table)",
+)
+def db_rows(db_path, table, rows, source_type, miner_uid, last_24h, filepaths_only, include_prompts):
     """Show the first N rows of either the prompts or media table"""
     # Validate source-type is only used with media table
     if source_type and table != "media":
         click.echo("❌ --source-type can only be used with --table media", err=True)
+        sys.exit(1)
+    
+    # Validate miner-uid is only used with media table and source-type=miner
+    if miner_uid and (table != "media" or source_type != "miner"):
+        click.echo("❌ --miner-uid can only be used with --table media and --source-type miner", err=True)
+        sys.exit(1)
+    
+    # Validate last-24h is only used with media table
+    if last_24h and table != "media":
+        click.echo("❌ --last-24h can only be used with --table media", err=True)
+        sys.exit(1)
+    
+    # Validate filepaths-only is only used with media table
+    if filepaths_only and table != "media":
+        click.echo("❌ --filepaths-only can only be used with --table media", err=True)
+        sys.exit(1)
+    
+    # Validate include-prompts is only used with media table
+    if include_prompts and table != "media":
+        click.echo("❌ --include-prompts can only be used with --table media", err=True)
         sys.exit(1)
 
     # Use DEFAULT_CACHE_DIR if not specified
@@ -413,6 +453,22 @@ def db_rows(db_path, table, rows, source_type):
     # Add source-type filter if provided
     if source_type:
         cmd.extend(["--source-type", source_type])
+    
+    # Add miner-uid filter if provided
+    if miner_uid:
+        cmd.extend(["--miner-uid", str(miner_uid)])
+    
+    # Add last-24h filter if provided
+    if last_24h:
+        cmd.append("--last-24h")
+    
+    # Add filepaths-only flag if provided
+    if filepaths_only:
+        cmd.append("--filepaths-only")
+    
+    # Add include-prompts flag if provided
+    if include_prompts:
+        cmd.append("--include-prompts")
 
     # Execute the db_rows script
     try:

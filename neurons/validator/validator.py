@@ -130,6 +130,7 @@ class Validator(BaseNeuron):
             self.metagraph,
             self.subtensor,
             self.miner_type_tracker,
+            save_state_callback=self.save_state,
         )
 
         await self.load_state()
