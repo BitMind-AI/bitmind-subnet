@@ -445,28 +445,30 @@ cli.add_command(discriminator, name="d")
 
 
 @discriminator.command()
-@click.option("--onnx-dir", help="Path to directory containing ONNX files")
-@click.option("--model-zip", help="Path to pre-existing model zip file")
+@click.option("--image-model", help="Path to image ONNX model file")
+@click.option("--video-model", help="Path to video ONNX model file")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
 @click.option("--netuid", default=34, help="Subnet UID")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
 def push_discriminator(
-    onnx_dir, model_zip, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
+    image_model, video_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
 ):
-    """Push discriminator model to Hugging Face and register on blockchain"""
+    """Push discriminator model(s) and register on blockchain. At least one model (image or video) must be provided."""
+    # Validate at least one model is provided
+    if not image_model and not video_model:
+        click.echo("Error: At least one model must be provided (--image-model or --video-model)", err=True)
+        return
+    
     # Build command arguments for the push_model script
     cmd = [sys.executable, "-m", "neurons.discriminator.push_model"]
 
-    # Add required arguments
-    if onnx_dir:
-        cmd.extend(["--onnx-dir", onnx_dir])
-    elif model_zip:
-        cmd.extend(["--model-zip", model_zip])
-    else:
-        click.echo("Error: Either --onnx-dir or --model-zip must be provided", err=True)
-        return
+    # Add model arguments
+    if image_model:
+        cmd.extend(["--image-model", image_model])
+    if video_model:
+        cmd.extend(["--video-model", video_model])
 
     # Add optional arguments
     cmd.extend(["--wallet-name", wallet_name])
