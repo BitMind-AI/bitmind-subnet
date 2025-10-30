@@ -501,8 +501,8 @@ cli.add_command(discriminator, name="d")
 
 
 @discriminator.command()
-@click.option("--image-model", help="Path to image ONNX model file")
-@click.option("--video-model", help="Path to video ONNX model file")
+@click.option("--image-model", help="Path to image detector zip file")
+@click.option("--video-model", help="Path to video detector zip file")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
 @click.option("--netuid", default=34, help="Subnet UID")
@@ -511,7 +511,7 @@ cli.add_command(discriminator, name="d")
 def push_discriminator(
     image_model, video_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
 ):
-    """Push discriminator model(s) and register on blockchain. At least one model (image or video) must be provided."""
+    """Push discriminator model(s) and register on blockchain. At least one model zip file (image or video) must be provided."""
     # Validate at least one model is provided
     if not image_model and not video_model:
         click.echo("Error: At least one model must be provided (--image-model or --video-model)", err=True)
@@ -549,11 +549,11 @@ discriminator.add_command(push_discriminator, name="push")
 
 
 @discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
-@click.option("--image-model", help="Path to image detector ONNX model")
-@click.option("--video-model", help="Path to video detector ONNX model")
+@click.option("--image-model", help="Path to image detector ONNX model or zip file")
+@click.option("--video-model", help="Path to video detector ONNX model or zip file")
 @click.pass_context
 def benchmark(ctx, image_model, video_model):
-    """Run image/video benchmarks for provided ONNX models using gasbench.
+    """Run image/video benchmarks for provided detector models using gasbench.
     All other options are passed directly to gasbench. Use 'gasbench --help' to see available options.
     Common options: --debug, --small, --full, --gasstation-only, --cache-dir, --output-dir
     """
