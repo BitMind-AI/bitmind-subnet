@@ -112,8 +112,6 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
 fi
 
 
-rm -rf ~/.cache/sn34
-
 # Check if we're in the right directory
 if [ ! -f "pyproject.toml" ]; then
     log_error "pyproject.toml not found. Please run this script from the project root directory."

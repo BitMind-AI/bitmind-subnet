@@ -620,13 +620,15 @@ class ContentManager:
 		"""Get verified miner media entries that haven't been rewarded yet."""
 		return self.content_db.get_unrewarded_verified_miner_media(limit=limit)
 
-	def get_unrewarded_verification_stats(self, limit: int = None) -> Dict[str, Dict[str, Any]]:
+	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False) -> Dict[str, Dict[str, Any]]:
 		"""
-		Get verification statistics for unrewarded miner media (pass rates, etc.).
+		Get verification statistics for miner media (pass rates, etc.).
 		Returns raw statistics without computing rewards - that's done in rewards.py.
 
 		Args:
-			limit: Maximum number of unrewarded entries to consider per miner
+			limit: Maximum number of entries to consider per miner
+			include_all: If False (default), only return stats for unrewarded media.
+						If True, return stats for ALL verified media (rewarded + unrewarded)
 
 		Returns:
 			Dict mapping miner hotkey to verification stats:
@@ -638,14 +640,21 @@ class ContentManager:
 					"total_failed": int,         # Count of failed verification media
 					"total_evaluated": int,      # Count of evaluated media (verified + failed)
 					"pass_rate": float,          # verified / (verified + failed)
-					"media_ids": List[str]       # IDs of verified media to mark as rewarded
+					"media_ids": List[str],      # IDs of verified media to mark as rewarded
+					"last_timestamp": float      # Creation timestamp of most recent verified media sample
 				}
 			}
 		"""
 		try:
-			verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
+			if include_all:
+				verified_media = self.get_miner_media(verification_status="verified")
+				if limit and len(verified_media) > limit:
+					verified_media = verified_media[:limit]
+			else:
+				verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
 			if not verified_media:
-				bt.logging.debug("No unrewarded verified miner media found")
+				media_type = "verified miner media" if include_all else "unrewarded verified miner media"
+				bt.logging.debug(f"No {media_type} found")
 				return {}
 
 			miner_stats = {}
@@ -660,11 +669,14 @@ class ContentManager:
 						"verified_media_ids": [],
 						"total_verified": 0,
 						"total_submissions": 0,
-						"total_failed": 0
+						"total_failed": 0,
+						"last_timestamp": media.created_at
 					}
 				
 				miner_stats[hotkey]["verified_media_ids"].append(media.id)
 				miner_stats[hotkey]["total_verified"] += 1
+				if media.created_at > miner_stats[hotkey]["last_timestamp"]:
+					miner_stats[hotkey]["last_timestamp"] = media.created_at
 
 			# Get total submission counts per miner (verified + failed + pending)
 			for hotkey, stats in miner_stats.items():
@@ -697,7 +709,8 @@ class ContentManager:
 					"total_failed": failed,
 					"total_evaluated": total_evaluated,
 					"pass_rate": pass_rate,
-					"media_ids": stats["verified_media_ids"]
+					"media_ids": stats["verified_media_ids"],
+					"last_timestamp": stats["last_timestamp"]
 				}
 
 			bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
