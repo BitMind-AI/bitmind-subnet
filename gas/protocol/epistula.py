@@ -76,10 +76,12 @@ def verify_signature(
         return "Invalid uuid"
     if not isinstance(body, bytes):
         return "Body is not of type bytes"
-    ALLOWED_DELTA_MS = 8000
+    ALLOWED_DELTA_MS = 15000
     keypair = Keypair(ss58_address=signed_by)
     if timestamp + ALLOWED_DELTA_MS < now:
-        return "Request is too stale"
+        staleness_ms = now - timestamp
+        staleness_seconds = staleness_ms / 1000.0
+        return f"Request is too stale: {staleness_seconds:.1f}s old (limit: {ALLOWED_DELTA_MS/1000.0}s)"
     message = f"{sha256(body).hexdigest()}.{uuid}.{timestamp}.{signed_for}"
     verified = keypair.verify(message, signature)
     if not verified:

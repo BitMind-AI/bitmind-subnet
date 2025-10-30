@@ -18,8 +18,6 @@ Discriminative miners need to prepare ONNX models for classification tasks. You'
 - `image_detector.onnx` - For image classification tasks  
 - `video_detector.onnx` - For video classification tasks
 
-Place these files in a directory (e.g., `models/`) or create a zip file containing them.
-
 ## Pushing Your Model
 
 First, activate the virtual environment:
@@ -27,14 +25,27 @@ First, activate the virtual environment:
 source .venv/bin/activate
 ```
 
-Once you have your ONNX models ready, push them to the network using the `push-discriminator` command:
+Once you have your ONNX models ready, push them to the network using the `push` command. You can upload models one at a time or both together:
 
 ```bash
-# Push from a directory containing ONNX files
-gascli discriminator push --onnx-dir models/ 
+# Upload both models together
+gascli d push \
+  --image-model image_detector.onnx \
+  --video-model video_detector.onnx \
+  --wallet-name your_wallet_name \
+  --wallet-hotkey your_hotkey_name
 
-# Or push from a pre-existing zip file
-gascli d push --model-zip models.zip
+# Or upload just the image model
+gascli d push \
+  --image-model image_detector.onnx \
+  --wallet-name your_wallet_name \
+  --wallet-hotkey your_hotkey_name
+
+# Or upload just the video model
+gascli d push \
+  --video-model video_detector.onnx \
+  --wallet-name your_wallet_name \
+  --wallet-hotkey your_hotkey_name
 ```
 
 ### Command Options
@@ -43,7 +54,8 @@ The `push` command accepts several parameters:
 
 ```bash
 gascli d push \
-  --onnx-dir models/ \
+  --image-model image_detector.onnx \
+  --video-model video_detector.onnx \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name \
   --netuid 34 \
@@ -52,12 +64,14 @@ gascli d push \
 ```
 
 **Parameters:**
-- `--onnx-dir` or `--model-zip`: Path to your ONNX models
+- `--image-model`: Path to image ONNX model (optional, but at least one model required)
+- `--video-model`: Path to video ONNX model (optional, but at least one model required)
 - `--wallet-name`: Bittensor wallet name (default: "default")
 - `--wallet-hotkey`: Bittensor hotkey name (default: "default") 
 - `--netuid`: Subnet UID (default: 34)
 - `--chain-endpoint`: Subtensor network endpoint (default: "wss://test.finney.opentensor.ai:443/")
 - `--retry-delay`: Retry delay in seconds (default: 60)
+
 
 ### What Happens During Push
 
