@@ -561,26 +561,27 @@ def benchmark(ctx, image_model, video_model):
         click.echo("Error: Either --image-model or --video-model must be provided", err=True)
         return
  
-    def run_gasbench(model_path, modality):
-        click.echo(f"Running {modality} benchmark on {model_path}...")
-        cmd = ["gasbench", model_path, modality] + ctx.args
+    def run_gasbench(model_path, modality_flag):
+        click.echo(f"Running benchmark on {model_path}...")
+        # gasbench --image-model /path or gasbench --video-model /path
+        cmd = ["gasbench", modality_flag, model_path] + ctx.args
   
         try:
             result = subprocess.run(cmd, check=True)
             if result.returncode == 0:
-                click.echo(f"✅ {modality.capitalize()} benchmark completed successfully!")
+                click.echo(f"✅ Benchmark completed successfully!")
         except subprocess.CalledProcessError as e:
-            click.echo(f"❌ {modality.capitalize()} benchmark failed with exit code {e.returncode}", err=True)
+            click.echo(f"❌ Benchmark failed with exit code {e.returncode}", err=True)
             sys.exit(e.returncode)
         except Exception as e:
-            click.echo(f"❌ Error running {modality} benchmark: {e}", err=True)
+            click.echo(f"❌ Error running benchmark: {e}", err=True)
             sys.exit(1)
  
     if image_model:
-        run_gasbench(image_model, "image")
+        run_gasbench(image_model, "--image-model")
  
     if video_model:
-        run_gasbench(video_model, "video")
+        run_gasbench(video_model, "--video-model")
 
 # =============================================================================
 # GENERATOR COMMANDS
