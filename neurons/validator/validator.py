@@ -40,6 +40,11 @@ except Exception:
 
 
 MAINNET_UID = 34
+SS58_ADDRESSES = {
+    "burn": "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
+    "video_escrow": "5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",
+    "image_escrow": "5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",
+}
 
 
 class Validator(BaseNeuron):
@@ -125,7 +130,10 @@ class Validator(BaseNeuron):
             self.metagraph,
             self.subtensor,
             self.miner_type_tracker,
+            save_state_callback=self.save_state,
         )
+
+        await self.load_state()
 
         dataset_counts = self.content_manager.get_dataset_media_counts()
         total_dataset_media = sum(dataset_counts.values())
@@ -143,6 +151,7 @@ class Validator(BaseNeuron):
             "\N{GRINNING FACE WITH SMILING EYES}",
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}",
         )
+        await self.set_weights(0)
 
         while not self.exit_context.isExiting:
             self.step += 1
@@ -158,8 +167,9 @@ class Validator(BaseNeuron):
 
     @on_block_interval("generator_challenge_interval")
     async def issue_generator_challenge(self, block):
-        """Generator challenges coming soon!"""
+        """Issue generative challenges and save state to preserve active tasks"""
         await self.generative_challenge_manager.issue_generative_challenge()
+        await self.save_state()
 
     @on_block_interval("epoch_length")
     async def set_weights(self, block):
@@ -193,37 +203,35 @@ class Validator(BaseNeuron):
                 normed_weights = self.scores / norm
 
                 # discriminator rewards distributed only upon performance improvements on benchmark exam
-                burn_pct = .5
+                burn_pct = 0.7
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58="5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
+                    hotkey_ss58=SS58_ADDRESSES["burn"],
                     netuid=self.config.netuid, 
                     block=block
                 )
 
-                d_pct = 1. # .8
-                d_fee_pct = .3
-                fee_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58="5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",  # TODO
+                d_pct = .8
+                video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58=SS58_ADDRESSES["video_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
-                escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58="5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",  # TODO
+                image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58=SS58_ADDRESSES["image_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
 
-                # .7 to discriminators, .3 to generators for now
-                g_pct = (1 - d_pct)
+                # .8 to discriminators, .2 to generators for now
+                g_pct = (1. - d_pct)
                 normed_weights = np.array([
                     (1 - burn_pct) * g_pct  * v
                     for v in normed_weights
                 ])
                 
                 normed_weights[burn_uid] = burn_pct
-                normed_weights[fee_uid] = (1 - burn_pct) * d_pct * d_fee_pct 
-                normed_weights[escrow_uid] = (1 - burn_pct) * d_pct * (1 - d_fee_pct)
-                bt.logging.info(f"Discriminator rewards UID: {escrow_uid}")
-                bt.logging.info(f"UIDs: {uids}")
-                bt.logging.info(f"NORMED WEIGHTS: {normed_weights}")
+                normed_weights[image_escrow_uid] = (1 - burn_pct) * d_pct / 2
+                normed_weights[video_escrow_uid] = (1 - burn_pct) * d_pct / 2
+                bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
+                bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
@@ -240,9 +248,9 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
-        verification_stats = self.content_manager.get_unrewarded_verification_stats()
+        # Get verification stats for only unrewarded media to quickly slash for submissions that fail verification
+        verification_stats = self.content_manager.get_unrewarded_verification_stats(include_all=True)
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
-
         generator_results, discriminator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
         )
@@ -250,9 +258,10 @@ class Validator(BaseNeuron):
         #bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
         reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
+        all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
         rewards = {
-            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, 0)
-            for uid in reward_multipliers 
+            uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, .01)
+            for uid in all_generator_uids 
         }
 
         if len(rewards) == 0:
@@ -279,6 +288,8 @@ class Validator(BaseNeuron):
             else:
                 bt.logging.warning("Failed to mark media as rewarded")
 
+        return list(all_generator_uids)
+
     async def log_on_block(self, block):
         """
         Log information about validator state at regular intervals.
@@ -299,14 +310,16 @@ class Validator(BaseNeuron):
 
     async def save_state(self):
         """
-        Atomically save validator state (scores + miner history)
+        Atomically save validator state (scores + challenge tasks)
         Maintains the current state and one backup.
         """
         async with self._state_lock:
             bt.logging.debug("save_state() acquired state lock")
             try:
                 state_data = {"scores.npy": self.scores}
-                state_objects = [(self.miner_type_tracker, "miner_type_tracker.pkl")]
+                state_objects = [
+                    (self.generative_challenge_manager, "challenge_tasks.pkl")
+                ]
 
                 success = save_validator_state(
                     base_dir=self.config.neuron.full_path,
@@ -330,7 +343,9 @@ class Validator(BaseNeuron):
         """
         try:
             state_data_keys = ["scores.npy"]
-            state_objects = [(self.discriminator_tracker, "discriminator_history.pkl")]
+            state_objects = [
+                (self.generative_challenge_manager, "challenge_tasks.pkl")
+            ]
 
             loaded_state = load_validator_state(
                 base_dir=self.config.neuron.full_path,

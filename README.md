@@ -52,8 +52,12 @@ gascli validator start
 # Miners: Start or restart generative miner
 gascli generator start
 
-# Miners: Push discriminator models
-gascli discriminator push --onnx-dir /path/to/models --wallet-name default --hotkey-name default
+# Miners: Push discriminator models (both at once)
+gascli discriminator push --image-model image_detector.onnx --video-model video_detector.onnx --wallet-name default --wallet-hotkey default
+
+# Or push one model at a time
+gascli d push --image-model image_detector.onnx 
+gascli d push --video-model video_detector.onnx
 ```
 
 **Available Aliases:**
