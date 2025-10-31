@@ -564,7 +564,7 @@ def benchmark(ctx, image_model, video_model):
     def run_gasbench(model_path, modality_flag):
         click.echo(f"Running benchmark on {model_path}...")
         # gasbench --image-model /path or gasbench --video-model /path
-        cmd = ["gasbench", modality_flag, model_path] + ctx.args
+        cmd = ["gasbench", "run", modality_flag, model_path] + ctx.args
   
         try:
             result = subprocess.run(cmd, check=True)
