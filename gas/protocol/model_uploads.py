@@ -19,9 +19,10 @@ def generate_presigned_url(
     filename: str, 
     file_size: int, 
     file_hash: str, 
-    content_type: Optional[str] = None
+    content_type: Optional[str] = None,
+    modality: Optional[str] = None
 ) -> dict:
-    """Generate presigned upload URL from the API."""
+    """Generate presigned upload URL from the API with optional modality parameter."""
     
     # Prepare request payload
     payload = {
@@ -31,6 +32,8 @@ def generate_presigned_url(
     }
     if content_type:
         payload['content_type'] = content_type
+    if modality:
+        payload['modality'] = modality
     
     payload_json = json.dumps(payload, separators=(',', ':'))
     payload_bytes = payload_json.encode('utf-8')
@@ -153,91 +156,94 @@ def confirm_upload(wallet: bt.wallet, upload_endpoint: str, model_id: int, file_
         }
 
 
-def upload_model_zip_presigned(wallet: bt.wallet, file_path: str, upload_endpoint: str) -> dict:
-    """Upload file using presigned URL flow with Epistula authentication."""
+def upload_single_modality(
+    wallet: bt.wallet,
+    file_path: str,
+    modality: str,
+    upload_endpoint: str
+) -> dict:
+    """Upload a single modality file (image or video model)."""
     file_path_obj = Path(file_path)
     if not file_path_obj.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    # Read file content and calculate hash
-    with open(file_path_obj, "rb") as f:
+    with open(file_path_obj, 'rb') as f:
         file_content = f.read()
 
     file_hash = calculate_sha256(file_content)
     file_size = len(file_content)
     filename = file_path_obj.name
 
-    print(f"📁 File Info:")
-    print(f"  Path: {file_path}")
-    print(f"  Name: {filename}")
-    print(f"  Size: {file_size} bytes ({file_size / 1024 / 1024:.1f} MB)")
-    print(f"  Hash: {file_hash}")
+    print(f"\n{'='*70}")
+    print(f"UPLOADING {modality.upper()} MODEL")
+    print(f"{'='*70}")
+    print(f"📁 File: {filename}")
+    print(f"📊 Size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
+    print(f"🔐 Hash: {file_hash}")
 
+    # Step 1: Generate presigned URL with modality
+    print(f"\n[1/3] Generating presigned URL...")
     presigned_result = generate_presigned_url(
-        wallet, 
-        upload_endpoint, 
-        filename, 
-        file_size, 
+        wallet,
+        upload_endpoint,
+        filename,
+        file_size,
         file_hash,
-        'application/octet-stream'
+        'application/octet-stream',
+        modality
     )
-    
+
     if not presigned_result['success']:
         return {
             "success": False,
+            "modality": modality,
             "step": "presigned_url_generation",
             "error": presigned_result['response'].get('error', 'Unknown error'),
             "response": presigned_result['response']
         }
-    
+
     presigned_data = presigned_result['response']['data']
     model_id = presigned_data['model_id']
     presigned_url = presigned_data['presigned_url']
     r2_key = presigned_data['r2_key']
-    expires_at = presigned_data['expires_at']
-    
-    print(f"  ✅ Presigned URL generated successfully!")
-    print(f"    Model ID: {model_id}")
-    print(f"    R2 Key: {r2_key}")
-    print(f"    Expires at: {expires_at}")
 
+    print(f"✅ Presigned URL generated!")
+    print(f"  Model ID: {model_id}")
+    print(f"  R2 Key: {r2_key}")
+    print(f"\n[2/3] Uploading to R2...")
     upload_result = upload_to_r2(presigned_url, file_content, 'application/octet-stream')
-    
+
     if not upload_result['success']:
         return {
             "success": False,
+            "modality": modality,
             "step": "r2_upload",
             "model_id": model_id,
             "error": upload_result['response'].get('error', 'Unknown error'),
             "response": upload_result['response']
         }
-    
-    print(f"  ✅ File uploaded to R2 successfully!")
-    print(f"    ETag: {upload_result['response'].get('etag', 'N/A')}")
-    
+
+    print(f"✅ File uploaded to R2!")
+    print(f"  ETag: {upload_result['response'].get('etag', 'N/A')}")
+
+    print(f"\n[3/3] Confirming upload...")
     confirm_result = confirm_upload(wallet, upload_endpoint, model_id, file_hash)
-    
+
     if not confirm_result['success']:
         return {
             "success": False,
+            "modality": modality,
             "step": "upload_confirmation",
             "model_id": model_id,
             "error": confirm_result['response'].get('error', 'Unknown error'),
             "response": confirm_result['response']
         }
-    
-    confirm_data = confirm_result['response']['data']
-    final_model_id = confirm_data['model_id']
-    final_r2_key = confirm_data['r2_key']
-    
-    print(f"  ✅ Upload confirmed")
-    print(f"    Model ID: {final_model_id}")
-    print(f"    R2 Key: {final_r2_key}")
-    print(f"    File Hash: {confirm_data['file_hash']}")
-    
+
+    print(f"✅ Upload confirmed!")
     return {
         "success": True,
-        "model_id": final_model_id,
+        "modality": modality,
+        "model_id": model_id,
         "r2_key": r2_key,
         "file_hash": file_hash,
         "file_size": file_size

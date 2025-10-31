@@ -40,6 +40,11 @@ except Exception:
 
 
 MAINNET_UID = 34
+SS58_ADDRESSES = {
+    "burn": "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
+    "video_escrow": "5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",
+    "image_escrow": "5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",
+}
 
 
 class Validator(BaseNeuron):
@@ -125,7 +130,10 @@ class Validator(BaseNeuron):
             self.metagraph,
             self.subtensor,
             self.miner_type_tracker,
+            save_state_callback=self.save_state,
         )
+
+        await self.load_state()
 
         dataset_counts = self.content_manager.get_dataset_media_counts()
         total_dataset_media = sum(dataset_counts.values())
@@ -159,8 +167,9 @@ class Validator(BaseNeuron):
 
     @on_block_interval("generator_challenge_interval")
     async def issue_generator_challenge(self, block):
-        """Generator challenges coming soon!"""
+        """Issue generative challenges and save state to preserve active tasks"""
         await self.generative_challenge_manager.issue_generative_challenge()
+        await self.save_state()
 
     @on_block_interval("epoch_length")
     async def set_weights(self, block):
@@ -196,18 +205,18 @@ class Validator(BaseNeuron):
                 # discriminator rewards distributed only upon performance improvements on benchmark exam
                 burn_pct = 0.7
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58="5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
+                    hotkey_ss58=SS58_ADDRESSES["burn"],
                     netuid=self.config.netuid, 
                     block=block
                 )
 
                 d_pct = .8
                 video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58="5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",  # TODO
+                    hotkey_ss58=SS58_ADDRESSES["video_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
                 image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58="5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",  # TODO
+                    hotkey_ss58=SS58_ADDRESSES["image_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
 
@@ -301,14 +310,16 @@ class Validator(BaseNeuron):
 
     async def save_state(self):
         """
-        Atomically save validator state (scores + miner history)
+        Atomically save validator state (scores + challenge tasks)
         Maintains the current state and one backup.
         """
         async with self._state_lock:
             bt.logging.debug("save_state() acquired state lock")
             try:
                 state_data = {"scores.npy": self.scores}
-                state_objects = [(self.miner_type_tracker, "miner_type_tracker.pkl")]
+                state_objects = [
+                    (self.generative_challenge_manager, "challenge_tasks.pkl")
+                ]
 
                 success = save_validator_state(
                     base_dir=self.config.neuron.full_path,
@@ -332,7 +343,9 @@ class Validator(BaseNeuron):
         """
         try:
             state_data_keys = ["scores.npy"]
-            state_objects = [(self.discriminator_tracker, "discriminator_history.pkl")]
+            state_objects = [
+                (self.generative_challenge_manager, "challenge_tasks.pkl")
+            ]
 
             loaded_state = load_validator_state(
                 base_dir=self.config.neuron.full_path,

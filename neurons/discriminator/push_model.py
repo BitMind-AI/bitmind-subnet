@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Script to push a zip of multiple ONNX models to Hugging Face and register it on the Bittensor blockchain.
+Script to push separate image and video detector models and register on the Bittensor blockchain.
 
 Usage:
-    python push_model.py --onnx-dir "path/to/models/directory" [options]
-    python push_model.py --model-zip "path/to/models.zip" [options]
+    python push_model.py --image-model <path> --video-model <path> [options]
 
 Options:
-    --wallet-name NAME         Bittensor wallet name (default: default)
-    --wallet-hotkey KEY       Bittensor hotkey name (default: default)
-    --netuid UID             Subnet UID (default: 34)
-    --subtensor-chain-endpoint URL  Subtensor network endpoint
-    --retry-delay SECS       Retry delay in seconds (default: 60)
+    --image-model PATH       Path to image detector zip file (required)
+    --video-model PATH       Path to video detector zip file (required)
+    --wallet-name NAME       Bittensor wallet name (default: default)
+    --wallet-hotkey KEY      Bittensor hotkey name (default: default)
+    --netuid UID            Subnet UID (default: 34)
+    --chain-endpoint URL     Subtensor network endpoint
+    --retry-delay SECS      Retry delay in seconds (default: 60)
 
 Example:
-    python push_model.py --onnx-dir "models/" --wallet-name miner1
-    python push_model.py --model-zip "models.zip" --wallet-name miner1
+    python push_model.py --image-model image_detector.zip --video-model video_detector.zip --wallet-name miner1
 """
 import argparse
 import asyncio
@@ -49,8 +49,7 @@ except ImportError:
 
 from gas.types import DiscriminatorModelId as ModelId
 from gas.utils.chain_model_metadata_store import ChainModelMetadataStore
-from gas.protocol.model_uploads import upload_model_zip_presigned
-from gas.utils.model_zips import validate_onnx_directory, create_model_zip
+from gas.protocol.model_uploads import upload_single_modality
 
 
 MODEL_UPLOAD_ENDPOINT = "https://onnx-models-worker.bitmind.workers.dev/upload"
@@ -81,65 +80,90 @@ def print_step(step_num: int, total_steps: int, message: str):
     print(f"{Fore.CYAN}[{step_num}/{total_steps}] {message}{Style.RESET_ALL}")
 
 
-def get_hash_of_two_strings(str1: str, str2: str) -> str:
-    return str(hash(str1 + str2))  # Simplified hash function
-
-
-def compute_zip_hash(zip_path: str) -> str:
-    """Compute SHA256 hash of a zip file"""
-    hash_sha256 = hashlib.sha256()
-
-    with open(zip_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_sha256.update(chunk)
-
-    return hash_sha256.hexdigest()
-
-
-async def push_model_zip(
-    onnx_dir: Optional[str] = None,
-    zip_path: Optional[str] = None,
+async def push_separate_models(
+    image_model_path: Optional[str] = None,
+    video_model_path: Optional[str] = None,
     wallet: bt.wallet = None,
     retry_delay_secs: int = 60,
     netuid: int = 34,
     chain_endpoint: Optional[str] = None,
 ):
-    """Pushes a zip of multiple ONNX models and their configuration to Hugging Face and
-    registers it on the Bittensor blockchain."""
-
-    # Step 0: Prepare model zip
-    if zip_path is not None:
-        if not os.path.exists(zip_path):
-            raise FileNotFoundError(f"Model zip file not found: {zip_path}")
-        print_info(f"Using provided model zip: {zip_path}")
-
-    elif onnx_dir is not None:
-        if not os.path.exists(onnx_dir):
-            raise FileNotFoundError(f"ONNX directory not found: {onnx_dir}")
-
-        print_info(f"Creating model zip from directory: {onnx_dir}")
-        zip_path = create_model_zip(onnx_dir)
-        print_success(f"Created model zip: {zip_path}")
-    else:
-        raise ValueError("Either --onnx-dir or --model-zip must be provided")
-
-    # Step 1: Upload to cloud inference system
-    print()
-    print_step(1, 2, " Uploading model zip to cloud inference system...")
-    response = upload_model_zip_presigned(wallet, zip_path, MODEL_UPLOAD_ENDPOINT)
-
-    if not response["success"]:
-        print_error("Failed to upload model to cloud inference system")
-        print_error(f"Failed at step: {response.get('step', 'unknown')}")
-        print_error(f"Error: {response.get('error', 'Unknown error')}")
-        if 'model_id' in response:
-            print_info(f"Model ID: {response['model_id']}")
-        return False
+    """Pushes separate image and/or video detector models and registers on the Bittensor blockchain.
     
-    print_success("Model zip uploaded successfully!")
+    At least one model (image or video) must be provided.
+    """
+    if not image_model_path and not video_model_path:
+        raise ValueError("At least one model (--image-model or --video-model) must be provided")
 
-    # Step 2: Register on Blockchain
-    print_step(2, 2, "Registering model metadata on blockchain...")
+    if image_model_path and not os.path.exists(image_model_path):
+        raise FileNotFoundError(f"Image model file not found: {image_model_path}")
+    if video_model_path and not os.path.exists(video_model_path):
+        raise FileNotFoundError(f"Video model file not found: {video_model_path}")
+
+    if image_model_path:
+        print_info(f"Image model: {image_model_path}")
+    if video_model_path:
+        print_info(f"Video model: {video_model_path}")
+
+    results = {}
+    upload_count = 0
+    total_uploads = (1 if image_model_path else 0) + (1 if video_model_path else 0)
+
+    if image_model_path:
+        upload_count += 1
+        print()
+        print_step(upload_count, total_uploads + 1, "Uploading image model to cloud inference system...")
+        try:
+            image_result = upload_single_modality(
+                wallet,
+                image_model_path,
+                'image',
+                MODEL_UPLOAD_ENDPOINT
+            )
+            results['image'] = image_result
+            
+            if not image_result['success']:
+                print_error(f"Image model upload failed at step: {image_result.get('step', 'unknown')}")
+                print_error(f"Error: {image_result.get('error', 'Unknown error')}")
+                return False
+            
+            print_success("Image model uploaded successfully!")
+        except Exception as e:
+            print_error(f"Image model upload failed with exception: {e}")
+            return False
+
+    if video_model_path:
+        upload_count += 1
+        print()
+        print_step(upload_count, total_uploads + 1, "Uploading video model to cloud inference system...")
+        try:
+            video_result = upload_single_modality(
+                wallet,
+                video_model_path,
+                'video',
+                MODEL_UPLOAD_ENDPOINT
+            )
+            results['video'] = video_result
+            
+            if not video_result['success']:
+                print_error(f"Video model upload failed at step: {video_result.get('step', 'unknown')}")
+                print_error(f"Error: {video_result.get('error', 'Unknown error')}")
+                return False
+
+            print_success("Video model uploaded successfully!")
+        except Exception as e:
+            print_error(f"Video model upload failed with exception: {e}")
+            return False
+
+    # Display discriminator IDs for uploaded models
+    if 'image' in results:
+        print_info(f"Image Discriminator ID: {results['image']['model_id']}")
+    if 'video' in results:
+        print_info(f"Video Discriminator ID: {results['video']['model_id']}")
+
+    # Step: Register on Blockchain
+    print()
+    print_step(upload_count + 1, total_uploads + 1, "Registering model metadata on blockchain...")
     
     if not chain_endpoint:
         chain_endpoint = "finney" if netuid == 34 else "test"
@@ -148,61 +172,68 @@ async def push_model_zip(
     subtensor = bt.subtensor(network=chain_endpoint)
     metadata_store = ChainModelMetadataStore(subtensor, netuid)
 
-    model_key = response.get("r2_key", "")
-    if not model_key:
-        print_error("Model key not provided in upload response")
-        return False
+    # Register each model separately on the blockchain
+    for modality, result in results.items():
+        model_key = result.get("r2_key", "")
+        if not model_key:
+            print_error(f"{modality.capitalize()} model key not provided in upload response")
+            return False
 
-    hash = get_hash_of_two_strings(
-        compute_zip_hash(zip_path), wallet.hotkey.ss58_address
-    )
+        # Create hash for this specific model
+        model_hash = hashlib.sha256(
+            f"{result['file_hash']}{wallet.hotkey.ss58_address}".encode()
+        ).hexdigest()
+        hash_value = str(hash(model_hash))
 
-    model_id = ModelId(key=model_key, hash=hash)
-    print_info(f"Model ID: {model_id}")
+        model_id = ModelId(key=model_key, hash=hash_value)
+        print_info(f"Registering {modality} model (ID: {model_id.key})...")
 
-    while True:
-        try:
-            print_info("Storing model metadata on chain...")
-            await metadata_store.store_model_metadata(wallet, model_id)
-            
-            print_info("Verifying metadata on chain...")
-            uid = subtensor.get_uid_for_hotkey_on_subnet(
-                wallet.hotkey.ss58_address, netuid
-            )
-            model_metadata = await metadata_store.retrieve_model_metadata(
-                uid, wallet.hotkey.ss58_address
-            )
+        while True:
+            try:
+                await metadata_store.store_model_metadata(wallet, model_id)
+                
+                # Verify registration
+                uid = subtensor.get_uid_for_hotkey_on_subnet(
+                    wallet.hotkey.ss58_address, netuid
+                )
+                model_metadata = await metadata_store.retrieve_model_metadata(
+                    uid, wallet.hotkey.ss58_address
+                )
 
-            if (
-                not model_metadata
-                or model_metadata.id.to_compressed_str() != model_id.to_compressed_str()
-            ):
-                print_error(f"Metadata verification failed")
-                print_error(f"Expected: {model_id}")
-                print_error(f"Got: {model_metadata}")
-                raise ValueError("Metadata verification failed")
+                if (
+                    not model_metadata
+                    or model_metadata.id.to_compressed_str() != model_id.to_compressed_str()
+                ):
+                    print_error(f"{modality.capitalize()} model metadata verification failed")
+                    print_error(f"Expected: {model_id}")
+                    print_error(f"Got: {model_metadata}")
+                    raise ValueError(f"{modality.capitalize()} metadata verification failed")
 
-            print_success("Model metadata registered on blockchain successfully!")
-            return True
-            
-        except Exception as e:
-            print_error(f"Failed to register on blockchain: {e}")
-            print_warning(f"Retrying in {retry_delay_secs} seconds...")
-            time.sleep(retry_delay_secs)
+                print_success(f"{modality.capitalize()} model registered on blockchain!")
+                break  # Success, move to next model
+
+            except Exception as e:
+                print_error(f"Failed to register {modality} model on blockchain: {e}")
+                print_warning(f"Retrying in {retry_delay_secs} seconds...")
+                time.sleep(retry_delay_secs)
+
+    print_success("All models registered successfully!")
+    return True
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Push a zip of ONNX models to Hugging Face and register on Bittensor"
+        description="Push image and/or video detector models and register on Bittensor. At least one model must be provided."
     )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--onnx-dir",
-        help="Path to directory containing ONNX files (image_detector.onnx, video_detector.onnx)",
+
+    # Model paths (at least one required)
+    parser.add_argument(
+        "--image-model",
+        help="Path to image detector zip file",
     )
-    group.add_argument(
-        "--model-zip",
-        help="Path to pre-existing model zip file",
+    parser.add_argument(
+        "--video-model",
+        help="Path to video detector zip file",
     )
     parser.add_argument(
         "--wallet-name",
@@ -234,24 +265,21 @@ def main():
 
     args = parser.parse_args()
 
+    # Validate at least one model is provided
+    if not args.image_model and not args.video_model:
+        parser.error("At least one model must be provided: --image-model or --video-model")
+
     print()
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Model Push Configuration ==={Style.RESET_ALL}")
-
-    if args.onnx_dir:
-        print(f"ONNX Directory: {args.onnx_dir}")
-    else:
-        print(f"Model Zip: {args.model_zip}")
+    if args.image_model:
+        print(f"Image Model: {args.image_model}")
+    if args.video_model:
+        print(f"Video Model: {args.video_model}")
     print(f"Wallet: {args.wallet_name}/{args.wallet_hotkey}")
     print(f"Subnet UID: {args.netuid}")
     print(f"Chain Endpoint: {args.chain_endpoint}")
     print()
 
-    # Validate ONNX directory if provided
-    if args.onnx_dir and not validate_onnx_directory(args.onnx_dir):
-        print_error("ONNX directory validation failed")
-        sys.exit(1)
-
-    print()
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Starting Model Push ==={Style.RESET_ALL}")
 
    # Initialize wallet
@@ -273,9 +301,9 @@ def main():
 
     try:
         success = asyncio.run(
-            push_model_zip(
-                onnx_dir=args.onnx_dir,
-                zip_path=args.model_zip,
+            push_separate_models(
+                image_model_path=args.image_model,
+                video_model_path=args.video_model,
                 wallet=wallet,
                 retry_delay_secs=args.retry_delay,
                 netuid=netuid,
@@ -293,9 +321,8 @@ def main():
     except Exception as e:
         print()
         print_error(f"💥 Model push failed with error: {e}")
-        if args.onnx_dir or args.model_zip:
-            print_info("Full traceback:")
-            print(traceback.format_exc())
+        print_info("Full traceback:")
+        print(traceback.format_exc())
         sys.exit(1)
 
 

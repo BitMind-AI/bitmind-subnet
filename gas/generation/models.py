@@ -17,6 +17,7 @@ from diffusers import (
     CogView4Pipeline,
     CogVideoXImageToVideoPipeline,
     WanPipeline,
+    ChromaPipeline
 )
 
 from gas.generation.model_registry import ModelRegistry
@@ -204,6 +205,22 @@ def get_text_to_image_models() -> List[ModelConfig]:
             use_autocast=False,
             tags=[],
         ),
+        ModelConfig(
+            path="lodestones/Chroma1-HD",
+            task=ModelTask.TEXT_TO_IMAGE,
+            pipeline_cls=ChromaPipeline,
+            pretrained_args={
+                "torch_dtype": torch.bfloat16,
+            },
+            generation_args={
+                "guidance_scale": 3.,
+                "num_images_per_prompt": 1,
+                "num_inference_steps": 40,
+                "generator": torch.Generator("cpu")
+            },
+            use_autocast=False,
+            tags=["chroma", "flux-schnell"],
+        )
     ]
 
 

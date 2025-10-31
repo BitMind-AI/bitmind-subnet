@@ -52,8 +52,12 @@ gascli validator start
 # Miners: Start or restart generative miner
 gascli generator start
 
-# Miners: Push discriminator models
-gascli discriminator push --onnx-dir /path/to/models --wallet-name default --hotkey-name default
+# Miners: Push discriminator models (both at once)
+gascli discriminator push --image-model image_detector.zip --video-model video_detector.zip --wallet-name default --wallet-hotkey default
+
+# Or push one model at a time
+gascli d push --image-model image_detector.zip 
+gascli d push --video-model video_detector.zip
 ```
 
 **Available Aliases:**
@@ -73,7 +77,7 @@ pm2 start gen_miner.config.js
 
 # Miners: Push discriminator models
 source .venv/bin/activate
-python neurons/discriminator/push_model.py --onnx-dir /path/to/models --wallet-name default --hotkey-name default
+python neurons/discriminator/push_model.py --image-model image_detector.zip --video-model video_detector.zip --wallet-name default --wallet-hotkey default
 ```
 For detailed installation and usage instructions, see [Installation Guide](docs/Installation.md).
 

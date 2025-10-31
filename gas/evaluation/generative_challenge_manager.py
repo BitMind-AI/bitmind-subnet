@@ -1,6 +1,7 @@
 import asyncio
 import time
 import os
+import pickle
 import aiohttp
 import bittensor as bt
 import numpy as np
@@ -28,12 +29,14 @@ class GenerativeChallengeManager:
         metagraph,
         subtensor,
         miner_type_tracker,
+        save_state_callback=None,
     ):
         self.config = config
         self.wallet = wallet
         self.metagraph = metagraph
         self.subtensor = subtensor
         self.miner_type_tracker = miner_type_tracker
+        self._save_state_callback = save_state_callback
 
         self.content_manager = ContentManager(self.config.cache.base_dir)
 
@@ -119,8 +122,8 @@ class GenerativeChallengeManager:
                     "status": "pending",
                     "sent_at": time.time(),
                 }
-            bt.logging.trace(
-                f"Sent generative challenge to UID {uid}, task_id: {miner_task_id}, prompt_id: {prompt_entry.id}"
+            bt.logging.info(
+                f"Stored challenge task {miner_task_id} for UID {uid}. Total active tasks: {len(self.challenge_tasks)}"
             )
         else:
             error = response_data.get("error") if response_data else "Unknown error"
@@ -131,47 +134,60 @@ class GenerativeChallengeManager:
         Accepts direct binary image, video, and application/octet-stream payloads.
         """
         content_type = request.headers.get("content-type", "").lower()
-        
-        # Get task ID from header early for UID logging in error cases
         task_id = request.headers.get("task-id")
+        client_ip = request.client.host if request.client else "unknown"
         
-        # Helper function to get UID for logging
-        def get_uid_for_logging():
-            if task_id and task_id in self.challenge_tasks:
-                return self.challenge_tasks[task_id].get("uid", "unknown")
-            return "unknown"
+        uid = "unknown"
+        signed_by = request.headers.get("Epistula-Signed-By")
+        if task_id and task_id in self.challenge_tasks:
+            uid = self.challenge_tasks[task_id].get("uid", "unknown")
+        elif signed_by and signed_by in self.metagraph.hotkeys:
+            try:
+                uid = self.metagraph.hotkeys.index(signed_by)
+            except (ValueError, AttributeError):
+                pass
+        
+        bt.logging.debug(f"Generative callback request from UID {uid} (IP: {client_ip}), task_id: {task_id}, content_type: {content_type}")
 
-        # Accept image, video, and application/octet-stream content types
+        # Helper function to format UID with hotkey for better debugging
+        def format_uid_info():
+            if uid == "unknown" and signed_by:
+                return f"UID {uid} (signed-by: {signed_by})"
+            return f"UID {uid}"
+
         if not (
             content_type.startswith("image/") or 
             content_type.startswith("video/") or 
             content_type == "application/octet-stream"
         ):
-            uid = get_uid_for_logging()
-            bt.logging.error(f"Invalid content type: {content_type} from UID {uid}. Only image/*, video/*, and application/octet-stream are supported.")
+            bt.logging.error(f"Invalid content type: {content_type} from {format_uid_info()} (IP: {client_ip}). Only image/*, video/*, and application/octet-stream are supported.")
             return Response(status_code=400, content="Only image, video, and application/octet-stream content types are supported")
         
         if not task_id:
-            bt.logging.error("Binary upload missing task-id header from unknown UID")
+            bt.logging.error(f"Binary upload missing task-id header from {format_uid_info()} (IP: {client_ip})")
             return Response(status_code=400, content="Missing task-id header")
             
-        # Get binary payload
         binary_data = await request.body()
         if not binary_data:
-            uid = get_uid_for_logging()
-            bt.logging.error(f"Task {task_id} from UID {uid}: Empty binary payload received")
+            bt.logging.error(f"Task {task_id} from {format_uid_info()} (IP: {client_ip}): Empty binary payload received")
             return Response(status_code=400, content="Empty binary payload")
             
         async with self.challenge_lock:
+            bt.logging.debug(f"Callback for task {task_id}: Current active tasks: {list(self.challenge_tasks.keys())}")
             if task_id not in self.challenge_tasks:
-                bt.logging.warning(f"Received binary upload for unknown task_id: {task_id} from unknown UID")
-                return Response(status_code=404, content="Task not found")
+                # Check if this might be a stale task from a previous session
+                bt.logging.debug(f"Received binary upload for unknown task_id: {task_id} from {format_uid_info()} (IP: {client_ip}), content_type: {content_type}, size: {len(binary_data)} bytes")
+                # Accept the upload gracefully but don't process it - this reduces 404 spam
+                # while still indicating the task wasn't found in our debug logs
+                return Response(status_code=200, content="Task not found in current session")
 
             challenge_info = self.challenge_tasks[task_id]
             generator_uid = challenge_info["uid"]
+            
+            auth_uid_msg = f" (auth UID: {uid})" if uid != generator_uid and uid != "unknown" else ""
             bt.logging.info(
-                f"Received binary upload for task {task_id}, UID {generator_uid}, "
-                f"type: {content_type}, size: {len(binary_data)} bytes"
+                f"Received binary upload for task {task_id}, UID {generator_uid}{auth_uid_msg}, "
+                f"type: {content_type}, size: {len(binary_data)} bytes (IP: {client_ip})"
             )
 
             filepath = await self.store_binary_content(
@@ -186,6 +202,13 @@ class GenerativeChallengeManager:
                 challenge_info["error_message"] = "Failed to store binary content"
 
             del self.challenge_tasks[task_id]
+            
+        # Save state after task completion to persist the deletion
+        if self._save_state_callback:
+            try:
+                await self._save_state_callback()
+            except Exception as e:
+                bt.logging.warning(f"Failed to save state after task completion: {e}")
                 
         return Response(status_code=200, content="Binary content received")
 
@@ -286,3 +309,50 @@ class GenerativeChallengeManager:
             bt.logging.info("Shutting down webhook server...")
             self.fast_api.stop()
             bt.logging.info("Webhook server stopped")
+
+    def save_state(self, save_dir: str, filename: str):
+        """Save challenge tasks state to disk"""
+        try:
+            bt.logging.info(f"Saving challenge tasks state: {len(self.challenge_tasks)} active tasks")
+            # Clean up stale tasks before saving (older than 2 hours)
+            current_time = time.time()
+            stale_tasks = []
+            for task_id, task_info in self.challenge_tasks.items():
+                if current_time - task_info.get("sent_at", 0) > 7200:  # 2 hours
+                    stale_tasks.append(task_id)
+
+            for task_id in stale_tasks:
+                del self.challenge_tasks[task_id]
+                bt.logging.debug(f"Removed stale task {task_id} during state save")
+
+            filepath = os.path.join(save_dir, filename)
+            with open(filepath, 'wb') as f:
+                pickle.dump(self.challenge_tasks, f)
+            bt.logging.info(f"Successfully saved {len(self.challenge_tasks)} active challenge tasks to {filepath}")
+        except Exception as e:
+            bt.logging.error(f"Failed to save challenge tasks state: {e}")
+
+    def load_state(self, save_dir: str, filename: str):
+        """Load challenge tasks state from disk"""
+        try:
+            filepath = os.path.join(save_dir, filename)
+            if not os.path.exists(filepath):
+                bt.logging.debug(f"No challenge tasks state file found at {filepath}")
+                return True  # Not an error - just no state to load
+
+            with open(filepath, 'rb') as f:
+                loaded_tasks = pickle.load(f)
+
+            current_time = time.time()
+            valid_tasks = {}
+            for task_id, task_info in loaded_tasks.items():
+                if current_time - task_info.get("sent_at", 0) <= 7200:  # 2 hours
+                    valid_tasks[task_id] = task_info
+
+            self.challenge_tasks = valid_tasks
+            bt.logging.info(f"Loaded {len(self.challenge_tasks)} active challenge tasks from {filepath}")
+            return True  # Success
+        except Exception as e:
+            bt.logging.error(f"Failed to load challenge tasks state: {e}")
+            self.challenge_tasks = {}
+            return False  # Failure

@@ -378,14 +378,54 @@ def db_stats(db_path, base_dir, detailed):
 )
 @click.option(
     "--source-type",
-    type=click.Choice(["scraper", "dataset", "generated"]),
+    type=click.Choice(["scraper", "dataset", "generated", "miner"]),
     help="Filter media table by source type (only applies to media table)",
 )
-def db_rows(db_path, table, rows, source_type):
+@click.option(
+    "--miner-uid",
+    type=int,
+    help="Filter media table by specific miner UID (only applies to media table with source-type=miner)",
+)
+@click.option(
+    "--last-24h",
+    is_flag=True,
+    help="Filter media table to show only entries from the last 24 hours (only applies to media table)",
+)
+@click.option(
+    "--filepaths-only",
+    is_flag=True,
+    help="Display only file paths (only applies to media table)",
+)
+@click.option(
+    "--include-prompts",
+    is_flag=True,
+    help="Include associated prompt content with file paths (only applies to media table)",
+)
+def db_rows(db_path, table, rows, source_type, miner_uid, last_24h, filepaths_only, include_prompts):
     """Show the first N rows of either the prompts or media table"""
     # Validate source-type is only used with media table
     if source_type and table != "media":
         click.echo("❌ --source-type can only be used with --table media", err=True)
+        sys.exit(1)
+    
+    # Validate miner-uid is only used with media table and source-type=miner
+    if miner_uid and (table != "media" or source_type != "miner"):
+        click.echo("❌ --miner-uid can only be used with --table media and --source-type miner", err=True)
+        sys.exit(1)
+    
+    # Validate last-24h is only used with media table
+    if last_24h and table != "media":
+        click.echo("❌ --last-24h can only be used with --table media", err=True)
+        sys.exit(1)
+    
+    # Validate filepaths-only is only used with media table
+    if filepaths_only and table != "media":
+        click.echo("❌ --filepaths-only can only be used with --table media", err=True)
+        sys.exit(1)
+    
+    # Validate include-prompts is only used with media table
+    if include_prompts and table != "media":
+        click.echo("❌ --include-prompts can only be used with --table media", err=True)
         sys.exit(1)
 
     # Use DEFAULT_CACHE_DIR if not specified
@@ -413,6 +453,22 @@ def db_rows(db_path, table, rows, source_type):
     # Add source-type filter if provided
     if source_type:
         cmd.extend(["--source-type", source_type])
+    
+    # Add miner-uid filter if provided
+    if miner_uid:
+        cmd.extend(["--miner-uid", str(miner_uid)])
+    
+    # Add last-24h filter if provided
+    if last_24h:
+        cmd.append("--last-24h")
+    
+    # Add filepaths-only flag if provided
+    if filepaths_only:
+        cmd.append("--filepaths-only")
+    
+    # Add include-prompts flag if provided
+    if include_prompts:
+        cmd.append("--include-prompts")
 
     # Execute the db_rows script
     try:
@@ -445,28 +501,30 @@ cli.add_command(discriminator, name="d")
 
 
 @discriminator.command()
-@click.option("--onnx-dir", help="Path to directory containing ONNX files")
-@click.option("--model-zip", help="Path to pre-existing model zip file")
+@click.option("--image-model", help="Path to image detector zip file")
+@click.option("--video-model", help="Path to video detector zip file")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
 @click.option("--netuid", default=34, help="Subnet UID")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
 def push_discriminator(
-    onnx_dir, model_zip, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
+    image_model, video_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
 ):
-    """Push discriminator model to Hugging Face and register on blockchain"""
+    """Push discriminator model(s) and register on blockchain. At least one model zip file (image or video) must be provided."""
+    # Validate at least one model is provided
+    if not image_model and not video_model:
+        click.echo("Error: At least one model must be provided (--image-model or --video-model)", err=True)
+        return
+    
     # Build command arguments for the push_model script
     cmd = [sys.executable, "-m", "neurons.discriminator.push_model"]
 
-    # Add required arguments
-    if onnx_dir:
-        cmd.extend(["--onnx-dir", onnx_dir])
-    elif model_zip:
-        cmd.extend(["--model-zip", model_zip])
-    else:
-        click.echo("Error: Either --onnx-dir or --model-zip must be provided", err=True)
-        return
+    # Add model arguments
+    if image_model:
+        cmd.extend(["--image-model", image_model])
+    if video_model:
+        cmd.extend(["--video-model", video_model])
 
     # Add optional arguments
     cmd.extend(["--wallet-name", wallet_name])
@@ -490,45 +548,40 @@ def push_discriminator(
 discriminator.add_command(push_discriminator, name="push")
 
 
-# Benchmark discriminator models against BitMind datasets
-@discriminator.command(name="benchmark")
-@click.option("--image-model", help="Path to image detector ONNX model")
-@click.option("--video-model", help="Path to video detector ONNX model")
-@click.option("-v", count=True, help="Increase verbosity (-v, -vv, -vvv)")
-@click.option("--no-stream-images", is_flag=True, help="Disable streaming images; download locally")
-@click.option("--hf-home", help="Override Hugging Face cache root (sets HF_HOME)")
-@click.option("--temp-dir", help="Directory for temporary video extraction (overrides TMPDIR)")
-@click.option("--max-samples", type=int, default=None, help="Maximum number of samples to evaluate per modality (use all if omitted)")
-def benchmark(image_model, video_model, v, no_stream_images, hf_home, temp_dir, max_samples):
-    """Run image/video benchmarks for provided ONNX models"""
+@discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+@click.option("--image-model", help="Path to image detector ONNX model or zip file")
+@click.option("--video-model", help="Path to video detector ONNX model or zip file")
+@click.pass_context
+def benchmark(ctx, image_model, video_model):
+    """Run image/video benchmarks for provided detector models using gasbench.
+    All other options are passed directly to gasbench. Use 'gasbench --help' to see available options.
+    Common options: --debug, --small, --full, --gasstation-only, --cache-dir, --output-dir
+    """
     if not image_model and not video_model:
         click.echo("Error: Either --image-model or --video-model must be provided", err=True)
         return
-
-    # Build command to invoke the benchmark runner
-    cmd = [sys.executable, "-m", "neurons.discriminator.local_eval.run_benchmark"]
+ 
+    def run_gasbench(model_path, modality_flag):
+        click.echo(f"Running benchmark on {model_path}...")
+        # gasbench --image-model /path or gasbench --video-model /path
+        cmd = ["gasbench", "run", modality_flag, model_path] + ctx.args
+  
+        try:
+            result = subprocess.run(cmd, check=True)
+            if result.returncode == 0:
+                click.echo(f"✅ Benchmark completed successfully!")
+        except subprocess.CalledProcessError as e:
+            click.echo(f"❌ Benchmark failed with exit code {e.returncode}", err=True)
+            sys.exit(e.returncode)
+        except Exception as e:
+            click.echo(f"❌ Error running benchmark: {e}", err=True)
+            sys.exit(1)
+ 
     if image_model:
-        cmd.extend(["--image_model", image_model])
+        run_gasbench(image_model, "--image-model")
+ 
     if video_model:
-        cmd.extend(["--video_model", video_model])
-    if v:
-        cmd.extend(["-" + "v" * v])
-    # Stream by default; pass disable flag if requested
-    if no_stream_images:
-        cmd.append("--no-stream-images")
-    if hf_home:
-        cmd.extend(["--hf-home", hf_home])
-    if temp_dir:
-        cmd.extend(["--temp-dir", temp_dir])
-    if max_samples is not None:
-        cmd.extend(["--max-samples", str(max_samples)])
-
-    try:
-        result = subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        sys.exit(e.returncode)
-    except Exception as e:
-        sys.exit(1)
+        run_gasbench(video_model, "--video-model")
 
 # =============================================================================
 # GENERATOR COMMANDS
