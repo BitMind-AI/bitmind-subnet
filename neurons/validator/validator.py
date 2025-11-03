@@ -151,7 +151,6 @@ class Validator(BaseNeuron):
             "\N{GRINNING FACE WITH SMILING EYES}",
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}",
         )
-        await self.set_weights(0)
 
         while not self.exit_context.isExiting:
             self.step += 1

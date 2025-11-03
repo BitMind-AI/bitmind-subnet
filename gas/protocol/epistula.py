@@ -13,6 +13,7 @@ from fastapi import Request, HTTPException
 
 
 EPISTULA_VERSION = str(2)
+MIN_VALIDATOR_STAKE = 20000
 
 
 def generate_header(
@@ -119,7 +120,7 @@ async def _verify_request(
     uid = metagraph.hotkeys.index(signed_by)
     stake = metagraph.S[uid].item()
 
-    if not no_force_validator_permit and stake <= 0:
+    if not no_force_validator_permit and stake < MIN_VALIDATOR_STAKE:
         bt.logging.warning(
             f"Blacklisting request from {signed_by} [uid={uid}], not enough stake -- {stake}"
         )
