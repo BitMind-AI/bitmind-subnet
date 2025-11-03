@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Script to push separate image and video ONNX models and register on the Bittensor blockchain.
+Script to push separate image and video detector models and register on the Bittensor blockchain.
 
 Usage:
     python push_model.py --image-model <path> --video-model <path> [options]
 
 Options:
-    --image-model PATH       Path to image ONNX model file (required)
-    --video-model PATH       Path to video ONNX model file (required)
+    --image-model PATH       Path to image detector zip file (required)
+    --video-model PATH       Path to video detector zip file (required)
     --wallet-name NAME       Bittensor wallet name (default: default)
     --wallet-hotkey KEY      Bittensor hotkey name (default: default)
     --netuid UID            Subnet UID (default: 34)
@@ -15,7 +15,7 @@ Options:
     --retry-delay SECS      Retry delay in seconds (default: 60)
 
 Example:
-    python push_model.py --image-model image_detector.onnx --video-model video_detector.onnx --wallet-name miner1
+    python push_model.py --image-model image_detector.zip --video-model video_detector.zip --wallet-name miner1
 """
 import argparse
 import asyncio
@@ -88,7 +88,7 @@ async def push_separate_models(
     netuid: int = 34,
     chain_endpoint: Optional[str] = None,
 ):
-    """Pushes separate image and/or video ONNX models and registers on the Bittensor blockchain.
+    """Pushes separate image and/or video detector models and registers on the Bittensor blockchain.
     
     At least one model (image or video) must be provided.
     """
@@ -223,17 +223,17 @@ async def push_separate_models(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Push image and/or video ONNX models and register on Bittensor. At least one model must be provided."
+        description="Push image and/or video detector models and register on Bittensor. At least one model must be provided."
     )
 
     # Model paths (at least one required)
     parser.add_argument(
         "--image-model",
-        help="Path to image ONNX model file",
+        help="Path to image detector zip file",
     )
     parser.add_argument(
         "--video-model",
-        help="Path to video ONNX model file",
+        help="Path to video detector zip file",
     )
     parser.add_argument(
         "--wallet-name",

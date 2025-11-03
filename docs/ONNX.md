@@ -95,6 +95,20 @@ torch.onnx.export(
 )
 ```
 
+## Packaging Your Models
+
+After creating your ONNX models, you need to package them into zip files before pushing to the network:
+
+```bash
+# Package image model
+zip image_detector.zip image_detector.onnx
+
+# Package video model
+zip video_detector.zip video_detector.onnx
+```
+
+Each zip file should contain only the corresponding ONNX model file.
+
 ## Next Steps
 
-Once you have your ONNX files, follow the [Discriminative Mining Guide](Discriminative-Mining.md) to push them to the network.
+Once you have your ONNX files packaged as zip files, follow the [Discriminative Mining Guide](Discriminative-Mining.md) to push them to the network.
