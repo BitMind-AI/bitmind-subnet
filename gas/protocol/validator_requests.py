@@ -232,15 +232,15 @@ async def get_benchmark_results(
                         f"Failed to fetch discriminator results: HTTP {response.status}, response: {error_text}"
                     )
 
-            generator_url = f"{base_url}/api/v1/validator/generator-results?validator_address={hotkey.ss58_address}"
+            after_timestamp = one_week_ago.isoformat()
+            generator_url = f"{base_url}/api/v1/validator/generator-results?validator_address={hotkey.ss58_address}&after={after_timestamp}"
             bt.logging.debug(f"Requesting generator results from: {generator_url}")
 
             epistula_headers = generate_header(hotkey, b"", None)
             async with session.get(generator_url, headers=epistula_headers) as response:
                 if response.status == 200:
-                    all_generator_results = await response.json()
-                    generator_results = filter_recent_results(all_generator_results)
-                    bt.logging.info(f"Successfully fetched {len(all_generator_results)} generator results, {len(generator_results)} from last week")
+                    generator_results = await response.json()
+                    bt.logging.info(f"Successfully fetched {len(generator_results)} generator results from last week")
                 else:
                     error_text = await response.text()
                     bt.logging.warning(
