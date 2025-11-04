@@ -77,7 +77,7 @@ gascli d push \
 
 ### Packaging Your Models
 
-Before pushing, you need to package your ONNX models into zip files. This helps keep the system flexible should we expand to other model formats, or ones that require multiple files. Currently, each zip file should contain the corresponding ONNX model:
+Before pushing, you need to package your ONNX models into zip files. The zip format helps keep the system flexible should we expand to other model formats, or ones that require multiple files. Currently, each zip file should contain the corresponding ONNX model:
 
 ```bash
 # Package image model
