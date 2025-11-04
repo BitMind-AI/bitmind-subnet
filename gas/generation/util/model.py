@@ -21,11 +21,26 @@ def load_autoencoder_kl_wan(
     subfolder="vae", 
     torch_dtype=torch.float32
 ):
-    return AutoencoderKLWan.from_pretrained(
-        model_id, 
-        subfolder=subfolder, 
-        torch_dtype=torch_dtype
-    )
+    """
+    Load Wan AutoencoderKL with local-first loading strategy.
+    """
+    try:
+        # Try loading from local cache first (no HF API calls)
+        bt.logging.info(f"Attempting to load {model_id} VAE from local cache...")
+        return AutoencoderKLWan.from_pretrained(
+            model_id, 
+            subfolder=subfolder, 
+            torch_dtype=torch_dtype,
+            local_files_only=True
+        )
+    except (OSError, ValueError) as e:
+        # Model not in cache, download from HuggingFace
+        bt.logging.info(f"VAE not in local cache, downloading from HuggingFace...")
+        return AutoencoderKLWan.from_pretrained(
+            model_id, 
+            subfolder=subfolder, 
+            torch_dtype=torch_dtype
+        )
 
 def load_hunyuanvideo_transformer(
     model_id: str = "tencent/HunyuanVideo",
@@ -33,14 +48,33 @@ def load_hunyuanvideo_transformer(
     torch_dtype: torch.dtype = torch.bfloat16,
     revision: str = "refs/pr/18",
 ):
-    return HunyuanVideoTransformer3DModel.from_pretrained(
-        model_id, subfolder=subfolder, torch_dtype=torch_dtype, revision=revision
-    )
+    """
+    Load HunyuanVideo transformer with local-first loading strategy.
+    
+    Tries to load from local cache first to avoid unnecessary HF API calls.
+    Only downloads from HuggingFace if the model is not yet cached locally.
+    """
+    try:
+        # Try loading from local cache first (no HF API calls)
+        bt.logging.info(f"Attempting to load {model_id} from local cache...")
+        return HunyuanVideoTransformer3DModel.from_pretrained(
+            model_id, 
+            subfolder=subfolder, 
+            torch_dtype=torch_dtype, 
+            revision=revision,
+            local_files_only=True
+        )
+    except (OSError, ValueError) as e:
+        # Model not in cache, download from HuggingFace
+        bt.logging.info(f"Model not in local cache, downloading from HuggingFace...")
+        return HunyuanVideoTransformer3DModel.from_pretrained(
+            model_id, subfolder=subfolder, torch_dtype=torch_dtype, revision=revision
+        )
 
 
 def load_annimatediff_motion_adapter(step: int = 4) -> MotionAdapter:
     """
-    Load a motion adapter model for AnimateDiff.
+    Load a motion adapter model for AnimateDiff with local-first loading strategy.
 
     Args:
         step: The step size for the motion adapter. Options: [1, 2, 4, 8].
@@ -60,7 +94,15 @@ def load_annimatediff_motion_adapter(step: int = 4) -> MotionAdapter:
 
     repo = "ByteDance/AnimateDiff-Lightning"
     ckpt = f"animatediff_lightning_{step}step_diffusers.safetensors"
-    adapter.load_state_dict(load_file(hf_hub_download(repo, ckpt), device=device))
+
+    try:
+        bt.logging.info(f"Attempting to load AnimateDiff adapter from local cache...")
+        checkpoint_path = hf_hub_download(repo, ckpt, local_files_only=True)
+    except (OSError, ValueError) as e:
+        bt.logging.info(f"Adapter not in local cache, downloading from HuggingFace...")
+        checkpoint_path = hf_hub_download(repo, ckpt)
+    
+    adapter.load_state_dict(load_file(checkpoint_path, device=device))
     return adapter
 
 
@@ -171,16 +213,28 @@ class JanusWrapper(DiffusionPipeline):
 
 
 def load_janus_model(model_path: str, **kwargs):
-    processor = VLChatProcessor.from_pretrained(model_path)
+    """
+    Load Janus model with local-first loading strategy.
+    """
+    try:
+        bt.logging.info(f"Attempting to load Janus {model_path} from local cache...")
+        processor = VLChatProcessor.from_pretrained(model_path, local_files_only=True)
+        janus_kwargs = {
+            "trust_remote_code": True,
+            "torch_dtype": kwargs.get("torch_dtype", torch.bfloat16),
+            "local_files_only": True,
+        }
 
-    # Filter kwargs to only include what Janus expects
-    janus_kwargs = {
-        "trust_remote_code": True,
-        "torch_dtype": kwargs.get("torch_dtype", torch.bfloat16),
-    }
+        model = AutoModelForCausalLM.from_pretrained(model_path, **janus_kwargs).eval()
 
-    # Let device placement be handled by diffusers like other models
-    model = AutoModelForCausalLM.from_pretrained(model_path, **janus_kwargs).eval()
+    except (OSError, ValueError) as e:
+        bt.logging.info(f"Janus model not in local cache, downloading from HuggingFace...")
+        processor = VLChatProcessor.from_pretrained(model_path)
+        janus_kwargs = {
+            "trust_remote_code": True,
+            "torch_dtype": kwargs.get("torch_dtype", torch.bfloat16),
+        }
+        model = AutoModelForCausalLM.from_pretrained(model_path, **janus_kwargs).eval()
 
     return model, processor
 
@@ -300,6 +354,13 @@ def enable_model_optimizations(
 
     # Handle VAE optimizations if not using CPU offload
     if not enable_cpu_offload:
+        # Store the model's dtype for ensuring VAE consistency
+        model_dtype = None
+        if hasattr(model, 'dtype'):
+            model_dtype = model.dtype
+        elif hasattr(model, 'unet') and hasattr(model.unet, 'dtype'):
+            model_dtype = model.unet.dtype
+        
         if enable_vae_slicing:
             bt.logging.debug(f"Enabling VAE slicing for {model_name}model")
             try:
@@ -323,3 +384,13 @@ def enable_model_optimizations(
                     bt.logging.warning(
                         f"Failed to enable VAE tiling for {model_name}model: {e}"
                     )
+
+        # Ensure VAE stays in the correct dtype after optimizations
+        # This fixes "expected scalar type Half but found Float" errors
+        if model_dtype is not None and hasattr(model, 'vae'):
+            try:
+                if model.vae.dtype != model_dtype:
+                    bt.logging.debug(f"Casting VAE from {model.vae.dtype} to {model_dtype} for dtype consistency")
+                    model.vae.to(dtype=model_dtype)
+            except Exception as e:
+                bt.logging.debug(f"Could not cast VAE dtype: {e}")

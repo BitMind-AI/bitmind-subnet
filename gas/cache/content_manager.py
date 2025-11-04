@@ -728,81 +728,98 @@ class ContentManager:
 		hf_dataset_repos: dict, 
 		upload_batch_size: int, 
 		videos_per_archive: int,
-		validator_hotkey: str = None
+		validator_hotkey: str = None,
+		num_batches: int = 1
 	):
 		"""
 		Upload unuploaded media from database to HuggingFace, separated by modality.
 		Only uploads verified miner media or validator-generated media.
+
+		Args:
+			num_batches: Number of batches to process in this upload cycle (default: 1)
 		"""
-		try:			
-			#  prioritize verified miner media, then fill with validator media
-			media_by_modality = {}
-			total_found = 0
+		try:
+			if num_batches is None or num_batches < 1:
+				bt.logging.warning(f"Invalid num_batches value: {num_batches}, using default of 1")
+				num_batches = 1
 			
-			for modality in ["image", "video"]:
-				# prioritize all verified miner media
-				verified_miner_media = self.content_db.get_unuploaded_media(
-					limit=None, 
-					modality=modality, 
-					verified_only=True
-				)
-				
-				# Fill remaining slots with any unuploaded validator media
-				remaining_slots = max(0, upload_batch_size - len(verified_miner_media))
-				remaining_media = []
-				if remaining_slots > 0:
-					remaining_media = self.content_db.get_unuploaded_media(
-						limit=remaining_slots, 
+			total_uploaded_all_batches = 0
+
+			for batch_num in range(num_batches):
+				bt.logging.info(f"Processing upload batch {batch_num + 1}/{num_batches}")
+
+				#  prioritize verified miner media, then fill with validator media
+				media_by_modality = {}
+				total_found = 0
+
+				for modality in ["image", "video"]:
+					# prioritize verified miner media up to batch size
+					verified_miner_media = self.content_db.get_unuploaded_media(
+						limit=upload_batch_size, 
 						modality=modality, 
-						skip_verified=True
+						verified_only=True
 					)
 
-				unuploaded_media = verified_miner_media + remaining_media
-				media_by_modality[modality] = unuploaded_media
-				total_found += len(unuploaded_media)
+					# Fill remaining slots with any unuploaded validator media
+					remaining_slots = max(0, upload_batch_size - len(verified_miner_media))
+					remaining_media = []
+					if remaining_slots > 0:
+						remaining_media = self.content_db.get_unuploaded_media(
+							limit=remaining_slots, 
+							modality=modality, 
+							skip_verified=True
+						)
+
+					unuploaded_media = verified_miner_media + remaining_media
+					media_by_modality[modality] = unuploaded_media
+					total_found += len(unuploaded_media)
+
+					bt.logging.info(
+						f"{modality}: {len(verified_miner_media)} verified miner + "
+						f"{len(remaining_media)} validator = {len(unuploaded_media)} total"
+					)
+
+				if total_found == 0:
+					bt.logging.info(f"No more unuploaded media found after {batch_num} batches")
+					break
 
 				bt.logging.info(
-					f"{modality}: {len(verified_miner_media)} verified miner + "
-					f"{len(remaining_media)} validator = {len(unuploaded_media)} total"
+					f"Batch {batch_num + 1}: Found {total_found} unuploaded media files to upload "
+					f"({len(media_by_modality['image'])} images, {len(media_by_modality['video'])} videos)"
 				)
-			
-			if total_found == 0:
-				bt.logging.debug("No unuploaded media found in database")
-				return
 
-			bt.logging.info(
-				f"Found {total_found} unuploaded media files to upload to HuggingFace "
-				f"({len(media_by_modality['image'])} images, {len(media_by_modality['video'])} videos)"
-			)
+				all_successfully_processed_ids = []
 
-			all_successfully_processed_ids = []
+				if media_by_modality['image']:
+					uploaded_ids = upload_images_to_hf(
+						media_entries=media_by_modality['image'],
+						hf_token=hf_token,
+						dataset_repo=hf_dataset_repos['image'],
+						validator_hotkey=validator_hotkey
+					)
+					all_successfully_processed_ids.extend(uploaded_ids)
 
-			if media_by_modality['image']:
-				uploaded_ids = upload_images_to_hf(
-					media_entries=media_by_modality['image'],
-					hf_token=hf_token,
-					dataset_repo=hf_dataset_repos['image'],
-					validator_hotkey=validator_hotkey
-				)
-				all_successfully_processed_ids.extend(uploaded_ids)
+				if media_by_modality['video']:
+					uploaded_ids = upload_videos_to_hf(
+						media_entries=media_by_modality['video'],
+						hf_token=hf_token,
+						dataset_repo=hf_dataset_repos['video'],
+						videos_per_archive=videos_per_archive,
+						validator_hotkey=validator_hotkey
+					)
+					all_successfully_processed_ids.extend(uploaded_ids)
 
-			if media_by_modality['video']:
-				uploaded_ids = upload_videos_to_hf(
-					media_entries=media_by_modality['video'],
-					hf_token=hf_token,
-					dataset_repo=hf_dataset_repos['video'],
-					videos_per_archive=videos_per_archive,
-					validator_hotkey=validator_hotkey
-				)
-				all_successfully_processed_ids.extend(uploaded_ids)
+				# Mark all successfully uploaded media as uploaded in db
+				if all_successfully_processed_ids:
+					success = self.mark_media_uploaded(all_successfully_processed_ids)
+					if success:
+						bt.logging.info(f"Batch {batch_num + 1}: Marked {len(all_successfully_processed_ids)} entries as uploaded in database")
+						total_uploaded_all_batches += len(all_successfully_processed_ids)
+					else:
+						bt.logging.warning(f"Batch {batch_num + 1}: Failed to mark media as uploaded in database")
 
-			# Mark all successfully uploaded media as uploaded in db
-			if all_successfully_processed_ids:
-				success = self.mark_media_uploaded(all_successfully_processed_ids)
-				if success:
-					bt.logging.info(f"Marked {len(all_successfully_processed_ids)} entries as uploaded in database")
-				else:
-					bt.logging.warning("Failed to mark media as uploaded in database")
+			if total_uploaded_all_batches > 0:
+				bt.logging.info(f"✅ Upload cycle complete: {total_uploaded_all_batches} total files uploaded across {batch_num + 1} batches")
 
 		except Exception as e:
 			bt.logging.error(f"Error uploading batch to HuggingFace: {e}")

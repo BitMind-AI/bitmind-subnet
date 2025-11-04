@@ -129,11 +129,22 @@ class GenerationPipeline:
                     }
 
                     bt.logging.debug(f"Loading {stage_name} from {base_model}")
-                    MODEL[stage_name] = stage_cls.from_pretrained(
-                        base_model,
-                        **stage_args_filtered,
-                        add_watermarker=False,
-                    )
+                    # Try local-first loading for multi-stage pipelines
+                    try:
+                        bt.logging.info(f"Attempting to load {stage_name} from local cache...")
+                        MODEL[stage_name] = stage_cls.from_pretrained(
+                            base_model,
+                            **stage_args_filtered,
+                            add_watermarker=False,
+                            local_files_only=True,
+                        )
+                    except (OSError, ValueError) as e:
+                        bt.logging.info(f"Stage {stage_name} not in local cache, downloading...")
+                        MODEL[stage_name] = stage_cls.from_pretrained(
+                            base_model,
+                            **stage_args_filtered,
+                            add_watermarker=False,
+                        )
 
                     enable_model_optimizations(
                         model=MODEL[stage_name],
@@ -153,12 +164,24 @@ class GenerationPipeline:
 
                     MODEL[stage_name].watermarker = None
             else:
-                # Single-stage pipeline
-                MODEL = pipeline_cls.from_pretrained(
-                    model_id,
-                    **pipeline_args,
-                    add_watermarker=False,
-                )
+                # Single-stage pipeline with local-first loading
+                try:
+                    # Try loading from local cache first (no HF API calls)
+                    bt.logging.info(f"Attempting to load {model_id} pipeline from local cache...")
+                    MODEL = pipeline_cls.from_pretrained(
+                        model_id,
+                        **pipeline_args,
+                        add_watermarker=False,
+                        local_files_only=True,
+                    )
+                except (OSError, ValueError) as e:
+                    # Model not in cache, download from HuggingFace
+                    bt.logging.info(f"Pipeline not in local cache, downloading from HuggingFace...")
+                    MODEL = pipeline_cls.from_pretrained(
+                        model_id,
+                        **pipeline_args,
+                        add_watermarker=False,
+                    )
 
                 # Load LoRA weights if specified
                 if "lora_model_id" in model_config:
