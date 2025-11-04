@@ -506,7 +506,7 @@ def add_generation_service_args(parser):
         "--upload-batch-size",
         type=int,
         help="Maximum number of media files to upload to HuggingFace per batch",
-        default=50,
+        default=500,
     )
 
     parser.add_argument(
