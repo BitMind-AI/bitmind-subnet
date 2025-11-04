@@ -142,12 +142,29 @@ def verify_media(
                 for entry in valid_entries
             ]
 
-        # Create verification results
+        # Create verification results and detect corrupted videos
         verification_results = []
+        corrupted_videos = []
 
         for i, (media_entry, consensus_result) in enumerate(
             zip(valid_entries, consensus_results)
         ):
+            # Check if video was corrupted/unreadable (indicated by None score from all models)
+            if consensus_result.get("corrupted", False) or consensus_result["consensus_score"] is None:
+                bt.logging.warning(
+                    f"Corrupted/invalid video detected: {media_entry.file_path} (ID: {media_entry.id})"
+                )
+                corrupted_videos.append(media_entry)
+                # Still create a failed result for this entry
+                result = VerificationResult(
+                    media_entry=media_entry,
+                    original_prompt=prompts[i],
+                    verification_score=None,
+                    passed=False,
+                )
+                verification_results.append(result)
+                continue
+            
             consensus_score = consensus_result["consensus_score"]
             passed = consensus_score >= threshold
 
@@ -177,12 +194,27 @@ def verify_media(
                 f"models={consensus_result['num_models']}/3"
             )
 
+        # Delete corrupted/invalid videos
+        if corrupted_videos:
+            bt.logging.warning(
+                f"Deleting {len(corrupted_videos)} corrupted/invalid video(s) from storage"
+            )
+            for media_entry in corrupted_videos:
+                try:
+                    success = content_manager.delete_media(media_id=media_entry.id)
+                    if success:
+                        bt.logging.info(f"Deleted corrupted video: {media_entry.file_path}")
+                    else:
+                        bt.logging.error(f"Failed to delete corrupted video: {media_entry.file_path}")
+                except Exception as e:
+                    bt.logging.error(f"Error deleting corrupted video {media_entry.file_path}: {e}")
+
         # Summary logging
         successful_count = len(verification_results)
         passed_count = sum(1 for r in verification_results if r.passed)
-        avg_score = sum(
-            r.verification_score["score"] for r in verification_results
-        ) / len(verification_results)
+        # Only compute average from results that have valid scores
+        valid_scores = [r.verification_score["score"] for r in verification_results if r.verification_score]
+        avg_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
 
         bt.logging.info(
             f"✅ Verification complete: {successful_count}/{len(media_entries)} processed, "

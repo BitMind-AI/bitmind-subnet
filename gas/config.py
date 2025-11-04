@@ -510,10 +510,17 @@ def add_generation_service_args(parser):
     )
 
     parser.add_argument(
+        "--upload-num-batches",
+        type=int,
+        help="Number of upload batches to process per cycle",
+        default=5,
+    )
+
+    parser.add_argument(
         "--videos-per-archive",
         type=int,
         help="Maximum number of videos per archive file (keeps archive size manageable)",
-        default=25,
+        default=150,
     )
 
     # Shared source-limit args
