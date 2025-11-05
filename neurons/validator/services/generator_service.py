@@ -81,8 +81,9 @@ class GeneratorService:
             "image": f"{self.hf_org}/generated-images",
             "video": f"{self.hf_org}/generated-videos",
         }
-        self.upload_batch_size = getattr(config, "upload_batch_size", 50)
-        self.videos_per_archive = getattr(config, "videos_per_archive", 25)
+        self.upload_batch_size = config.upload_batch_size
+        self.upload_num_batches = config.upload_num_batches
+        self.videos_per_archive = config.videos_per_archive
 
         # third party generative services
         self.tp_generators = {"nano_banana": nano_banana.generate_image}
@@ -235,11 +236,12 @@ class GeneratorService:
                 self._verify_miner_media(clip_batch_size=32)
 
                 # Upload batch of miner/validator generated media to HuggingFace
-                bt.logging.info("Beginning hf batch upload")
+                bt.logging.info(f"Beginning hf batch upload cycle ({self.upload_num_batches} batches of {self.upload_batch_size} files per modality)")
                 self.content_manager.upload_batch_to_huggingface(
                     hf_token=self.hf_token,
                     hf_dataset_repos=self.hf_dataset_repos,
                     upload_batch_size=self.upload_batch_size,
+                    num_batches=self.upload_num_batches,
                     videos_per_archive=self.videos_per_archive,
                     validator_hotkey=self.validator_wallet.hotkey.ss58_address,
                 )
@@ -440,7 +442,7 @@ class GeneratorService:
             error_results = [r for r in results if r.verification_score is None]
             if error_results:
                 bt.logging.warning(
-                    f"[GENERATOR-SEdRVICE] {len(error_results)} verification processing errors"
+                    f"[GENERATOR-SERVICE] {len(error_results)} verification processing errors"
                 )
 
             failed_results = [

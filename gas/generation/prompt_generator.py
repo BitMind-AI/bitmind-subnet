@@ -61,29 +61,50 @@ class PromptGenerator:
 
     def load_vlm(self) -> None:
         """
-        Load the vision-language model for image annotation.
+        Load the vision-language model for image annotation with local-first loading.
         """
         bt.logging.debug(f"Loading caption generation model {self.vlm_name}")
-        self.vlm_processor = Blip2Processor.from_pretrained(
-            self.vlm_name, torch_dtype=torch.float32
-        )
-        self.vlm = Blip2ForConditionalGeneration.from_pretrained(
-            self.vlm_name, torch_dtype=torch.float32
-        )
+
+        try:
+            bt.logging.info(f"Attempting to load {self.vlm_name} from local cache...")
+            self.vlm_processor = Blip2Processor.from_pretrained(
+                self.vlm_name, local_files_only=True
+            )
+            self.vlm = Blip2ForConditionalGeneration.from_pretrained(
+                self.vlm_name, torch_dtype=torch.float32, local_files_only=True
+            )
+        except (OSError, ValueError) as e:
+            bt.logging.info(f"Model not in local cache, downloading from HuggingFace...")
+            self.vlm_processor = Blip2Processor.from_pretrained(self.vlm_name)
+            self.vlm = Blip2ForConditionalGeneration.from_pretrained(
+                self.vlm_name, torch_dtype=torch.float32
+            )
+        
         self.vlm.to(self.device)
         bt.logging.info(f"Loaded image annotation model {self.vlm_name}")
 
     def load_llm(self) -> None:
         """
-        Load the language model for text moderation.
+        Load the language model for text moderation with local-first loading.
         """
         bt.logging.debug(f"Loading caption moderation model {self.llm_name}")
         m = re.match(r"cuda:(\d+)", self.device)
         gpu_id = int(m.group(1)) if m else 0
-        llm = AutoModelForCausalLM.from_pretrained(
-            self.llm_name, torch_dtype=torch.bfloat16, device_map={"": gpu_id}
-        )
-        tokenizer = AutoTokenizer.from_pretrained(self.llm_name)
+
+        try:
+            bt.logging.info(f"Attempting to load {self.llm_name} from local cache...")
+            llm = AutoModelForCausalLM.from_pretrained(
+                self.llm_name, torch_dtype=torch.bfloat16, device_map={"": gpu_id},
+                local_files_only=True
+            )
+            tokenizer = AutoTokenizer.from_pretrained(self.llm_name, local_files_only=True)
+        except (OSError, ValueError) as e:
+            bt.logging.info(f"Model not in local cache, downloading from HuggingFace...")
+            llm = AutoModelForCausalLM.from_pretrained(
+                self.llm_name, torch_dtype=torch.bfloat16, device_map={"": gpu_id}
+            )
+            tokenizer = AutoTokenizer.from_pretrained(self.llm_name)
+
         self.llm = pipeline("text-generation", model=llm, tokenizer=tokenizer)
         bt.logging.info(f"Loaded caption moderation model {self.llm_name}")
 

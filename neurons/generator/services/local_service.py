@@ -61,27 +61,38 @@ class LocalService(BaseGenerationService):
         self.models_loaded = True
     
     def _load_image_model(self):
-        """Load Stable Diffusion model for image generation."""
+        """Load Stable Diffusion model for image generation with local-first loading."""
         try:
             model_id = "runwayml/stable-diffusion-v1-5"
             bt.logging.info(f"Loading Stable Diffusion model: {model_id}")
-            
-            self.image_model = StableDiffusionPipeline.from_pretrained(
-                model_id,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                safety_checker=None,  # Disable safety checker for faster inference
-                requires_safety_checker=False,
-            )
-            
+
+            try:
+                bt.logging.info(f"Attempting to load {model_id} from local cache...")
+                self.image_model = StableDiffusionPipeline.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    safety_checker=None,
+                    requires_safety_checker=False,
+                    local_files_only=True,
+                )
+            except (OSError, ValueError) as e:
+                bt.logging.info(f"Model not in local cache, downloading from HuggingFace...")
+                self.image_model = StableDiffusionPipeline.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    safety_checker=None,
+                    requires_safety_checker=False,
+                )
+
             if self.device == "cuda":
                 self.image_model = self.image_model.to("cuda")
-            
+
             bt.logging.success("✅ Stable Diffusion model loaded")
 
         except Exception as e:
             bt.logging.error(f"Failed to load Stable Diffusion: {e}")
             raise
-    
+
     def _load_video_model(self):
         """Load video generation model."""
         try:
@@ -97,13 +108,29 @@ class LocalService(BaseGenerationService):
             )
 
             adapter = MotionAdapter().to(self.device, torch.float16)
-            adapter.load_state_dict(load_file(hf_hub_download(repo, ckpt), device=self.device))
+            try:
+                bt.logging.info(f"Attempting to load AnimateDiff adapter from local cache...")
+                checkpoint_path = hf_hub_download(repo, ckpt, local_files_only=True)
+            except (OSError, ValueError) as e:
+                bt.logging.info(f"Adapter not in local cache, downloading from HuggingFace...")
+                checkpoint_path = hf_hub_download(repo, ckpt)
+            adapter.load_state_dict(load_file(checkpoint_path, device=self.device))
 
-            pipe = AnimateDiffPipeline.from_pretrained(
-                base_model_id,
-                motion_adapter=adapter,
-                torch_dtype=torch.float16,
-            ).to(self.device)
+            try:
+                bt.logging.info(f"Attempting to load {base_model_id} from local cache...")
+                pipe = AnimateDiffPipeline.from_pretrained(
+                    base_model_id,
+                    motion_adapter=adapter,
+                    torch_dtype=torch.float16,
+                    local_files_only=True,
+                ).to(self.device)
+            except (OSError, ValueError) as e:
+                bt.logging.info(f"Pipeline not in local cache, downloading from HuggingFace...")
+                pipe = AnimateDiffPipeline.from_pretrained(
+                    base_model_id,
+                    motion_adapter=adapter,
+                    torch_dtype=torch.float16,
+                ).to(self.device)
 
             pipe.scheduler = EulerDiscreteScheduler.from_config(
                 pipe.scheduler.config,

@@ -74,44 +74,64 @@ def extract_temporal_frames(video_path: str) -> List[np.ndarray]:
         video_path: Path to video file
         
     Returns:
-        List of 8 frames as numpy arrays (RGB format)
+        List of 8 frames as numpy arrays (RGB format), or empty list if video is invalid
     """
+    cap = None
     try:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            bt.logging.warning(f"Could not open video: {video_path}")
+            bt.logging.debug(f"Could not open video (likely corrupted): {video_path}")
             return []
             
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames == 0:
-            bt.logging.warning(f"Video has no frames: {video_path}")
-            cap.release()
+            bt.logging.debug(f"Video has no frames (likely corrupted): {video_path}")
+            return []
+        
+        # Check if video is too short (single frame or near-single frame)
+        if total_frames < 3:
+            bt.logging.debug(f"Video has too few frames ({total_frames}), likely a static image: {video_path}")
             return []
             
         frames = []
+        failed_reads = 0
         
         # Sample 8 frames uniformly across the video duration
-        frame_indices = np.linspace(0, total_frames - 1, 8, dtype=int)
+        frame_indices = np.linspace(0, total_frames - 1, min(8, total_frames), dtype=int)
             
         for frame_idx in frame_indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             
-            if ret:
+            if ret and frame is not None:
                 # Convert BGR to RGB
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frames.append(frame_rgb)
             else:
-                bt.logging.warning(f"Could not read frame {frame_idx} from {video_path}")
+                failed_reads += 1
                 
-        cap.release()
+        # If we failed to read more than half the frames, video is corrupted
+        if failed_reads > len(frame_indices) / 2 or len(frames) < 2:
+            bt.logging.debug(f"Could not read enough frames from video ({len(frames)}/{len(frame_indices)} succeeded): {video_path}")
+            return []
         
-        bt.logging.debug(f"Extracted {len(frames)} frames from {video_path}")
+        # Check if all frames are identical (miners trying to game with static images)
+        if len(frames) >= 2:
+            first_frame = frames[0]
+            all_identical = all(np.array_equal(first_frame, frame) for frame in frames[1:])
+            if all_identical:
+                bt.logging.debug(f"All frames are identical (static image posing as video): {video_path}")
+                return []
+                
+        bt.logging.debug(f"Extracted {len(frames)} valid frames from {video_path}")
         return frames
         
     except Exception as e:
-        bt.logging.error(f"Error extracting frames from {video_path}: {e}")
+        bt.logging.debug(f"Error extracting frames from {video_path}: {e}")
         return []
+    finally:
+        if cap is not None:
+            cap.release()
 
 
 def process_video_temporal(
@@ -318,9 +338,10 @@ def calculate_clip_alignment(
                         batch_features_padded[local_idx] = video_features[0]  # Remove batch dimension
                         bt.logging.debug(f"Processed video {video_path} with temporal features")
                     else:
-                        bt.logging.warning(f"Failed to process video {video_path}")
+                        # Video is corrupted/invalid, leave features as zeros (will result in low score)
+                        bt.logging.debug(f"Failed to process video (corrupted/invalid): {video_path}")
                 except Exception as e:
-                    bt.logging.warning(f"Error processing video {video_path}: {e}")
+                    bt.logging.debug(f"Error processing video {video_path}: {e}")
             
             all_media_features.append(batch_features_padded)
 
@@ -402,19 +423,35 @@ def calculate_clip_alignment_consensus(
                 sample_scores.append(score)
                 individual_scores[model_name] = score
 
-            consensus_score = sum(sample_scores) / len(sample_scores)
-            score_std = np.std(sample_scores) if len(sample_scores) > 1 else 0.0
-            min_score = min(sample_scores)
-            max_score = max(sample_scores)
+            # Check if this is a corrupted video (all scores are 0 or very close to 0)
+            # This happens when video frames couldn't be extracted
+            is_corrupted = all(score < 0.001 for score in sample_scores) if sample_scores else True
+            
+            if is_corrupted:
+                consensus_result = {
+                    "consensus_score": None,
+                    "individual_scores": individual_scores,
+                    "num_models": len(sample_scores),
+                    "corrupted": True,
+                    "score_std": 0.0,
+                    "score_range": [0.0, 0.0],
+                    "failed_models": failed_models,
+                }
+            else:
+                consensus_score = sum(sample_scores) / len(sample_scores)
+                score_std = np.std(sample_scores) if len(sample_scores) > 1 else 0.0
+                min_score = min(sample_scores)
+                max_score = max(sample_scores)
 
-            consensus_result = {
-                "consensus_score": consensus_score,
-                "individual_scores": individual_scores,
-                "num_models": len(sample_scores),
-                "score_std": score_std,
-                "score_range": [min_score, max_score],
-                "failed_models": failed_models,
-            }
+                consensus_result = {
+                    "consensus_score": consensus_score,
+                    "individual_scores": individual_scores,
+                    "num_models": len(sample_scores),
+                    "corrupted": False,
+                    "score_std": score_std,
+                    "score_range": [min_score, max_score],
+                    "failed_models": failed_models,
+                }
 
             consensus_results.append(consensus_result)
 
