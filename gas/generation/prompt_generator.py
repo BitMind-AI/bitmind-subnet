@@ -68,16 +68,14 @@ class PromptGenerator:
         try:
             bt.logging.info(f"Attempting to load {self.vlm_name} from local cache...")
             self.vlm_processor = Blip2Processor.from_pretrained(
-                self.vlm_name, torch_dtype=torch.float32, local_files_only=True
+                self.vlm_name, local_files_only=True
             )
             self.vlm = Blip2ForConditionalGeneration.from_pretrained(
                 self.vlm_name, torch_dtype=torch.float32, local_files_only=True
             )
         except (OSError, ValueError) as e:
             bt.logging.info(f"Model not in local cache, downloading from HuggingFace...")
-            self.vlm_processor = Blip2Processor.from_pretrained(
-                self.vlm_name, torch_dtype=torch.float32
-            )
+            self.vlm_processor = Blip2Processor.from_pretrained(self.vlm_name)
             self.vlm = Blip2ForConditionalGeneration.from_pretrained(
                 self.vlm_name, torch_dtype=torch.float32
             )
