@@ -6,15 +6,19 @@ This guide explains how to create ONNX models for discriminative mining using th
 
 **⚠️ IMPORTANT**: Your ONNX models must meet these requirements:
 
-1. **Dynamic Axes**: Use dynamic axes for everything except Channels
-   - Image models: `{0: 'batch_size', 2: 'height', 3: 'width'}`
-   - Video models: `{0: 'batch_size', 1: 'frames', 3: 'height', 4: 'width'}`
+1. **Input Shape**: Specify fixed spatial dimensions for optimal batching
+   - Image models: `['batch_size', 3, H, W]` where H and W are fixed (e.g., 224)
+   - Video models: `['batch_size', 'frames', 3, H, W]` where H and W are fixed
+   - ⚠️ If you use dynamic H/W axes, gasbench will default to 224x224
 
 2. **Pixel Range**: Accept raw pixel values in range `[0-255]`
-   - The model wrapper handles all preprocessing (normalization, resizing, etc.)
-   - Your model should expect raw uint8 inputs
+   - Gasbench handles preprocessing (shortest-edge resize, center crop, augmentations)
+   - Your model wrapper should only normalize to [0, 1] and apply model-specific normalization
 
-3. **Output Format**: Return logits for 3 classes `[real, synthetic, semisynthetic]` with the shape (batch_size, 3)
+3. **Output Format**: Return logits for 3 classes `[real, synthetic, semisynthetic]`
+   - Image models: `(batch_size, 3)`
+   - Video models: `(batch_size, 3)` after temporal aggregation
+
 
 ## Example Scripts
 
@@ -52,32 +56,36 @@ The `neurons/discriminator/onnx_examples` directory contains working examples:
    # Should see: image_detector.onnx, video_detector.onnx
    ```
 
-## Model Wrapper
+## Preprocessing Pipeline
 
-The `model_wrapper.py` file contains example preprocessing wrappers that handle:
-- Pixel normalization (`[0-255]` → `[0-1]`)
-- Image resizing and cropping
-- ImageNet normalization
-- Video frame processing
+Gasbench performs the following preprocessing before passing data to your model:
+1. **Resize shortest edge** to target size (preserving aspect ratio)
+2. **Center crop** to exact target size (H x W from your model spec)
+3. **Random augmentations** (rotation, flip, crop, color jitter, etc.)
+4. **Batching** with configurable batch size
 
-**Follow the ** to ensure your models work correctly with the network.
+Your ONNX wrapper should only handle:
+- Normalization: `[0-255]` → `[0-1]`
+- Model-specific transforms (e.g., ImageNet mean/std)
+- **Video models**: Temporal aggregation
 
 ## Custom Models
 
 To create your own model:
 
 1. **Inherit from `nn.Module`** and implement your architecture
-2. **Wrap with `ImageModelWrapper` or `VideoModelWrapper`**
-3. **Export with dynamic axes** as shown in the examples
-4. **Test with raw uint8 inputs** to ensure compatibility
+2. **Wrap with preprocessing** (normalize, model-specific transforms, temporal aggregation)
+3. **Export with fixed spatial dimensions** as shown in the examples
+4. **Test with batched uint8 inputs** to ensure compatibility
 
 ## Example Export Code
 
+### Image Model
 ```python
-# Create dummy input with raw pixel values
+# Create dummy input with raw pixel values (fixed spatial dims)
 dummy_input = torch.randint(0, 256, (1, 3, 224, 224), dtype=torch.uint8)
 
-# Export with dynamic axes
+# Export with fixed spatial dimensions for batching
 torch.onnx.export(
     wrapped_model,
     dummy_input,
@@ -85,7 +93,7 @@ torch.onnx.export(
     input_names=['input'],
     output_names=['logits'],
     dynamic_axes={
-        'input': {0: 'batch_size', 2: 'height', 3: 'width'},
+        'input': {0: 'batch_size'},  # Only batch_size is dynamic
         'logits': {0: 'batch_size'}
     },
     opset_version=11,
@@ -95,9 +103,59 @@ torch.onnx.export(
 )
 ```
 
+### Video Model
+```python
+# Create dummy input (B, T, C, H, W) with fixed spatial dims
+dummy_input = torch.randint(0, 256, (1, 8, 3, 224, 224), dtype=torch.uint8)
+
+# Export with dynamic batch and frames, fixed spatial dims
+torch.onnx.export(
+    wrapped_model,
+    dummy_input,
+    "models/video_detector.onnx",
+    input_names=['input'],
+    output_names=['logits'],
+    dynamic_axes={
+        'input': {0: 'batch_size', 1: 'frames'},  # H, W are fixed
+        'logits': {0: 'batch_size'}
+    },
+    opset_version=11,
+    do_constant_folding=True,
+    export_params=True,
+    keep_initializers_as_inputs=False
+)
+```
+
+## Model Preprocessing Wrapper
+
+To perform input preprocessing or ouptut postprocessing, you can wrap your model:
+
+```python
+class PreprocessingWrapper(nn.Module):
+    def __init__(self, model, is_video=False):
+        super().__init__()
+        self.model = model
+        
+    def forward(self, x):
+        # Input x: (B, T, C, H, W) for video, (B, C, H, W) for image
+        # Values in range [0, 255]
+        
+        # Normalize to [0, 1]
+        x = x.float() / 255.0
+        
+        # Apply model
+        outputs = self.model(x)
+        
+        # Any necessary output postprocessing
+
+        return outputs
+```
+
+The temporal aggregation prevents single-frame anomalies from dominating predictions.
+
 ## Packaging Your Models
 
-After creating your ONNX models, you need to package them into zip files before pushing to the network:
+After creating your ONNX models, you need to package them into zip files before pushing to the network (keeps the system flexible in case we need to add supplemental files in the future):
 
 ```bash
 # Package image model
