@@ -32,6 +32,7 @@ from gas.evaluation import (
     get_generator_base_rewards,
     get_generator_reward_multipliers,
 )
+from neurons.validator.services.data_service import DataService
 
 try:
     load_dotenv(".env.validator")
@@ -73,6 +74,9 @@ class Validator(BaseNeuron):
 
         self.content_manager = ContentManager(self.config.cache.base_dir)
 
+        # Initialize DataService for scraping capabilities
+        self.data_service = DataService(self.config)
+
         ## Typesafety
         self.set_weights_fn = create_set_weights(spec_version, self.config.netuid)
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
@@ -97,6 +101,7 @@ class Validator(BaseNeuron):
                 self.log_on_block,
                 self.issue_generator_challenge,
                 self.set_weights,
+                self.start_scraping_cycle,
             ]
         )
 
@@ -132,6 +137,10 @@ class Validator(BaseNeuron):
             self.miner_type_tracker,
             save_state_callback=self.save_state,
         )
+
+        # Start DataService for scraping capabilities
+        bt.logging.info("[VALIDATOR] Starting DataService for scraping capabilities")
+        asyncio.create_task(self.data_service.start())
 
         await self.load_state()
 
@@ -307,6 +316,18 @@ class Validator(BaseNeuron):
         except Exception as e:
             bt.logging.warning(f"Error in log_on_block: {e}")
 
+    @on_block_interval("scraper_interval")
+    async def start_scraping_cycle(self, block):
+        """
+        Start scraping cycle at regular intervals to collect data alongside generation.
+        """
+        try:
+            bt.logging.info(f"[VALIDATOR] Starting scraping cycle at block {block}")
+            await self.data_service.start_scraper_cycle(block)
+        except Exception as e:
+            bt.logging.error(f"[VALIDATOR] Error in scraping cycle: {e}")
+            bt.logging.error(traceback.format_exc())
+
     async def save_state(self):
         """
         Atomically save validator state (scores + challenge tasks)
@@ -371,6 +392,8 @@ class Validator(BaseNeuron):
         await self.shutdown_substrate()
         if self.generative_challenge_manager:
            await self.generative_challenge_manager.shutdown()
+        if hasattr(self, 'data_service') and self.data_service:
+           await self.data_service.stop()
 
     def heartbeat(self):
         bt.logging.info("Starting Heartbeat")

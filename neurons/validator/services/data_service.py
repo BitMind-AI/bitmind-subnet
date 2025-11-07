@@ -93,7 +93,7 @@ class DataService:
 
         self.block_callbacks = [
             self.log_on_block,
-            #self.start_scraper_cycle,
+            self.start_scraper_cycle,
             self.start_dataset_download,
         ]
 
