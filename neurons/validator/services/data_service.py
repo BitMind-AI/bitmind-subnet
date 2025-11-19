@@ -16,8 +16,7 @@ from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 
 from gas.cache import ContentManager
 from gas.config import add_args, add_data_service_args
-from gas.datasets import initialize_dataset_registry
-from gas.datasets.dataset_registry import DatasetRegistry
+from gas.datasets import load_all_datasets
 from gas.datasets.download import download_and_extract
 from gas.scraping import GoogleScraper
 from gas.types import MediaType, Modality, SourceType
@@ -72,7 +71,7 @@ class DataService:
         ]
 
         # Dataset download vars
-        self.dataset_registry = initialize_dataset_registry()
+        self.all_datasets = load_all_datasets()
         self.scraper_thread: Optional[Thread] = None
         self.downloader_thread: Optional[Thread] = None
         self.stop_event = Event()
@@ -313,13 +312,8 @@ class DataService:
 
     def _downloader_worker(self):
         try:
-            # Build the set of all registered datasets and select those below threshold
-            image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
-            video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
-            all_datasets = image_datasets + video_datasets
-
             datasets_to_download = [
-                d for d in all_datasets
+                d for d in self.all_datasets
                 if self.content_manager.needs_more_data(SourceType.DATASET, d.path)
             ]
 

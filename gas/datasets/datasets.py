@@ -1,227 +1,57 @@
 """
-Dataset definitions for the validator cache system
+Dataset definitions from gasbench for the validator cache system 
 """
 
 from typing import List
+from gas.types import DatasetConfig, MediaType, Modality
+from gasbench.dataset.config import load_benchmark_datasets_from_yaml
+ 
 
-from gas.types import Modality, MediaType, DatasetConfig
+
+def _from_benchmark_config(bc) -> DatasetConfig:
+    """
+    Map gasbench BenchmarkDatasetConfig -> bitmind-subnet DatasetConfig
+    """
+    return DatasetConfig(
+        path=bc.path,
+        modality=bc.modality,          # coerced to Modality in DatasetConfig.__post_init__
+        media_type=bc.media_type,      # coerced to MediaType in DatasetConfig.__post_init__
+        source_format=(bc.source_format or ""),
+    )
+
+
+def _load_yaml_datasets(modality: str) -> List[DatasetConfig]:
+    """
+    Load datasets from gasbench's bundled benchmark_datasets.yaml and map them.
+    Filters out unsupported sources for current downloader (e.g., gasstation/*, non-HF sources).
+    """
+    data = load_benchmark_datasets_from_yaml()
+    bench_list = data.get(modality, []) or []
+
+    mapped: List[DatasetConfig] = []
+    for bc in bench_list:
+        # Exclude gasstation paths and non-HuggingFace sources (bitmind-subnet downloader only supports HF)
+        try:
+            source = getattr(bc, "source", "huggingface")
+            path = getattr(bc, "path", "") or ""
+            if source != "huggingface":
+                continue
+            if path.startswith("gasstation/"):
+                continue
+            mapped.append(_from_benchmark_config(bc))
+        except Exception:
+            continue
+
+    return mapped
 
 
 def get_image_datasets() -> List[DatasetConfig]:
-    """
-    Get the list of image datasets used by the validator.
-
-    Returns:
-        List of image dataset configurations
-    """
-    return [
-        # Real image datasets
-        DatasetConfig(
-            path="drawthingsai/megalith-10m",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["diverse"],
-            source_format="tar",
-        ),
-        DatasetConfig(
-            path="bitmind/bm-eidon-image",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["frontier"],
-        ),
-        DatasetConfig(
-            path="bitmind/bm-real",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-        ),
-        DatasetConfig(
-            path="bitmind/open-image-v7-256",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["diverse"],
-        ),
-        DatasetConfig(
-            path="bitmind/celeb-a-hq",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["faces", "high-quality"],
-        ),
-        DatasetConfig(
-            path="bitmind/ffhq-256",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["faces", "high-quality"],
-        ),
-        DatasetConfig(
-            path="bitmind/MS-COCO-unique-256",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["diverse"],
-        ),
-        DatasetConfig(
-            path="bitmind/AFHQ",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["animals", "high-quality"],
-        ),
-        DatasetConfig(
-            path="bitmind/lfw",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["faces"],
-        ),
-        DatasetConfig(
-            path="bitmind/caltech-256",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["objects", "categorized"],
-        ),
-        DatasetConfig(
-            path="bitmind/caltech-101",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["objects", "categorized"],
-        ),
-        DatasetConfig(
-            path="bitmind/dtd",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["textures"],
-        ),
-        DatasetConfig(
-            path="bitmind/idoc-mugshots-images",
-            modality=Modality.IMAGE,
-            media_type=MediaType.REAL,
-            tags=["faces"],
-        ),
-        # Synthetic image datasets
-        DatasetConfig(
-            path="bitmind/JourneyDB",
-            modality=Modality.IMAGE,
-            media_type=MediaType.SYNTHETIC,
-            tags=["midjourney"],
-        ),
-        DatasetConfig(
-            path="bitmind/GenImage_MidJourney",
-            modality=Modality.IMAGE,
-            media_type=MediaType.SYNTHETIC,
-            tags=["midjourney"],
-        ),
-        DatasetConfig(
-            path="bitmind/bm-aura-imagegen",
-            modality=Modality.IMAGE,
-            media_type=MediaType.SYNTHETIC,
-            tags=["sora"],
-        ),
-        DatasetConfig(
-            path="bitmind/bm-imagine",
-            modality=Modality.IMAGE,
-            media_type=MediaType.SYNTHETIC,
-            tags=["grok"],
-            source_format="jpg",
-        ),
-        DatasetConfig(
-            path="Yejy53/Echo-4o-Image",
-            modality=Modality.IMAGE,
-            media_type=MediaType.SYNTHETIC,
-            tags=["gpt"],
-            source_format="tar",
-        ),
-        # Semisynthetic image datasets
-        DatasetConfig(
-            path="bitmind/face-swap",
-            modality=Modality.IMAGE,
-            media_type=MediaType.SEMISYNTHETIC,
-            tags=["faces", "manipulated"],
-        ),
-    ]
+    return _load_yaml_datasets("image")
 
 
 def get_video_datasets() -> List[DatasetConfig]:
-    """
-    Get the list of video datasets used by the validator.
-    """
-    return [
-        # Real video datasets
-        DatasetConfig(
-            path="bitmind/bm-eidon-video",
-            modality=Modality.VIDEO,
-            media_type=MediaType.REAL,
-            tags=["frontier"],
-            source_format="zip",
-        ),
-        DatasetConfig(
-            path="shangxd/imagenet-vidvrd",
-            modality=Modality.VIDEO,
-            media_type=MediaType.REAL,
-            tags=["diverse"],
-            source_format="zip",
-        ),
-        DatasetConfig(
-            path="nkp37/OpenVid-1M",
-            modality=Modality.VIDEO,
-            media_type=MediaType.REAL,
-            tags=["diverse", "large-zips"],
-            source_format="zip",
-        ),
-        DatasetConfig(
-            path="facebook/PE-Video",
-            modality=Modality.VIDEO,
-            media_type=MediaType.REAL,
-            source_format="tar",
-        ),
-        # Semisynthetic video datasets
-        DatasetConfig(
-            path="bitmind/semisynthetic-video",
-            modality=Modality.VIDEO,
-            media_type=MediaType.SEMISYNTHETIC,
-            tags=["faces"],
-            source_format="zip",
-        ),
-        # Synthetic video datasets
-        DatasetConfig(
-            path="Rapidata/text-2-video-human-preferences-veo3",
-            modality=Modality.VIDEO,
-            media_type=MediaType.SYNTHETIC,
-            tags=["veo"],
-            source_format="mp4",
-        ),
-        DatasetConfig(
-            path="Rapidata/text-2-video-human-preferences-veo2",
-            modality=Modality.VIDEO,
-            media_type=MediaType.SYNTHETIC,
-            tags=["veo"],
-            source_format="mp4",
-        ),
-        DatasetConfig(
-            path="bitmind/aura-video",
-            modality=Modality.VIDEO,
-            media_type=MediaType.SYNTHETIC,
-            tags=["sora"],
-            source_format="parquet",
-        ),
-        DatasetConfig(
-            path="bitmind/aislop-videos",
-            modality=Modality.VIDEO,
-            media_type=MediaType.SYNTHETIC,
-            tags=["slop"],
-            source_format="tar",
-        ),
-    ]
+    return _load_yaml_datasets("video")
 
 
-def initialize_dataset_registry():
-    """
-    Initialize and populate the dataset registry.
-
-    Returns:
-        Fully populated DatasetRegistry instance
-    """
-    from gas.datasets.dataset_registry import DatasetRegistry
-
-    registry = DatasetRegistry()
-
-    registry.register_all(get_image_datasets())
-    registry.register_all(get_video_datasets())
-
-    return registry
+def load_all_datasets() -> List[DatasetConfig]:
+    return get_image_datasets() + get_video_datasets()
