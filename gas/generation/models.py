@@ -62,13 +62,6 @@ def get_text_to_image_models() -> List[ModelConfig]:
             tags=["stable-diffusion", "xl", "realistic"],
         ),
         ModelConfig(
-            path="Corcelio/mobius",
-            task=ModelTask.TEXT_TO_IMAGE,
-            pipeline_cls=StableDiffusionXLPipeline,
-            pretrained_args={"use_safetensors": True, "torch_dtype": torch.float16},
-            tags=["stable-diffusion", "xl"],
-        ),
-        ModelConfig(
             path="black-forest-labs/FLUX.1-dev",
             task=ModelTask.TEXT_TO_IMAGE,
             pipeline_cls=FluxPipeline,
