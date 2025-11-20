@@ -10,6 +10,7 @@ from itertools import zip_longest
 from threading import Event, Thread
 from typing import List, Optional
 from pathlib import Path
+import math
 
 import bittensor as bt
 from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
@@ -60,6 +61,23 @@ class DataService:
             min_source_threshold=getattr(self.config, "min_source_threshold", 0.8),
         )
 
+        # Upload configuration and HF credentials
+        self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        self.hf_org = "gasstation"
+        self.hf_dataset_repos = {
+            "image": f"{self.hf_org}/gs-image-v2",
+            "video": f"{self.hf_org}/gs-video-v2",
+        }
+        self.upload_batch_size = getattr(self.config, "upload_batch_size", 500)
+        self.upload_threshold = getattr(self.config, "upload_threshold", 1000)
+        self.upload_max_batches = getattr(self.config, "upload_max_batches", 5)
+        self.videos_per_archive = getattr(self.config, "videos_per_archive", 50)
+        # Validator wallet (for tagging uploads with hotkey, if available)
+        try:
+            self.validator_wallet = bt.wallet(config=self.config)
+        except Exception:
+            self.validator_wallet = None
+
         # scraper initialization
         self.scrapers = [
             GoogleScraper(
@@ -74,6 +92,7 @@ class DataService:
         self.all_datasets = load_all_datasets()
         self.scraper_thread: Optional[Thread] = None
         self.downloader_thread: Optional[Thread] = None
+        self.uploader_thread: Optional[Thread] = None
         self.stop_event = Event()
 
         # Service state
@@ -94,6 +113,7 @@ class DataService:
             self.log_on_block,
             #self.start_scraper_cycle,
             self.start_dataset_download,
+            self.start_upload_cycle,
         ]
 
     async def start(self):
@@ -456,6 +476,55 @@ class DataService:
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error writing dataset media: {e}")
             return False
+    
+    @on_block_interval("upload_check_interval")
+    def start_upload_cycle(self):
+        """Start uploader thread if not already running and threshold met."""
+        if self.uploader_thread is not None:
+            return
+        if self.uploader_thread and self.uploader_thread.is_alive():
+            return
+
+        try:
+            total = 0
+            imgs = self.content_manager.get_unuploaded_media(
+                limit=100000, modality="image", verified_only=True, skip_verified=False
+            )
+            vids = self.content_manager.get_unuploaded_media(
+                limit=100000, modality="video", verified_only=True, skip_verified=False
+            )
+            total = (len(imgs) if imgs else 0) + (len(vids) if vids else 0)
+            if total < int(self.upload_threshold):
+                return
+        except Exception as e:
+            bt.logging.warning(f"[DATA-SERVICE] Unable to compute upload threshold: {e}",)
+            return
+
+        def _worker():
+            try:
+                batches = max(0, min(self.upload_max_batches, math.ceil(total / max(1, int(self.upload_batch_size)))))
+                if batches <= 0:
+                    bt.logging.info("[DATA-SERVICE] Upload skipped (below threshold)")
+                    return
+                bt.logging.info(
+                    f"[DATA-SERVICE] Uploading {batches} batch(es) of {self.upload_batch_size} files per modality (total pending {total})"
+                )
+                self.content_manager.upload_batch_to_huggingface(
+                    hf_token=self.hf_token,
+                    hf_dataset_repos=self.hf_dataset_repos,
+                    upload_batch_size=self.upload_batch_size,
+                    videos_per_archive=self.videos_per_archive,
+                    validator_hotkey=(self.validator_wallet.hotkey.ss58_address if self.validator_wallet else None),
+                    num_batches=batches,
+                )
+            except Exception as e:
+                bt.logging.error(f"[DATA-SERVICE] Uploader error: {e}")
+                bt.logging.error(traceback.format_exc())
+            finally:
+                self.uploader_thread = None
+
+        self.uploader_thread = Thread(target=_worker, daemon=True)
+        self.uploader_thread.start()
 
     async def log_on_block(self, block):
         """Log service status on block events."""
