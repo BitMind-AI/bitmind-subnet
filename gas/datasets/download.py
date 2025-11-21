@@ -186,18 +186,32 @@ def _process_parquet(source_path: Path, dataset: DatasetConfig, num_items: int):
     sample_df = df.sample(n=min(num_items, len(df)))
 
     if dataset.modality == Modality.IMAGE:
-        media_col = next((c for c in sample_df.columns if "image" in c.lower()), None)
+        media_col = (
+            next((c for c in sample_df.columns if c.lower() == "image"), None)
+            or next((c for c in sample_df.columns if "image" in c.lower() and "_id" not in c.lower() and "width" not in c.lower() and "height" not in c.lower()), None)
+            or next((c for c in sample_df.columns if "image" in c.lower()), None)
+        )
     else:
         candidates = ["video", "bytes", "content", "data"]
-        media_col = next((c for c in sample_df.columns if any(k in c.lower() for k in candidates)), None)
+        media_col = (
+            next((c for c in sample_df.columns if c.lower() in candidates), None)
+            or next((c for c in sample_df.columns if any(k in c.lower() for k in candidates) and "_id" not in c.lower()), None)
+            or next((c for c in sample_df.columns if any(k in c.lower() for k in candidates)), None)
+        )
 
     if not media_col:
         bt.logging.warning(f"No media column found in {source_path} for modality {dataset.modality}")
         return
 
+    bt.logging.debug(f"Selected media column '{media_col}' from {source_path}")
+
     for _, row in sample_df.iterrows():
         try:
             media_data = row[media_col]
+            
+            if media_data is None or isinstance(media_data, (int, float)):
+                continue
+            
             if isinstance(media_data, dict):
                 key = next(
                     (
@@ -216,6 +230,8 @@ def _process_parquet(source_path: Path, dataset: DatasetConfig, num_items: int):
                     img = Image.open(BytesIO(media_data))
                 yield img, _common_metadata(dataset, source_path)
             else:
+                if media_data is None or isinstance(media_data, (int, float)):
+                    continue
                 if not isinstance(media_data, (bytes, bytearray)):
                     media_data = base64.b64decode(media_data)
                 yield bytes(media_data), _common_metadata(dataset, source_path)

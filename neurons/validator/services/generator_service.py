@@ -79,10 +79,6 @@ class GeneratorService:
             "image": f"{self.hf_org}/gs-image-v2",
             "video": f"{self.hf_org}/gs-video-v2",
         }
-        self.upload_batch_size = config.upload_batch_size
-        self.upload_num_batches = config.upload_num_batches
-        self.images_per_archive = config.images_per_archive
-        self.videos_per_archive = config.videos_per_archive
 
         self.tp_generators = {"nano_banana": nano_banana.generate_image}
 

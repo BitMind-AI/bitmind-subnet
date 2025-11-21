@@ -512,14 +512,21 @@ def add_generation_service_args(parser):
     parser.add_argument(
         "--upload-batch-size",
         type=int,
-        help="Maximum number of media files to upload to HuggingFace per batch",
-        default=500,
+        help="Maximum number of media files to upload to HuggingFace per batch (rows in parquet)",
+        default=1000,
     )
 
     parser.add_argument(
-        "--upload-num-batches",
+        "--upload-threshold",
         type=int,
-        help="Number of upload batches to process per cycle",
+        help="Minimum number of unuploaded media files to trigger an upload cycle",
+        default=1000,
+    )
+
+    parser.add_argument(
+        "--upload-max-batches",
+        type=int,
+        help="Maximum number of upload batches to process per cycle",
         default=5,
     )
 
@@ -554,7 +561,7 @@ def add_data_service_args(parser):
     parser.add_argument(
         "--upload-check-interval",
         type=int,
-        help="Upload interval in blocks (default: 300 = 1 hour)",
+        help="Upload interval  in blocks (default: 300 = 1 hour)",
         default=300,
     )
 

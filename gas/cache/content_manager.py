@@ -599,14 +599,12 @@ class ContentManager:
 		self, 
 		limit: int = 100, 
 		modality: str = None, 
-		verified_only: bool = False, 
-		skip_verified: bool = False
+		source_type: str = None
 	) -> List[MediaEntry]:
 		return self.content_db.get_unuploaded_media(
 			limit=limit,
 			modality=modality,
-			verified_only=verified_only,
-			skip_verified=skip_verified
+			source_type=source_type
 		)
 
 	def mark_media_uploaded(self, media_ids: List[str]) -> bool:
@@ -732,7 +730,7 @@ class ContentManager:
 		validator_hotkey: str = None,
 		num_batches: int = 1
 	):
-		"""Upload unuploaded media from database to HuggingFace, separated by modality"""
+		"""Upload unuploaded media from database to HuggingFace, separated by source (miner vs validator) and modality"""
 		try:
 			if num_batches is None or num_batches < 1:
 				bt.logging.warning(f"Invalid num_batches value: {num_batches}, using default of 1")
@@ -743,35 +741,36 @@ class ContentManager:
 			for batch_num in range(num_batches):
 				bt.logging.info(f"Processing upload batch {batch_num + 1}/{num_batches}")
 
-				#  prioritize verified miner media, then fill with validator media
+				# Prioritize verified miner media, fill remaining with validator-generated media
 				media_by_modality = {}
 				total_found = 0
 
 				for modality in ["image", "video"]:
-					# prioritize verified miner media up to batch size
+					# First, get verified miner media up to batch size
 					verified_miner_media = self.content_db.get_unuploaded_media(
 						limit=upload_batch_size, 
 						modality=modality, 
-						verified_only=True
+						source_type='miner'
 					)
 
-					# Fill remaining slots with any unuploaded validator media
+					# Fill remaining slots with validator-generated media
 					remaining_slots = max(0, upload_batch_size - len(verified_miner_media))
-					remaining_media = []
+					validator_media = []
 					if remaining_slots > 0:
-						remaining_media = self.content_db.get_unuploaded_media(
+						validator_media = self.content_db.get_unuploaded_media(
 							limit=remaining_slots, 
 							modality=modality, 
-							skip_verified=True
+							source_type='generated'
 						)
 
-					unuploaded_media = verified_miner_media + remaining_media
-					media_by_modality[modality] = unuploaded_media
-					total_found += len(unuploaded_media)
+					# Combine: miner first, then validator
+					combined_media = verified_miner_media + validator_media
+					media_by_modality[modality] = combined_media
+					total_found += len(combined_media)
 
 					bt.logging.info(
-						f"{modality}: {len(verified_miner_media)} verified miner + "
-						f"{len(remaining_media)} validator = {len(unuploaded_media)} total"
+						f"{modality}: {len(verified_miner_media)} miner + "
+						f"{len(validator_media)} validator = {len(combined_media)} total"
 					)
 
 				if total_found == 0:
@@ -785,6 +784,7 @@ class ContentManager:
 
 				all_successfully_processed_ids = []
 
+				# Upload images (mixed miner + validator)
 				if media_by_modality['image']:
 					uploaded_ids = upload_images_to_hf(
 						media_entries=media_by_modality['image'],
@@ -795,6 +795,7 @@ class ContentManager:
 					)
 					all_successfully_processed_ids.extend(uploaded_ids)
 
+				# Upload videos (mixed miner + validator)
 				if media_by_modality['video']:
 					uploaded_ids = upload_videos_to_hf(
 						media_entries=media_by_modality['video'],
