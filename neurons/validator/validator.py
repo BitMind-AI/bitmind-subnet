@@ -3,11 +3,12 @@ import sys
 import json
 import traceback
 from time import sleep
+from threading import Thread
 
 import numpy as np
 from dotenv import load_dotenv
 import bittensor as bt
-from threading import Thread
+import torch
 
 from gas import __spec_version__ as spec_version
 from gas.protocol.validator_requests import get_benchmark_results
