@@ -115,8 +115,8 @@ def yield_media_from_source(
     """
     Unified media extractor for parquet, zip, and tar sources.
 
-    Returns only the common metadata fields across all previous extractors.
-    Common metadata: dataset, dataset_path, dataset_tags, dataset_priority, modality, media_type
+    Returns only the common metadata fields across all previous extractors:
+    dataset, dataset_path, dataset_priority, modality, media_type
     """
     try:
         filename = str(source_path.name).lower()
@@ -174,7 +174,6 @@ def _common_metadata(dataset: DatasetConfig, source_path: Path) -> Dict[str, Any
     return {
         "dataset": source_path.parent.name,
         "dataset_path": dataset.path,
-        "dataset_tags": dataset.tags,
         "dataset_priority": dataset.priority,
         "modality": dataset.modality,
         "media_type": dataset.media_type,

@@ -517,10 +517,17 @@ def add_generation_service_args(parser):
     )
 
     parser.add_argument(
+        "--images-per-archive",
+        type=int,
+        help="Number of images per tar archive (target ~100-200MB per archive)",
+        default=500,
+    )
+
+    parser.add_argument(
         "--videos-per-archive",
         type=int,
-        help="Maximum number of videos per archive file (keeps archive size manageable)",
-        default=150,
+        help="Number of videos per tar archive (target ~650MB per archive, max <1GB)",
+        default=200,
     )
 
     # Shared source-limit args
@@ -534,6 +541,13 @@ def add_data_service_args(parser):
         "--scraper-interval",
         type=int,
         help="Scraper interval in blocks (default: 300 = 1 hour)",
+        default=300,
+    )
+
+    parser.add_argument(
+        "--upload-check-interval",
+        type=int,
+        help="Upload interval in blocks (default: 300 = 1 hour)",
         default=300,
     )
 

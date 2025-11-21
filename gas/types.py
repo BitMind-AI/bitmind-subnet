@@ -80,7 +80,6 @@ class DatasetConfig:
     path: str  # HuggingFace path
     modality: Modality
     media_type: MediaType
-    tags: List[str] = field(default_factory=list)
     file_format: str = ""
     source_format: str = ""
     priority: int = 1  # Optional: priority for sampling (higher is more frequent)
@@ -93,9 +92,6 @@ class DatasetConfig:
                 self.source_format = "parquet"
             elif self.modality == Modality.VIDEO:
                 self.source_format = "zip"
-
-        if isinstance(self.tags, str):
-            self.tags = [t.strip() for t in self.tags.split(",")]
 
         if isinstance(self.modality, str):
             self.modality = Modality(self.modality.lower())

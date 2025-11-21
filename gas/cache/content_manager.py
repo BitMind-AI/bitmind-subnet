@@ -727,17 +727,12 @@ class ContentManager:
 		hf_token: str, 
 		hf_dataset_repos: dict, 
 		upload_batch_size: int, 
+		images_per_archive: int,
 		videos_per_archive: int,
 		validator_hotkey: str = None,
 		num_batches: int = 1
 	):
-		"""
-		Upload unuploaded media from database to HuggingFace, separated by modality.
-		Only uploads verified miner media or validator-generated media.
-
-		Args:
-			num_batches: Number of batches to process in this upload cycle (default: 1)
-		"""
+		"""Upload unuploaded media from database to HuggingFace, separated by modality"""
 		try:
 			if num_batches is None or num_batches < 1:
 				bt.logging.warning(f"Invalid num_batches value: {num_batches}, using default of 1")
@@ -795,6 +790,7 @@ class ContentManager:
 						media_entries=media_by_modality['image'],
 						hf_token=hf_token,
 						dataset_repo=hf_dataset_repos['image'],
+						images_per_archive=images_per_archive,
 						validator_hotkey=validator_hotkey
 					)
 					all_successfully_processed_ids.extend(uploaded_ids)
