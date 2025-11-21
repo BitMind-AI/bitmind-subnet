@@ -25,11 +25,6 @@ from gas.generation import (
 )
 from gas.cache.content_manager import ContentManager
 from gas.types import Modality, MediaType
-from gas.verification import (
-    run_verification,
-    get_verification_summary,
-    clear_clip_models,
-)
 
 
 class GeneratorService:
@@ -243,10 +238,6 @@ class GeneratorService:
 
         while not self._stop_requested.is_set():
             try:
-                self._run_job({"kind": "verify", "args": {"clip_batch_size": 32}})
-                if self._stop_requested.is_set():
-                    break
-
                 self._await_media(min_needed=1, max_wait_s=1200, poll_s=10)
                 self._run_job(
                     {
@@ -281,9 +272,7 @@ class GeneratorService:
         vram_before_free, _ = torch.cuda.mem_get_info()
         start = time.time()
 
-        if kind == "verify":
-            self._verify_miner_media(clip_batch_size=args.get("clip_batch_size", 32))
-        elif kind == "prompts":
+        if kind == "prompts":
             count, ready = self._has_min_source_media(min_needed=1)
             if not ready:
                 bt.logging.info(f"[GENERATOR-SERVICE] Skipping prompt generation; waiting for base media ({count}/1)")
@@ -581,10 +570,6 @@ class GeneratorService:
                                 bt.logging.info(
                                     f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
                                 )
-                                try:
-                                    self._verify_miner_media(clip_batch_size=16, batch_size=32)
-                                except Exception as e:
-                                    bt.logging.debug(f"[GENERATOR-SERVICE] Verify-between-models skipped: {e}")
                 else:
                     # send prompt to third party services
                     for service_name, generator_fn in self.tp_generators.items():
@@ -604,10 +589,6 @@ class GeneratorService:
                                 bt.logging.info(
                                     f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
                                 )
-                                try:
-                                    self._verify_miner_media(clip_batch_size=16, batch_size=32)
-                                except Exception as e:
-                                    bt.logging.debug(f"[GENERATOR-SERVICE] Verify-between-TP models skipped: {e}")
 
                 bt.logging.info(
                     f"[GENERATOR-SERVICE] Completed media generation for prompt '{prompt.id}' in {time.time()-start:.2f} seconds"
@@ -616,72 +597,6 @@ class GeneratorService:
             bt.logging.warning(
                 "[GENERATOR-SERVICE] No prompts available for media generation"
             )
-
-    def _verify_miner_media(self, threshold: float = 0.25, clip_batch_size: int = 32, batch_size: Optional[int] = None):
-        """
-        Verify all pending miner-submitted media using batched CLIP processing with consensus voting.
-
-        Args:
-            threshold: Threshold for determining pass/fail (default: 0.25, raw CLIP score)
-            clip_batch_size: Batch size for CLIP operations (default: 32, adjust based on GPU memory)
-            batch_size: Optional max number of media items to process this call (None processes all)
-        """
-        try:
-            bt.logging.info(
-                f"[GENERATOR-SERVICE] Starting verification of all pending media (clip_batch_size={clip_batch_size})"
-            )
-
-            results = run_verification(
-                content_manager=self.content_manager,
-                batch_size=batch_size,
-                threshold=threshold,
-                clip_batch_size=clip_batch_size,
-            )
-
-            if not results:
-                bt.logging.info("[GENERATOR-SERVICE] No media to verify")
-                return
-
-            summary = get_verification_summary(results)
-            bt.logging.info(
-                f"[GENERATOR-SERVICE] Batched verification complete: "
-                f"{summary['successful']}/{summary['total']} processed, "
-                f"{summary['passed']} passed, {summary['failed']} failed, {summary['errors']} errors "
-                f"(pass rate: {summary['pass_rate']:.1%}, "
-                f"avg score: {summary['average_score']:.3f})"
-            )
-
-            error_results = [r for r in results if r.verification_score is None]
-            if error_results:
-                bt.logging.warning(
-                    f"[GENERATOR-SERVICE] {len(error_results)} verification processing errors"
-                )
-
-            failed_results = [
-                r for r in results if r.verification_score is not None and not r.passed
-            ]
-            if failed_results:
-                bt.logging.debug(
-                    f"[GENERATOR-SERVICE] {len(failed_results)} media failed verification threshold"
-                )
-
-            successful_results = [
-                r for r in results if r.verification_score is not None
-            ]
-            if successful_results:
-                bt.logging.debug("[GENERATOR-SERVICE] Sample verification results:")
-                for result in successful_results[:3]:  # Log first 3 successes
-                    score = result.verification_score.get("score", 0)
-                    bt.logging.debug(
-                        f"  Media {result.media_entry.id}: "
-                        f"score={score:.3f}, passed={result.passed}"
-                    )
-        except Exception as e:
-            bt.logging.error(f"[GENERATOR-SERVICE] Error in verification pipeline: {e}")
-            bt.logging.error(traceback.format_exc())
-
-        finally:
-            clear_clip_models()
 
     def _write_media(self, media_sample, prompt_id: str):
         """

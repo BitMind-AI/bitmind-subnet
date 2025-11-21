@@ -97,6 +97,7 @@ class Validator(BaseNeuron):
                 self.log_on_block,
                 self.issue_generator_challenge,
                 self.set_weights,
+                self.verify_pending_media,
             ]
         )
 
@@ -242,6 +243,70 @@ class Validator(BaseNeuron):
                 return False
 
         return True
+
+    @on_block_interval("verification_interval")
+    async def verify_pending_media(self, block):
+        """Verify all pending miner-submitted media using CLIP verification."""
+        try:
+            if torch.cuda.is_available():
+                free_vram_gb, total_vram_gb = torch.cuda.mem_get_info()
+                free_vram_gb = free_vram_gb / (1024**3)
+                total_vram_gb = total_vram_gb / (1024**3)
+
+                CLIP_VRAM_REQUIRED_GB = 8.0
+
+                if free_vram_gb < CLIP_VRAM_REQUIRED_GB:
+                    bt.logging.warning(
+                        f"[VALIDATOR] Skipping verification - insufficient VRAM: "
+                        f"{free_vram_gb:.2f} GB free < {CLIP_VRAM_REQUIRED_GB:.2f} GB required "
+                        f"(total: {total_vram_gb:.2f} GB). Will retry next interval."
+                    )
+                    return
+
+                bt.logging.info(
+                    f"[VALIDATOR] VRAM check passed: {free_vram_gb:.2f} GB free "
+                    f"(required: {CLIP_VRAM_REQUIRED_GB:.2f} GB)"
+                )
+
+            bt.logging.info(f"[VALIDATOR] Starting periodic verification at block {block}")
+
+            from gas.verification import (
+                run_verification,
+                get_verification_summary,
+                clear_clip_models,
+            )
+
+            results = run_verification(
+                content_manager=self.content_manager,
+                batch_size=None,
+                threshold=0.25,
+                clip_batch_size=32,
+            )
+
+            if not results:
+                bt.logging.info("[VALIDATOR] No media to verify")
+                return
+
+            summary = get_verification_summary(results)
+            bt.logging.info(
+                f"[VALIDATOR] Verification complete: "
+                f"{summary['successful']}/{summary['total']} processed, "
+                f"{summary['passed']} passed, {summary['failed']} failed, {summary['errors']} errors "
+                f"(pass rate: {summary['pass_rate']:.1%}, "
+                f"avg score: {summary['average_score']:.3f})"
+            )
+
+            error_results = [r for r in results if r.verification_score is None]
+            if error_results:
+                bt.logging.warning(
+                    f"[VALIDATOR] {len(error_results)} verification processing errors"
+                )
+
+        except Exception as e:
+            bt.logging.error(f"[VALIDATOR] Verification error: {e}")
+            bt.logging.error(traceback.format_exc())
+        finally:
+            clear_clip_models()
 
     async def update_scores(self):
         """
