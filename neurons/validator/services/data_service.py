@@ -484,7 +484,6 @@ class DataService:
 
         try:
             total = 0
-            # Count all unuploaded media (both miner and validator) for threshold check
             imgs = self.content_manager.get_unuploaded_media(
                 limit=100000, modality="image"
             )
@@ -492,20 +491,24 @@ class DataService:
                 limit=100000, modality="video"
             )
             total = (len(imgs) if imgs else 0) + (len(vids) if vids else 0)
+            
             if total < self.config.upload_threshold:
+                bt.logging.debug(f"[DATA-SERVICE] Upload threshold not met: {total} < {self.config.upload_threshold}")
                 return
+            
+            bt.logging.info(f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_threshold}")
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Unable to compute upload threshold: {e}",)
             return
 
         def _worker():
             try:
-                batches = max(0, min(self.config.upload_max_batches, math.ceil(total / max(1, self.config.upload_batch_size))))
+                batches = self.config.upload_max_batches
                 if batches <= 0:
-                    bt.logging.info("[DATA-SERVICE] Upload skipped (below threshold)")
+                    bt.logging.info("[DATA-SERVICE] Upload skipped (waiting for upload batch minimum)")
                     return
                 bt.logging.info(
-                    f"[DATA-SERVICE] Uploading {batches} batch(es) of {self.config.upload_batch_size} files per modality (total pending {total})"
+                    f"[DATA-SERVICE] Uploading {batches} batch(es) of {self.config.upload_batch_size} files per modality"
                 )
                 self.content_manager.upload_batch_to_huggingface(
                     hf_token=self.hf_token,

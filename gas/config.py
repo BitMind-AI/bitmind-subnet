@@ -583,7 +583,7 @@ def add_data_service_args(parser):
         "--upload-batch-size",
         type=int,
         help="Maximum number of media files to upload to HuggingFace per batch per modality",
-        default=500,
+        default=1000,
     )
 
     parser.add_argument(
@@ -604,14 +604,14 @@ def add_data_service_args(parser):
         "--images-per-archive",
         type=int,
         help="Number of images per tar archive (target ~100-200MB per archive)",
-        default=100,
+        default=500,
     )
 
     parser.add_argument(
         "--videos-per-archive",
         type=int,
         help="Number of videos per tar archive (target ~650MB per archive)",
-        default=50,
+        default=200,
     )
 
     # Shared source-limit args
