@@ -496,14 +496,21 @@ class DataService:
                 bt.logging.debug(f"[DATA-SERVICE] Upload threshold not met: {total} < {self.config.upload_threshold}")
                 return
             
-            bt.logging.info(f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_threshold}")
+            batches = min(
+                self.config.upload_max_batches,
+                total // self.config.upload_threshold
+            )
+            
+            bt.logging.info(
+                f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_threshold}. "
+                f"Will upload {batches} batch(es)"
+            )
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Unable to compute upload threshold: {e}",)
             return
 
         def _worker():
             try:
-                batches = self.config.upload_max_batches
                 if batches <= 0:
                     bt.logging.info("[DATA-SERVICE] Upload skipped (waiting for upload batch minimum)")
                     return
