@@ -54,24 +54,21 @@ class DataService:
         # used for filesystem/db writes
         self.content_manager = ContentManager(
             base_dir=self.config.cache.base_dir,
-            max_per_source=getattr(self.config, "max_per_source", 500),
-            enable_source_limits=getattr(self.config, "enable_source_limits", True),
-            prune_strategy=getattr(self.config, "prune_strategy", "oldest"),
-            remove_on_sample=getattr(self.config, "remove_on_sample", True),
-            min_source_threshold=getattr(self.config, "min_source_threshold", 0.8),
+            max_per_source=self.config.max_per_source,
+            enable_source_limits=self.config.enable_source_limits,
+            prune_strategy=self.config.prune_strategy,
+            remove_on_sample=self.config.remove_on_sample,
+            min_source_threshold=self.config.min_source_threshold,
         )
 
         # Upload configuration and HF credentials
         self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
         self.hf_org = "gasstation"
         self.hf_dataset_repos = {
-            "image": f"{self.hf_org}/gs-image-v2",
-            "video": f"{self.hf_org}/gs-video-v2",
+            "image": f"{self.hf_org}/gs-images-v2",
+            "video": f"{self.hf_org}/gs-videos-v2",
         }
-        self.upload_batch_size = getattr(self.config, "upload_batch_size", 500)
-        self.upload_threshold = getattr(self.config, "upload_threshold", 1000)
-        self.upload_max_batches = getattr(self.config, "upload_max_batches", 5)
-        self.videos_per_archive = getattr(self.config, "videos_per_archive", 50)
+        
         # Validator wallet (for tagging uploads with hotkey, if available)
         try:
             self.validator_wallet = bt.wallet(config=self.config)
@@ -361,10 +358,10 @@ class DataService:
 
                 for media_bytes, metadata in download_and_extract(
                     dataset,
-                    images_per_parquet=getattr(self.config, 'dataset_images_per_parquet', 100),
-                    videos_per_zip=getattr(self.config, 'dataset_videos_per_zip', 50),
-                    parquet_per_dataset=getattr(self.config, 'dataset_parquet_per_dataset', 5),
-                    zips_per_dataset=getattr(self.config, 'dataset_zips_per_dataset', 2),
+                    images_per_parquet=self.config.dataset_images_per_parquet,
+                    videos_per_zip=self.config.dataset_videos_per_zip,
+                    parquet_per_dataset=self.config.dataset_parquet_per_dataset,
+                    zips_per_dataset=self.config.dataset_zips_per_dataset,
                     temp_dir=str(Path(self.config.cache.base_dir) / "tmp"),
                 ):
                     if self.stop_event.is_set():
@@ -478,7 +475,7 @@ class DataService:
             return False
     
     @on_block_interval("upload_check_interval")
-    def start_upload_cycle(self):
+    async def start_upload_cycle(self, block):
         """Start uploader thread if not already running and threshold met."""
         if self.uploader_thread is not None:
             return
@@ -488,32 +485,37 @@ class DataService:
         try:
             total = 0
             imgs = self.content_manager.get_unuploaded_media(
-                limit=100000, modality="image", verified_only=True, skip_verified=False
+                limit=100000, modality="image"
             )
             vids = self.content_manager.get_unuploaded_media(
-                limit=100000, modality="video", verified_only=True, skip_verified=False
+                limit=100000, modality="video"
             )
             total = (len(imgs) if imgs else 0) + (len(vids) if vids else 0)
-            if total < int(self.upload_threshold):
+            
+            if total < self.config.upload_threshold:
+                bt.logging.debug(f"[DATA-SERVICE] Upload threshold not met: {total} < {self.config.upload_threshold}")
                 return
+            
+            bt.logging.info(f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_threshold}")
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Unable to compute upload threshold: {e}",)
             return
 
         def _worker():
             try:
-                batches = max(0, min(self.upload_max_batches, math.ceil(total / max(1, int(self.upload_batch_size)))))
+                batches = self.config.upload_max_batches
                 if batches <= 0:
-                    bt.logging.info("[DATA-SERVICE] Upload skipped (below threshold)")
+                    bt.logging.info("[DATA-SERVICE] Upload skipped (waiting for upload batch minimum)")
                     return
                 bt.logging.info(
-                    f"[DATA-SERVICE] Uploading {batches} batch(es) of {self.upload_batch_size} files per modality (total pending {total})"
+                    f"[DATA-SERVICE] Uploading {batches} batch(es) of {self.config.upload_batch_size} files per modality"
                 )
                 self.content_manager.upload_batch_to_huggingface(
                     hf_token=self.hf_token,
                     hf_dataset_repos=self.hf_dataset_repos,
-                    upload_batch_size=self.upload_batch_size,
-                    videos_per_archive=self.videos_per_archive,
+                    upload_batch_size=self.config.upload_batch_size,
+                    images_per_archive=self.config.images_per_archive,
+                    videos_per_archive=self.config.videos_per_archive,
                     validator_hotkey=(self.validator_wallet.hotkey.ss58_address if self.validator_wallet else None),
                     num_batches=batches,
                 )
