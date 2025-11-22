@@ -68,6 +68,7 @@ class DataService:
             "image": f"{self.hf_org}/gs-image-v2",
             "video": f"{self.hf_org}/gs-video-v2",
         }
+        
         # Validator wallet (for tagging uploads with hotkey, if available)
         try:
             self.validator_wallet = bt.wallet(config=self.config)
@@ -474,7 +475,7 @@ class DataService:
             return False
     
     @on_block_interval("upload_check_interval")
-    def start_upload_cycle(self, block):
+    async def start_upload_cycle(self, block):
         """Start uploader thread if not already running and threshold met."""
         if self.uploader_thread is not None:
             return
@@ -491,7 +492,7 @@ class DataService:
                 limit=100000, modality="video"
             )
             total = (len(imgs) if imgs else 0) + (len(vids) if vids else 0)
-            if total < int(self.config.upload_threshold):
+            if total < self.config.upload_threshold:
                 return
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Unable to compute upload threshold: {e}",)
@@ -499,7 +500,7 @@ class DataService:
 
         def _worker():
             try:
-                batches = max(0, min(self.config.upload_max_batches, math.ceil(total / max(1, int(self.config.upload_batch_size)))))
+                batches = max(0, min(self.config.upload_max_batches, math.ceil(total / max(1, self.config.upload_batch_size))))
                 if batches <= 0:
                     bt.logging.info("[DATA-SERVICE] Upload skipped (below threshold)")
                     return

@@ -509,41 +509,6 @@ def add_generation_service_args(parser):
         default=10,
     )
 
-    parser.add_argument(
-        "--upload-batch-size",
-        type=int,
-        help="Maximum number of media files to upload to HuggingFace per batch (rows in parquet)",
-        default=1000,
-    )
-
-    parser.add_argument(
-        "--upload-threshold",
-        type=int,
-        help="Minimum number of unuploaded media files to trigger an upload cycle",
-        default=1000,
-    )
-
-    parser.add_argument(
-        "--upload-max-batches",
-        type=int,
-        help="Maximum number of upload batches to process per cycle",
-        default=5,
-    )
-
-    parser.add_argument(
-        "--images-per-archive",
-        type=int,
-        help="Number of images per tar archive (target ~100-200MB per archive)",
-        default=500,
-    )
-
-    parser.add_argument(
-        "--videos-per-archive",
-        type=int,
-        help="Number of videos per tar archive (target ~650MB per archive, max <1GB)",
-        default=200,
-    )
-
     # Shared source-limit args
     add_source_limit_args(parser)
 
@@ -612,6 +577,41 @@ def add_data_service_args(parser):
         type=int,
         help="Number of zip files to download per dataset (default: 2)",
         default=2,
+    )
+
+    parser.add_argument(
+        "--upload-batch-size",
+        type=int,
+        help="Maximum number of media files to upload to HuggingFace per batch per modality",
+        default=500,
+    )
+
+    parser.add_argument(
+        "--upload-threshold",
+        type=int,
+        help="Minimum number of unuploaded media files to trigger an upload cycle",
+        default=1000,
+    )
+
+    parser.add_argument(
+        "--upload-max-batches",
+        type=int,
+        help="Maximum number of upload batches to process per cycle",
+        default=5,
+    )
+
+    parser.add_argument(
+        "--images-per-archive",
+        type=int,
+        help="Number of images per tar archive (target ~100-200MB per archive)",
+        default=100,
+    )
+
+    parser.add_argument(
+        "--videos-per-archive",
+        type=int,
+        help="Number of videos per tar archive (target ~650MB per archive)",
+        default=50,
     )
 
     # Shared source-limit args
