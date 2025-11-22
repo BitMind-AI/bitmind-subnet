@@ -65,8 +65,8 @@ class DataService:
         self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
         self.hf_org = "gasstation"
         self.hf_dataset_repos = {
-            "image": f"{self.hf_org}/gs-image-v2",
-            "video": f"{self.hf_org}/gs-video-v2",
+            "image": f"{self.hf_org}/gs-images-v2",
+            "video": f"{self.hf_org}/gs-videos-v2",
         }
         
         # Validator wallet (for tagging uploads with hotkey, if available)
