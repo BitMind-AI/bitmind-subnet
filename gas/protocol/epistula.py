@@ -108,13 +108,16 @@ async def _verify_request(
 
     signed_by = request.headers.get("Epistula-Signed-By")
     signed_for = request.headers.get("Epistula-Signed-For")
+    client_ip = request.client.host if request.client else "unknown"
 
     if signed_for != wallet.hotkey.ss58_address:
+        bt.logging.error(f"Request not intended for self from {signed_by} (IP: {client_ip})")
         raise HTTPException(
             status_code=400, detail="Bad Request, message is not intended for self"
         )
     
     if signed_by not in metagraph.hotkeys:
+        bt.logging.error(f"Signer not in metagraph: {signed_by} (IP: {client_ip})")
         raise HTTPException(status_code=401, detail="Signer not in metagraph")
 
     uid = metagraph.hotkeys.index(signed_by)
@@ -138,7 +141,7 @@ async def _verify_request(
     )
 
     if err:
-        bt.logging.error(err)
+        bt.logging.error(f"UID {uid} (IP: {client_ip}): {err}")
         raise HTTPException(status_code=400, detail=err)
 
 
