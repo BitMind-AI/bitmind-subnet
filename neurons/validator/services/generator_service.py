@@ -87,9 +87,8 @@ class GeneratorService:
         # job_name -> {"peak_vram_gb": float, "avg_duration_s": float, "count": int}
         # Per-model profiling: model_name -> {"max_peak_vram_gb": float, "avg_gen_s": float, "count": int, "last_gen_s": float}
         self._model_profiles = {}
-        # Generation batch size (number of prompts per local-gen batch)
-        self._headroom_gb = 3.0  # conservative headroom for local gen
-        self.gen_batch_size = self.config.local_batch_size if hasattr(self.config, "local") or hasattr(self.config, "local_batch_size") else 1
+        self._headroom_gb = 3.0
+        self.gen_batch_size = getattr(self.config, 'local_batch_size', 1)
         try:
             self._load_profiles_from_cache()
         except Exception as e:
