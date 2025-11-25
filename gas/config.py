@@ -225,13 +225,6 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
-        "--verification-interval",
-        type=int,
-        help="How often to verify pending media, measured in 12 second blocks (default: 120 = 24 minutes).",
-        default=120,
-    )
-
-    parser.add_argument(
         "--dataset-download-interval",
         type=int,
         help="How often to download and extract datasets, measured in 12 second blocks (default: 720 = 2.4 hours)",
