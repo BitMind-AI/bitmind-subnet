@@ -477,8 +477,6 @@ class DataService:
     @on_block_interval("upload_check_interval")
     async def start_upload_cycle(self, block):
         """Start uploader thread if not already running and threshold met."""
-        if self.uploader_thread is not None:
-            return
         if self.uploader_thread and self.uploader_thread.is_alive():
             return
 
