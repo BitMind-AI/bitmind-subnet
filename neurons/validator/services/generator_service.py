@@ -6,6 +6,9 @@ import traceback
 from pathlib import Path
 from threading import Thread, Event, Lock
 from typing import Optional
+from collections import deque
+import random
+import json
 
 import bittensor as bt
 import torch
@@ -22,11 +25,6 @@ from gas.generation import (
 )
 from gas.cache.content_manager import ContentManager
 from gas.types import Modality, MediaType
-from gas.verification import (
-    run_verification,
-    get_verification_summary,
-    clear_clip_models,
-)
 
 
 class GeneratorService:
@@ -78,15 +76,25 @@ class GeneratorService:
 
         self.hf_org = "gasstation"
         self.hf_dataset_repos = {
-            "image": f"{self.hf_org}/generated-images",
-            "video": f"{self.hf_org}/generated-videos",
+            "image": f"{self.hf_org}/gs-image-v2",
+            "video": f"{self.hf_org}/gs-video-v2",
         }
-        self.upload_batch_size = config.upload_batch_size
-        self.upload_num_batches = config.upload_num_batches
-        self.videos_per_archive = config.videos_per_archive
 
-        # third party generative services
         self.tp_generators = {"nano_banana": nano_banana.generate_image}
+
+        self._first_run_profiled = False
+        self._job_profiles = {}  
+        # job_name -> {"peak_vram_gb": float, "avg_duration_s": float, "count": int}
+        # Per-model profiling: model_name -> {"max_peak_vram_gb": float, "avg_gen_s": float, "count": int, "last_gen_s": float}
+        self._model_profiles = {}
+        self._headroom_gb = 3.0
+        self.gen_batch_size = getattr(self.config, 'local_batch_size', 1)
+        try:
+            self._load_profiles_from_cache()
+        except Exception as e:
+            bt.logging.debug(f"[GENERATOR-SERVICE] Could not load cached profiles: {e}")
+
+        self._verification_max_batch = 512
 
     @property
     def output_dir(self):
@@ -165,7 +173,6 @@ class GeneratorService:
 
         while self._service_running:
             try:
-                # Start generation process
                 if not self._start_generation():
                     bt.logging.error(
                         "[GENERATOR-SERVICE] Failed to start generation process"
@@ -182,7 +189,7 @@ class GeneratorService:
                     bt.logging.info(
                         "[GENERATOR-SERVICE] Generation process stopped, restarting..."
                     )
-                    time.sleep(60)  # Wait before restart
+                    time.sleep(10)
 
             except KeyboardInterrupt:
                 bt.logging.info("[GENERATOR-SERVICE] Received interrupt signal")
@@ -198,6 +205,7 @@ class GeneratorService:
         """Worker thread that performs the actual generation work."""
         try:
             self._initialize_pipelines()
+            self._run_verification()
             self._generation_work_loop()
         except Exception as e:
             bt.logging.error(
@@ -223,62 +231,234 @@ class GeneratorService:
         )
 
     def _generation_work_loop(self):
-        """Main generation work loop."""
+        """Main generation loop."""
         bt.logging.info("[GENERATOR-SERVICE] Starting generation work loop")
-
-        prompt_batch_size = self.config.prompt_batch_size
-        query_batch_size = self.config.query_batch_size
-        local_batch_size = self.config.local_batch_size
-        tps_batch_size = self.config.tps_batch_size
 
         while not self._stop_requested.is_set():
             try:
-                self._verify_miner_media(clip_batch_size=32)
-
-                # Upload batch of miner/validator generated media to HuggingFace
-                bt.logging.info(f"Beginning hf batch upload cycle ({self.upload_num_batches} batches of {self.upload_batch_size} files per modality)")
-                self.content_manager.upload_batch_to_huggingface(
-                    hf_token=self.hf_token,
-                    hf_dataset_repos=self.hf_dataset_repos,
-                    upload_batch_size=self.upload_batch_size,
-                    num_batches=self.upload_num_batches,
-                    videos_per_archive=self.videos_per_archive,
-                    validator_hotkey=self.validator_wallet.hotkey.ss58_address,
+                self._await_media(min_needed=1, max_wait_s=1200, poll_s=10)
+                self._run_job(
+                    {
+                        "kind": "prompts",
+                        "args": {"batch_size": self.config.prompt_batch_size}
+                    }
                 )
 
-                # Generate search queries
-                start = time.time()
-                self._generate_text("search_query", query_batch_size)
-                bt.logging.info(
-                    f"[GENERATOR-SERVICE] Generated {query_batch_size} queries in {time.time()-start:.2f} seconds"
-                )
+                self._run_verification()
+
+                if self._first_run_profiled is False:
+                    self._first_run_profiled = True
+                    try:
+                        self._save_profiles_to_cache()
+                    except Exception:
+                        pass
+
                 if self._stop_requested.is_set():
                     break
 
-                # Generate prompts
-                start = time.time()
-                self._generate_text("prompt", prompt_batch_size)
-                bt.logging.info(
-                    f"[GENERATOR-SERVICE] Generated {prompt_batch_size} prompts in {time.time()-start:.2f} seconds"
-                )
-                if self._stop_requested.is_set():
-                    break
+                self._run_job({"kind": "gen_tps", "args": {"k": self.config.tps_batch_size}})
+                self._run_verification()
 
-                # Clear GPU memory
-                self.prompt_generator.clear_gpu()
-
-                # Generate media with third party services
-                self._generate_media(use_local=False, k=tps_batch_size)
-
-                # Generate media with local models
-                self._generate_media(use_local=True, k=local_batch_size)
+                self._run_job({"kind": "gen_local", "args": {"k": self.gen_batch_size}})
+                self._run_verification()
 
             except Exception as e:
-                bt.logging.error(
-                    f"[GENERATOR-SERVICE] Error in generation work loop: {e}"
-                )
+                bt.logging.error(f"[GENERATOR-SERVICE] Error in generation work loop: {e}")
                 bt.logging.error(traceback.format_exc())
-                time.sleep(3)  # Wait before retrying
+                time.sleep(3)
+
+    def _run_job(self, job):
+        kind = job.get("kind")
+        args = job.get("args", {}) or {}
+
+        torch.cuda.reset_peak_memory_stats()
+        vram_before_free, _ = torch.cuda.mem_get_info()
+        start = time.time()
+
+        if kind == "prompts":
+            count, ready = self._has_min_source_media(min_needed=1)
+            if not ready:
+                bt.logging.info(f"[GENERATOR-SERVICE] Skipping prompt generation; waiting for base media ({count}/1)")
+                return
+            start = time.time()
+            self._generate_text("prompt", args.get("batch_size", 1))
+            bt.logging.info(f"[GENERATOR-SERVICE] Generated prompts in {time.time()-start:.2f} seconds")
+        elif kind == "gen_tps":
+            self._generate_media(use_local=False, k=args.get("k", 1))
+        elif kind == "gen_local":
+            self._generate_media(use_local=True, k=args.get("k", self.gen_batch_size))
+        else:
+            bt.logging.warning(f"[GENERATOR-SERVICE] Unknown job kind: {kind}")
+
+        duration = time.time() - start
+        peak_alloc_bytes = torch.cuda.max_memory_allocated()
+        peak_gb = float(peak_alloc_bytes) / (1024**3)
+        self._update_profile(kind, peak_gb, duration)
+        vram_after_free, _ = torch.cuda.mem_get_info()
+
+        vram_before_gb = float(vram_before_free) / (1024**3)
+        vram_after_gb = float(vram_after_free) / (1024**3)
+        profiling_results = {
+            "job_kind": kind,
+            "duration_s": round(duration, 4),
+            "peak_vram_gb": round(peak_gb, 4),
+            "vram_before_job_gb": round(vram_before_gb, 4),
+            "vram_after_job_gb": round(vram_after_gb, 4),
+            "vram_diff_gb": round(vram_before_gb - vram_after_gb, 4), # Memory held by the job
+        }
+        bt.logging.debug(f"[GENERATOR-SERVICE] Job profiling: {json.dumps(profiling_results)}")
+
+    def _update_profile(self, kind: str, peak_gb: float, duration_s: float):
+        rec = self._job_profiles.get(kind, {"peak_vram_gb": 0.0, "avg_duration_s": 0.0, "count": 0})
+        cnt = rec["count"] + 1
+        rec["peak_vram_gb"] = max(rec["peak_vram_gb"], peak_gb)
+        # ema
+        if rec["count"] == 0:
+            rec["avg_duration_s"] = duration_s
+        else:
+            rec["avg_duration_s"] = (rec["avg_duration_s"] * rec["count"] + duration_s) / cnt
+        rec["count"] = cnt
+        self._job_profiles[kind] = rec
+        try:
+            self._save_profiles_to_cache()
+        except Exception as e:
+            bt.logging.debug(f"[GENERATOR-SERVICE] Failed to persist profiles: {e}")
+
+    def _update_model_metrics(self, model_name: str, peak_gb: float, gen_duration_s: Optional[float]):
+        rec = self._model_profiles.get(
+            model_name,
+            {"max_peak_vram_gb": 0.0, "avg_gen_s": 0.0, "count": 0, "last_gen_s": 0.0},
+        )
+        # normalize keys
+        max_peak = rec.get("max_peak_vram_gb", 0.0)
+        avg_gen = rec.get("avg_gen_s", 0.0)
+        cnt = rec.get("count", 0)
+        if peak_gb is None:
+            peak_gb = 0.0
+        if gen_duration_s is None:
+            gen_duration_s = 0.0
+        max_peak = max(max_peak, float(peak_gb))
+        if cnt == 0:
+            avg_gen = float(gen_duration_s)
+        else:
+            avg = (avg_gen * cnt + float(gen_duration_s)) / (cnt + 1)
+            avg_gen = avg
+        rec = {
+            "max_peak_vram_gb": max(max_peak, 0.0),
+            "avg_gen_s": avg_gen,
+            "count": cnt + 1,
+            "last_gen_s": float(gen_duration_s),
+        }
+        self._model_profiles[model_name] = rec
+        try:
+            self._save_profiles_to_cache()
+        except Exception:
+            pass
+
+    def _get_vram_gb(self):
+        if torch.cuda.is_available():
+            free_b, total_b = torch.cuda.mem_get_info()
+            return free_b / (1024**3), total_b / (1024**3)
+        return float("inf"), float("inf")
+
+    def _get_expected_runtime_s(self, kind: str) -> float:
+        rec = self._job_profiles.get(kind)
+        if rec and rec.get("avg_duration_s"):
+            return max(60.0, float(rec["avg_duration_s"]))
+        # fallback heuristics
+        if kind == "gen_local":
+            return 40.0 * 60.0  # 40 minutes default
+        if kind == "verify":
+            return 2.0 * 60.0
+        return 60.0
+
+    def _profiles_cache_path(self) -> Path:
+        profiles_dir = Path(self.config.cache.base_dir).expanduser() / "profiles"
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+        return profiles_dir / "generator_profiles.json"
+
+    def _load_profiles_from_cache(self):
+        path = self._profiles_cache_path()
+        if not path.exists():
+            return
+        with open(path, "r") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            cached = data.get("job_profiles")
+            if isinstance(cached, dict):
+                self._job_profiles = cached
+            m = data.get("model_profiles")
+            if isinstance(m, dict):
+                self._model_profiles = m
+            sched = data.get("scheduling")
+            if isinstance(sched, dict):
+                _ = sched  # preserved for potential future use
+
+    def _save_profiles_to_cache(self):
+        path = self._profiles_cache_path()
+        exp_heavy = self._get_expected_runtime_s("gen_local")
+        window = max(2.0 * exp_heavy, exp_heavy + 60.0)
+        doc = {
+            "job_profiles": self._job_profiles,
+            "model_profiles": self._model_profiles,
+            "scheduling": {
+                "budget_seconds": exp_heavy,
+                "window_seconds": window,
+            },
+            "version": 1,
+        }
+        tmp = path.with_suffix(".json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(doc, f)
+        tmp.replace(path)
+
+    def _has_min_source_media(self, min_needed: int) -> tuple[int, bool]:
+        try:
+            total = 0
+            min_needed = max(1, int(min_needed))
+            for mt in (MediaType.REAL, MediaType.SEMISYNTHETIC, MediaType.SYNTHETIC):
+                cache_result = self.content_manager.sample_media_with_content(
+                    modality=Modality.IMAGE,
+                    media_type=mt,
+                    count=min_needed,
+                    remove_from_cache=False,
+                )
+                total += cache_result["count"] if cache_result and "count" in cache_result else 0
+                if total >= min_needed:
+                    break
+            return total, total >= min_needed
+        except Exception:
+            return 0, False
+
+    def _await_media(self, min_needed: int, max_wait_s: int = 600, poll_s: int = 10) -> bool:
+        start = time.time()
+        while not self._stop_requested.is_set():
+            count, ready = self._has_min_source_media(min_needed=max(1, int(min_needed)))
+            if ready:
+                return True
+            if time.time() - start >= max_wait_s:
+                bt.logging.info(f"[GENERATOR-SERVICE] Media readiness wait timed out ({count}/{min_needed}); continuing without prompts")
+                return False
+            bt.logging.info(f"[GENERATOR-SERVICE] Waiting for base media ({count}/{min_needed})...")
+            time.sleep(poll_s)
+
+    def _sample_images(self, count: int = 1):
+        """Sample image media with content from any media type, randomly across types."""
+        media_types = [MediaType.REAL, MediaType.SEMISYNTHETIC, MediaType.SYNTHETIC]
+        random.shuffle(media_types)
+        for mt in media_types:
+            try:
+                result = self.content_manager.sample_media_with_content(
+                    modality=Modality.IMAGE,
+                    media_type=mt,
+                    count=count,
+                )
+                if result and result.get("count", 0) > 0:
+                    return result
+            except Exception as e:
+                bt.logging.debug(f"[GENERATOR-SERVICE] sample_media_with_content failed for {mt}: {e}")
+                continue
+        return {"count": 0, "items": []}
 
     def _generate_text(
         self, content_type: str = "search_query", batch_size: int = 10
@@ -309,9 +489,7 @@ class GeneratorService:
                     generated += 1
 
                 elif content_type == "prompt":
-                    cache_result = self.content_manager.sample_media_with_content(
-                        Modality.IMAGE, MediaType.REAL
-                    )
+                    cache_result = self._sample_images(count=1)
 
                     if not cache_result or not cache_result["count"]:
                         bt.logging.warning("No images available for prompt generation")
@@ -320,7 +498,8 @@ class GeneratorService:
                     item = cache_result["items"][0]
                     for modality in Modality:
                         prompt = self.prompt_generator.generate_prompt_from_image(
-                            Image.fromarray(item["image"]), intended_modality=modality
+                            Image.fromarray(item["image"]),
+                            intended_modality=modality
                         )
 
                         self.content_manager.write_prompt(
@@ -334,15 +513,12 @@ class GeneratorService:
                     raise ValueError(f"Unknown content_type: {content_type}")
 
             except Exception as e:
-                bt.logging.error(
-                    f"[GENERATOR-SERVICE] Error generating {content_type}: {e}"
-                )
+                bt.logging.error(f"[GENERATOR-SERVICE] Error generating {content_type}: {e}")
                 continue
 
-            bt.logging.info(
-                f"[GENERATOR-SERVICE] Added {generated} {content_type}s to database"
-            )
-
+            bt.logging.info(f"[GENERATOR-SERVICE] Added {generated} {content_type}s to database")
+                
+        self.prompt_generator.clear_gpu()
         return generated
 
     def _generate_media(self, use_local=True, k=1):
@@ -362,7 +538,12 @@ class GeneratorService:
                 bt.logging.debug(f"- Models: {self.model_names}")
 
                 if use_local:
-                    # send prompt to all local models
+                    # Send prompt to all local models
+                    try:
+                        torch.cuda.reset_peak_memory_stats()
+                    except Exception:
+                        pass
+
                     for gen_output in self.generation_pipeline.generate_media(
                         prompt=prompt.content,
                         model_names=self.model_names,
@@ -372,11 +553,28 @@ class GeneratorService:
                             break
 
                         if gen_output:
+                            # profiling
+                            peak_gb = 0.0
+                            try:
+                                peak_bytes = torch.cuda.max_memory_allocated()
+                                peak_gb = float(peak_bytes) / (1024**3)
+                            except Exception:
+                                peak_gb = 0.0
+                            model_name = gen_output.get("model_name")
+                            gen_dur = gen_output.get("gen_duration")
+                            if model_name:
+                                self._update_model_metrics(model_name, peak_gb, gen_dur)
+
+                            torch.cuda.reset_peak_memory_stats()
+
+                            # save gen outputs
                             save_path = self._write_media(gen_output, prompt.id)
                             if save_path:
                                 bt.logging.info(
                                     f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
                                 )
+
+                        self._run_verification()
                 else:
                     # send prompt to third party services
                     for service_name, generator_fn in self.tp_generators.items():
@@ -404,72 +602,6 @@ class GeneratorService:
             bt.logging.warning(
                 "[GENERATOR-SERVICE] No prompts available for media generation"
             )
-
-    def _verify_miner_media(self, threshold: float = 0.25, clip_batch_size: int = 32):
-        """
-        Verify all pending miner-submitted media using batched CLIP processing with consensus voting.
-
-        Args:
-            threshold: Threshold for determining pass/fail (default: 0.25, raw CLIP score)
-            clip_batch_size: Batch size for CLIP operations (default: 32, adjust based on GPU memory)
-        """
-        try:
-            bt.logging.info(
-                f"[GENERATOR-SERVICE] Starting verification of all pending media (clip_batch_size={clip_batch_size})"
-            )
-
-            results = run_verification(
-                content_manager=self.content_manager,
-                batch_size=None,  # Process all available miner media
-                threshold=threshold,
-                clip_batch_size=clip_batch_size,
-            )
-
-            if not results:
-                bt.logging.info("[GENERATOR-SERVICE] No media to verify")
-                return
-
-            # Generate and log summary with performance metrics
-            summary = get_verification_summary(results)
-            bt.logging.info(
-                f"[GENERATOR-SERVICE] Batched verification complete: "
-                f"{summary['successful']}/{summary['total']} processed, "
-                f"{summary['passed']} passed, {summary['failed']} failed, {summary['errors']} errors "
-                f"(pass rate: {summary['pass_rate']:.1%}, "
-                f"avg score: {summary['average_score']:.3f})"
-            )
-
-            error_results = [r for r in results if r.verification_score is None]
-            if error_results:
-                bt.logging.warning(
-                    f"[GENERATOR-SERVICE] {len(error_results)} verification processing errors"
-                )
-
-            failed_results = [
-                r for r in results if r.verification_score is not None and not r.passed
-            ]
-            if failed_results:
-                bt.logging.debug(
-                    f"[GENERATOR-SERVICE] {len(failed_results)} media failed verification threshold"
-                )
-
-            successful_results = [
-                r for r in results if r.verification_score is not None
-            ]
-            if successful_results:
-                bt.logging.debug("[GENERATOR-SERVICE] Sample verification results:")
-                for result in successful_results[:3]:  # Log first 3 successes
-                    score = result.verification_score.get("score", 0)
-                    bt.logging.debug(
-                        f"  Media {result.media_entry.id}: "
-                        f"score={score:.3f}, passed={result.passed}"
-                    )
-        except Exception as e:
-            bt.logging.error(f"[GENERATOR-SERVICE] Error in verification pipeline: {e}")
-            bt.logging.error(traceback.format_exc())
-
-        finally:
-            clear_clip_models()
 
     def _write_media(self, media_sample, prompt_id: str):
         """
@@ -505,6 +637,49 @@ class GeneratorService:
             )
             bt.logging.error(traceback.format_exc())
             return None
+
+    def _run_verification(self):
+        """Run verification after GPU has been cleared."""
+        pending = self.content_manager.get_pending_verification_count()
+        if pending == 0:
+            return
+
+        try:
+            from gas.verification import (
+                run_verification,
+                get_verification_summary,
+                clear_clip_models,
+            )
+
+            bt.logging.info(f"[GENERATOR-SERVICE] Starting verification for {pending} pending media")
+            start_time = time.time()
+
+            results = run_verification(
+                content_manager=self.content_manager,
+                batch_size=self._verification_max_batch,
+                threshold=0.25,
+                clip_batch_size=512,
+            )
+
+            if results:
+                summary = get_verification_summary(results)
+                bt.logging.info(
+                    f"[GENERATOR-SERVICE] Verification complete in {time.time()-start_time:.1f}s: "
+                    f"{summary['successful']}/{summary['total']} processed, "
+                    f"{summary['passed']} passed, {summary['failed']} failed, {summary['errors']} errors "
+                    f"(pass rate: {summary['pass_rate']:.1%}, avg score: {summary['average_score']:.3f})"
+                )
+
+            clear_clip_models()
+
+        except Exception as e:
+            bt.logging.error(f"[GENERATOR-SERVICE] Verification error: {e}")
+            bt.logging.error(traceback.format_exc())
+            try:
+                from gas.verification import clear_clip_models
+                clear_clip_models()
+            except:
+                pass
 
     def _cleanup(self):
         """Clean up resources."""

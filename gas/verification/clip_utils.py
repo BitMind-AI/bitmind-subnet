@@ -68,13 +68,13 @@ def clear_clip_models():
 
 def extract_temporal_frames(video_path: str) -> List[np.ndarray]:
     """
-    Extract 8 frames uniformly from a video for temporal analysis.
+    Extract 4 frames uniformly from a video for temporal analysis.
     
-    Args:
-        video_path: Path to video file
-        
-    Returns:
-        List of 8 frames as numpy arrays (RGB format), or empty list if video is invalid
+        Args:
+            video_path: Path to video file
+            
+        Returns:
+            List of 4 frames as numpy arrays (RGB format), or empty list if video is invalid
     """
     cap = None
     try:
@@ -97,7 +97,7 @@ def extract_temporal_frames(video_path: str) -> List[np.ndarray]:
         failed_reads = 0
         
         # Sample 8 frames uniformly across the video duration
-        frame_indices = np.linspace(0, total_frames - 1, min(8, total_frames), dtype=int)
+        frame_indices = np.linspace(0, total_frames - 1, min(4, total_frames), dtype=int)
             
         for frame_idx in frame_indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -141,7 +141,7 @@ def process_video_temporal(
     device: str,
 ) -> Optional[torch.Tensor]:
     """
-    Process a video using 8 uniformly sampled frames with mean aggregation.
+    Process a video using 4 uniformly sampled frames with mean aggregation.
     
     Args:
         video_path: Path to video file
@@ -247,7 +247,7 @@ def calculate_clip_alignment(
         # Combine all text features
         text_features = torch.cat(all_text_features, dim=0)
 
-        bt.logging.debug(f"Processing {len(media_paths)} media files in batches")
+        bt.logging.info(f"[{model_name}] Processing {len(media_paths)} media files in batches of {batch_size}")
         all_media_features = []
 
         for i in range(0, len(media_paths), batch_size):
@@ -328,15 +328,19 @@ def calculate_clip_alignment(
                     batch_features_padded[local_idx] = image_features[feat_idx]
             
             # Process videos individually with temporal processing
-            for video_path, local_k, orig_idx in video_paths_in_batch:
+            if video_paths_in_batch:
+                bt.logging.info(f"[{model_name}] Processing {len(video_paths_in_batch)} videos in batch {i//batch_size + 1}")
+            
+            for video_idx, (video_path, local_k, orig_idx) in enumerate(video_paths_in_batch, 1):
                 try:
+                    bt.logging.debug(f"[{model_name}] Processing video {video_idx}/{len(video_paths_in_batch)}: {Path(video_path).name}")
                     video_features = process_video_temporal(
                         video_path, model, preprocess, device
                     )
                     if video_features is not None:
                         local_idx = orig_idx - i
                         batch_features_padded[local_idx] = video_features[0]  # Remove batch dimension
-                        bt.logging.debug(f"Processed video {video_path} with temporal features")
+                        bt.logging.debug(f"[{model_name}] Completed video {video_idx}/{len(video_paths_in_batch)}")
                     else:
                         # Video is corrupted/invalid, leave features as zeros (will result in low score)
                         bt.logging.debug(f"Failed to process video (corrupted/invalid): {video_path}")
@@ -392,13 +396,13 @@ def calculate_clip_alignment_consensus(
 
         for model_name in CLIP_MODELS:
             try:
-                bt.logging.debug(f"Processing with model {model_name}")
+                bt.logging.info(f"Running verification with model {model_name}")
                 scores = calculate_clip_alignment(
                     media_paths, prompts, model_name, batch_size
                 )
                 if scores is not None and len(scores) == len(media_paths):
                     all_model_scores[model_name] = scores
-                    bt.logging.debug(f"Model {model_name}: got {len(scores)} scores")
+                    bt.logging.info(f"Model {model_name} complete: got {len(scores)} scores")
                 else:
                     failed_models.append(model_name)
                     bt.logging.warning(f"Model {model_name} failed to calculate scores")

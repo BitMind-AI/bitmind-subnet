@@ -922,18 +922,17 @@ class ContentDB:
             return int(row[0]) if row and row[0] is not None else 0
 
     def get_unuploaded_media(
-        self, limit: int = 100, modality: str = None, verified_only: bool = False, skip_verified: bool = False
+        self, limit: int = 100, modality: str = None, source_type: str = None
     ) -> List[MediaEntry]:
         """
         Get media entries that haven't been uploaded to HuggingFace yet.
-        Smart selection prioritizes verified miner media over validator-generated media.
         MediaEntry objects are enriched with prompt_content for HuggingFace metadata.
 
         Args:
             limit: Maximum number of entries to return (None = no limit)
             modality: Optional filter by modality ('image' or 'video'). If None, returns all.
-            verified_only: If True, only return verified miner media
-            skip_verified: If True, only return validator-generated media (skip verified miner media)
+            source_type: Explicit source type filter ('miner', 'generated', 'scraper', 'dataset'). 
+                        If 'miner', only returns verified miner media.
 
         Returns:
             List of MediaEntry objects where uploaded=0 and ready for upload, with prompt_content populated
@@ -943,21 +942,21 @@ class ContentDB:
                 limit = int(limit)
 
             bt.logging.debug(
-                f"[DEBUG] Getting unuploaded media with limit {limit}, modality filter: {modality}"
+                f"[DEBUG] Getting unuploaded media with limit {limit}, modality: {modality}, source_type: {source_type}"
             )
             with self._get_db_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 base_where = "(uploaded = 0 OR uploaded IS NULL)"
 
-                if verified_only:
-                    # Only verified miner media
+                if source_type == 'miner':
                     source_filter = "(source_type = 'miner' AND verified = 1)"
-                elif skip_verified:
-                    # Only validator-generated media (skip verified miner media)
+                elif source_type == 'generated':
                     source_filter = "source_type = 'generated'"
+                elif source_type in ('scraper', 'dataset'):
+                    source_filter = f"source_type = '{source_type}'"
                 else:
-                    # Default: both verified miner and validator-generated
-                    source_filter = "(source_type = 'generated' OR (source_type = 'miner' AND verified = 1))"
+                    # Default: both verified miner and all validator sources
+                    source_filter = "(source_type IN ('scraper', 'dataset', 'generated') OR (source_type = 'miner' AND verified = 1))"
 
                 query = f"SELECT * FROM media WHERE {base_where} AND {source_filter}"
 

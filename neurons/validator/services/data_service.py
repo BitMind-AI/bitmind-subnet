@@ -10,14 +10,14 @@ from itertools import zip_longest
 from threading import Event, Thread
 from typing import List, Optional
 from pathlib import Path
+import math
 
 import bittensor as bt
 from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 
 from gas.cache import ContentManager
 from gas.config import add_args, add_data_service_args
-from gas.datasets import initialize_dataset_registry
-from gas.datasets.dataset_registry import DatasetRegistry
+from gas.datasets import load_all_datasets
 from gas.datasets.download import download_and_extract
 from gas.scraping import GoogleScraper
 from gas.types import MediaType, Modality, SourceType
@@ -54,12 +54,26 @@ class DataService:
         # used for filesystem/db writes
         self.content_manager = ContentManager(
             base_dir=self.config.cache.base_dir,
-            max_per_source=getattr(self.config, "max_per_source", 500),
-            enable_source_limits=getattr(self.config, "enable_source_limits", True),
-            prune_strategy=getattr(self.config, "prune_strategy", "oldest"),
-            remove_on_sample=getattr(self.config, "remove_on_sample", True),
-            min_source_threshold=getattr(self.config, "min_source_threshold", 0.8),
+            max_per_source=self.config.max_per_source,
+            enable_source_limits=self.config.enable_source_limits,
+            prune_strategy=self.config.prune_strategy,
+            remove_on_sample=self.config.remove_on_sample,
+            min_source_threshold=self.config.min_source_threshold,
         )
+
+        # Upload configuration and HF credentials
+        self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        self.hf_org = "gasstation"
+        self.hf_dataset_repos = {
+            "image": f"{self.hf_org}/gs-images-v2",
+            "video": f"{self.hf_org}/gs-videos-v2",
+        }
+        
+        # Validator wallet (for tagging uploads with hotkey, if available)
+        try:
+            self.validator_wallet = bt.wallet(config=self.config)
+        except Exception:
+            self.validator_wallet = None
 
         # scraper initialization
         self.scrapers = [
@@ -72,9 +86,10 @@ class DataService:
         ]
 
         # Dataset download vars
-        self.dataset_registry = initialize_dataset_registry()
+        self.all_datasets = load_all_datasets()
         self.scraper_thread: Optional[Thread] = None
         self.downloader_thread: Optional[Thread] = None
+        self.uploader_thread: Optional[Thread] = None
         self.stop_event = Event()
 
         # Service state
@@ -95,6 +110,7 @@ class DataService:
             self.log_on_block,
             #self.start_scraper_cycle,
             self.start_dataset_download,
+            self.start_upload_cycle,
         ]
 
     async def start(self):
@@ -313,13 +329,8 @@ class DataService:
 
     def _downloader_worker(self):
         try:
-            # Build the set of all registered datasets and select those below threshold
-            image_datasets = self.dataset_registry.get_datasets(modality=Modality.IMAGE)
-            video_datasets = self.dataset_registry.get_datasets(modality=Modality.VIDEO)
-            all_datasets = image_datasets + video_datasets
-
             datasets_to_download = [
-                d for d in all_datasets
+                d for d in self.all_datasets
                 if self.content_manager.needs_more_data(SourceType.DATASET, d.path)
             ]
 
@@ -347,10 +358,10 @@ class DataService:
 
                 for media_bytes, metadata in download_and_extract(
                     dataset,
-                    images_per_parquet=getattr(self.config, 'dataset_images_per_parquet', 100),
-                    videos_per_zip=getattr(self.config, 'dataset_videos_per_zip', 50),
-                    parquet_per_dataset=getattr(self.config, 'dataset_parquet_per_dataset', 5),
-                    zips_per_dataset=getattr(self.config, 'dataset_zips_per_dataset', 2),
+                    images_per_parquet=self.config.dataset_images_per_parquet,
+                    videos_per_zip=self.config.dataset_videos_per_zip,
+                    parquet_per_dataset=self.config.dataset_parquet_per_dataset,
+                    zips_per_dataset=self.config.dataset_zips_per_dataset,
                     temp_dir=str(Path(self.config.cache.base_dir) / "tmp"),
                 ):
                     if self.stop_event.is_set():
@@ -462,6 +473,65 @@ class DataService:
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error writing dataset media: {e}")
             return False
+    
+    @on_block_interval("upload_check_interval")
+    async def start_upload_cycle(self, block):
+        """Start uploader thread if not already running and threshold met."""
+        if self.uploader_thread and self.uploader_thread.is_alive():
+            return
+
+        try:
+            total = 0
+            imgs = self.content_manager.get_unuploaded_media(
+                limit=100000, modality="image"
+            )
+            vids = self.content_manager.get_unuploaded_media(
+                limit=100000, modality="video"
+            )
+            total = (len(imgs) if imgs else 0) + (len(vids) if vids else 0)
+            
+            if total < self.config.upload_threshold:
+                bt.logging.debug(f"[DATA-SERVICE] Upload threshold not met: {total} < {self.config.upload_threshold}")
+                return
+            
+            batches = min(
+                self.config.upload_max_batches,
+                total // self.config.upload_threshold
+            )
+            
+            bt.logging.info(
+                f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_threshold}. "
+                f"Will upload {batches} batch(es)"
+            )
+        except Exception as e:
+            bt.logging.warning(f"[DATA-SERVICE] Unable to compute upload threshold: {e}",)
+            return
+
+        def _worker():
+            try:
+                if batches <= 0:
+                    bt.logging.info("[DATA-SERVICE] Upload skipped (waiting for upload batch minimum)")
+                    return
+                bt.logging.info(
+                    f"[DATA-SERVICE] Uploading {batches} batch(es) of {self.config.upload_batch_size} files per modality"
+                )
+                self.content_manager.upload_batch_to_huggingface(
+                    hf_token=self.hf_token,
+                    hf_dataset_repos=self.hf_dataset_repos,
+                    upload_batch_size=self.config.upload_batch_size,
+                    images_per_archive=self.config.images_per_archive,
+                    videos_per_archive=self.config.videos_per_archive,
+                    validator_hotkey=(self.validator_wallet.hotkey.ss58_address if self.validator_wallet else None),
+                    num_batches=batches,
+                )
+            except Exception as e:
+                bt.logging.error(f"[DATA-SERVICE] Uploader error: {e}")
+                bt.logging.error(traceback.format_exc())
+            finally:
+                self.uploader_thread = None
+
+        self.uploader_thread = Thread(target=_worker, daemon=True)
+        self.uploader_thread.start()
 
     async def log_on_block(self, block):
         """Log service status on block events."""
