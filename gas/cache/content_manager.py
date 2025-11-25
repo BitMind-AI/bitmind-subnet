@@ -588,6 +588,11 @@ class ContentManager:
 		"""
 		return self.content_db.get_miner_media(verification_status=verification_status)
 
+	def get_pending_verification_count(self) -> int:
+		"""Get count of media entries pending verification."""
+		pending_media = self.get_miner_media(verification_status="pending")
+		return len(pending_media)
+
 	def mark_miner_media_verified(self, media_id: str) -> bool:
 		return self.content_db.mark_miner_media_verified(media_id)
 

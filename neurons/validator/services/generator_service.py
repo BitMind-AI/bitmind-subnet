@@ -95,6 +95,8 @@ class GeneratorService:
         except Exception as e:
             bt.logging.debug(f"[GENERATOR-SERVICE] Could not load cached profiles: {e}")
 
+        self._verification_max_batch = 512
+
     @property
     def output_dir(self):
         return self._output_dir
@@ -204,6 +206,7 @@ class GeneratorService:
         """Worker thread that performs the actual generation work."""
         try:
             self._initialize_pipelines()
+            self._run_verification()
             self._generation_work_loop()
         except Exception as e:
             bt.logging.error(
@@ -242,6 +245,8 @@ class GeneratorService:
                     }
                 )
 
+                self._run_verification()
+
                 if self._first_run_profiled is False:
                     self._first_run_profiled = True
                     try:
@@ -253,7 +258,10 @@ class GeneratorService:
                     break
 
                 self._run_job({"kind": "gen_tps", "args": {"k": self.config.tps_batch_size}})
+                self._run_verification()
+
                 self._run_job({"kind": "gen_local", "args": {"k": self.gen_batch_size}})
+                self._run_verification()
 
             except Exception as e:
                 bt.logging.error(f"[GENERATOR-SERVICE] Error in generation work loop: {e}")
@@ -566,6 +574,8 @@ class GeneratorService:
                                 bt.logging.info(
                                     f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
                                 )
+
+                        self._run_verification()
                 else:
                     # send prompt to third party services
                     for service_name, generator_fn in self.tp_generators.items():
@@ -628,6 +638,49 @@ class GeneratorService:
             )
             bt.logging.error(traceback.format_exc())
             return None
+
+    def _run_verification(self):
+        """Run verification after GPU has been cleared."""
+        pending = self.content_manager.get_pending_verification_count()
+        if pending == 0:
+            return
+
+        try:
+            from gas.verification import (
+                run_verification,
+                get_verification_summary,
+                clear_clip_models,
+            )
+
+            bt.logging.info(f"[GENERATOR-SERVICE] Starting verification for {pending} pending media")
+            start_time = time.time()
+
+            results = run_verification(
+                content_manager=self.content_manager,
+                batch_size=self._verification_max_batch,
+                threshold=0.25,
+                clip_batch_size=512,
+            )
+
+            if results:
+                summary = get_verification_summary(results)
+                bt.logging.info(
+                    f"[GENERATOR-SERVICE] Verification complete in {time.time()-start_time:.1f}s: "
+                    f"{summary['successful']}/{summary['total']} processed, "
+                    f"{summary['passed']} passed, {summary['failed']} failed, {summary['errors']} errors "
+                    f"(pass rate: {summary['pass_rate']:.1%}, avg score: {summary['average_score']:.3f})"
+                )
+
+            clear_clip_models()
+
+        except Exception as e:
+            bt.logging.error(f"[GENERATOR-SERVICE] Verification error: {e}")
+            bt.logging.error(traceback.format_exc())
+            try:
+                from gas.verification import clear_clip_models
+                clear_clip_models()
+            except:
+                pass
 
     def _cleanup(self):
         """Clean up resources."""

@@ -32,13 +32,14 @@ def run_verification(
         return []
             
     preload_clip_models()
+    bt.logging.info("CLIP models loaded, starting verification")
 
     if batch_size is None:
         batch = pending_media
         bt.logging.debug(f"Processing all {len(batch)} pending media entries")
     else:
         batch = pending_media[:batch_size]
-        bt.logging.debug(f"Processing {len(batch)} of {len(pending_media)} pending media entries")
+        bt.logging.info(f"Processing {len(batch)} of {len(pending_media)} pending media entries")
 
     results = verify_media(
         content_manager=content_manager,
@@ -47,7 +48,7 @@ def run_verification(
         batch_size=clip_batch_size,
     )
 
-    bt.logging.debug("Writing verification results to db")
+    bt.logging.info("Verification batch complete, updating database")
     for result in results:
         if result.verification_score:  # Only process if verification actually ran
             try:
@@ -97,7 +98,7 @@ def verify_media(
             return []
 
         bt.logging.debug(
-            f"Starting batch verification of {len(media_entries)} media entries"
+            f"Starting verification for {len(media_entries)} media entries"
         )
 
         media_paths = []
@@ -126,17 +127,51 @@ def verify_media(
             bt.logging.warning("No valid media entries found for batch verification")
             return []
 
-        bt.logging.debug(
-            f"Processing {len(valid_entries)} valid entries in batched mode"
+        # Separate images and videos for optimal batching
+        image_entries = []
+        image_paths = []
+        image_prompts = []
+        video_entries = []
+        video_paths = []
+        video_prompts = []
+        
+        for entry, path, prompt in zip(valid_entries, media_paths, prompts):
+            from pathlib import Path
+            if Path(path).suffix.lower() in [".mp4", ".avi", ".mov", ".mkv", ".webm"]:
+                video_entries.append(entry)
+                video_paths.append(path)
+                video_prompts.append(prompt)
+            else:
+                image_entries.append(entry)
+                image_paths.append(path)
+                image_prompts.append(prompt)
+        
+        bt.logging.info(
+            f"Split into {len(image_entries)} images and {len(video_entries)} videos"
         )
 
-        # Run consensus verification
-        consensus_results = calculate_clip_alignment_consensus(
-            media_paths, prompts, batch_size
-        )
-
-        if consensus_results is None:
-            bt.logging.error("Consensus verification failed")
+        all_results = []
+        
+        # Process images with large batch size (128)
+        if image_entries:
+            bt.logging.info(f"Processing {len(image_entries)} images (batch_size=128)")
+            image_consensus = calculate_clip_alignment_consensus(
+                image_paths, image_prompts, batch_size=128
+            )
+            if image_consensus:
+                all_results.extend(zip(image_entries, image_prompts, image_consensus))
+        
+        # Process videos with small batch size (32)
+        if video_entries:
+            bt.logging.info(f"Processing {len(video_entries)} videos (batch_size=32)")
+            video_consensus = calculate_clip_alignment_consensus(
+                video_paths, video_prompts, batch_size=32
+            )
+            if video_consensus:
+                all_results.extend(zip(video_entries, video_prompts, video_consensus))
+        
+        if not all_results:
+            bt.logging.error("Consensus verification failed for all media")
             return [
                 VerificationResult(media_entry=entry, passed=False)
                 for entry in valid_entries
@@ -146,9 +181,7 @@ def verify_media(
         verification_results = []
         corrupted_videos = []
 
-        for i, (media_entry, consensus_result) in enumerate(
-            zip(valid_entries, consensus_results)
-        ):
+        for media_entry, prompt, consensus_result in all_results:
             # Check if video was corrupted/unreadable (indicated by None score from all models)
             if consensus_result.get("corrupted", False) or consensus_result["consensus_score"] is None:
                 bt.logging.warning(
@@ -158,7 +191,7 @@ def verify_media(
                 # Still create a failed result for this entry
                 result = VerificationResult(
                     media_entry=media_entry,
-                    original_prompt=prompts[i],
+                    original_prompt=prompt,
                     verification_score=None,
                     passed=False,
                 )
@@ -171,7 +204,7 @@ def verify_media(
             verification_score = {
                 "score": consensus_score,
                 "clip_score": consensus_score,
-                "original_prompt": prompts[i],
+                "original_prompt": prompt,
                 "method": "clip_consensus",
                 "consensus_details": consensus_result,
                 "passed": passed,
@@ -180,7 +213,7 @@ def verify_media(
 
             result = VerificationResult(
                 media_entry=media_entry,
-                original_prompt=prompts[i],
+                original_prompt=prompt,
                 verification_score=verification_score,
                 passed=passed,
             )

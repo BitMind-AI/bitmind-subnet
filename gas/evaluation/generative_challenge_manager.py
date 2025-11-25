@@ -29,14 +29,12 @@ class GenerativeChallengeManager:
         metagraph,
         subtensor,
         miner_type_tracker,
-        save_state_callback=None,
     ):
         self.config = config
         self.wallet = wallet
         self.metagraph = metagraph
         self.subtensor = subtensor
         self.miner_type_tracker = miner_type_tracker
-        self._save_state_callback = save_state_callback
 
         self.content_manager = ContentManager(self.config.cache.base_dir)
 
@@ -202,13 +200,6 @@ class GenerativeChallengeManager:
                 challenge_info["error_message"] = "Failed to store binary content"
 
             del self.challenge_tasks[task_id]
-            
-        # Save state after task completion to persist the deletion
-        if self._save_state_callback:
-            try:
-                await self._save_state_callback()
-            except Exception as e:
-                bt.logging.warning(f"Failed to save state after task completion: {e}")
                 
         return Response(status_code=200, content="Binary content received")
 
