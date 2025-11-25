@@ -267,7 +267,7 @@ def _prepare_image_operations(
     
     if not archive_uploads:
         bt.logging.warning("No image archives created")
-        return None, None
+        return None, None, []
     
     all_metadata = []
     for archive_path, archive_metadata_list in archive_uploads:
@@ -318,7 +318,7 @@ def _prepare_image_operations(
     
     if not dataset_dict["media_id"]:
         bt.logging.warning("No valid image metadata to upload")
-        return None, None
+        return None, None, []
     
     features = Features({
         "media_id": Value("string"),
