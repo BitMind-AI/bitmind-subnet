@@ -15,19 +15,32 @@ from .metagraph import (
 
 from .autoupdater import autoupdate
 
-from .transforms import (
-    apply_random_augmentations,
-    get_base_transforms,
-    get_random_augmentations,
-    get_random_augmentations_medium,
-    get_random_augmentations_hard,
-)
-
 from .state_manager import (
     StateManager,
     save_validator_state,
     load_validator_state,
 )
+
+
+# Lazy imports for transforms to avoid pulling in heavy dependencies (diffusers, etc.)
+# These are only loaded when explicitly accessed
+def __getattr__(name):
+    if name in (
+        "apply_random_augmentations",
+        "get_base_transforms", 
+        "get_random_augmentations",
+        "get_random_augmentations_medium",
+        "get_random_augmentations_hard",
+    ):
+        from .transforms import (
+            apply_random_augmentations,
+            get_base_transforms,
+            get_random_augmentations,
+            get_random_augmentations_medium,
+            get_random_augmentations_hard,
+        )
+        return locals()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     # Core utilities
@@ -43,14 +56,14 @@ __all__ = [
     "create_set_weights",
     # Autoupdater
     "autoupdate",
-    # Transforms
+    # State management
+    "StateManager",
+    "save_validator_state",
+    "load_validator_state",
+    # Transforms (lazy loaded)
     "apply_random_augmentations",
     "get_base_transforms",
     "get_random_augmentations",
     "get_random_augmentations_medium", 
     "get_random_augmentations_hard",
-    # State management
-    "StateManager",
-    "save_validator_state",
-    "load_validator_state",
 ] 
