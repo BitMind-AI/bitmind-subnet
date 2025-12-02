@@ -33,6 +33,7 @@ dependencies = [
     "pre-commit==4.2.0",
     # "diffusers==0.33.1",
     "transformers==4.55.0",
+    "qwen-vl-utils>=0.0.14",
     "scikit-learn==1.7.1",
     "av==14.2.0",
     "opencv-python==4.11.0.86",
