@@ -5,3 +5,23 @@ from .clip_utils import (
     calculate_clip_alignment,
     calculate_clip_alignment_consensus,
 )
+from .duplicate_detection import (
+    compute_image_hash,
+    compute_video_hash,
+    compute_media_hash,
+    compute_crop_resistant_hash,
+    hamming_distance,
+    count_crop_segment_matches,
+    is_duplicate,
+    find_duplicates,
+    check_duplicate_in_db,
+    DEFAULT_HAMMING_THRESHOLD,
+    DEFAULT_CROP_RESISTANT_MATCH_THRESHOLD,
+)
+from .c2pa_verification import (
+    verify_c2pa,
+    is_from_trusted_generator,
+    C2PAVerificationResult,
+    TRUSTED_ISSUERS,
+    C2PA_AVAILABLE,
+)
