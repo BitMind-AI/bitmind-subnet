@@ -86,7 +86,7 @@ class PromptGenerator:
                 device_map="auto",
                 local_files_only=True,
             )
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, TypeError) as e:
             bt.logging.info(f"Model not in local cache, downloading from HuggingFace...")
             self.vlm_processor = AutoProcessor.from_pretrained(self.vlm_name)
             self.vlm = Qwen2_5_VLForConditionalGeneration.from_pretrained(
@@ -215,12 +215,13 @@ class PromptGenerator:
             messages, tokenize=False, add_generation_prompt=True
         )
         
-        # Process image and text inputs
         inputs = self.vlm_processor(
             text=[text],
             images=[image],
             padding=True,
             return_tensors="pt",
+            #min_pixels=256 * 28 * 28,
+            #max_pixels=1280 * 28 * 28,
         )
         inputs = inputs.to(self.vlm.device)
 
