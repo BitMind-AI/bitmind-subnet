@@ -483,6 +483,7 @@ def check_duplicate_in_db(
     threshold: int = DEFAULT_HAMMING_THRESHOLD,
     crop_match_threshold: int = DEFAULT_CROP_RESISTANT_MATCH_THRESHOLD,
     limit: int = 1000,
+    prompt_id: Optional[str] = None,
 ) -> Optional[Tuple[str, int]]:
     """
     Check if a hash has duplicates in the database.
@@ -497,21 +498,33 @@ def check_duplicate_in_db(
         threshold: Maximum Hamming distance for pHash duplicate
         crop_match_threshold: Minimum crop segment matches for duplicate
         limit: Maximum number of hashes to check (most recent)
+        prompt_id: If provided, only check duplicates within this prompt
 
     Returns:
         Tuple of (media_id, distance) for closest match, or None if no duplicate
     """
     try:
         with content_db._get_db_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT id, perceptual_hash FROM media 
-                WHERE perceptual_hash IS NOT NULL AND source_type = 'miner'
-                ORDER BY created_at DESC
-                LIMIT ?
-                """,
-                (limit,)
-            )
+            if prompt_id:
+                cursor = conn.execute(
+                    """
+                    SELECT id, perceptual_hash FROM media 
+                    WHERE perceptual_hash IS NOT NULL AND source_type = 'miner' AND prompt_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (prompt_id, limit,)
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT id, perceptual_hash FROM media 
+                    WHERE perceptual_hash IS NOT NULL AND source_type = 'miner'
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,)
+                )
             rows = cursor.fetchall()
 
         if not rows:

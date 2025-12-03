@@ -885,6 +885,7 @@ class ContentManager:
 		perceptual_hash: str,
 		threshold: int = 8,
 		limit: int = 1000,
+		prompt_id: Optional[str] = None,
 	) -> Optional[tuple]:
 		"""
 		Check if a perceptual hash has duplicates in the database.
@@ -893,12 +894,13 @@ class ContentManager:
 			perceptual_hash: Hash to check for duplicates
 			threshold: Maximum Hamming distance to consider as duplicate
 			limit: Maximum number of hashes to check
+			prompt_id: If provided, only check duplicates within this prompt
 
 		Returns:
 			Tuple of (media_id, hamming_distance) for closest match, or None if no duplicate
 		"""
 		from gas.verification.duplicate_detection import check_duplicate_in_db
-		return check_duplicate_in_db(self.content_db, perceptual_hash, threshold, limit)
+		return check_duplicate_in_db(self.content_db, perceptual_hash, threshold, limit, prompt_id=prompt_id)
 
 	def compute_and_check_duplicate(
 		self,

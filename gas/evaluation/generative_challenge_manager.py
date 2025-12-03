@@ -245,7 +245,7 @@ class GenerativeChallengeManager:
             except Exception as e:
                 bt.logging.debug(f"Corruption check error (allowing): {e}")
 
-            # Step 2: Compute perceptual hash and check for duplicates
+            # Step 2: Compute perceptual hash and check for duplicates within same prompt
             perceptual_hash = None
             try:
                 from gas.verification.duplicate_detection import compute_media_hash, DEFAULT_HAMMING_THRESHOLD
@@ -254,7 +254,8 @@ class GenerativeChallengeManager:
                 if perceptual_hash:
                     duplicate_info = self.content_manager.check_duplicate(
                         perceptual_hash, 
-                        threshold=DEFAULT_HAMMING_THRESHOLD
+                        threshold=DEFAULT_HAMMING_THRESHOLD,
+                        prompt_id=prompt_id,
                     )
                     if duplicate_info:
                         dup_media_id, dup_distance = duplicate_info
