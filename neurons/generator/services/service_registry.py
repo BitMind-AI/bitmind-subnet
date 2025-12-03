@@ -58,8 +58,8 @@ class ServiceRegistry:
                 initialized.add(image_service)
         
         if video_service:
-            if video_service in initialized:
-                # Reuse same service instance
+            can_reuse = video_service in initialized and video_service != "local"
+            if can_reuse:
                 self.services["video"] = self.services.get("image") or self._create_service(video_service, "video")
             else:
                 service = self._create_service(video_service, "video")
@@ -76,7 +76,10 @@ class ServiceRegistry:
         service_class = SERVICE_MAP[service_name]
         
         try:
-            service = service_class(self.config)
+            if service_name == "local":
+                service = service_class(self.config, target_modality=modality)
+            else:
+                service = service_class(self.config)
             if service.is_available():
                 bt.logging.success(f"✅ {service.name} ready for {modality}")
                 return service
