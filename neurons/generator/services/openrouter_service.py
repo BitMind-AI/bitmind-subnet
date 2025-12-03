@@ -104,29 +104,25 @@ class OpenRouterService(BaseGenerationService):
             
             bt.logging.debug(f"OpenRouter API result keys: {list(api_result.keys())}")
             
-            # Convert PIL image to bytes for miner compatibility
+            # Use raw binary data to preserve C2PA metadata from Google/Gemini
+            image_data = api_result.get("raw_binary")
             pil_image = api_result.get("image")
-            if pil_image is None:
-                bt.logging.error("No image in OpenRouter API result")
-                raise ValueError("No image in OpenRouter API result")
             
-            # Convert PIL image to PNG bytes
-            img_buffer = io.BytesIO()
-            pil_image.save(img_buffer, format='PNG')
-            image_data = img_buffer.getvalue()
+            if image_data is None:
+                bt.logging.error("No raw binary data in OpenRouter API result")
+                raise ValueError("No raw binary data in OpenRouter API result")
             
-            bt.logging.info(f"Converted image to {len(image_data)} bytes")
+            bt.logging.info(f"Using raw binary ({len(image_data)} bytes) to preserve C2PA metadata")
             
-            # Return in the format expected by miner
             result = {
-                "data": image_data,  # Binary data for miner compatibility
+                "data": image_data,
                 "metadata": {
                     "model": model,
                     "provider": "openrouter",
-                    "format": "PNG",
+                    "format": api_result.get("format", "unknown"),
                     "generation_time": api_result.get('gen_duration', 0),
-                    "width": pil_image.width,
-                    "height": pil_image.height,
+                    "width": pil_image.width if pil_image else 0,
+                    "height": pil_image.height if pil_image else 0,
                 }
             }
             
@@ -219,16 +215,27 @@ class OpenRouterService(BaseGenerationService):
             if ',' not in image_url:
                 bt.logging.error("Invalid image URL format from OpenRouter")
                 raise ValueError("Invalid image URL format from OpenRouter")
+            
+            # Extract format from data URL (e.g., "data:image/png;base64,...")
+            header_part = image_url.split(',')[0]
+            image_format = "PNG"
+            if "image/" in header_part:
+                fmt = header_part.split("image/")[1].split(";")[0].upper()
+                if fmt in ["PNG", "JPEG", "JPG", "WEBP"]:
+                    image_format = fmt
                 
             base64_data = image_url.split(',')[1]
             image_binary = base64.b64decode(base64_data)
+            
+            # Open with PIL just to get dimensions, but preserve raw bytes for C2PA
             pil_image = Image.open(io.BytesIO(image_binary))
 
             gen_time = time.time() - start_time
 
-            # Return in the expected format
             output = {
                 "image": pil_image,
+                "raw_binary": image_binary,  # Preserve original bytes with C2PA
+                "format": image_format,
                 "modality": "image",
                 "media_type": "synthetic",
                 "prompt": prompt,

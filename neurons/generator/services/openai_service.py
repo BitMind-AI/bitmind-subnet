@@ -3,6 +3,7 @@ import time
 from typing import Dict, Any, Optional
 
 import bittensor as bt
+import requests
 
 from .base_service import BaseGenerationService
 from ..task_manager import GenerationTask
@@ -12,10 +13,8 @@ class OpenAIService(BaseGenerationService):
     """
     OpenAI API service for image generation using DALL-E.
     
-    This demonstrates how to implement a 3rd party API service that:
-    1. Forwards requests to external APIs
-    2. Returns direct URLs instead of binary data
-    3. Handles API-specific parameters and errors
+    DALL-E 3 embeds C2PA content credentials in generated images,
+    so we download the actual image bytes to preserve this metadata.
     """
     
     def __init__(self, config: Any = None):
@@ -65,19 +64,17 @@ class OpenAIService(BaseGenerationService):
             raise ValueError(f"Unsupported modality: {task.modality}")
     
     def _generate_image(self, task: GenerationTask) -> Dict[str, Any]:
-        """Generate an image using DALL-E."""
+        """Generate an image using DALL-E and download the bytes with C2PA metadata."""
         try:
             bt.logging.info(f"Generating image with DALL-E: {task.prompt[:50]}...")
             
-            # Extract parameters
-            width = task.parameters.get("width", 1024)
-            height = task.parameters.get("height", 1024)
-            quality = task.parameters.get("quality", "standard")
+            params = task.parameters or {}
+            width = params.get("width", 1024)
+            height = params.get("height", 1024)
+            quality = params.get("quality", "standard")
             
-            # Ensure size is supported by DALL-E
             size = self._get_valid_size(width, height)
             
-            # Generate image
             response = self.client.images.generate(
                 model="dall-e-3",
                 prompt=task.prompt,
@@ -87,10 +84,16 @@ class OpenAIService(BaseGenerationService):
             )
             
             image_url = response.data[0].url
-            bt.logging.success(f"Image generated successfully: {image_url}")
+            bt.logging.info(f"DALL-E generated image, downloading from URL...")
+            
+            img_response = requests.get(image_url, timeout=60)
+            img_response.raise_for_status()
+            image_data = img_response.content
+            
+            bt.logging.success(f"Downloaded {len(image_data)} bytes with C2PA metadata")
             
             return {
-                "url": image_url,
+                "data": image_data,
                 "metadata": {
                     "model": "dall-e-3",
                     "size": size,
