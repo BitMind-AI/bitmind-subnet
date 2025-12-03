@@ -60,6 +60,8 @@ dependencies = [
     "ftfy==6.3.1",
     "huggingface_hub>=0.17.0",
     "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@main",
+    "imagehash>=4.3.1",
+    "c2pa-python>=0.6.0",
 ]
 
 [project.scripts]

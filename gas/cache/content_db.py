@@ -270,6 +270,55 @@ class ContentDB:
             except Exception as e:
                 bt.logging.error(f"Error updating NULL uploaded values: {e}")
 
+            # Add perceptual_hash column for duplicate detection (migration)
+            try:
+                conn.execute("ALTER TABLE media ADD COLUMN perceptual_hash TEXT")
+                bt.logging.info("Added 'perceptual_hash' column to media table")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_media_perceptual_hash ON media (perceptual_hash)"
+                )
+                conn.commit()
+            except Exception as e:
+                if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
+                    bt.logging.error(f"Unexpected error adding 'perceptual_hash' column: {e}")
+                else:
+                    try:
+                        conn.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_media_perceptual_hash ON media (perceptual_hash)"
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass
+
+            # Add c2pa_verified column for C2PA content credentials verification (migration)
+            try:
+                conn.execute("ALTER TABLE media ADD COLUMN c2pa_verified BOOLEAN DEFAULT 0")
+                bt.logging.info("Added 'c2pa_verified' column to media table")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_media_c2pa_verified ON media (c2pa_verified)"
+                )
+                conn.commit()
+            except Exception as e:
+                if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
+                    bt.logging.error(f"Unexpected error adding 'c2pa_verified' column: {e}")
+                else:
+                    try:
+                        conn.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_media_c2pa_verified ON media (c2pa_verified)"
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass
+
+            # Add c2pa_issuer column for C2PA issuer tracking (migration)
+            try:
+                conn.execute("ALTER TABLE media ADD COLUMN c2pa_issuer TEXT")
+                bt.logging.info("Added 'c2pa_issuer' column to media table")
+                conn.commit()
+            except Exception as e:
+                if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
+                    bt.logging.error(f"Unexpected error adding 'c2pa_issuer' column: {e}")
+
             # Temporary data hygiene: prune prompts whose source_media_id no longer exists in media table
             # Note: This only checks DB-level association, not filesystem existence.
             try:
@@ -405,6 +454,21 @@ class ContentDB:
                 if "rewarded" in row.keys() and row["rewarded"] is not None
                 else False
             ),
+            perceptual_hash=(
+                row["perceptual_hash"]
+                if "perceptual_hash" in row.keys() and row["perceptual_hash"] is not None
+                else None
+            ),
+            c2pa_verified=(
+                bool(row["c2pa_verified"])
+                if "c2pa_verified" in row.keys() and row["c2pa_verified"] is not None
+                else False
+            ),
+            c2pa_issuer=(
+                row["c2pa_issuer"]
+                if "c2pa_issuer" in row.keys() and row["c2pa_issuer"] is not None
+                else None
+            ),
             created_at=row["created_at"],
             generation_args=(
                 json.loads(row["generation_args"]) if row["generation_args"] else None
@@ -436,6 +500,9 @@ class ContentDB:
         resolution: Optional[tuple[int, int]] = None,
         file_size: Optional[int] = None,
         format: Optional[str] = None,
+        perceptual_hash: Optional[str] = None,
+        c2pa_verified: Optional[bool] = None,
+        c2pa_issuer: Optional[str] = None,
     ) -> str:
         media_id = str(uuid.uuid4())
         created_at = time.time()
@@ -449,8 +516,9 @@ class ContentDB:
                 INSERT INTO media (id, prompt_id, file_path, modality, media_type, source_type,
                                  model_name, download_url, scraper_name, dataset_name, 
                                  dataset_source_file, dataset_index, uid, hotkey, verified,
-                                 created_at, generation_args, mask_path, timestamp, resolution, file_size, format)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 created_at, generation_args, mask_path, timestamp, resolution, 
+                                 file_size, format, perceptual_hash, c2pa_verified, c2pa_issuer)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     media_id,
@@ -475,6 +543,9 @@ class ContentDB:
                     json.dumps(list(resolution)) if resolution else None,
                     file_size,
                     format,
+                    perceptual_hash,
+                    c2pa_verified,
+                    c2pa_issuer,
                 ),
             )
             conn.commit()

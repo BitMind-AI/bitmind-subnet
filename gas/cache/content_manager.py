@@ -147,6 +147,9 @@ class ContentManager:
 		content_type: str,
 		task_id: str,
 		model_name: Optional[str] = None,
+		perceptual_hash: Optional[str] = None,
+		c2pa_verified: Optional[bool] = None,
+		c2pa_issuer: Optional[str] = None,
 	) -> Optional[str]:
 		"""
 		Write miner-generated binary media to storage.
@@ -159,6 +162,9 @@ class ContentManager:
 			content_type: MIME content type (e.g., "image/png", "video/mp4")
 			task_id: Unique task identifier for filename
 			model_name: Optional model name
+			perceptual_hash: Pre-computed perceptual hash for duplicate detection
+			c2pa_verified: Whether C2PA verification passed
+			c2pa_issuer: C2PA issuer name if verified
 
 		Returns:
 			Path to saved file if successful, None if failed
@@ -194,6 +200,9 @@ class ContentManager:
 				resolution=resolution,
 				file_size=file_size,
 				format=media_data.format,
+				perceptual_hash=perceptual_hash,
+				c2pa_verified=c2pa_verified,
+				c2pa_issuer=c2pa_issuer,
 			)
 
 			bt.logging.info(f"Saved miner media to {save_path} with database ID: {media_id}")
@@ -870,3 +879,54 @@ class ContentManager:
 			True if the source needs more data
 		"""
 		return self.get_source_count(source_type, source_name) < self.min_source_threshold
+
+	def check_duplicate(
+		self,
+		perceptual_hash: str,
+		threshold: int = 8,
+		limit: int = 1000,
+		prompt_id: Optional[str] = None,
+	) -> Optional[tuple]:
+		"""
+		Check if a perceptual hash has duplicates in the database.
+
+		Args:
+			perceptual_hash: Hash to check for duplicates
+			threshold: Maximum Hamming distance to consider as duplicate
+			limit: Maximum number of hashes to check
+			prompt_id: If provided, only check duplicates within this prompt
+
+		Returns:
+			Tuple of (media_id, hamming_distance) for closest match, or None if no duplicate
+		"""
+		from gas.verification.duplicate_detection import check_duplicate_in_db
+		return check_duplicate_in_db(self.content_db, perceptual_hash, threshold, limit, prompt_id=prompt_id)
+
+	def compute_and_check_duplicate(
+		self,
+		media_content: bytes,
+		modality: str,
+		threshold: int = 8,
+	) -> tuple:
+		"""
+		Compute perceptual hash for media and check for duplicates.
+
+		Args:
+			media_content: Raw media bytes
+			modality: "image" or "video"
+			threshold: Hamming distance threshold for duplicates
+
+		Returns:
+			Tuple of (perceptual_hash, is_duplicate, duplicate_info)
+			where duplicate_info is (media_id, distance) if duplicate found, else None
+		"""
+		from gas.verification.duplicate_detection import compute_media_hash
+
+		perceptual_hash = compute_media_hash(media_content, modality=modality)
+		if not perceptual_hash:
+			return None, False, None
+
+		duplicate_info = self.check_duplicate(perceptual_hash, threshold)
+		is_duplicate = duplicate_info is not None
+
+		return perceptual_hash, is_duplicate, duplicate_info
