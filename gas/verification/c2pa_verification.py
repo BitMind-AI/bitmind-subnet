@@ -127,7 +127,8 @@ def verify_c2pa(
 
         # Read C2PA manifest from file
         try:
-            reader = c2pa.Reader.from_file(file_path)
+            with c2pa.Reader(file_path) as reader:
+                manifest_json = reader.json()
         except Exception as e:
             # No C2PA manifest found - this is common for most images
             return C2PAVerificationResult(
@@ -135,8 +136,6 @@ def verify_c2pa(
                 error=f"No C2PA manifest found: {str(e)}"
             )
 
-        # Get the active manifest (most recent/authoritative)
-        manifest_json = reader.json()
         if not manifest_json:
             return C2PAVerificationResult(
                 verified=False,
