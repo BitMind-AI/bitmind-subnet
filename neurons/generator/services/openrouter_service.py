@@ -29,7 +29,7 @@ class OpenRouterService(BaseGenerationService):
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
         # Default model from nano_banana
-        self.default_model = "google/gemini-2.5-flash-image-preview"
+        self.default_model = "google/gemini-3-pro-image-preview"
         
         # Timeout and retry settings
         self.timeout = 60.0
@@ -112,7 +112,10 @@ class OpenRouterService(BaseGenerationService):
                 bt.logging.error("No raw binary data in OpenRouter API result")
                 raise ValueError("No raw binary data in OpenRouter API result")
             
-            bt.logging.info(f"Using raw binary ({len(image_data)} bytes) to preserve C2PA metadata")
+            bt.logging.info(
+                f"OpenRouterService returning: {len(image_data)} bytes, "
+                f"magic={image_data[:16].hex()}, same_as_raw={image_data is api_result.get('raw_binary')}"
+            )
             
             result = {
                 "data": image_data,
