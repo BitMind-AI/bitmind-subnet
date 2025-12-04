@@ -109,8 +109,8 @@ Validators are responsible for challenging and scoring both miner types. Generat
   </a>
 </p> 
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BitMind-AI/bitmind-subnet)
-
 ## Contributing
 
 Contributions are welcome and can be made via a pull request to the `testnet` branch.
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BitMind-AI/bitmind-subnet)

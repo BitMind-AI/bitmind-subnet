@@ -12,6 +12,8 @@ from gas.types import MinerType
 class MinerTypeTracker:
     """Tracks miner types and manages periodic updates"""
 
+    TYPE_CACHE_TTL = 300  # Only re-query miners every 5 minutes
+
     def __init__(self, config, wallet, metagraph, subtensor):
         self.config = config
         self.wallet = wallet
@@ -20,6 +22,7 @@ class MinerTypeTracker:
 
         self.miner_types: Dict[int, MinerType] = {}
         self.last_update: Dict[int, float] = {}
+        self._last_full_update: float = 0
 
     async def initialize_miner_types(self):
         """Initialize miner types for all registered miners"""
@@ -28,12 +31,30 @@ class MinerTypeTracker:
         await self.update_miner_types(all_miners)
         bt.logging.debug(f"Initialized miner types for {len(self.miner_types)} miners")
 
-    async def update_miner_types(self, miner_uids: Optional[List[int]] = None):
-        """Update miner types for specified miners"""
-        if miner_uids is None:
-            miner_uids = list(range(self.metagraph.n))
+    async def update_miner_types(self, miner_uids: Optional[List[int]] = None, force: bool = False):
+        """Update miner types for specified miners, skipping recently queried ones"""
+        current_time = time.time()
 
-        bt.logging.trace(f"Updating miner types for {miner_uids}")
+        if miner_uids is None:
+            # Skip full update if we did one recently
+            if not force and (current_time - self._last_full_update) < self.TYPE_CACHE_TTL:
+                bt.logging.trace("Skipping miner type update - cache still fresh")
+                return
+            miner_uids = list(range(self.metagraph.n))
+            self._last_full_update = current_time
+
+        # Filter to only stale entries (not queried within TTL)
+        if not force:
+            stale_uids = [
+                uid for uid in miner_uids 
+                if (current_time - self.last_update.get(uid, 0)) >= self.TYPE_CACHE_TTL
+            ]
+            if not stale_uids:
+                bt.logging.trace(f"All {len(miner_uids)} miners have fresh type cache")
+                return
+            miner_uids = stale_uids
+
+        bt.logging.debug(f"Querying miner types for {len(miner_uids)} UIDs")
         async with aiohttp.ClientSession() as session:
             responses = await asyncio.gather(
                 *[
