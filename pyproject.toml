@@ -2,8 +2,6 @@
 requires = ["setuptools>=69.0", "wheel", "pip>=21.0"]
 build-backend = "setuptools.build_meta"
 
-
-
 [project]
 name = "gas"
 dynamic = ["version"]
@@ -23,6 +21,7 @@ dependencies = [
     "pandas==2.3.0",
     "torch==2.7.1",
     "torchvision==0.22.1",
+    #"flash-attn>=2.7.0",
     "asyncpg==0.30.0",
     "httpcore==1.0.7",
     "httpx==0.28.1",
@@ -33,6 +32,7 @@ dependencies = [
     "pre-commit==4.2.0",
     # "diffusers==0.33.1",
     "transformers==4.55.0",
+    "qwen-vl-utils>=0.0.14",
     "scikit-learn==1.7.1",
     "av==14.2.0",
     "opencv-python==4.11.0.86",
@@ -54,10 +54,12 @@ dependencies = [
     "stamina==25.1.0",
     "click>=8.0.0",
     "datasets==4.0.0",
-    "async-substrate-interface==1.5.1",
+    "async-substrate-interface>=1.5.1",
     "ftfy==6.3.1",
     "huggingface_hub>=0.17.0",
     "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@main",
+    "imagehash>=4.3.1",
+    "c2pa-python>=0.25.0",
 ]
 
 [project.scripts]

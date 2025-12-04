@@ -18,6 +18,13 @@ PY_DEPS_ONLY=false
 SYS_DEPS_ONLY=false
 CLEAR_VENV=false
 
+# Load cache dir from .env.validator if it exists, otherwise use default
+if [ -f ".env.validator" ]; then
+    SN34_CACHE_DIR_FROM_ENV=$(grep -E "^SN34_CACHE_DIR=" .env.validator 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+fi
+CACHE_DIR="${SN34_CACHE_DIR_FROM_ENV:-$HOME/.cache/sn34}"
+CACHE_DIR="${CACHE_DIR/#\~/$HOME}"
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -111,6 +118,10 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
     fi
 fi
 
+# TODO: REMOVE TEMP
+log_info "Clearing $CACHE_DIR for release 4.3.0..."
+rm -rf "$CACHE_DIR"
+log_success "$CACHE_DIR cleared"
 
 # Check if we're in the right directory
 if [ ! -f "pyproject.toml" ]; then
@@ -145,9 +156,10 @@ fi
 
 log_success "uv detected ✓"
 
-# Python 3.10+ is supported with no upper version limit
 
+# Python 3.10+ is supported with no upper version limit
 log_success "Python $python_version detected ✓"
+
 
 # Check and install required system dependencies (unless --no-system-deps is specified)
 if [ "$SKIP_SYSTEM_DEPS" = false ]; then
@@ -321,7 +333,6 @@ fi
 # Skip Python dependencies if only installing system dependencies
 if [ "$SYS_DEPS_ONLY" = false ]; then
     log_info "Checking if we need to clear v3.x cache"
-    CACHE_DIR="$HOME/.cache/sn34"
     if [ -d "$CACHE_DIR" ]; then
         # Check if any .db files exist in the cache directory
         if ! find "$CACHE_DIR" -name "*.db" -type f | grep -q .; then

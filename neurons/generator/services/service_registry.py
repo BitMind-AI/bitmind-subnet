@@ -1,3 +1,4 @@
+import os
 from typing import Dict, List, Optional, Any
 import bittensor as bt
 
@@ -7,49 +8,121 @@ from .openrouter_service import OpenRouterService
 from .local_service import LocalService
 
 
+SERVICE_MAP = {
+    "openai": OpenAIService,
+    "openrouter": OpenRouterService,
+    "local": LocalService,
+}
+
+
 class ServiceRegistry:
     """
-    Registry for managing different generation services.
+    Registry for managing generation services.
     
-    The registry automatically discovers available services and routes
-    tasks to the best available service for each task type.
+    Set per-modality service via env vars:
+      IMAGE_SERVICE=openai|openrouter|local|none
+      VIDEO_SERVICE=openai|openrouter|local|none
+    
+    Services:
+      - openai: DALL-E 3 (requires OPENAI_API_KEY)
+      - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY)
+      - local: Local Stable Diffusion models
+      - none: Disable this modality (no service loaded)
+    
+    If not set, falls back to loading all available services.
     """
     
     def __init__(self, config: Any = None):
         self.config = config
-        self.services: List[BaseGenerationService] = []
+        self.services: Dict[str, BaseGenerationService] = {}  # modality -> service
+        self._all_services: List[BaseGenerationService] = []  # fallback list
         self._initialize_services()
     
     def _initialize_services(self):
-        """Initialize all available services."""
-        bt.logging.info("Initializing generation services...")
+        """Initialize services based on IMAGE_SERVICE and VIDEO_SERVICE env vars."""
+        image_service = os.getenv("IMAGE_SERVICE", "").lower().strip()
+        video_service = os.getenv("VIDEO_SERVICE", "").lower().strip()
         
-        # Try to initialize services in order of preference
-        service_classes = [
-            OpenAIService,      # 3rd party API service
-            OpenRouterService,  # OpenRouter API service
-            LocalService,       # Local model service
-        ]
+        if image_service or video_service:
+            self._init_modality_services(image_service, video_service)
+        else:
+            self._init_all_services()
+    
+    def _init_modality_services(self, image_service: str, video_service: str):
+        """Initialize specific services for each modality."""
+        initialized = set()
         
-        for service_class in service_classes:
+        if image_service == "none":
+            bt.logging.info("IMAGE_SERVICE=none, no image service will be loaded")
+        elif image_service:
+            service = self._create_service(image_service, "image")
+            if service:
+                self.services["image"] = service
+                initialized.add(image_service)
+        
+        if video_service == "none":
+            bt.logging.info("VIDEO_SERVICE=none, no video service will be loaded")
+        elif video_service:
+            can_reuse = video_service in initialized and video_service != "local"
+            if can_reuse:
+                self.services["video"] = self.services.get("image") or self._create_service(video_service, "video")
+            else:
+                service = self._create_service(video_service, "video")
+                if service:
+                    self.services["video"] = service
+    
+    def _create_service(self, service_name: str, modality: str) -> Optional[BaseGenerationService]:
+        """Create and validate a service instance."""
+        if service_name not in SERVICE_MAP:
+            bt.logging.error(f"Unknown service: {service_name}. Valid options: {list(SERVICE_MAP.keys())}")
+            return None
+        
+        bt.logging.info(f"Initializing {service_name} for {modality}")
+        service_class = SERVICE_MAP[service_name]
+        
+        try:
+            if service_name == "local":
+                service = service_class(self.config, target_modality=modality)
+            else:
+                service = service_class(self.config)
+            if service.is_available():
+                bt.logging.success(f"✅ {service.name} ready for {modality}")
+                return service
+            else:
+                bt.logging.error(f"❌ {service.name} configured for {modality} but not available (check API keys)")
+        except Exception as e:
+            bt.logging.error(f"Failed to initialize {service_name}: {e}")
+        return None
+    
+    def _init_all_services(self):
+        """Initialize all available services (fallback behavior)."""
+        bt.logging.info("No IMAGE_SERVICE/VIDEO_SERVICE set, initializing all available services...")
+        
+        for name, service_class in SERVICE_MAP.items():
             try:
                 service = service_class(self.config)
                 if service.is_available():
-                    self.services.append(service)
+                    self._all_services.append(service)
                     bt.logging.info(f"✅ {service.name} is available")
                 else:
                     bt.logging.info(f"❌ {service.name} is not available")
             except Exception as e:
-                bt.logging.warning(f"Failed to initialize {service_class.__name__}: {e}")
-                bt.logging.debug(f"Full error for {service_class.__name__}: {e}", exc_info=True)
+                bt.logging.warning(f"Failed to initialize {name}: {e}")
         
-        bt.logging.info(f"Initialized {len(self.services)} generation services")
+        bt.logging.info(f"Initialized {len(self._all_services)} generation services")
     
     def get_service(self, modality: str) -> Optional[BaseGenerationService]:
-        """Get the best available service for a modality."""
-        for service in self.services:
+        """Get the service for a modality."""
+        # Check explicit modality mapping first
+        if modality in self.services:
+            service = self.services[modality]
+            bt.logging.debug(f"Using {service.name} for {modality}")
+            return service
+        
+        # Fallback to scanning all services
+        for service in self._all_services:
             if service.supports_modality(modality):
-                bt.logging.debug(f"Using {service.name} for modality={modality}")
+                bt.logging.debug(f"Using {service.name} for {modality}")
                 return service
         
         bt.logging.warning(f"No service available for modality={modality}")
@@ -57,39 +130,33 @@ class ServiceRegistry:
     
     def get_available_services(self) -> List[Dict[str, Any]]:
         """Get information about all available services."""
-        return [service.get_info() for service in self.services]
+        seen = set()
+        result = []
+        
+        for service in list(self.services.values()) + self._all_services:
+            if service.name not in seen:
+                seen.add(service.name)
+                result.append(service.get_info())
+        return result
     
     def get_all_api_key_requirements(self) -> Dict[str, str]:
-        """
-        Get API key requirements from all services (both available and unavailable).
+        """Get API key requirements from all services."""
+        all_requirements = {
+            "IMAGE_SERVICE": "Service for images: openai, openrouter, local, or none",
+            "VIDEO_SERVICE": "Service for videos: openai, openrouter, local, or none",
+        }
         
-        This method creates instances of all service classes to get their API key
-        requirements, regardless of whether they're currently available.
-        
-        Returns:
-            Dict with environment variable names as keys and descriptions as values.
-        """
-        all_requirements = {}
-        
-        service_classes = [
-            OpenAIService,
-            OpenRouterService,
-            LocalService,
-        ]
-        
-        for service_class in service_classes:
+        for name, service_class in SERVICE_MAP.items():
             try:
-                # Create a temporary instance to get API key requirements
-                # We don't need it to be fully initialized, just to call the method
                 temp_service = service_class()
-                requirements = temp_service.get_api_key_requirements()
-                all_requirements.update(requirements)
+                all_requirements.update(temp_service.get_api_key_requirements())
             except Exception as e:
-                bt.logging.warning(f"Failed to get API key requirements from {service_class.__name__}: {e}")
+                bt.logging.warning(f"Failed to get API key requirements from {name}: {e}")
         
         return all_requirements
     
     def reload_services(self):
         """Reload all services (useful for configuration changes)."""
         self.services.clear()
+        self._all_services.clear()
         self._initialize_services()

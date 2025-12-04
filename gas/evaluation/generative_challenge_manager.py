@@ -207,7 +207,14 @@ class GenerativeChallengeManager:
         self, binary_data: bytes, content_type: str, generator_uid: int, task_id: str
     ) -> Optional[str]:
         """
-        Store binary content directly uploaded by miner using ContentManager
+        Store binary content directly uploaded by miner using ContentManager.
+        
+        Performs pre-storage validation and REJECTS:
+        - Duplicate content (perceptual hash match)
+        - Content without valid C2PA from trusted AI generators
+        - Corrupted/unreadable media
+        
+        Only content that passes all checks is stored and eligible for HuggingFace upload.
         """
         try:
             bt.logging.trace(f"Storing binary content for task {task_id}, size: {len(binary_data)} bytes")
@@ -222,22 +229,106 @@ class GenerativeChallengeManager:
             media_type = task_info["media_type"] 
             prompt_id = task_info["prompt_id"]
 
-            # Let ContentManager handle all filesystem and database operations
+            # Get modality string for checks
+            modality_str = modality.value if hasattr(modality, 'value') else str(modality)
+            miner_hotkey = self.metagraph.hotkeys[generator_uid]
+
+            # Step 1: Check for corrupted/unreadable media
+            try:
+                is_corrupted = self._check_media_corrupted(binary_data, modality_str)
+                if is_corrupted:
+                    bt.logging.warning(
+                        f"REJECTED corrupted media from UID {generator_uid} task {task_id}: "
+                        f"media is unreadable or invalid"
+                    )
+                    return None
+            except Exception as e:
+                bt.logging.debug(f"Corruption check error (allowing): {e}")
+
+            # Step 2: Compute perceptual hash and check for duplicates within same prompt
+            perceptual_hash = None
+            try:
+                from gas.verification.duplicate_detection import compute_media_hash, DEFAULT_HAMMING_THRESHOLD
+
+                perceptual_hash = compute_media_hash(binary_data, modality=modality_str)
+                if perceptual_hash:
+                    duplicate_info = self.content_manager.check_duplicate(
+                        perceptual_hash, 
+                        threshold=DEFAULT_HAMMING_THRESHOLD,
+                        prompt_id=prompt_id,
+                    )
+                    if duplicate_info:
+                        dup_media_id, dup_distance = duplicate_info
+                        bt.logging.warning(
+                            f"REJECTED duplicate from UID {generator_uid} task {task_id}: "
+                            f"matches media {dup_media_id} with distance {dup_distance}"
+                        )
+                        return None  # Reject duplicates
+            except Exception as e:
+                bt.logging.debug(f"Duplicate detection skipped: {e}")
+
+            # Step 3: Verify C2PA content credentials - REQUIRE trusted issuer
+            c2pa_verified = False
+            c2pa_issuer = None
+            try:
+                from gas.verification.c2pa_verification import verify_c2pa, C2PA_AVAILABLE
+
+                if not C2PA_AVAILABLE:
+                    bt.logging.error(
+                        f"REJECTED from UID {generator_uid} task {task_id}: "
+                        f"c2pa-python library not installed - required for verification"
+                    )
+                    return None
+
+                c2pa_result = verify_c2pa(binary_data)
+                if c2pa_result.verified and c2pa_result.is_trusted_issuer:
+                    c2pa_verified = True
+                    c2pa_issuer = c2pa_result.issuer
+                    bt.logging.info(
+                        f"C2PA verified for UID {generator_uid}: issuer={c2pa_issuer}"
+                    )
+                else:
+                    # Reject if no valid C2PA from trusted source
+                    rejection_reason = "no C2PA manifest" if not c2pa_result.verified else "untrusted issuer"
+                    bt.logging.warning(
+                        f"REJECTED from UID {generator_uid} task {task_id}: "
+                        f"C2PA check failed ({rejection_reason})"
+                    )
+                    return None
+            except ImportError:
+                bt.logging.error(
+                    f"REJECTED from UID {generator_uid} task {task_id}: "
+                    f"c2pa-python library not installed - required for verification"
+                )
+                return None
+            except Exception as e:
+                bt.logging.error(
+                    f"REJECTED from UID {generator_uid} task {task_id}: "
+                    f"C2PA verification error: {e}"
+                )
+                return None
+
+            # Step 4: All checks passed - store the media
             filepath = self.content_manager.write_miner_media(
                 modality=modality,
                 media_type=media_type,
                 prompt_id=prompt_id,
                 uid=generator_uid,
-                hotkey=self.metagraph.hotkeys[generator_uid],
+                hotkey=miner_hotkey,
                 media_content=binary_data,
                 content_type=content_type,
                 task_id=task_id,
                 model_name=None,
+                perceptual_hash=perceptual_hash,
+                c2pa_verified=c2pa_verified,
+                c2pa_issuer=c2pa_issuer,
             )
 
             if filepath:
                 bt.logging.success(
-                    f"Stored binary content: {filepath} (size: {len(binary_data)} bytes)"
+                    f"Stored verified content: {filepath} (size: {len(binary_data)} bytes, "
+                    f"hash: {perceptual_hash[:16] if perceptual_hash else 'N/A'}..., "
+                    f"c2pa_issuer: {c2pa_issuer})"
                 )
                 return filepath
             else:
@@ -247,6 +338,53 @@ class GenerativeChallengeManager:
         except Exception as e:
             bt.logging.error(f"Error storing binary content: {e}")
             return None
+
+    def _check_media_corrupted(self, binary_data: bytes, modality: str) -> bool:
+        """
+        Check if media data is corrupted/unreadable.
+        
+        Returns:
+            True if corrupted, False if valid
+        """
+        import io
+        
+        try:
+            if modality == "image":
+                from PIL import Image
+                img = Image.open(io.BytesIO(binary_data))
+                img.verify()  # Verify it's a valid image
+                return False
+            elif modality == "video":
+                import tempfile
+                import cv2
+                
+                # Write to temp file and try to open with cv2
+                with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                    tmp.write(binary_data)
+                    tmp_path = tmp.name
+                
+                try:
+                    cap = cv2.VideoCapture(tmp_path)
+                    if not cap.isOpened():
+                        return True
+                    
+                    # Try to read at least one frame
+                    ret, frame = cap.read()
+                    cap.release()
+                    
+                    if not ret or frame is None:
+                        return True
+                    
+                    return False
+                finally:
+                    import os
+                    os.unlink(tmp_path)
+            else:
+                return False  # Unknown modality, don't reject
+                
+        except Exception as e:
+            bt.logging.debug(f"Media corruption check failed: {e}")
+            return True  # If we can't verify, assume corrupted
 
 
     def init_fastapi(self):

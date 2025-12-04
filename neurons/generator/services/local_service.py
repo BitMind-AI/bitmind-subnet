@@ -28,12 +28,13 @@ class LocalService(BaseGenerationService):
     4. Can be extended with different model types
     """
     
-    def __init__(self, config: Any = None):
+    def __init__(self, config: Any = None, target_modality: Optional[str] = None):
         super().__init__(config)
 
         self.image_model = None
         self.video_model = None
         self.models_loaded = False
+        self.target_modality = target_modality
 
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available. A CUDA-capable device is required.")
@@ -45,18 +46,23 @@ class LocalService(BaseGenerationService):
         self._load_models()
 
     def _load_models(self):
-        """Load local models."""
+        """Load local models based on target_modality."""
         bt.logging.info("Loading local generation models...")
         
-        try:
-            self._load_image_model()
-        except Exception as e:
-            bt.logging.warning(f"Failed to load image model: {e}")
+        load_image = self.target_modality is None or self.target_modality == "image"
+        load_video = self.target_modality is None or self.target_modality == "video"
         
-        try:
-            self._load_video_model()
-        except Exception as e:
-            bt.logging.warning(f"Failed to load video model: {e}")
+        if load_image:
+            try:
+                self._load_image_model()
+            except Exception as e:
+                bt.logging.warning(f"Failed to load image model: {e}")
+        
+        if load_video:
+            try:
+                self._load_video_model()
+            except Exception as e:
+                bt.logging.warning(f"Failed to load video model: {e}")
         
         self.models_loaded = True
     

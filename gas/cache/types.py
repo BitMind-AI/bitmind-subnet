@@ -79,6 +79,13 @@ class MediaEntry:
 
     prompt_content: Optional[str] = None  # for hf uploads
 
+    # Duplicate detection
+    perceptual_hash: Optional[str] = None  # pHash for duplicate detection
+
+    # C2PA content credentials
+    c2pa_verified: Optional[bool] = False  # C2PA validation passed
+    c2pa_issuer: Optional[str] = None  # Issuer name if C2PA verified
+
     # Common fields
     created_at: float = None
     resolution: Optional[tuple[int, int]] = None  # (width, height)

@@ -205,7 +205,6 @@ class GeneratorService:
         """Worker thread that performs the actual generation work."""
         try:
             self._initialize_pipelines()
-            self._run_verification()
             self._generation_work_loop()
         except Exception as e:
             bt.logging.error(
@@ -244,8 +243,6 @@ class GeneratorService:
                     }
                 )
 
-                self._run_verification()
-
                 if self._first_run_profiled is False:
                     self._first_run_profiled = True
                     try:
@@ -257,8 +254,6 @@ class GeneratorService:
                     break
 
                 self._run_job({"kind": "gen_tps", "args": {"k": self.config.tps_batch_size}})
-                self._run_verification()
-
                 self._run_job({"kind": "gen_local", "args": {"k": self.gen_batch_size}})
                 self._run_verification()
 
