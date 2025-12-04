@@ -29,7 +29,7 @@ class OpenRouterService(BaseGenerationService):
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
         # Default model from nano_banana
-        self.default_model = "google/gemini-2.5-flash-image-preview"
+        self.default_model = "google/gemini-3-pro-image-preview"
         
         # Timeout and retry settings
         self.timeout = 60.0
