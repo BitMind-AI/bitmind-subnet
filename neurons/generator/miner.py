@@ -127,6 +127,7 @@ class GenerativeMiner(BaseNeuron):
         try:
             # Get the appropriate service for this task
             service = self.service_registry.get_service(task.modality)
+            bt.logging.info(f"Using service: {service.__class__.__name__ if service else 'None'} for {task.modality}")
             if not service:
                 raise ValueError(f"No service available for modality={task.modality}")
 
@@ -136,8 +137,9 @@ class GenerativeMiner(BaseNeuron):
 
             # mark task complete & send webhook response
             result_data = result.get("data")
-            bt.logging.debug(
-                f"Task {task.task_id} completed with {len(result_data) if result_data else 0} bytes of data"
+            bt.logging.info(
+                f"Task {task.task_id} result_data: {len(result_data) if result_data else 0} bytes, "
+                f"type={type(result_data)}, magic={result_data[:16].hex() if result_data else 'N/A'}"
             )
 
             self._save_to_output_dir(task, result_data)

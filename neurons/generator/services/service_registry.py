@@ -20,13 +20,14 @@ class ServiceRegistry:
     Registry for managing generation services.
     
     Set per-modality service via env vars:
-      IMAGE_SERVICE=openai|openrouter|local
-      VIDEO_SERVICE=openai|openrouter|local
+      IMAGE_SERVICE=openai|openrouter|local|none
+      VIDEO_SERVICE=openai|openrouter|local|none
     
     Services:
       - openai: DALL-E 3 (requires OPENAI_API_KEY)
       - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY)
       - local: Local Stable Diffusion models
+      - none: Disable this modality (no service loaded)
     
     If not set, falls back to loading all available services.
     """
@@ -51,13 +52,17 @@ class ServiceRegistry:
         """Initialize specific services for each modality."""
         initialized = set()
         
-        if image_service:
+        if image_service == "none":
+            bt.logging.info("IMAGE_SERVICE=none, no image service will be loaded")
+        elif image_service:
             service = self._create_service(image_service, "image")
             if service:
                 self.services["image"] = service
                 initialized.add(image_service)
         
-        if video_service:
+        if video_service == "none":
+            bt.logging.info("VIDEO_SERVICE=none, no video service will be loaded")
+        elif video_service:
             can_reuse = video_service in initialized and video_service != "local"
             if can_reuse:
                 self.services["video"] = self.services.get("image") or self._create_service(video_service, "video")
@@ -137,8 +142,8 @@ class ServiceRegistry:
     def get_all_api_key_requirements(self) -> Dict[str, str]:
         """Get API key requirements from all services."""
         all_requirements = {
-            "IMAGE_SERVICE": "Service for images: openai, openrouter, or local",
-            "VIDEO_SERVICE": "Service for videos: openai, openrouter, or local",
+            "IMAGE_SERVICE": "Service for images: openai, openrouter, local, or none",
+            "VIDEO_SERVICE": "Service for videos: openai, openrouter, local, or none",
         }
         
         for name, service_class in SERVICE_MAP.items():
