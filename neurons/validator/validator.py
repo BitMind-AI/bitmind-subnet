@@ -178,7 +178,6 @@ class Validator(BaseNeuron):
         bt.logging.info(f"Updating scores at block {block}")
         generator_uids = await self.update_scores()
         
-        # FIX: Handle None/empty generator_uids
         if generator_uids is None:
             generator_uids = []
             bt.logging.warning("No generator rewards available; using empty generator_uids")
@@ -198,8 +197,7 @@ class Validator(BaseNeuron):
                         "responses from miners, or a bug in your reward functions."
                     )
 
-                # FIX: Get special UIDs first
-                burn_pct = .7  # TODO: config in next change
+                burn_pct = .7
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=SS58_ADDRESSES["burn"],
                     netuid=self.config.netuid, 
@@ -230,7 +228,7 @@ class Validator(BaseNeuron):
 
                 normed_weights = self.scores / norm
 
-                # FIX: Scale ONLY active (non-special) weights
+                # Scale ONLY active (non-special) weights
                 g_pct = (1. - d_pct)
                 active_mask = np.array([uid not in special_uids for uid in range(len(normed_weights))])
                 normed_weights[active_mask] *= (1 - burn_pct) * g_pct
@@ -241,6 +239,7 @@ class Validator(BaseNeuron):
                 normed_weights[video_escrow_uid] = (1 - burn_pct) * d_pct / 2
                 bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
                 bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
+
                 # Verify burn rate
                 total_weight = np.sum(normed_weights)
                 actual_burn_rate = normed_weights[burn_uid] / total_weight if total_weight > 0 else 0
