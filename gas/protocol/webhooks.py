@@ -21,9 +21,23 @@ def send_success_webhook(
     retry_delay: float = 2.0,
     timeout: float = 30.0
 ):
+    binary_data = result.get("data")
+    if not binary_data:
+        bt.logging.error(f"send_success_webhook called with empty data for task {task.task_id}")
+        return
+    
+    payload_size = len(binary_data)
+    bt.logging.debug(f"Preparing webhook for task {task.task_id}: {payload_size} bytes")
+    
+    result_copy = {
+        "data": binary_data,
+        "metadata": result.get("metadata"),
+        "url": result.get("url"),
+    }
+    
     def _send():
         try:
-            _send_webhook(task, result, True, hotkey, external_ip, port, max_retries, retry_delay, timeout)
+            _send_webhook(task, result_copy, True, hotkey, external_ip, port, max_retries, retry_delay, timeout)
         except Exception as e:
             bt.logging.error(f"Failed to send success webhook for task {task.task_id}: {e}")
     
@@ -102,7 +116,8 @@ def _attempt_webhook_send(
                 bt.logging.error(f"Task {task.task_id} marked as successful but no binary data in result")
                 return False
 
-            bt.logging.debug(f"Sending webhook for task {task.task_id}: {len(binary_data)} bytes of {task.modality} data")
+            payload_size = len(binary_data)
+            bt.logging.info(f"Webhook payload for task {task.task_id}: {payload_size} bytes of {task.modality} data")
 
             if task.modality == "image":
                 content_type = "image/png"
@@ -113,6 +128,7 @@ def _attempt_webhook_send(
 
             headers = {
                 "Content-Type": content_type,
+                "Content-Length": str(payload_size),
                 "task-id": task.task_id,
                 "task-status": "completed",
                 **generate_header(hotkey, binary_data, task.signed_by),
@@ -124,7 +140,7 @@ def _attempt_webhook_send(
                     header_key = f"x-meta-{key.replace('_', '-')}"
                     headers[header_key] = str(value)
 
-        bt.logging.info("Sending webhook to:", task.webhook_url)
+        bt.logging.info(f"Sending webhook to: {task.webhook_url}")
         response = requests.post(
             task.webhook_url, 
             data=binary_data, 
@@ -132,8 +148,14 @@ def _attempt_webhook_send(
             timeout=timeout
         )
 
-        return response.status_code < 300
+        if response.status_code >= 300:
+            bt.logging.warning(
+                f"Webhook for task {task.task_id} returned status {response.status_code}: {response.text[:200]}"
+            )
+            return False
+        
+        return True
 
     except requests.RequestException as e:
-        bt.logging.warning(f"Webhook request failed: {e}")
+        bt.logging.warning(f"Webhook request failed for task {task.task_id}: {e}")
         return False
