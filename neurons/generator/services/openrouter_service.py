@@ -199,23 +199,31 @@ class OpenRouterService(BaseGenerationService):
                 raise ValueError("OpenRouter response missing choices")
 
             choice = result['choices'][0]
+            bt.logging.debug(f"OpenRouter choice keys: {list(choice.keys())}")
+
             if 'message' not in choice or 'images' not in choice['message']:
                 bt.logging.error("OpenRouter response missing images in message")
+                bt.logging.debug(f"OpenRouter message keys: {list(choice.get('message', {}).keys())}")
                 raise ValueError("OpenRouter response missing images in message")
 
-            images = choice['message']['images']
+            message = choice['message']
+            bt.logging.debug(f"OpenRouter message keys: {list(message.keys())}")
+
+            images = message['images']
             if not images:
                 bt.logging.error("OpenRouter response contains no images")
                 raise ValueError("OpenRouter response contains no images")
 
+            bt.logging.debug(f"OpenRouter image[0] keys: {list(images[0].keys())}")
+
             # Process the first image
             image_url = images[0]['image_url']['url']
-            
+
             # Handle base64 data URL format: "data:image/<fmt>;base64,<data>"
             if ',' not in image_url:
                 bt.logging.error("Invalid image URL format from OpenRouter")
                 raise ValueError("Invalid image URL format from OpenRouter")
-            
+
             # Extract format from data URL (e.g., "data:image/png;base64,...")
             header_part = image_url.split(',')[0]
             image_format = "PNG"
@@ -223,9 +231,15 @@ class OpenRouterService(BaseGenerationService):
                 fmt = header_part.split("image/")[1].split(";")[0].upper()
                 if fmt in ["PNG", "JPEG", "JPG", "WEBP"]:
                     image_format = fmt
+
+            bt.logging.debug(f"OpenRouter image data URL header: {header_part}")
+            bt.logging.debug(f"OpenRouter detected format: {image_format}")
                 
             base64_data = image_url.split(',')[1]
             image_binary = base64.b64decode(base64_data)
+            
+            bt.logging.info(f"OpenRouter raw binary size: {len(image_binary)} bytes")
+            bt.logging.debug(f"OpenRouter binary magic bytes: {image_binary[:16].hex()}")
             
             # Open with PIL just to get dimensions, but preserve raw bytes for C2PA
             pil_image = Image.open(io.BytesIO(image_binary))
