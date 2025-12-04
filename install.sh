@@ -111,6 +111,10 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
     fi
 fi
 
+# TODO: REMOVE TEMP
+log_info "Clearing $CACHE_DIR for release 4.3.0..."
+rm -rf "$CACHE_DIR"
+log_success "$CACHE_DIR cleared"
 
 # Check if we're in the right directory
 if [ ! -f "pyproject.toml" ]; then
@@ -145,9 +149,10 @@ fi
 
 log_success "uv detected ✓"
 
-# Python 3.10+ is supported with no upper version limit
 
+# Python 3.10+ is supported with no upper version limit
 log_success "Python $python_version detected ✓"
+
 
 # Check and install required system dependencies (unless --no-system-deps is specified)
 if [ "$SKIP_SYSTEM_DEPS" = false ]; then
