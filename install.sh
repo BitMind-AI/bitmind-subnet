@@ -18,6 +18,13 @@ PY_DEPS_ONLY=false
 SYS_DEPS_ONLY=false
 CLEAR_VENV=false
 
+# Load cache dir from .env.validator if it exists, otherwise use default
+if [ -f ".env.validator" ]; then
+    SN34_CACHE_DIR_FROM_ENV=$(grep -E "^SN34_CACHE_DIR=" .env.validator 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+fi
+CACHE_DIR="${SN34_CACHE_DIR_FROM_ENV:-$HOME/.cache/sn34}"
+CACHE_DIR="${CACHE_DIR/#\~/$HOME}"
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -326,7 +333,6 @@ fi
 # Skip Python dependencies if only installing system dependencies
 if [ "$SYS_DEPS_ONLY" = false ]; then
     log_info "Checking if we need to clear v3.x cache"
-    CACHE_DIR="$HOME/.cache/sn34"
     if [ -d "$CACHE_DIR" ]; then
         # Check if any .db files exist in the cache directory
         if ! find "$CACHE_DIR" -name "*.db" -type f | grep -q .; then
