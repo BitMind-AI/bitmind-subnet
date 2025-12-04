@@ -24,40 +24,29 @@ except ImportError:
 # These are organizations that embed C2PA credentials in their AI-generated content
 TRUSTED_ISSUERS = [
     # OpenAI
-    "openai",
-    "openai.com",
-    "dall-e",
-    "chatgpt",
-    
+    "openai", "openai.com", "dall-e", "sora", "chatgpt",
+
     # Google
-    "google",
-    "google.com", 
-    "deepmind",
-    "imagen",
-    "gemini",
-    
+    "google", "google.com", "google.llc",
+    "imagen", "veo", "gemini", "deepmind",
+
     # Adobe
-    "adobe",
-    "adobe.com",
-    "firefly",
-    
+    "adobe", "adobe.com", "firefly", "contentauthenticity",
+
     # Microsoft
-    "microsoft",
-    "microsoft.com",
-    "bing",
-    "designer",
-    
-    # Stability AI
-    "stability",
-    "stability.ai",
-    "stable diffusion",
-    
-    # Midjourney
-    "midjourney",
-    
-    # Anthropic
-    "anthropic",
+    "microsoft", "microsoft.com", "bing", "designer", "copilot",
+
+    # Meta
+    "meta", "meta.com", "facebook", "instagram",
+
+    # Other
+    "runway", "runwayml", "runwayml.com",
+    "stability", "stability.ai",
+    "pika", "pika.art",
+    "canva", "canva.com",
+    "shutterstock", "shutterstock.com",
 ]
+
 
 
 class C2PAVerificationResult:
