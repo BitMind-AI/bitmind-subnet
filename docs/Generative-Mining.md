@@ -92,6 +92,29 @@ Generative miners support multiple generation approaches. You can choose between
 - **Advantages**: No ongoing API costs, full control over models, privacy
 - **Note**: Requires additional model setup and local compute resources
 
+### Runway Service (Video Generation)
+- **API Key**: `RUNWAYML_API_SECRET`
+- **Supported**: Video generation
+- **Models**: Gen-4 Turbo, Gen-3 Alpha Turbo
+- **Website**: [Runway ML](https://dev.runwayml.com/)
+- **Features**:
+  - Text-to-video generation
+  - Image-to-video (animate still images)
+  - 5 or 10 second video clips
+  - Multiple aspect ratios (16:9, 9:16, 1:1)
+- **Pricing**: ~$0.05/second (~$0.25 for 5s video, ~$0.50 for 10s video)
+
+**Configuration:**
+```bash
+# In .env.gen_miner
+VIDEO_SERVICE=runway
+RUNWAYML_API_SECRET=your_api_key_here
+
+# Optional settings
+RUNWAY_MODEL=gen3a_turbo  # or gen4.5
+RUNWAY_DEFAULT_DURATION=5  # 5 or 10 seconds
+```
+
 **Important**: Configure at least one generation method (API service OR local models) for your miner to be functional. Local generation with open source models is a cost-effective alternative to paid API services.
 
 ## Starting the Miner
