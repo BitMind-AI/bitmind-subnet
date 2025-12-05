@@ -6,12 +6,14 @@ from .base_service import BaseGenerationService
 from .openai_service import OpenAIService
 from .openrouter_service import OpenRouterService
 from .local_service import LocalService
+from .runway_service import RunwayService
 
 
 SERVICE_MAP = {
     "openai": OpenAIService,
     "openrouter": OpenRouterService,
     "local": LocalService,
+    "runway": RunwayService,
 }
 
 
@@ -21,12 +23,13 @@ class ServiceRegistry:
     
     Set per-modality service via env vars:
       IMAGE_SERVICE=openai|openrouter|local|none
-      VIDEO_SERVICE=openai|openrouter|local|none
+      VIDEO_SERVICE=openai|openrouter|local|runway|none
     
     Services:
       - openai: DALL-E 3 (requires OPENAI_API_KEY)
       - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY)
       - local: Local Stable Diffusion models
+      - runway: Runway Gen-4 video generation (requires RUNWAYML_API_SECRET)
       - none: Disable this modality (no service loaded)
     
     If not set, falls back to loading all available services.
@@ -143,7 +146,7 @@ class ServiceRegistry:
         """Get API key requirements from all services."""
         all_requirements = {
             "IMAGE_SERVICE": "Service for images: openai, openrouter, local, or none",
-            "VIDEO_SERVICE": "Service for videos: openai, openrouter, local, or none",
+            "VIDEO_SERVICE": "Service for videos: runway, local, or none",
         }
         
         for name, service_class in SERVICE_MAP.items():
