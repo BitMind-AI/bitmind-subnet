@@ -106,8 +106,9 @@ def upload_media_to_hf(
                 return []
             raise
 
+        validator_hotkey = kwargs.get("validator_hotkey")
         upload_files, metadata_entries, successfully_processed_ids = (
-            _process_media_entries(media_entries, modality)
+            _process_media_entries(media_entries, modality, validator_hotkey)
         )
 
         if not upload_files:
@@ -192,9 +193,15 @@ def upload_media_to_hf(
 
 
 def _process_media_entries(
-    media_entries: List[Any], modality: str
+    media_entries: List[Any], modality: str, validator_hotkey: str = None
 ) -> Tuple[List[Tuple], List[Dict], List[str]]:
-    """Process media entries into upload files, metadata, and success IDs."""
+    """Process media entries into upload files, metadata, and success IDs.
+    
+    Args:
+        media_entries: List of media entry objects
+        modality: "image" or "video"
+        validator_hotkey: Validator hotkey to use for non-miner generated content
+    """
     upload_files = []
     metadata_entries = []
     successfully_processed_ids = []
@@ -226,12 +233,15 @@ def _process_media_entries(
             else:
                 resolution_str = str(media_entry.resolution)
 
+        # Use media entry's hotkey if available, otherwise fall back to validator hotkey
+        generator_hotkey = getattr(media_entry, "hotkey", None) or validator_hotkey or "unknown"
+
         metadata_entries.append(
             {
                 "filename": filename,
                 "media_id": media_entry.id,
                 "media_hash": media_hash,
-                "generator_hotkey": getattr(media_entry, "hotkey", "validator"),
+                "generator_hotkey": generator_hotkey,
                 "generator_uid": getattr(media_entry, "uid", 0),
                 "model_name": media_entry.model_name or "unknown",
                 "prompt_id": media_entry.prompt_id or "",

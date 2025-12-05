@@ -177,7 +177,11 @@ class Validator(BaseNeuron):
         """
         bt.logging.info(f"Updating scores at block {block}")
         generator_uids = await self.update_scores()
-
+        
+        if generator_uids is None:
+            generator_uids = []
+            bt.logging.warning("No generator rewards available; using empty generator_uids")
+        
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
             try:
@@ -193,16 +197,7 @@ class Validator(BaseNeuron):
                         "responses from miners, or a bug in your reward functions."
                     )
 
-                norm = np.ones_like(self.scores)
-                norm[generator_uids] = np.linalg.norm(self.scores[generator_uids], ord=1)
-
-                if np.any(norm == 0) or np.isnan(norm).any():
-                    norm = np.ones_like(norm)  # Avoid division by zero or NaN
-
-                normed_weights = self.scores / norm
-
-                # discriminator rewards distributed only upon performance improvements on benchmark exam
-                burn_pct = 0.7
+                burn_pct = .7
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=SS58_ADDRESSES["burn"],
                     netuid=self.config.netuid, 
@@ -219,18 +214,36 @@ class Validator(BaseNeuron):
                      netuid=self.config.netuid, 
                      block=block)
 
-                # .8 to discriminators, .2 to generators for now
-                g_pct = (1. - d_pct)
-                normed_weights = np.array([
-                    (1 - burn_pct) * g_pct  * v
-                    for v in normed_weights
-                ])
+                special_uids = {burn_uid, image_escrow_uid, video_escrow_uid}
+                bt.logging.info(f"Special UIDs to exclude: {special_uids}")
+
+                # Compute norm excluding specials
+                norm = np.ones_like(self.scores)
+                active_uids = [uid for uid in generator_uids if uid not in special_uids]
+                if active_uids:
+                    norm[active_uids] = np.linalg.norm(self.scores[active_uids], ord=1)
                 
+                if np.any(norm == 0) or np.isnan(norm).any():
+                    norm = np.ones_like(norm)
+
+                normed_weights = self.scores / norm
+
+                # Scale ONLY active (non-special) weights
+                g_pct = (1. - d_pct)
+                active_mask = np.array([uid not in special_uids for uid in range(len(normed_weights))])
+                normed_weights[active_mask] *= (1 - burn_pct) * g_pct
+
+                # Set special weights (only once, no prior scaling)
                 normed_weights[burn_uid] = burn_pct
                 normed_weights[image_escrow_uid] = (1 - burn_pct) * d_pct / 2
                 normed_weights[video_escrow_uid] = (1 - burn_pct) * d_pct / 2
                 bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
                 bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
+
+                # Verify burn rate
+                total_weight = np.sum(normed_weights)
+                actual_burn_rate = normed_weights[burn_uid] / total_weight if total_weight > 0 else 0
+                bt.logging.info(f"Total weight sum: {total_weight:.4f}, Actual burn rate: {actual_burn_rate:.4f} (target: {burn_pct})")
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)

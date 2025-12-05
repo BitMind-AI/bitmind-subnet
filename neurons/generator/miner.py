@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import os
 import requests
 import sys
 import time
@@ -126,6 +127,7 @@ class GenerativeMiner(BaseNeuron):
         try:
             # Get the appropriate service for this task
             service = self.service_registry.get_service(task.modality)
+            bt.logging.info(f"Using service: {service.__class__.__name__ if service else 'None'} for {task.modality}")
             if not service:
                 raise ValueError(f"No service available for modality={task.modality}")
 
@@ -135,9 +137,13 @@ class GenerativeMiner(BaseNeuron):
 
             # mark task complete & send webhook response
             result_data = result.get("data")
-            bt.logging.debug(
-                f"Task {task.task_id} completed with {len(result_data) if result_data else 0} bytes of data"
+            bt.logging.info(
+                f"Task {task.task_id} result_data: {len(result_data) if result_data else 0} bytes, "
+                f"type={type(result_data)}, magic={result_data[:16].hex() if result_data else 'N/A'}"
             )
+
+            self._save_to_output_dir(task, result_data)
+
             self.task_manager.mark_task_completed(
                 task.task_id, result_data, result.get("url")
             )
@@ -266,6 +272,40 @@ class GenerativeMiner(BaseNeuron):
             except Exception as e:
                 bt.logging.error(f"Error in cleanup loop: {e}")
                 time.sleep(cleanup_interval)
+
+    def _save_to_output_dir(self, task, data: bytes):
+        """Save generated content and metadata to output directory."""
+        if not data:
+            return
+
+        save_locally = os.getenv("MINER_SAVE_LOCALLY", "false").lower() in ("true", "1", "yes")
+        if not save_locally:
+            return
+
+        ext = "png" if task.modality == "image" else "mp4"
+        media_path = self.output_dir / f"{task.task_id}.{ext}"
+        meta_path = self.output_dir / f"{task.task_id}.json"
+
+        try:
+            media_path.write_bytes(data)
+            bt.logging.info(f"💾 Saved {task.modality} to {media_path}")
+        except Exception as e:
+            bt.logging.warning(f"Failed to save {task.modality} to {media_path}: {e}")
+
+        try:
+            import json
+            metadata = {
+                "task_id": task.task_id,
+                "modality": task.modality,
+                "prompt": task.prompt,
+                "parameters": task.parameters,
+                "signed_by": task.signed_by,
+                "created_at": task.created_at,
+                "completed_at": time.time(),
+            }
+            meta_path.write_text(json.dumps(metadata, indent=2))
+        except Exception as e:
+            bt.logging.warning(f"Failed to save metadata to {meta_path}: {e}")
 
     # API Endpoints
     async def _handle_generation_request(self, request: Request, modality: str):
