@@ -6,6 +6,7 @@ import time
 
 from neurons.generator.services.stabilityai_service import StabilityAIService, Models
 from neurons.generator.task_manager import TaskManager
+from gas.verification.c2pa_verification import verify_c2pa
 
 # Set API key if one isn't already set
 os.environ.setdefault(
@@ -66,16 +67,18 @@ def run_model_test(service, manager, model):
         # Validate image integrity
         assert validate_image(img_bytes), "Image failed Pillow validation"
 
+        # After generating with Runway
+        result = verify_c2pa(img_bytes)
+        if result.verified and result.is_trusted_issuer:
+            print(f"✅ C2PA verified: {result.issuer}")
+        else:
+            print(f"❌ C2PA failed: {result.error}")
+
         # Validate metadata
         assert meta["model"] == model
         assert meta["provider"] == "stability.ai"
         assert meta["format"] in ("PNG", "JPEG", "WEBP")
         assert meta["generation_time"] > 0
-
-        if meta.get("c2pa"):
-            print("✔ C2PA metadata detected")
-        else:
-            print("✘ No C2PA metadata found")
 
         print(f"=== Model {model} PASSED ===")
 
