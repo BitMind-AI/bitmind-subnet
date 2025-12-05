@@ -4,6 +4,7 @@ import bittensor as bt
 from .base_service import BaseGenerationService
 from .openai_service import OpenAIService
 from .openrouter_service import OpenRouterService
+from .stabilityai_service import StabilityAIService
 from .local_service import LocalService
 
 
@@ -28,6 +29,7 @@ class ServiceRegistry:
         service_classes = [
             OpenAIService,      # 3rd party API service
             OpenRouterService,  # OpenRouter API service
+            StabilityAIService, # StabilitAI API service
             LocalService,       # Local model service
         ]
         
@@ -74,6 +76,7 @@ class ServiceRegistry:
         service_classes = [
             OpenAIService,
             OpenRouterService,
+            StabilityAIService,
             LocalService,
         ]
         
