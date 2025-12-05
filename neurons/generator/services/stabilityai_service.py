@@ -188,7 +188,6 @@ class StabilityAIService(BaseGenerationService):
             img_bytes = response.content
             gen_time = time.time() - start_time
 
-            print(len(img_bytes))
             # Extract C2PA (embedded in image)
             c2pa_metadata = self._extract_c2pa_metadata(img_bytes, output_format)
 
