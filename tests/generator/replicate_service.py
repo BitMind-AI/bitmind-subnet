@@ -7,10 +7,7 @@ import time
 from neurons.generator.services.replicate_service import ReplicateService, Models
 from neurons.generator.task_manager import TaskManager
 
-os.environ.setdefault(
-    "REPLICATE_API_TOKEN",
-    "r8_YOUR-API-TOKEN"
-)
+# Note: Set REPLICATE_API_TOKEN in your environment before running tests
 
 
 def save_image(img_bytes, filename):
@@ -93,6 +90,8 @@ def test_invalid_api_key():
     try:
         service.process(task)
         raise AssertionError("❌ Should have failed with invalid API token!")
+    except AssertionError:
+        raise
     except Exception as e:
         print(f"✔ Correctly failed: {e}")
 
