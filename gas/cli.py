@@ -503,18 +503,19 @@ cli.add_command(discriminator, name="d")
 @discriminator.command()
 @click.option("--image-model", help="Path to image detector zip file")
 @click.option("--video-model", help="Path to video detector zip file")
+@click.option("--audio-model", help="Path to audio detector zip file")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
 @click.option("--netuid", default=34, help="Subnet UID")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
 def push_discriminator(
-    image_model, video_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
+    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
 ):
-    """Push discriminator model(s) and register on blockchain. At least one model zip file (image or video) must be provided."""
+    """Push discriminator model(s) and register on blockchain. At least one model zip file (image, video, or audio) must be provided."""
     # Validate at least one model is provided
-    if not image_model and not video_model:
-        click.echo("Error: At least one model must be provided (--image-model or --video-model)", err=True)
+    if not image_model and not video_model and not audio_model:
+        click.echo("Error: At least one model must be provided (--image-model, --video-model, or --audio-model)", err=True)
         return
     
     # Build command arguments for the push_model script
@@ -525,6 +526,8 @@ def push_discriminator(
         cmd.extend(["--image-model", image_model])
     if video_model:
         cmd.extend(["--video-model", video_model])
+    if audio_model:
+        cmd.extend(["--audio-model", audio_model])
 
     # Add optional arguments
     cmd.extend(["--wallet-name", wallet_name])
@@ -551,19 +554,19 @@ discriminator.add_command(push_discriminator, name="push")
 @discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.option("--image-model", help="Path to image detector ONNX model or zip file")
 @click.option("--video-model", help="Path to video detector ONNX model or zip file")
+@click.option("--audio-model", help="Path to audio detector ONNX model or zip file")
 @click.pass_context
-def benchmark(ctx, image_model, video_model):
-    """Run image/video benchmarks for provided detector models using gasbench.
+def benchmark(ctx, image_model, video_model, audio_model):
+    """Run image/video/audio benchmarks for provided detector models using gasbench.
     All other options are passed directly to gasbench. Use 'gasbench --help' to see available options.
     Common options: --debug, --small, --full, --gasstation-only, --cache-dir, --output-dir
     """
-    if not image_model and not video_model:
-        click.echo("Error: Either --image-model or --video-model must be provided", err=True)
+    if not image_model and not video_model and not audio_model:
+        click.echo("Error: At least one model must be provided (--image-model, --video-model, or --audio-model)", err=True)
         return
  
     def run_gasbench(model_path, modality_flag):
         click.echo(f"Running benchmark on {model_path}...")
-        # gasbench --image-model /path or gasbench --video-model /path
         cmd = ["gasbench", "run", modality_flag, model_path] + ctx.args
   
         try:
@@ -582,6 +585,9 @@ def benchmark(ctx, image_model, video_model):
  
     if video_model:
         run_gasbench(video_model, "--video-model")
+
+    if audio_model:
+        run_gasbench(audio_model, "--audio-model")
 
 # =============================================================================
 # GENERATOR COMMANDS
