@@ -73,12 +73,11 @@ class OpenAIService(BaseGenerationService):
         """Generate an image using DALL-E and download the bytes with C2PA metadata."""
         try:
             bt.logging.info(f"Generating image with DALL-E: {task.prompt[:50]}...")
-
             params = task.parameters or {}
             width = params.get("width", 1024)
             height = params.get("height", 1024)
             quality = params.get("quality", "standard")
-
+    
             size = self._get_valid_image_size(width, height)
 
             response = self.client.images.generate(
