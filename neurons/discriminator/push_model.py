@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Script to push separate image and video detector models and register on the Bittensor blockchain.
+Script to push separate image, video, and audio detector models and register on the Bittensor blockchain.
 
 Usage:
-    python push_model.py --image-model <path> --video-model <path> [options]
+    python push_model.py [--image-model <path>] [--video-model <path>] [--audio-model <path>] [options]
 
 Options:
-    --image-model PATH       Path to image detector zip file (required)
-    --video-model PATH       Path to video detector zip file (required)
+    --image-model PATH       Path to image detector zip file
+    --video-model PATH       Path to video detector zip file
+    --audio-model PATH       Path to audio detector zip file
     --wallet-name NAME       Bittensor wallet name (default: default)
     --wallet-hotkey KEY      Bittensor hotkey name (default: default)
     --netuid UID            Subnet UID (default: 34)
@@ -83,31 +84,38 @@ def print_step(step_num: int, total_steps: int, message: str):
 async def push_separate_models(
     image_model_path: Optional[str] = None,
     video_model_path: Optional[str] = None,
+    audio_model_path: Optional[str] = None,
     wallet: bt.wallet = None,
     retry_delay_secs: int = 60,
     netuid: int = 34,
     chain_endpoint: Optional[str] = None,
 ):
-    """Pushes separate image and/or video detector models and registers on the Bittensor blockchain.
+    """Pushes separate image, video, and/or audio detector models and registers on the Bittensor blockchain.
     
-    At least one model (image or video) must be provided.
+    At least one model (image, video, or audio) must be provided.
     """
-    if not image_model_path and not video_model_path:
-        raise ValueError("At least one model (--image-model or --video-model) must be provided")
+    if not image_model_path and not video_model_path and not audio_model_path:
+        raise ValueError("At least one model (--image-model, --video-model, or --audio-model) must be provided")
 
     if image_model_path and not os.path.exists(image_model_path):
         raise FileNotFoundError(f"Image model file not found: {image_model_path}")
     if video_model_path and not os.path.exists(video_model_path):
         raise FileNotFoundError(f"Video model file not found: {video_model_path}")
+    if audio_model_path and not os.path.exists(audio_model_path):
+        raise FileNotFoundError(f"Audio model file not found: {audio_model_path}")
 
     if image_model_path:
         print_info(f"Image model: {image_model_path}")
     if video_model_path:
         print_info(f"Video model: {video_model_path}")
+    if audio_model_path:
+        print_info(f"Audio model: {audio_model_path}")
 
     results = {}
     upload_count = 0
-    total_uploads = (1 if image_model_path else 0) + (1 if video_model_path else 0)
+    total_uploads = (1 if image_model_path else 0) + \
+                    (1 if video_model_path else 0) + \
+                    (1 if audio_model_path else 0) # Updated total uploads count
 
     if image_model_path:
         upload_count += 1
@@ -155,13 +163,37 @@ async def push_separate_models(
             print_error(f"Video model upload failed with exception: {e}")
             return False
 
+    if audio_model_path:
+        upload_count += 1
+        print()
+        print_step(upload_count, total_uploads + 1, "Uploading audio model to cloud inference system...")
+        try:
+            audio_result = upload_single_modality(
+                wallet,
+                audio_model_path,
+                'audio',
+                MODEL_UPLOAD_ENDPOINT
+            )
+            results['audio'] = audio_result
+            
+            if not audio_result['success']:
+                print_error(f"Audio model upload failed at step: {audio_result.get('step', 'unknown')}")
+                print_error(f"Error: {audio_result.get('error', 'Unknown error')}")
+                return False
+            
+            print_success("Audio model uploaded successfully!")
+        except Exception as e:
+            print_error(f"Audio model upload failed with exception: {e}")
+            return False
+
     # Display discriminator IDs for uploaded models
     if 'image' in results:
         print_info(f"Image Discriminator ID: {results['image']['model_id']}")
     if 'video' in results:
         print_info(f"Video Discriminator ID: {results['video']['model_id']}")
+    if 'audio' in results:
+        print_info(f"Audio Discriminator ID: {results['audio']['model_id']}")
 
-    # Step: Register on Blockchain
     print()
     print_step(upload_count + 1, total_uploads + 1, "Registering model metadata on blockchain...")
     
@@ -223,7 +255,7 @@ async def push_separate_models(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Push image and/or video detector models and register on Bittensor. At least one model must be provided."
+        description="Push image, video, and/or audio detector models and register on Bittensor. At least one model must be provided."
     )
 
     # Model paths (at least one required)
@@ -234,6 +266,10 @@ def main():
     parser.add_argument(
         "--video-model",
         help="Path to video detector zip file",
+    )
+    parser.add_argument(
+        "--audio-model",
+        help="Path to audio detector zip file",
     )
     parser.add_argument(
         "--wallet-name",
@@ -266,8 +302,8 @@ def main():
     args = parser.parse_args()
 
     # Validate at least one model is provided
-    if not args.image_model and not args.video_model:
-        parser.error("At least one model must be provided: --image-model or --video-model")
+    if not args.image_model and not args.video_model and not args.audio_model:
+        parser.error("At least one model must be provided: --image-model, --video-model, or --audio-model")
 
     print()
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Model Push Configuration ==={Style.RESET_ALL}")
@@ -275,6 +311,8 @@ def main():
         print(f"Image Model: {args.image_model}")
     if args.video_model:
         print(f"Video Model: {args.video_model}")
+    if args.audio_model:
+        print(f"Audio Model: {args.audio_model}")
     print(f"Wallet: {args.wallet_name}/{args.wallet_hotkey}")
     print(f"Subnet UID: {args.netuid}")
     print(f"Chain Endpoint: {args.chain_endpoint}")
@@ -304,6 +342,7 @@ def main():
             push_separate_models(
                 image_model_path=args.image_model,
                 video_model_path=args.video_model,
+                audio_model_path=args.audio_model,
                 wallet=wallet,
                 retry_delay_secs=args.retry_delay,
                 netuid=netuid,
