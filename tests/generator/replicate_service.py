@@ -69,31 +69,39 @@ def run_model_test(service, manager, model):
     except Exception:
         print(f"=== Model {model} FAILED ===")
         print(traceback.format_exc())
+        raise
 
 
 def test_invalid_api_key():
     print("\n=== Testing invalid API key ===")
-    os.environ["REPLICATE_API_TOKEN"] = "invalid-token"
-
-    service = ReplicateService()
-    manager = TaskManager()
-
-    task_id = manager.create_task(
-        modality="image",
-        prompt="test prompt",
-        parameters={"model": Models.FLUX_SCHNELL},
-        webhook_url=None,
-        signed_by="test"
-    )
-    task = manager.get_task(task_id)
-
+    original_token = os.environ.get("REPLICATE_API_TOKEN")
     try:
-        service.process(task)
-        raise AssertionError("❌ Should have failed with invalid API token!")
-    except AssertionError:
-        raise
-    except Exception as e:
-        print(f"✔ Correctly failed: {e}")
+        os.environ["REPLICATE_API_TOKEN"] = "invalid-token"
+
+        service = ReplicateService()
+        manager = TaskManager()
+
+        task_id = manager.create_task(
+            modality="image",
+            prompt="test prompt",
+            parameters={"model": Models.FLUX_SCHNELL},
+            webhook_url=None,
+            signed_by="test"
+        )
+        task = manager.get_task(task_id)
+
+        try:
+            service.process(task)
+            raise AssertionError("❌ Should have failed with invalid API token!")
+        except AssertionError:
+            raise
+        except Exception as e:
+            print(f"✔ Correctly failed: {e}")
+    finally:
+        if original_token is not None:
+            os.environ["REPLICATE_API_TOKEN"] = original_token
+        elif "REPLICATE_API_TOKEN" in os.environ:
+            del os.environ["REPLICATE_API_TOKEN"]
 
 
 def test_invalid_model(service, manager):
