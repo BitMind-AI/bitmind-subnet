@@ -28,6 +28,8 @@ from gas.generation.util.model import (
     load_hunyuanvideo_transformer,
     load_annimatediff_motion_adapter,
     load_autoencoder_kl_wan,
+    load_hidream_llm_text_encoder,
+    load_hidream_tokenizer,
     JanusWrapper,
 )
 from gas.types import ModelConfig, ModelTask
@@ -223,6 +225,19 @@ def get_text_to_image_models() -> List[ModelConfig]:
             pipeline_cls=HiDreamImagePipeline,
             pretrained_args={
                 "torch_dtype": torch.bfloat16,
+                "text_encoder_3": (
+                    load_hidream_llm_text_encoder,
+                    {
+                        "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                        "torch_dtype": torch.bfloat16,
+                    },
+                ),
+                "tokenizer_3": (
+                    load_hidream_tokenizer,
+                    {
+                        "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                    },
+                ),
             },
             generation_args={
                 "guidance_scale": 5.0,
@@ -236,13 +251,11 @@ def get_text_to_image_models() -> List[ModelConfig]:
         ModelConfig(
             path="Insta360-Research/DiT360-Panorama-Image-Generation",
             task=ModelTask.TEXT_TO_IMAGE,
-            pipeline_cls=FluxPipeline,
+            pipeline_cls=DiffusionPipeline,
             pretrained_args={
-                "model_id": "black-forest-labs/FLUX.1-dev",
+                "model_id": "Insta360-Research/DiT360-Panorama-Image-Generation"",
                 "torch_dtype": torch.bfloat16,
             },
-            lora_model_id="Insta360-Research/DiT360-Panorama-Image-Generation",
-            lora_loading_args={"use_peft_backend": True},
             generation_args={
                 "guidance_scale": 3.5,
                 "num_images_per_prompt": 1,
@@ -252,7 +265,7 @@ def get_text_to_image_models() -> List[ModelConfig]:
             },
             use_autocast=False,
             enable_model_cpu_offload=True,
-            tags=["flux", "panorama", "360"],
+            tags=["panorama", "360"],
         ),
     ]
 
