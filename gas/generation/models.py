@@ -248,25 +248,6 @@ def get_text_to_image_models() -> List[ModelConfig]:
             enable_model_cpu_offload=True,
             tags=["hidream"],
         ),
-        ModelConfig(
-            path="Insta360-Research/DiT360-Panorama-Image-Generation",
-            task=ModelTask.TEXT_TO_IMAGE,
-            pipeline_cls=DiffusionPipeline,
-            pretrained_args={
-                "model_id": "Insta360-Research/DiT360-Panorama-Image-Generation"",
-                "torch_dtype": torch.bfloat16,
-            },
-            generation_args={
-                "guidance_scale": 3.5,
-                "num_images_per_prompt": 1,
-                "num_inference_steps": 50,
-                "height": 512,
-                "width": 1024,  # Panoramic aspect ratio
-            },
-            use_autocast=False,
-            enable_model_cpu_offload=True,
-            tags=["panorama", "360"],
-        ),
     ]
 
 
