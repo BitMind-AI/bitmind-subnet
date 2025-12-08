@@ -1,5 +1,6 @@
 import gc
 import json
+import os
 import random
 import time
 from pathlib import Path
@@ -117,6 +118,8 @@ class GenerationPipeline:
                     pipeline_args[k] = v[0](**v[1])
 
             model_id = pipeline_args.pop("model_id", model_name)
+            
+            hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN") or os.environ.get("HF_TOKEN")
 
             if isinstance(pipeline_cls, dict):
                 # Multi-stage pipeline
@@ -137,6 +140,7 @@ class GenerationPipeline:
                             **stage_args_filtered,
                             add_watermarker=False,
                             local_files_only=True,
+                            token=hf_token,
                         )
                     except (OSError, ValueError) as e:
                         bt.logging.info(f"Stage {stage_name} not in local cache, downloading...")
@@ -144,6 +148,7 @@ class GenerationPipeline:
                             base_model,
                             **stage_args_filtered,
                             add_watermarker=False,
+                            token=hf_token,
                         )
 
                     enable_model_optimizations(
@@ -173,6 +178,7 @@ class GenerationPipeline:
                         **pipeline_args,
                         add_watermarker=False,
                         local_files_only=True,
+                        token=hf_token,
                     )
                 except (OSError, ValueError) as e:
                     # Model not in cache, download from HuggingFace
@@ -181,6 +187,7 @@ class GenerationPipeline:
                         model_id,
                         **pipeline_args,
                         add_watermarker=False,
+                        token=hf_token,
                     )
 
                 # Load LoRA weights if specified
@@ -189,8 +196,8 @@ class GenerationPipeline:
                         f"Loading LoRA weights from {model_config['lora_model_id']}"
                     )
                     lora_loading_args = model_config.get("lora_loading_args", {})
-                    self.model.load_lora_weights(
-                        model_config["lora_model_id"], **lora_loading_args
+                    MODEL.load_lora_weights(
+                        model_config["lora_model_id"], token=hf_token, **lora_loading_args
                     )
 
                 # Load scheduler if specified
