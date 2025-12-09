@@ -45,6 +45,7 @@ SS58_ADDRESSES = {
     "burn": "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
     "video_escrow": "5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",
     "image_escrow": "5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",
+    "audio_escrow": "5F9Qo4jqurfx3qHsC2kQtvge7Si5aW1BfYKwpxnnpVxouPyF",
 }
 
 
@@ -198,6 +199,7 @@ class Validator(BaseNeuron):
                     )
 
                 burn_pct = .7
+                audio_pct = .01
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=SS58_ADDRESSES["burn"],
                     netuid=self.config.netuid, 
@@ -213,8 +215,12 @@ class Validator(BaseNeuron):
                     hotkey_ss58=SS58_ADDRESSES["image_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
+                audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58=SS58_ADDRESSES["audio_escrow"],
+                     netuid=self.config.netuid, 
+                     block=block)
 
-                special_uids = {burn_uid, image_escrow_uid, video_escrow_uid}
+                special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
                 bt.logging.info(f"Special UIDs to exclude: {special_uids}")
 
                 # Compute norm excluding specials
@@ -229,16 +235,19 @@ class Validator(BaseNeuron):
                 normed_weights = self.scores / norm
 
                 # Scale ONLY active (non-special) weights
+                remaining_pct = 1 - burn_pct - audio_pct
                 g_pct = (1. - d_pct)
                 active_mask = np.array([uid not in special_uids for uid in range(len(normed_weights))])
-                normed_weights[active_mask] *= (1 - burn_pct) * g_pct
+                normed_weights[active_mask] *= remaining_pct * g_pct
 
                 # Set special weights (only once, no prior scaling)
                 normed_weights[burn_uid] = burn_pct
-                normed_weights[image_escrow_uid] = (1 - burn_pct) * d_pct / 2
-                normed_weights[video_escrow_uid] = (1 - burn_pct) * d_pct / 2
+                normed_weights[audio_escrow_uid] = audio_pct
+                normed_weights[image_escrow_uid] = remaining_pct * d_pct / 2
+                normed_weights[video_escrow_uid] = remaining_pct * d_pct / 2
                 bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
                 bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
+                bt.logging.info(f"Audio escrow UID: {audio_escrow_uid}")
 
                 # Verify burn rate
                 total_weight = np.sum(normed_weights)
