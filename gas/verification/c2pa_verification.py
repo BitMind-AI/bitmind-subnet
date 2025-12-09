@@ -203,29 +203,31 @@ def _detect_format(data: bytes) -> str:
     if data[:4] in (b'II*\x00', b'MM\x00*'):
         return ".tiff"
     
-    # HEIC/HEIF: ftyp with heic, heix, hevc, mif1 brands
+    # === ftyp-based formats (ISO Base Media File Format) ===
+    # MP4, M4A, MOV, 3GP, HEIC, AVIF all use ftyp box at offset 4
+    # Must check all brands in a single block to avoid unreachable code
     if len(data) >= 12 and data[4:8] == b'ftyp':
         brand = data[8:12]
+        
+        # Images: HEIC/HEIF
         if brand in (b'heic', b'heix', b'hevc', b'mif1', b'msf1'):
             return ".heic"
         if brand == b'avif':
             return ".avif"
-    
-    # === Video ===
-    
-    # MP4/M4V/MOV/3GP: Check for 'ftyp' box at offset 4
-    # The first 4 bytes are the box size (variable), bytes 4-8 are 'ftyp'
-    if len(data) >= 8 and data[4:8] == b'ftyp':
-        # Determine specific format from brand
-        if len(data) >= 12:
-            brand = data[8:12]
-            # QuickTime MOV
-            if brand == b'qt  ':
-                return ".mov"
-            # 3GP/3G2
-            if brand in (b'3gp4', b'3gp5', b'3gp6', b'3g2a'):
-                return ".3gp"
-        # Default to MP4 for other ftyp-based formats
+        
+        # Audio: M4A/AAC
+        if brand in (b'M4A ', b'M4B '):
+            return ".m4a"
+        
+        # Video: QuickTime MOV
+        if brand == b'qt  ':
+            return ".mov"
+        
+        # Video: 3GP/3G2
+        if brand in (b'3gp4', b'3gp5', b'3gp6', b'3g2a'):
+            return ".3gp"
+        
+        # Default: MP4 for other ftyp-based formats (isom, mp41, mp42, etc.)
         return ".mp4"
     
     # WebM/MKV: EBML header 1A 45 DF A3
@@ -259,12 +261,6 @@ def _detect_format(data: bytes) -> str:
     # OGG: 4F 67 67 53 (OggS)
     if data[:4] == b'OggS':
         return ".ogg"
-    
-    # AAC/M4A: ftyp with M4A brand
-    if len(data) >= 12 and data[4:8] == b'ftyp':
-        brand = data[8:12]
-        if brand in (b'M4A ', b'M4B ', b'isom'):
-            return ".m4a"
     
     return ".bin"
 
