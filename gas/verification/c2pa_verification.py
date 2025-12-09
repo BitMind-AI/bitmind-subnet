@@ -160,19 +160,113 @@ def verify_c2pa(
 
 
 def _detect_format(data: bytes) -> str:
-    """Detect image/video format from magic bytes."""
-    if data[:8] == b'\x89PNG\r\n\x1a\n':
-        return ".png"
-    elif data[:2] == b'\xff\xd8':
-        return ".jpg"
-    elif data[:4] == b'RIFF' and data[8:12] == b'WEBP':
-        return ".webp"
-    elif data[:4] == b'\x00\x00\x00\x1c' or data[:4] == b'\x00\x00\x00\x20':
-        return ".mp4"
-    elif data[:4] == b'\x1a\x45\xdf\xa3':
-        return ".webm"
-    else:
+    """
+    Detect media format from magic bytes.
+    
+    Supports:
+        - Images: PNG, JPEG, WebP, GIF, BMP, TIFF, HEIC/HEIF, AVIF
+        - Video: MP4/M4V/MOV (ftyp-based), WebM, AVI, MKV
+        - Audio: MP3, WAV, FLAC, OGG, AAC/M4A
+    
+    Args:
+        data: Raw bytes of the media file (at least first 12 bytes recommended)
+        
+    Returns:
+        File extension string (e.g., ".png", ".mp4") or ".bin" if unknown
+    """
+    if len(data) < 4:
         return ".bin"
+    
+    # === Images ===
+    
+    # PNG: 89 50 4E 47 0D 0A 1A 0A
+    if len(data) >= 8 and data[:8] == b'\x89PNG\r\n\x1a\n':
+        return ".png"
+    
+    # JPEG: FF D8 FF
+    if data[:3] == b'\xff\xd8\xff':
+        return ".jpg"
+    
+    # WebP: RIFF....WEBP
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return ".webp"
+    
+    # GIF: GIF87a or GIF89a
+    if data[:6] in (b'GIF87a', b'GIF89a'):
+        return ".gif"
+    
+    # BMP: 42 4D (BM)
+    if data[:2] == b'BM':
+        return ".bmp"
+    
+    # TIFF: 49 49 2A 00 (little-endian) or 4D 4D 00 2A (big-endian)
+    if data[:4] in (b'II*\x00', b'MM\x00*'):
+        return ".tiff"
+    
+    # HEIC/HEIF: ftyp with heic, heix, hevc, mif1 brands
+    if len(data) >= 12 and data[4:8] == b'ftyp':
+        brand = data[8:12]
+        if brand in (b'heic', b'heix', b'hevc', b'mif1', b'msf1'):
+            return ".heic"
+        if brand == b'avif':
+            return ".avif"
+    
+    # === Video ===
+    
+    # MP4/M4V/MOV/3GP: Check for 'ftyp' box at offset 4
+    # The first 4 bytes are the box size (variable), bytes 4-8 are 'ftyp'
+    if len(data) >= 8 and data[4:8] == b'ftyp':
+        # Determine specific format from brand
+        if len(data) >= 12:
+            brand = data[8:12]
+            # QuickTime MOV
+            if brand == b'qt  ':
+                return ".mov"
+            # 3GP/3G2
+            if brand in (b'3gp4', b'3gp5', b'3gp6', b'3g2a'):
+                return ".3gp"
+        # Default to MP4 for other ftyp-based formats
+        return ".mp4"
+    
+    # WebM/MKV: EBML header 1A 45 DF A3
+    if data[:4] == b'\x1a\x45\xdf\xa3':
+        # Both WebM and MKV use this header; WebM is a subset of MKV
+        # For C2PA purposes, treat as WebM (more common for web video)
+        return ".webm"
+    
+    # AVI: RIFF....AVI
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'AVI ':
+        return ".avi"
+    
+    # === Audio ===
+    
+    # MP3: ID3 tag or frame sync (FF FB, FF FA, FF F3, FF F2)
+    if data[:3] == b'ID3':
+        return ".mp3"
+    if data[:2] == b'\xff\xfb' or data[:2] == b'\xff\xfa':
+        return ".mp3"
+    if data[:2] == b'\xff\xf3' or data[:2] == b'\xff\xf2':
+        return ".mp3"
+    
+    # WAV: RIFF....WAVE
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WAVE':
+        return ".wav"
+    
+    # FLAC: 66 4C 61 43 (fLaC)
+    if data[:4] == b'fLaC':
+        return ".flac"
+    
+    # OGG: 4F 67 67 53 (OggS)
+    if data[:4] == b'OggS':
+        return ".ogg"
+    
+    # AAC/M4A: ftyp with M4A brand
+    if len(data) >= 12 and data[4:8] == b'ftyp':
+        brand = data[8:12]
+        if brand in (b'M4A ', b'M4B ', b'isom'):
+            return ".m4a"
+    
+    return ".bin"
 
 
 def _extract_issuer(manifest_json: str) -> Optional[str]:
