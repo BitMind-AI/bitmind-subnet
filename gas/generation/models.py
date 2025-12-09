@@ -17,7 +17,10 @@ from diffusers import (
     CogView4Pipeline,
     CogVideoXImageToVideoPipeline,
     WanPipeline,
-    ChromaPipeline
+    ChromaPipeline,
+    DiffusionPipeline,
+    HiDreamImagePipeline,
+    TextToVideoSDPipeline,
 )
 
 from gas.generation.model_registry import ModelRegistry
@@ -25,6 +28,8 @@ from gas.generation.util.model import (
     load_hunyuanvideo_transformer,
     load_annimatediff_motion_adapter,
     load_autoencoder_kl_wan,
+    load_hidream_llm_text_encoder,
+    load_hidream_tokenizer,
     JanusWrapper,
 )
 from gas.types import ModelConfig, ModelTask
@@ -213,7 +218,36 @@ def get_text_to_image_models() -> List[ModelConfig]:
             },
             use_autocast=False,
             tags=["chroma", "flux-schnell"],
-        )
+        ),
+        # ModelConfig(
+        #     path="HiDream-ai/HiDream-I1-Full",
+        #     task=ModelTask.TEXT_TO_IMAGE,
+        #     pipeline_cls=HiDreamImagePipeline,
+        #     pretrained_args={
+        #         "torch_dtype": torch.bfloat16,
+        #         "text_encoder_3": (
+        #             load_hidream_llm_text_encoder,
+        #             {
+        #                 "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        #                 "torch_dtype": torch.bfloat16,
+        #             },
+        #         ),
+        #         "tokenizer_3": (
+        #             load_hidream_tokenizer,
+        #             {
+        #                 "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        #             },
+        #         ),
+        #     },
+        #     generation_args={
+        #         "guidance_scale": 5.0,
+        #         "num_images_per_prompt": 1,
+        #         "num_inference_steps": 50,
+        #     },
+        #     use_autocast=False,
+        #     enable_model_cpu_offload=True,
+        #     tags=["hidream"],
+        # ),
     ]
 
 
@@ -255,6 +289,24 @@ def get_image_to_image_models() -> List[ModelConfig]:
             scheduler={"cls": DEISMultistepScheduler},
             tags=["stable-diffusion", "inpainting", "dreamshaper"],
         ),
+        # TODO: Uncomment when diffusers >= 0.36.0 is released (requires QwenImageEditPlusPipeline)
+        # ModelConfig(
+        #     path="lovis93/next-scene-qwen-image-lora-2509",
+        #     task=ModelTask.IMAGE_TO_IMAGE,
+        #     pipeline_cls=DiffusionPipeline,  # Auto-detects QwenImageEditPlusPipeline
+        #     pretrained_args={
+        #         "model_id": "Qwen/Qwen-Image-Edit-2509",
+        #         "torch_dtype": torch.bfloat16,
+        #     },
+        #     lora_model_id="lovis93/next-scene-qwen-image-lora-2509",
+        #     lora_loading_args={},
+        #     generation_args={
+        #         "num_inference_steps": 50,
+        #     },
+        #     use_autocast=False,
+        #     enable_model_cpu_offload=True,
+        #     tags=["qwen", "cinematic", "next-scene"],
+        # ),
     ]
 
 
@@ -403,6 +455,38 @@ def get_text_to_video_models() -> List[ModelConfig]:
             save_args={"fps": 24},
             tags=["wan"],
         ),
+        ModelConfig(
+            path="ali-vilab/text-to-video-ms-1.7b",
+            task=ModelTask.TEXT_TO_VIDEO,
+            pipeline_cls=TextToVideoSDPipeline,
+            pretrained_args={
+                "torch_dtype": torch.float16,
+            },
+            generation_args={
+                "num_frames": 16,
+                "num_inference_steps": 50,
+            },
+            save_args={"fps": 8},
+            enable_model_cpu_offload=True,
+            tags=["modelscope", "text-to-video"],
+        ),
+        # TODO: Uncomment when diffusers >= 0.36.0 is released (requires WanModularPipeline)
+        # ModelConfig(
+        #     path="krea/krea-realtime-video",
+        #     task=ModelTask.TEXT_TO_VIDEO,
+        #     pipeline_cls=WanModularPipeline,  # Experimental modular pipeline
+        #     pretrained_args={
+        #         "torch_dtype": torch.bfloat16,
+        #         "trust_remote_code": True,
+        #     },
+        #     generation_args={
+        #         "num_inference_steps": 4,  # Realtime - uses only 4 steps
+        #     },
+        #     save_args={"fps": 11},  # 11fps realtime generation
+        #     use_autocast=False,
+        #     enable_model_cpu_offload=True,
+        #     tags=["wan", "realtime", "krea"],
+        # ),
     ]
 
 

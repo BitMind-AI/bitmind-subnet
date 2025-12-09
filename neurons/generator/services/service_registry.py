@@ -5,6 +5,7 @@ import bittensor as bt
 from .base_service import BaseGenerationService
 from .openai_service import OpenAIService
 from .openrouter_service import OpenRouterService
+from .stabilityai_service import StabilityAIService
 from .local_service import LocalService
 
 
@@ -12,6 +13,7 @@ SERVICE_MAP = {
     "openai": OpenAIService,
     "openrouter": OpenRouterService,
     "local": LocalService,
+    "stabilityai": StabilityAIService
 }
 
 
