@@ -49,6 +49,7 @@ BT_LOGGING_LEVEL=info
 # Configure API keys for external services, or use local generation
 OPENAI_API_KEY=your_openai_api_key
 OPEN_ROUTER_API_KEY=your_openrouter_api_key
+STABILITY_API_KEY=your_stabilityai_api_key
 
 # Optional Settings  
 AUTO_UPDATE=false
@@ -83,6 +84,13 @@ Generative miners support multiple generation approaches. You can choose between
 - **Supported**: Image generation
 - **Models**: Google Gemini Flash Image Preview, various other models
 - **Website**: [OpenRouter.ai](https://openrouter.ai)
+
+### StabilityAI Service
+- **API Key**: `STABILITY_API_KEY`
+- **Supported**: Image generation
+- **Models**: SD 3.5 variant models
+- **Website**: [Stability.ai](https://stability.ai/)
+- **Pricing**: ~$0.0035/image (SD 3.5 Medium)
 
 ### Local Service (Open Source Models)
 - **API Key**: None required
