@@ -219,35 +219,35 @@ def get_text_to_image_models() -> List[ModelConfig]:
             use_autocast=False,
             tags=["chroma", "flux-schnell"],
         ),
-        ModelConfig(
-            path="HiDream-ai/HiDream-I1-Full",
-            task=ModelTask.TEXT_TO_IMAGE,
-            pipeline_cls=HiDreamImagePipeline,
-            pretrained_args={
-                "torch_dtype": torch.bfloat16,
-                "text_encoder_3": (
-                    load_hidream_llm_text_encoder,
-                    {
-                        "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-                        "torch_dtype": torch.bfloat16,
-                    },
-                ),
-                "tokenizer_3": (
-                    load_hidream_tokenizer,
-                    {
-                        "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-                    },
-                ),
-            },
-            generation_args={
-                "guidance_scale": 5.0,
-                "num_images_per_prompt": 1,
-                "num_inference_steps": 50,
-            },
-            use_autocast=False,
-            enable_model_cpu_offload=True,
-            tags=["hidream"],
-        ),
+        # ModelConfig(
+        #     path="HiDream-ai/HiDream-I1-Full",
+        #     task=ModelTask.TEXT_TO_IMAGE,
+        #     pipeline_cls=HiDreamImagePipeline,
+        #     pretrained_args={
+        #         "torch_dtype": torch.bfloat16,
+        #         "text_encoder_3": (
+        #             load_hidream_llm_text_encoder,
+        #             {
+        #                 "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        #                 "torch_dtype": torch.bfloat16,
+        #             },
+        #         ),
+        #         "tokenizer_3": (
+        #             load_hidream_tokenizer,
+        #             {
+        #                 "model_id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        #             },
+        #         ),
+        #     },
+        #     generation_args={
+        #         "guidance_scale": 5.0,
+        #         "num_images_per_prompt": 1,
+        #         "num_inference_steps": 50,
+        #     },
+        #     use_autocast=False,
+        #     enable_model_cpu_offload=True,
+        #     tags=["hidream"],
+        # ),
     ]
 
 
