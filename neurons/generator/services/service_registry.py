@@ -6,14 +6,18 @@ from .base_service import BaseGenerationService
 from .openai_service import OpenAIService
 from .openrouter_service import OpenRouterService
 from .stabilityai_service import StabilityAIService
+from .stabilityai_service import StabilityAIService
 from .local_service import LocalService
+from .fal_service import FalAIService
 
 
 SERVICE_MAP = {
     "openai": OpenAIService,
     "openrouter": OpenRouterService,
     "local": LocalService,
-    "stabilityai": StabilityAIService
+    "local": LocalService,
+    "stabilityai": StabilityAIService,
+    "fal": FalAIService
 }
 
 
@@ -144,8 +148,8 @@ class ServiceRegistry:
     def get_all_api_key_requirements(self) -> Dict[str, str]:
         """Get API key requirements from all services."""
         all_requirements = {
-            "IMAGE_SERVICE": "Service for images: openai, openrouter, local, or none",
-            "VIDEO_SERVICE": "Service for videos: openai, openrouter, local, or none",
+            "IMAGE_SERVICE": "Service for images: openai, openrouter, local, fal, or none",
+            "VIDEO_SERVICE": "Service for videos: openai, openrouter, local, fal, or none",
         }
         
         for name, service_class in SERVICE_MAP.items():
