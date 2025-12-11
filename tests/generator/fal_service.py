@@ -15,6 +15,7 @@ sys.modules["bittensor"] = mock_bt
 
 from neurons.generator.services.fal_service import FalAIService
 from neurons.generator.task_manager import TaskManager
+from gas.verification.c2pa_verification import verify_c2pa
 
 # Set API key if one isn't already set
 os.environ.setdefault(
@@ -73,6 +74,16 @@ def run_model_test(service, manager, model, modality="image"):
         if modality == "image":
             # Validate image integrity
             assert validate_image(data_bytes), "Image failed Pillow validation"
+            
+            # Check C2PA
+            try:
+                c2pa_result = verify_c2pa(data_bytes)
+                if c2pa_result.verified:
+                    print(f"✅ C2PA Verified! Issuer: {c2pa_result.issuer}")
+                else:
+                    print(f"⚠️ C2PA Not Verified: {c2pa_result.error}")
+            except Exception as e:
+                print(f"⚠️ C2PA Check Failed: {e}")
 
         # Validate metadata
         assert meta["model"] == model
