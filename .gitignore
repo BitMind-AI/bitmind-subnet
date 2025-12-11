@@ -76,3 +76,7 @@ downloaded_models/*
 generated_content/*
 
 wandb/*
+
+node_modules/
+package-lock.json
+package.json
