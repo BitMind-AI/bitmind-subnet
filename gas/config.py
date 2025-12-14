@@ -173,6 +173,13 @@ def add_miner_args(parser):
     )
 
     parser.add_argument(
+        "--miner.file-max-age-hours",
+        type=float,
+        default=1.0,
+        help="Maximum age (hours) of files in output directory before deletion",
+    )
+
+    parser.add_argument(
         "--miner.worker-threads",
         type=int,
         default=2,

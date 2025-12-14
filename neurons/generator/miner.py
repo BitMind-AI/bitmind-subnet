@@ -261,17 +261,69 @@ class GenerativeMiner(BaseNeuron):
         bt.logging.info("=" * 60)
 
     def _cleanup_loop(self):
-        """Background loop to cleanup old tasks."""
+        """Background loop to cleanup old tasks and files."""
         cleanup_interval = getattr(self.config.miner, "cleanup_interval", 3600)
+        file_max_age_hours = getattr(self.config.miner, "file_max_age_hours", 1)
+        
         while True:
             try:
-                removed = self.task_manager.cleanup_old_tasks()
-                if removed > 0:
-                    bt.logging.info(f"🧹 Cleaned up {removed} old tasks")
+                # Cleanup old tasks from memory
+                removed_tasks = self.task_manager.cleanup_old_tasks()
+                if removed_tasks > 0:
+                    bt.logging.info(f"🧹 Cleaned up {removed_tasks} old tasks from memory")
+                
+                # Cleanup old files from disk
+                removed_files = self._cleanup_old_files(file_max_age_hours)
+                if removed_files > 0:
+                    bt.logging.info(f"🗑️  Deleted {removed_files} old files from disk (older than {file_max_age_hours}h)")
+                
                 time.sleep(cleanup_interval)
             except Exception as e:
                 bt.logging.error(f"Error in cleanup loop: {e}")
                 time.sleep(cleanup_interval)
+    
+    def _cleanup_old_files(self, max_age_hours: float) -> int:
+        """
+        Delete files older than max_age_hours from the output directory.
+        
+        Args:
+            max_age_hours: Maximum age of files in hours before deletion
+            
+        Returns:
+            Number of files deleted
+        """
+        if not self.output_dir.exists():
+            return 0
+        
+        current_time = time.time()
+        max_age_seconds = max_age_hours * 3600
+        deleted_count = 0
+        
+        try:
+            # Get all files in output directory
+            for file_path in self.output_dir.iterdir():
+                if not file_path.is_file():
+                    continue
+                
+                # Check if file is old enough to delete
+                try:
+                    file_age = current_time - file_path.stat().st_mtime
+                    
+                    if file_age > max_age_seconds:
+                        # Delete media files (.png, .mp4) and metadata files (.json)
+                        if file_path.suffix in ['.png', '.mp4', '.json', '.jpg', '.jpeg', '.gif', '.webm', '.avi']:
+                            file_path.unlink()
+                            deleted_count += 1
+                            bt.logging.debug(f"Deleted old file: {file_path.name} (age: {file_age/3600:.2f}h)")
+                            
+                except Exception as e:
+                    bt.logging.warning(f"Failed to delete file {file_path.name}: {e}")
+                    continue
+                    
+        except Exception as e:
+            bt.logging.error(f"Error scanning output directory for cleanup: {e}")
+        
+        return deleted_count
 
     def _save_to_output_dir(self, task, data: bytes):
         """Save generated content and metadata to output directory."""
