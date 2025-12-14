@@ -118,11 +118,6 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
     fi
 fi
 
-# TODO: REMOVE TEMP
-log_info "Clearing $CACHE_DIR for release 4.3.0..."
-rm -rf "$CACHE_DIR"
-log_success "$CACHE_DIR cleared"
-
 # Check if we're in the right directory
 if [ ! -f "pyproject.toml" ]; then
     log_error "pyproject.toml not found. Please run this script from the project root directory."

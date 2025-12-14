@@ -339,6 +339,13 @@ class GenerativeMiner(BaseNeuron):
             signed_by = request.headers.get("Epistula-Signed-By", "unknown")
             parameters = body.get("parameters", {}) or {}
 
+            service = self.service_registry.get_service(modality)
+            if not service:
+                bt.logging.warning(f"Rejecting {modality} request: no service available")
+                return self._error_response(
+                    f"No service available for modality={modality}", 503
+                )
+
             task_id = self.task_manager.create_task(
                 modality=modality,
                 prompt=prompt,
