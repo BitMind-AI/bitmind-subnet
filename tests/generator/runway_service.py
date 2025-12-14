@@ -103,13 +103,21 @@ def test_invalid_api_key():
     task = manager.get_task(task_id)
 
     try:
-        service.process(task)
+        result = service.process(task)
+        # If we get here, the API call unexpectedly succeeded
         raise AssertionError("❌ Should have failed with invalid API key!")
+    except AssertionError:
+        # Re-raise AssertionError so test properly fails
+        raise
     except Exception as e:
+        # Expected: API should reject invalid key
         print(f"✔ Correctly failed: {e}")
     finally:
+        # Restore original environment
         if original_key:
             os.environ["RUNWAYML_API_SECRET"] = original_key
+        elif "RUNWAYML_API_SECRET" in os.environ:
+            del os.environ["RUNWAYML_API_SECRET"]
 
 
 def test_invalid_modality(service, manager):
