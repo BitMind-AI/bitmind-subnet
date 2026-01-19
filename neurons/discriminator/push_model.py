@@ -272,12 +272,6 @@ def main():
         help="Path to audio detector zip file",
     )
     parser.add_argument(
-        "--format",
-        choices=['onnx', 'safetensors', 'auto'],
-        default='auto',
-        help="Model format: 'onnx', 'safetensors', or 'auto' (default: auto-detect from ZIP contents)"
-    )
-    parser.add_argument(
         "--wallet-name",
         default="default",
         help="Bittensor wallet name"

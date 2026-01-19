@@ -504,15 +504,13 @@ cli.add_command(discriminator, name="d")
 @click.option("--image-model", help="Path to image detector zip file")
 @click.option("--video-model", help="Path to video detector zip file")
 @click.option("--audio-model", help="Path to audio detector zip file")
-@click.option("--format", "model_format", type=click.Choice(['onnx', 'safetensors', 'auto']), default="auto", 
-              help="Model format: 'onnx', 'safetensors', or 'auto' (default: auto-detect from ZIP contents)")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
 @click.option("--netuid", default=34, help="Subnet UID")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
 def push_discriminator(
-    image_model, video_model, audio_model, model_format, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
+    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
 ):
     """Push discriminator model(s) and register on blockchain. At least one model zip file (image, video, or audio) must be provided."""
     # Validate at least one model is provided
@@ -530,9 +528,6 @@ def push_discriminator(
         cmd.extend(["--video-model", video_model])
     if audio_model:
         cmd.extend(["--audio-model", audio_model])
-
-    # Add format flag
-    cmd.extend(["--format", model_format])
 
     # Add optional arguments
     cmd.extend(["--wallet-name", wallet_name])

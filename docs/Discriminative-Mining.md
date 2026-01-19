@@ -56,7 +56,6 @@ gascli d push \
   --image-model image_detector.zip \
   --video-model video_detector.zip \
   --audio-model audio_detector.zip \
-  --format auto \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name \
   --netuid 34 \
@@ -68,7 +67,6 @@ gascli d push \
 - `--image-model`: Path to image detector zip file
 - `--video-model`: Path to video detector zip file
 - `--audio-model`: Path to audio detector zip file
-- `--format`: Model format - `onnx`, `safetensors`, or `auto` (default: auto-detect from ZIP contents)
 - `--wallet-name`: Bittensor wallet name (default: "default")
 - `--wallet-hotkey`: Bittensor hotkey name (default: "default") 
 - `--netuid`: Subnet UID (default: 34)
