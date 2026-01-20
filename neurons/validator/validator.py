@@ -278,7 +278,20 @@ class Validator(BaseNeuron):
         #bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
         #bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
-        reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
+        # Get generator liveness data for filtering inactive generators
+        generator_liveness = None
+        max_inactive_hours = 24  # Hours of inactivity before generator rewards are zeroed
+        if hasattr(self, 'generative_challenge_manager') and self.generative_challenge_manager:
+            generator_liveness = self.generative_challenge_manager.get_all_generator_last_seen()
+            if generator_liveness:
+                bt.logging.debug(f"Using liveness data for {len(generator_liveness)} generators")
+        
+        reward_multipliers = get_generator_reward_multipliers(
+            generator_results, 
+            self.metagraph,
+            generator_liveness=generator_liveness,
+            max_inactive_hours=max_inactive_hours,
+        )
         all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
         rewards = {
             uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, .01)
@@ -295,7 +308,8 @@ class Validator(BaseNeuron):
 
         reward_arr = np.array([rewards.get(i, 0) for i in range(len(self.scores))])
 
-        alpha = 0.1
+        # Alpha for generator score EMA - higher = faster decay, less reward persistence
+        alpha = 0.2
         self.scores = alpha * reward_arr + (1 - alpha) * self.scores
 
         bt.logging.info(
