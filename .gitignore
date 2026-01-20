@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+
+# Node.js (not used - Python only project)
+node_modules/
+package.json
+package-lock.json
 .Python
 build/
 develop-eggs/
@@ -76,3 +81,5 @@ downloaded_models/*
 generated_content/*
 
 wandb/*
+
+sample-images/ 
