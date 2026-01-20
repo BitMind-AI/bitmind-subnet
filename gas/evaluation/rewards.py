@@ -1,4 +1,6 @@
 import math
+import time
+from typing import Dict, Optional
 
 import bittensor as bt
 
@@ -141,13 +143,23 @@ def get_generator_base_rewards(verification_stats):
         return {}, []
 
 
-def get_generator_reward_multipliers(generator_results, metagraph):
+def get_generator_reward_multipliers(
+    generator_results, 
+    metagraph,
+    generator_liveness: Optional[Dict[str, float]] = None,
+    max_inactive_hours: int = 24,
+):
     """
     Process generator results to extract rewards from fool counts.
+    
+    Optionally filters out inactive generators based on liveness tracking.
 
     Args:
         generator_results: List of GeneratorResult objects from API
         metagraph: Bittensor metagraph for SS58 to UID mapping
+        generator_liveness: Optional dict mapping hotkey to last activity timestamp.
+                           If provided, generators not seen within max_inactive_hours will get 0 rewards.
+        max_inactive_hours: Maximum hours of inactivity before generator is considered inactive (default: 48)
 
     Returns:
         dict: Mapping of UID to reward score for generators
@@ -158,6 +170,18 @@ def get_generator_reward_multipliers(generator_results, metagraph):
     if not generator_results:
         bt.logging.warning("No generator results data provided")
         return {}
+
+    # Build set of active generators if liveness data provided
+    active_generators = None
+    inactive_count = 0
+    if generator_liveness:
+        current_time = time.time()
+        max_inactive_seconds = max_inactive_hours * 3600
+        active_generators = {
+            hotkey for hotkey, last_seen in generator_liveness.items()
+            if (current_time - last_seen) <= max_inactive_seconds
+        }
+        bt.logging.info(f"Liveness filter: {len(active_generators)} active generators (within {max_inactive_hours}h)")
 
     # Aggregate fool counts by generator (ss58_address)
     generator_fooled_counts = {}
@@ -170,6 +194,12 @@ def get_generator_reward_multipliers(generator_results, metagraph):
                 continue                
             ss58_address = result.get("ss58_address")
             if not ss58_address or ss58_address not in ss58_to_uid:
+                continue
+
+            # Skip inactive generators if liveness filter is enabled
+            if active_generators is not None and ss58_address not in active_generators:
+                inactive_count += 1
+                bt.logging.debug(f"Skipping inactive generator {ss58_address[:16]}...")
                 continue
 
             fooled_count = result.get("fooled_count", 0)
@@ -224,7 +254,8 @@ def get_generator_reward_multipliers(generator_results, metagraph):
                 else:
                     bt.logging.warning(f"Zero total count for generator {ss58_address}")
 
-        bt.logging.info(f"Processed {len(generator_results)} generator results, computed rewards for {len(rewards)} generators")
+        inactive_msg = f", skipped {inactive_count} inactive" if inactive_count > 0 else ""
+        bt.logging.info(f"Processed {len(generator_results)} generator results, computed rewards for {len(rewards)} generators{inactive_msg}")
 
     except Exception as e:
         bt.logging.error(f"Error processing generator rewards: {e}")

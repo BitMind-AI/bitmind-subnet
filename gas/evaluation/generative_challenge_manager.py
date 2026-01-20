@@ -40,6 +40,10 @@ class GenerativeChallengeManager:
 
         self.challenge_tasks = {}
         self.challenge_lock = asyncio.Lock()
+        
+        # Track generator liveness: hotkey -> last activity timestamp
+        # Updated when a generator successfully responds to a challenge
+        self.generator_last_seen: Dict[str, float] = {}
 
         self.external_port = (
             getattr(self.config.neuron, 'external_callback_port', None) or 
@@ -195,6 +199,11 @@ class GenerativeChallengeManager:
                 challenge_info["status"] = "completed"
                 challenge_info["filepath"] = filepath
                 bt.logging.success(f"Task {task_id} completed with binary upload: {filepath}")
+                
+                # Track generator liveness - record when they successfully responded
+                miner_hotkey = self.metagraph.hotkeys[generator_uid]
+                self.generator_last_seen[miner_hotkey] = time.time()
+                bt.logging.debug(f"Updated liveness for generator {miner_hotkey[:16]}... (UID {generator_uid})")
             else:
                 challenge_info["status"] = "failed"
                 challenge_info["error_message"] = "Failed to store binary content"
@@ -432,6 +441,60 @@ class GenerativeChallengeManager:
             f"Callback URL for miners: {self.generative_callback_url}"
         )
 
+    def get_generator_last_seen(self, hotkey: str) -> Optional[float]:
+        """Get the last activity timestamp for a generator.
+        
+        Args:
+            hotkey: The generator's hotkey (SS58 address)
+            
+        Returns:
+            Unix timestamp of last activity, or None if never seen
+        """
+        return self.generator_last_seen.get(hotkey)
+    
+    def get_all_generator_last_seen(self) -> Dict[str, float]:
+        """Get all generator last seen timestamps.
+        
+        Returns:
+            Dict mapping hotkey to last activity timestamp
+        """
+        return self.generator_last_seen.copy()
+    
+    def is_generator_active(self, hotkey: str, max_inactive_hours: int = 24) -> bool:
+        """Check if a generator has been active within the specified window.
+        
+        Args:
+            hotkey: The generator's hotkey (SS58 address)
+            max_inactive_hours: Maximum hours of inactivity before considered inactive
+            
+        Returns:
+            True if generator was active within the window, False otherwise
+        """
+        last_seen = self.generator_last_seen.get(hotkey)
+        if last_seen is None:
+            return False
+        
+        hours_since_seen = (time.time() - last_seen) / 3600
+        return hours_since_seen <= max_inactive_hours
+    
+    def get_active_generators(self, max_inactive_hours: int = 24) -> Dict[str, float]:
+        """Get all generators that have been active within the specified window.
+        
+        Args:
+            max_inactive_hours: Maximum hours of inactivity before considered inactive
+            
+        Returns:
+            Dict mapping hotkey to last activity timestamp for active generators
+        """
+        current_time = time.time()
+        max_inactive_seconds = max_inactive_hours * 3600
+        
+        return {
+            hotkey: last_seen
+            for hotkey, last_seen in self.generator_last_seen.items()
+            if (current_time - last_seen) <= max_inactive_seconds
+        }
+
     async def shutdown(self):
         """Shutdown the webhook server gracefully"""
         if hasattr(self, "fast_api"):
@@ -440,7 +503,7 @@ class GenerativeChallengeManager:
             bt.logging.info("Webhook server stopped")
 
     def save_state(self, save_dir: str, filename: str):
-        """Save challenge tasks state to disk"""
+        """Save challenge tasks state and generator liveness to disk"""
         try:
             bt.logging.info(f"Saving challenge tasks state: {len(self.challenge_tasks)} active tasks")
             # Clean up stale tasks before saving (older than 2 hours)
@@ -454,34 +517,65 @@ class GenerativeChallengeManager:
                 del self.challenge_tasks[task_id]
                 bt.logging.debug(f"Removed stale task {task_id} during state save")
 
+            # Save challenge tasks
             filepath = os.path.join(save_dir, filename)
             with open(filepath, 'wb') as f:
                 pickle.dump(self.challenge_tasks, f)
             bt.logging.info(f"Successfully saved {len(self.challenge_tasks)} active challenge tasks to {filepath}")
+            
+            # Save generator liveness data (keep entries from last 7 days)
+            liveness_filepath = os.path.join(save_dir, "generator_liveness.pkl")
+            max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
+            valid_liveness = {
+                hotkey: ts 
+                for hotkey, ts in self.generator_last_seen.items()
+                if (current_time - ts) <= max_liveness_age
+            }
+            with open(liveness_filepath, 'wb') as f:
+                pickle.dump(valid_liveness, f)
+            bt.logging.info(f"Successfully saved liveness data for {len(valid_liveness)} generators")
         except Exception as e:
             bt.logging.error(f"Failed to save challenge tasks state: {e}")
 
     def load_state(self, save_dir: str, filename: str):
-        """Load challenge tasks state from disk"""
+        """Load challenge tasks state and generator liveness from disk"""
         try:
             filepath = os.path.join(save_dir, filename)
             if not os.path.exists(filepath):
                 bt.logging.debug(f"No challenge tasks state file found at {filepath}")
-                return True  # Not an error - just no state to load
+            else:
+                with open(filepath, 'rb') as f:
+                    loaded_tasks = pickle.load(f)
 
-            with open(filepath, 'rb') as f:
-                loaded_tasks = pickle.load(f)
+                current_time = time.time()
+                valid_tasks = {}
+                for task_id, task_info in loaded_tasks.items():
+                    if current_time - task_info.get("sent_at", 0) <= 7200:  # 2 hours
+                        valid_tasks[task_id] = task_info
 
-            current_time = time.time()
-            valid_tasks = {}
-            for task_id, task_info in loaded_tasks.items():
-                if current_time - task_info.get("sent_at", 0) <= 7200:  # 2 hours
-                    valid_tasks[task_id] = task_info
+                self.challenge_tasks = valid_tasks
+                bt.logging.info(f"Loaded {len(self.challenge_tasks)} active challenge tasks from {filepath}")
 
-            self.challenge_tasks = valid_tasks
-            bt.logging.info(f"Loaded {len(self.challenge_tasks)} active challenge tasks from {filepath}")
+            # Load generator liveness data
+            liveness_filepath = os.path.join(save_dir, "generator_liveness.pkl")
+            if os.path.exists(liveness_filepath):
+                with open(liveness_filepath, 'rb') as f:
+                    loaded_liveness = pickle.load(f)
+                
+                # Only keep entries from last 7 days
+                current_time = time.time()
+                max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
+                valid_liveness = {
+                    hotkey: ts 
+                    for hotkey, ts in loaded_liveness.items()
+                    if (current_time - ts) <= max_liveness_age
+                }
+                self.generator_last_seen = valid_liveness
+                bt.logging.info(f"Loaded liveness data for {len(valid_liveness)} generators")
+            
             return True  # Success
         except Exception as e:
             bt.logging.error(f"Failed to load challenge tasks state: {e}")
             self.challenge_tasks = {}
+            self.generator_last_seen = {}
             return False  # Failure
