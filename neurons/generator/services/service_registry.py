@@ -7,13 +7,14 @@ from .openai_service import OpenAIService
 from .openrouter_service import OpenRouterService
 from .stabilityai_service import StabilityAIService
 from .local_service import LocalService
+from .replicate_service import ReplicateService
 
 
 SERVICE_MAP = {
     "openai": OpenAIService,
     "openrouter": OpenRouterService,
     "local": LocalService,
-    "stabilityai": StabilityAIService
+    "replicate": ReplicateService,
 }
 
 
@@ -22,13 +23,14 @@ class ServiceRegistry:
     Registry for managing generation services.
     
     Set per-modality service via env vars:
-      IMAGE_SERVICE=openai|openrouter|local|none
-      VIDEO_SERVICE=openai|openrouter|local|none
+      IMAGE_SERVICE=openai|openrouter|local|replicate|none
+      VIDEO_SERVICE=openai|openrouter|local|replicate|none
     
     Services:
       - openai: DALL-E 3 (requires OPENAI_API_KEY)
       - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY)
       - local: Local Stable Diffusion models
+      - replicate: FLUX, SDXL via Replicate (requires REPLICATE_API_TOKEN)
       - none: Disable this modality (no service loaded)
     
     If not set, falls back to loading all available services.
