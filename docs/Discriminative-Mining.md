@@ -109,33 +109,28 @@ model_submission.zip
 
 #### model_config.yaml
 
-Configuration file specifying model metadata and preprocessing:
+Configuration file specifying model settings and input shape:
 
 ```yaml
-name: "my-detector-v1"
-version: "1.0.0"
-modality: "image"  # or "video", "audio"
+model:
+  weights_file: "model.safetensors"
+  num_classes: 2
 
 preprocessing:
   # For image/video models:
   resize: [224, 224]
-  normalize:
-    mean: [0.485, 0.456, 0.406]
-    std: [0.229, 0.224, 0.225]
   
-  # For audio models (instead of resize/normalize):
+  # For audio models (instead of resize):
   # sample_rate: 16000
   # duration_seconds: 6.0
-
-model:
-  num_classes: 2
-  weights_file: "model.safetensors"
 ```
 
 **Required fields:**
-- `name`: Model identifier (alphanumeric, hyphens, underscores only)
-- `modality`: One of `image`, `video`, or `audio`
+- `model.weights_file`: Name of the weights file (usually `model.safetensors`)
 - `model.num_classes`: Number of output classes (1-100)
+- `preprocessing.resize`: Input image size `[height, width]` for image/video models
+
+**Note:** Input normalization should be handled inside your `model.py` forward pass, not in the config.
 
 #### model.py
 
@@ -157,8 +152,12 @@ class MyDetector(nn.Module):
         self.classifier = nn.Linear(64, num_classes)
     
     def forward(self, x):
-        # Input: [B, C, H, W] for image/video, [B, samples] for audio
+        # Input: [B, C, H, W] uint8 pixels (0-255)
         # Output: [B, num_classes] logits
+        
+        # Normalize input (gasbench sends raw 0-255 pixel values)
+        x = x / 255.0
+        
         x = self.backbone(x)
         x = x.flatten(1)
         return self.classifier(x)
@@ -176,19 +175,20 @@ def load_model(weights_path: str, num_classes: int = 2) -> nn.Module:
     model = MyDetector(num_classes=num_classes)
     state_dict = load_file(weights_path)
     model.load_state_dict(state_dict)
+    model.eval()
     return model
 ```
 
 **Allowed imports:**
 - `torch`, `torch.nn`, `torch.nn.functional`
 - `torchvision`, `torchvision.models`, `torchvision.transforms`
-- `torchaudio`
+- `torchaudio`, `transformers`,
 - `numpy`, `math`, `functools`, `typing`
 - `safetensors`, `safetensors.torch`
 - `timm`, `einops`
 
 **Blocked imports (security):**
-- `os`, `sys`, `subprocess`, `pathlib` - system access
+- `os`, `sys`, `subprocess` - system access
 - `requests`, `socket`, `urllib` - network access
 - `pickle`, `marshal` - serialization/code execution
 - `eval`, `exec`, `__import__` - dynamic code execution
