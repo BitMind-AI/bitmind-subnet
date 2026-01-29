@@ -11,7 +11,7 @@ import bittensor as bt
 import torch
 
 from gas import __spec_version__ as spec_version
-from gas.protocol.validator_requests import get_benchmark_results
+from gas.protocol.validator_requests import get_benchmark_results, get_escrow_addresses
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
@@ -182,6 +182,24 @@ class Validator(BaseNeuron):
         if generator_uids is None:
             generator_uids = []
             bt.logging.warning("No generator rewards available; using empty generator_uids")
+
+        escrow_addresses = await get_escrow_addresses(
+            self.wallet.hotkey,
+            base_url=self.config.benchmark.api_url,
+        )
+        
+        # Use fetched addresses or fall back to defaults
+        if escrow_addresses:
+            bt.logging.info("Using escrow addresses from API")
+            active_ss58_addresses = {
+                "burn": SS58_ADDRESSES["burn"],
+                "video_escrow": escrow_addresses.get("video_escrow", SS58_ADDRESSES["video_escrow"]),
+                "image_escrow": escrow_addresses.get("image_escrow", SS58_ADDRESSES["image_escrow"]),
+                "audio_escrow": escrow_addresses.get("audio_escrow", SS58_ADDRESSES["audio_escrow"]),
+            }
+        else:
+            bt.logging.warning("Failed to fetch escrow addresses from API, using defaults")
+            active_ss58_addresses = SS58_ADDRESSES
         
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
@@ -201,22 +219,22 @@ class Validator(BaseNeuron):
                 burn_pct = .7
                 audio_pct = .01
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["burn"],
+                    hotkey_ss58=active_ss58_addresses["burn"],
                     netuid=self.config.netuid, 
                     block=block
                 )
 
                 d_pct = .8
                 video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["video_escrow"],
+                    hotkey_ss58=active_ss58_addresses["video_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
                 image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["image_escrow"],
+                    hotkey_ss58=active_ss58_addresses["image_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
                 audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["audio_escrow"],
+                    hotkey_ss58=active_ss58_addresses["audio_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
 
