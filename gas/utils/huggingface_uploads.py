@@ -40,6 +40,7 @@ def upload_images_to_hf(
     dataset_repo: str,
     images_per_archive: int,
     validator_hotkey: str = None,
+    validator_uid: int = None,
 ) -> List[str]:
     """Upload images and metadata to hf"""
     return upload_media_to_hf(
@@ -49,6 +50,7 @@ def upload_images_to_hf(
         "image",
         images_per_archive=images_per_archive,
         validator_hotkey=validator_hotkey,
+        validator_uid=validator_uid,
     )
 
 
@@ -58,6 +60,7 @@ def upload_videos_to_hf(
     dataset_repo: str,
     videos_per_archive: int,
     validator_hotkey: str = None,
+    validator_uid: int = None,
 ) -> List[str]:
     """Upload video .tar.gz files and metadata to hf"""
     return upload_media_to_hf(
@@ -67,6 +70,7 @@ def upload_videos_to_hf(
         "video",
         videos_per_archive=videos_per_archive,
         validator_hotkey=validator_hotkey,
+        validator_uid=validator_uid,
     )
 
 
@@ -107,8 +111,9 @@ def upload_media_to_hf(
             raise
 
         validator_hotkey = kwargs.get("validator_hotkey")
+        validator_uid = kwargs.get("validator_uid")
         upload_files, metadata_entries, successfully_processed_ids = (
-            _process_media_entries(media_entries, modality, validator_hotkey)
+            _process_media_entries(media_entries, modality, validator_hotkey, validator_uid)
         )
 
         if not upload_files:
@@ -193,14 +198,15 @@ def upload_media_to_hf(
 
 
 def _process_media_entries(
-    media_entries: List[Any], modality: str, validator_hotkey: str = None
+    media_entries: List[Any], modality: str, validator_hotkey: str = None, validator_uid: int = None
 ) -> Tuple[List[Tuple], List[Dict], List[str]]:
     """Process media entries into upload files, metadata, and success IDs.
     
     Args:
         media_entries: List of media entry objects
         modality: "image" or "video"
-        validator_hotkey: Validator hotkey to use for non-miner generated content
+        validator_hotkey: Validator hotkey running the upload
+        validator_uid: Validator UID on the network
     """
     upload_files = []
     metadata_entries = []
@@ -233,22 +239,35 @@ def _process_media_entries(
             else:
                 resolution_str = str(media_entry.resolution)
 
-        # Use media entry's hotkey if available, otherwise fall back to validator hotkey
-        generator_hotkey = getattr(media_entry, "hotkey", None) or validator_hotkey or "unknown"
+        # Determine generator type and info based on source_type
+        source_type_value = media_entry.source_type.value if hasattr(media_entry.source_type, 'value') else str(media_entry.source_type)
+        is_miner_generated = source_type_value == "miner"
+        
+        if is_miner_generated:
+            generator_type = "miner"
+            generator_hotkey = getattr(media_entry, "hotkey", None) or "unknown"
+            generator_uid = getattr(media_entry, "uid", None) or 0
+        else:
+            generator_type = "validator"
+            generator_hotkey = validator_hotkey or "unknown"
+            generator_uid = validator_uid if validator_uid is not None else 0
 
         metadata_entries.append(
             {
                 "filename": filename,
                 "media_id": media_entry.id,
                 "media_hash": media_hash,
+                "validator_hotkey": validator_hotkey or "unknown",
+                "validator_uid": validator_uid if validator_uid is not None else 0,
                 "generator_hotkey": generator_hotkey,
-                "generator_uid": getattr(media_entry, "uid", 0),
+                "generator_uid": generator_uid,
+                "generator_type": generator_type,
                 "model_name": media_entry.model_name or "unknown",
                 "prompt_id": media_entry.prompt_id or "",
                 "prompt_content": prompt_content,
                 "modality": media_entry.modality.value,
                 "media_type": media_entry.media_type.value,
-                "source_type": media_entry.source_type.value,
+                "source_type": source_type_value,
                 "format": getattr(media_entry, "format", file_extension.lstrip('.')).upper(),
                 "resolution": resolution_str,
                 "file_size": getattr(media_entry, "file_size", len(content)),
@@ -288,8 +307,11 @@ def _prepare_image_operations(
         "media_hash": [],
         "archive_filename": [],
         "file_path_in_archive": [],
+        "validator_hotkey": [],
+        "validator_uid": [],
         "generator_hotkey": [],
         "generator_uid": [],
+        "generator_type": [],
         "model_name": [],
         "prompt_id": [],
         "prompt_content": [],
@@ -310,8 +332,11 @@ def _prepare_image_operations(
         dataset_dict["media_hash"].append(metadata["media_hash"])
         dataset_dict["archive_filename"].append(metadata["archive_filename"])
         dataset_dict["file_path_in_archive"].append(metadata["file_path_in_archive"])
+        dataset_dict["validator_hotkey"].append(metadata["validator_hotkey"])
+        dataset_dict["validator_uid"].append(metadata["validator_uid"])
         dataset_dict["generator_hotkey"].append(metadata["generator_hotkey"])
         dataset_dict["generator_uid"].append(metadata["generator_uid"])
+        dataset_dict["generator_type"].append(metadata["generator_type"])
         dataset_dict["model_name"].append(metadata["model_name"])
         dataset_dict["prompt_id"].append(metadata["prompt_id"])
         dataset_dict["prompt_content"].append(metadata["prompt_content"])
@@ -335,8 +360,11 @@ def _prepare_image_operations(
         "media_hash": Value("string"),
         "archive_filename": Value("string"),
         "file_path_in_archive": Value("string"),
+        "validator_hotkey": Value("string"),
+        "validator_uid": Value("int64"),
         "generator_hotkey": Value("string"),
         "generator_uid": Value("int64"),
+        "generator_type": Value("string"),
         "model_name": Value("string"),
         "prompt_id": Value("string"),
         "prompt_content": Value("string"),
@@ -408,8 +436,11 @@ def _prepare_video_dataset_and_archives(
         "media_hash": [],
         "archive_filename": [],
         "file_path_in_archive": [],
+        "validator_hotkey": [],
+        "validator_uid": [],
         "generator_hotkey": [],
         "generator_uid": [],
+        "generator_type": [],
         "model_name": [],
         "prompt_id": [],
         "prompt_content": [],
@@ -430,8 +461,11 @@ def _prepare_video_dataset_and_archives(
         dataset_dict["media_hash"].append(metadata["media_hash"])
         dataset_dict["archive_filename"].append(metadata["archive_filename"])
         dataset_dict["file_path_in_archive"].append(metadata["file_path_in_archive"])
+        dataset_dict["validator_hotkey"].append(metadata["validator_hotkey"])
+        dataset_dict["validator_uid"].append(metadata["validator_uid"])
         dataset_dict["generator_hotkey"].append(metadata["generator_hotkey"])
         dataset_dict["generator_uid"].append(metadata["generator_uid"])
+        dataset_dict["generator_type"].append(metadata["generator_type"])
         dataset_dict["model_name"].append(metadata["model_name"])
         dataset_dict["prompt_id"].append(metadata["prompt_id"])
         dataset_dict["prompt_content"].append(metadata["prompt_content"])
@@ -455,8 +489,11 @@ def _prepare_video_dataset_and_archives(
         "media_hash": Value("string"),
         "archive_filename": Value("string"),
         "file_path_in_archive": Value("string"),
+        "validator_hotkey": Value("string"),
+        "validator_uid": Value("int64"),
         "generator_hotkey": Value("string"),
         "generator_uid": Value("int64"),
+        "generator_type": Value("string"),
         "model_name": Value("string"),
         "prompt_id": Value("string"),
         "prompt_content": Value("string"),

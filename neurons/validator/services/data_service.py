@@ -75,6 +75,19 @@ class DataService:
         except Exception:
             self.validator_wallet = None
 
+        # Validator UID (looked up from metagraph if wallet is available)
+        self.validator_uid = None
+        if self.validator_wallet:
+            try:
+                subtensor = bt.subtensor(config=self.config)
+                metagraph = subtensor.metagraph(netuid=self.config.netuid)
+                hotkey = self.validator_wallet.hotkey.ss58_address
+                if hotkey in metagraph.hotkeys:
+                    self.validator_uid = metagraph.hotkeys.index(hotkey)
+                    bt.logging.info(f"[DATA-SERVICE] Validator UID: {self.validator_uid}")
+            except Exception as e:
+                bt.logging.warning(f"[DATA-SERVICE] Could not lookup validator UID: {e}")
+
         # scraper initialization
         self.scrapers = [
             GoogleScraper(
@@ -522,6 +535,7 @@ class DataService:
                     images_per_archive=self.config.images_per_archive,
                     videos_per_archive=self.config.videos_per_archive,
                     validator_hotkey=(self.validator_wallet.hotkey.ss58_address if self.validator_wallet else None),
+                    validator_uid=self.validator_uid,
                     num_batches=batches,
                 )
             except Exception as e:

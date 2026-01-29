@@ -742,6 +742,7 @@ class ContentManager:
 		images_per_archive: int,
 		videos_per_archive: int,
 		validator_hotkey: str = None,
+		validator_uid: int = None,
 		num_batches: int = 1
 	):
 		"""Upload unuploaded media from database to HuggingFace, separated by source (miner vs validator) and modality"""
@@ -805,7 +806,8 @@ class ContentManager:
 						hf_token=hf_token,
 						dataset_repo=hf_dataset_repos['image'],
 						images_per_archive=images_per_archive,
-						validator_hotkey=validator_hotkey
+						validator_hotkey=validator_hotkey,
+						validator_uid=validator_uid
 					)
 					all_successfully_processed_ids.extend(uploaded_ids)
 
@@ -816,7 +818,8 @@ class ContentManager:
 						hf_token=hf_token,
 						dataset_repo=hf_dataset_repos['video'],
 						videos_per_archive=videos_per_archive,
-						validator_hotkey=validator_hotkey
+						validator_hotkey=validator_hotkey,
+						validator_uid=validator_uid
 					)
 					all_successfully_processed_ids.extend(uploaded_ids)
 
