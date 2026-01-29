@@ -22,6 +22,7 @@ from .c2pa_verification import (
     verify_c2pa,
     is_from_trusted_generator,
     C2PAVerificationResult,
-    TRUSTED_ISSUERS,
+    TRUSTED_CERT_ISSUERS,
+    TRUSTED_CA_ISSUERS,
     C2PA_AVAILABLE,
 )

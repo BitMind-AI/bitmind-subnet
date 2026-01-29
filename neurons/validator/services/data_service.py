@@ -65,8 +65,8 @@ class DataService:
         self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
         self.hf_org = "gasstation"
         self.hf_dataset_repos = {
-            "image": f"{self.hf_org}/gs-images-v2",
-            "video": f"{self.hf_org}/gs-videos-v2",
+            "image": f"{self.hf_org}/gs-images-v3",
+            "video": f"{self.hf_org}/gs-videos-v3",
         }
         
         # Validator wallet (for tagging uploads with hotkey, if available)
@@ -74,6 +74,23 @@ class DataService:
             self.validator_wallet = bt.wallet(config=self.config)
         except Exception:
             self.validator_wallet = None
+
+        # Validator UID (looked up from metagraph if wallet is available)
+        self.validator_uid = None
+        if self.validator_wallet:
+            try:
+                subtensor = bt.subtensor(config=self.config)
+                metagraph = subtensor.metagraph(netuid=self.config.netuid)
+                hotkey = self.validator_wallet.hotkey.ss58_address
+                hotkeys_list = list(metagraph.hotkeys)
+                if hotkey in hotkeys_list:
+                    self.validator_uid = hotkeys_list.index(hotkey)
+                else:
+                    bt.logging.warning(f"[DATA-SERVICE] Validator hotkey {hotkey[:16]}... not found in metagraph")
+            except Exception as e:
+                bt.logging.warning(f"[DATA-SERVICE] Could not lookup validator UID: {e}")
+        
+        bt.logging.info(f"[DATA-SERVICE] Validator UID: {self.validator_uid}, Hotkey: {self.validator_wallet.hotkey.ss58_address[:16] if self.validator_wallet else 'None'}...")
 
         # scraper initialization
         self.scrapers = [
@@ -522,6 +539,7 @@ class DataService:
                     images_per_archive=self.config.images_per_archive,
                     videos_per_archive=self.config.videos_per_archive,
                     validator_hotkey=(self.validator_wallet.hotkey.ss58_address if self.validator_wallet else None),
+                    validator_uid=self.validator_uid,
                     num_batches=batches,
                 )
             except Exception as e:
@@ -568,6 +586,7 @@ async def main():
 
     add_args(parser)
     add_data_service_args(parser)
+    bt.wallet.add_args(parser)
     bt.subtensor.add_args(parser)
     bt.logging.add_args(parser)
 
