@@ -179,11 +179,14 @@ if (config.startData) {
     script: dataScript,
     interpreter: pythonInterpreter,
     args: [
+      '--wallet.name', config.walletName,
+      '--wallet.hotkey', config.walletHotkey,
+      '--netuid', netuid.toString(),
+      '--subtensor.chain_endpoint', config.chainEndpoint,
       '--cache.base-dir', config.cacheDir,
-      '--chain-endpoint', config.chainEndpoint,
       '--scraper-interval', config.scraperInterval,
       '--dataset-interval', config.datasetInterval,
-      '--log-level', config.loglevel,
+      logParam,
     ].join(' '),
     env: {
       ...HF_ENV,
