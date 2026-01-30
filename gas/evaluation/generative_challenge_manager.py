@@ -201,13 +201,8 @@ class GenerativeChallengeManager:
                 bt.logging.success(f"Task {task_id} completed with binary upload: {filepath}")
                 
                 # Track generator liveness - record when they successfully responded
-                # Persist to both memory (for fast access) and database (for restart resilience)
                 miner_hotkey = self.metagraph.hotkeys[generator_uid]
-                current_time = time.time()
-                self.generator_last_seen[miner_hotkey] = current_time
-                self.content_manager.content_db.update_generator_liveness(
-                    miner_hotkey, current_time, generator_uid
-                )
+                self.generator_last_seen[miner_hotkey] = time.time()
                 bt.logging.debug(f"Updated liveness for generator {miner_hotkey[:16]}... (UID {generator_uid})")
             else:
                 challenge_info["status"] = "failed"
@@ -460,21 +455,10 @@ class GenerativeChallengeManager:
     def get_all_generator_last_seen(self) -> Dict[str, float]:
         """Get all generator last seen timestamps.
         
-        Merges in-memory data with persisted database data, preferring the most recent timestamp.
-        
         Returns:
             Dict mapping hotkey to last activity timestamp
         """
-        # Get persisted data from database (includes data from previous sessions)
-        db_liveness = self.content_manager.content_db.get_all_generator_liveness(max_age_hours=168)
-        
-        # Merge with in-memory data, preferring the more recent timestamp
-        merged = db_liveness.copy()
-        for hotkey, last_seen in self.generator_last_seen.items():
-            if hotkey not in merged or last_seen > merged[hotkey]:
-                merged[hotkey] = last_seen
-        
-        return merged
+        return self.generator_last_seen.copy()
     
     def is_generator_active(self, hotkey: str, max_inactive_hours: int = 24) -> bool:
         """Check if a generator has been active within the specified window.
@@ -519,7 +503,7 @@ class GenerativeChallengeManager:
             bt.logging.info("Webhook server stopped")
 
     def save_state(self, save_dir: str, filename: str):
-        """Save challenge tasks state and sync generator liveness to database"""
+        """Save challenge tasks state and generator liveness to disk"""
         try:
             bt.logging.info(f"Saving challenge tasks state: {len(self.challenge_tasks)} active tasks")
             # Clean up stale tasks before saving (older than 2 hours)
@@ -533,30 +517,28 @@ class GenerativeChallengeManager:
                 del self.challenge_tasks[task_id]
                 bt.logging.debug(f"Removed stale task {task_id} during state save")
 
-            # Save challenge tasks to pickle (short-lived, ok for pickle)
+            # Save challenge tasks
             filepath = os.path.join(save_dir, filename)
             with open(filepath, 'wb') as f:
                 pickle.dump(self.challenge_tasks, f)
             bt.logging.info(f"Successfully saved {len(self.challenge_tasks)} active challenge tasks to {filepath}")
             
-            # Sync generator liveness to database (persisted across restarts)
-            # Note: Individual updates happen in real-time during callback,
-            # this is just a bulk sync to ensure consistency
+            # Save generator liveness data (keep entries from last 7 days)
+            liveness_filepath = os.path.join(save_dir, "generator_liveness.pkl")
             max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
-            synced_count = 0
-            for hotkey, ts in self.generator_last_seen.items():
-                if (current_time - ts) <= max_liveness_age:
-                    self.content_manager.content_db.update_generator_liveness(hotkey, ts)
-                    synced_count += 1
-            
-            # Prune old liveness records from database
-            self.content_manager.content_db.prune_old_generator_liveness(max_age_hours=168)
-            bt.logging.info(f"Synced liveness data for {synced_count} generators to database")
+            valid_liveness = {
+                hotkey: ts 
+                for hotkey, ts in self.generator_last_seen.items()
+                if (current_time - ts) <= max_liveness_age
+            }
+            with open(liveness_filepath, 'wb') as f:
+                pickle.dump(valid_liveness, f)
+            bt.logging.info(f"Successfully saved liveness data for {len(valid_liveness)} generators")
         except Exception as e:
             bt.logging.error(f"Failed to save challenge tasks state: {e}")
 
     def load_state(self, save_dir: str, filename: str):
-        """Load challenge tasks state and generator liveness from database"""
+        """Load challenge tasks state and generator liveness from disk"""
         try:
             filepath = os.path.join(save_dir, filename)
             if not os.path.exists(filepath):
@@ -574,33 +556,22 @@ class GenerativeChallengeManager:
                 self.challenge_tasks = valid_tasks
                 bt.logging.info(f"Loaded {len(self.challenge_tasks)} active challenge tasks from {filepath}")
 
-            # Load generator liveness from database (primary source, persists across restarts)
-            db_liveness = self.content_manager.content_db.get_all_generator_liveness(max_age_hours=168)
-            self.generator_last_seen = db_liveness
-            bt.logging.info(f"Loaded liveness data for {len(db_liveness)} generators from database")
-            
-            # Also check legacy pickle file and merge if it has newer data
+            # Load generator liveness data
             liveness_filepath = os.path.join(save_dir, "generator_liveness.pkl")
             if os.path.exists(liveness_filepath):
-                try:
-                    with open(liveness_filepath, 'rb') as f:
-                        loaded_liveness = pickle.load(f)
-                    
-                    current_time = time.time()
-                    max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
-                    merged_count = 0
-                    for hotkey, ts in loaded_liveness.items():
-                        if (current_time - ts) <= max_liveness_age:
-                            if hotkey not in self.generator_last_seen or ts > self.generator_last_seen[hotkey]:
-                                self.generator_last_seen[hotkey] = ts
-                                # Also update database with newer data from pickle
-                                self.content_manager.content_db.update_generator_liveness(hotkey, ts)
-                                merged_count += 1
-                    
-                    if merged_count > 0:
-                        bt.logging.info(f"Merged {merged_count} liveness entries from legacy pickle file")
-                except Exception as e:
-                    bt.logging.debug(f"Could not load legacy liveness pickle: {e}")
+                with open(liveness_filepath, 'rb') as f:
+                    loaded_liveness = pickle.load(f)
+                
+                # Only keep entries from last 7 days
+                current_time = time.time()
+                max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
+                valid_liveness = {
+                    hotkey: ts 
+                    for hotkey, ts in loaded_liveness.items()
+                    if (current_time - ts) <= max_liveness_age
+                }
+                self.generator_last_seen = valid_liveness
+                bt.logging.info(f"Loaded liveness data for {len(valid_liveness)} generators")
             
             return True  # Success
         except Exception as e:
