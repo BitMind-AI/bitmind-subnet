@@ -287,8 +287,9 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
-        # Get verification stats for only unrewarded media to quickly slash for submissions that fail verification
-        verification_stats = self.content_manager.get_unrewarded_verification_stats(include_all=True)
+        # Get verification stats for ONLY unrewarded media - prevents double-counting of already-rewarded submissions
+        # (include_all=True was a bug that counted already-rewarded media again)
+        verification_stats = self.content_manager.get_unrewarded_verification_stats(include_all=False)
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
         generator_results, discriminator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
@@ -310,9 +311,12 @@ class Validator(BaseNeuron):
             generator_liveness=generator_liveness,
             max_inactive_hours=max_inactive_hours,
         )
-        all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
+        # Only reward generators that have BOTH local verified submissions AND benchmark results
+        # This enforces minimum 1 submission per epoch: miners must be in generator_base_rewards
+        # (which requires at least 1 unrewarded verified submission) to receive any rewards
+        all_generator_uids = set(generator_base_rewards.keys()) & set(reward_multipliers.keys())
         rewards = {
-            uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, .01)
+            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, .01)
             for uid in all_generator_uids 
         }
 
@@ -327,8 +331,22 @@ class Validator(BaseNeuron):
         reward_arr = np.array([rewards.get(i, 0) for i in range(len(self.scores))])
 
         # Alpha for generator score EMA - higher = faster decay, less reward persistence
-        alpha = 0.2
+        # 0.5 = 50% new rewards, 50% historical (aggressive decay for inactive miners)
+        alpha = 0.5
         self.scores = alpha * reward_arr + (1 - alpha) * self.scores
+
+        # Hard cutoff: zero out scores for generators not active within liveness window
+        # This prevents inactive miners from retaining any accumulated score via EMA decay
+        if generator_liveness:
+            inactive_count = 0
+            for uid in range(len(self.scores)):
+                if uid < len(self.metagraph.hotkeys):
+                    hotkey = self.metagraph.hotkeys[uid]
+                    if hotkey not in generator_liveness and self.scores[uid] > 0:
+                        self.scores[uid] = 0
+                        inactive_count += 1
+            if inactive_count > 0:
+                bt.logging.info(f"Zeroed scores for {inactive_count} inactive generators (not seen in {max_inactive_hours}h)")
 
         bt.logging.info(
             f"Updated scores for {len(rewards)} miners with EMA (alpha={alpha})"
