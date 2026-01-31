@@ -12,12 +12,7 @@ from typing import Optional, Dict, Any, List, Union
 
 import bittensor as bt
 
-try:
-    import c2pa
-    C2PA_AVAILABLE = True
-except ImportError:
-    C2PA_AVAILABLE = False
-    bt.logging.warning("c2pa-python not installed. C2PA verification will be disabled.")
+import c2pa
 
 
 TRUSTED_CERT_ISSUERS = {
@@ -35,7 +30,7 @@ TRUSTED_CERT_ISSUERS = {
 
 TRUSTED_CA_ISSUERS = {
     "DigiCert", "GlobalSign", "Entrust", "Sectigo", "Let's Encrypt",
-    "Amazon", "Google Trust Services", "Microsoft", "Apple", "Cloudflare",
+    "Amazon", "Google", "Microsoft", "Apple", "Cloudflare",
 }
 
 AI_SOURCE_TYPES = {
@@ -70,7 +65,7 @@ class C2PAVerificationResult:
         self.manifest_data = manifest_data or {}
         self.validation_errors = validation_errors or []
         self.error = error
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "verified": self.verified,
@@ -87,19 +82,20 @@ class C2PAVerificationResult:
 
 def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
     """Verify C2PA credentials with full cryptographic validation."""
-    if not C2PA_AVAILABLE:
-        return C2PAVerificationResult(verified=False, error="c2pa-python library not installed")
-
     temp_file = None
     try:
+        # Always read bytes to detect actual format (file extension might be wrong)
         if isinstance(media_data, bytes):
-            suffix = _detect_format(media_data)
-            temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-            temp_file.write(media_data)
-            temp_file.close()
-            file_path = temp_file.name
+            data = media_data
         else:
-            file_path = str(media_data)
+            data = Path(media_data).read_bytes()
+
+        # Create temp file with correct extension based on magic bytes
+        suffix = detect_media_format(data)
+        temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        temp_file.write(data)
+        temp_file.close()
+        file_path = temp_file.name
 
         try:
             with c2pa.Reader(file_path) as reader:
@@ -129,6 +125,12 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
         is_self_signed = cert_info.get("is_self_signed", True)
         cert_issuer = cert_info.get("cert_issuer")
         cert_subject = cert_info.get("cert_subject")
+        cert_chain_length = cert_info.get("cert_chain_length", 0)
+
+        bt.logging.debug(
+            f"C2PA cert info: issuer={cert_issuer}, subject={cert_subject}, "
+            f"chain_len={cert_chain_length}, is_self_signed={is_self_signed}"
+        )
 
         if is_self_signed:
             bt.logging.warning(f"C2PA rejected: self-signed certificate (subject: {cert_subject})")
@@ -196,17 +198,109 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
                 pass
 
 
-def _detect_format(data: bytes) -> str:
-    if data[:8] == b'\x89PNG\r\n\x1a\n':
+def detect_media_format(data: bytes) -> str:
+    """
+    Detect media format from magic bytes.
+
+    Supports:
+        - Images: PNG, JPEG, WebP, GIF, BMP, TIFF, HEIC/HEIF, AVIF
+        - Video: MP4/M4V/MOV (ftyp-based), WebM, AVI, MKV
+        - Audio: MP3, WAV, FLAC, OGG, AAC/M4A
+
+    Args:
+        data: Raw bytes of the media file (at least first 12 bytes recommended)
+
+    Returns:
+        File extension string (e.g., ".png", ".mp4") or ".bin" if unknown
+    """
+    if len(data) < 4:
+        return ".bin"
+
+    # === Images ===
+
+    # PNG: 89 50 4E 47 0D 0A 1A 0A
+    if len(data) >= 8 and data[:8] == b'\x89PNG\r\n\x1a\n':
         return ".png"
-    elif data[:2] == b'\xff\xd8':
+
+    # JPEG: FF D8 FF
+    if data[:3] == b'\xff\xd8\xff':
         return ".jpg"
-    elif data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+
+    # WebP: RIFF....WEBP
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
         return ".webp"
-    elif data[:4] == b'\x00\x00\x00\x1c' or data[:4] == b'\x00\x00\x00\x20':
+
+    # GIF: GIF87a or GIF89a
+    if data[:6] in (b'GIF87a', b'GIF89a'):
+        return ".gif"
+
+    # BMP: 42 4D (BM)
+    if data[:2] == b'BM':
+        return ".bmp"
+
+    # TIFF: 49 49 2A 00 (little-endian) or 4D 4D 00 2A (big-endian)
+    if data[:4] in (b'II*\x00', b'MM\x00*'):
+        return ".tiff"
+
+    # === ftyp-based formats (ISO Base Media File Format) ===
+    # MP4, M4A, MOV, 3GP, HEIC, AVIF all use ftyp box at offset 4
+    # Must check all brands in a single block to avoid unreachable code
+    if len(data) >= 12 and data[4:8] == b'ftyp':
+        brand = data[8:12]
+
+        # Images: HEIC/HEIF
+        if brand in (b'heic', b'heix', b'hevc', b'mif1', b'msf1'):
+            return ".heic"
+        if brand == b'avif':
+            return ".avif"
+
+        # Audio: M4A/AAC
+        if brand in (b'M4A ', b'M4B '):
+            return ".m4a"
+
+        # Video: QuickTime MOV
+        if brand == b'qt  ':
+            return ".mov"
+
+        # Video: 3GP/3G2
+        if brand in (b'3gp4', b'3gp5', b'3gp6', b'3g2a'):
+            return ".3gp"
+
+        # Default: MP4 for other ftyp-based formats (isom, mp41, mp42, etc.)
         return ".mp4"
-    elif data[:4] == b'\x1a\x45\xdf\xa3':
+
+    # WebM/MKV: EBML header 1A 45 DF A3
+    if data[:4] == b'\x1a\x45\xdf\xa3':
+        # Both WebM and MKV use this header; WebM is a subset of MKV
+        # For C2PA purposes, treat as WebM (more common for web video)
         return ".webm"
+
+    # AVI: RIFF....AVI
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'AVI ':
+        return ".avi"
+
+    # === Audio ===
+
+    # MP3: ID3 tag or frame sync (FF FB, FF FA, FF F3, FF F2)
+    if data[:3] == b'ID3':
+        return ".mp3"
+    if data[:2] == b'\xff\xfb' or data[:2] == b'\xff\xfa':
+        return ".mp3"
+    if data[:2] == b'\xff\xf3' or data[:2] == b'\xff\xf2':
+        return ".mp3"
+
+    # WAV: RIFF....WAVE
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WAVE':
+        return ".wav"
+
+    # FLAC: 66 4C 61 43 (fLaC)
+    if data[:4] == b'fLaC':
+        return ".flac"
+
+    # OGG: 4F 67 67 53 (OggS)
+    if data[:4] == b'OggS':
+        return ".ogg"
+
     return ".bin"
 
 
@@ -248,23 +342,23 @@ def _extract_certificate_info(manifest_data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         manifests = manifest_data.get("manifests", {})
         active_manifest_id = manifest_data.get("active_manifest")
-        
+
         manifest = None
         if active_manifest_id and active_manifest_id in manifests:
             manifest = manifests[active_manifest_id]
         elif manifests:
             manifest = next(iter(manifests.values()))
-        
+
         if not manifest:
             return result
-        
+
         signature_info = manifest.get("signature_info", {})
         cert_issuer = signature_info.get("issuer")
         result["cert_issuer"] = cert_issuer
-        
+
         cert_chain = signature_info.get("cert_chain", [])
         result["cert_chain_length"] = len(cert_chain) if cert_chain else 0
-        
+
         cert_subject = signature_info.get("subject")
         if not cert_subject:
             cert_serial = signature_info.get("cert_serial_number")
@@ -272,21 +366,21 @@ def _extract_certificate_info(manifest_data: Dict[str, Any]) -> Dict[str, Any]:
                 result["cert_subject"] = f"serial:{cert_serial}"
         else:
             result["cert_subject"] = cert_subject
-        
-        if cert_issuer and result["cert_subject"]:
-            result["is_self_signed"] = (
-                cert_issuer.lower() == result["cert_subject"].lower() or
-                result["cert_chain_length"] <= 1
-            )
-        elif result["cert_chain_length"] > 1:
-            result["is_self_signed"] = False
-        
+
+        # Check if cert_issuer is from a trusted CA first
         if cert_issuer and _is_trusted_ca(cert_issuer):
             result["is_self_signed"] = False
-            
+        elif cert_issuer and result["cert_subject"]:
+            # Only mark as self-signed if issuer == subject (actual self-signed)
+            # Don't use cert_chain_length - many valid certs don't include full chain
+            result["is_self_signed"] = cert_issuer.lower() == result["cert_subject"].lower()
+        elif result["cert_chain_length"] > 1:
+            result["is_self_signed"] = False
+        # else: default is True (assume self-signed if we can't determine)
+
     except Exception as e:
         bt.logging.debug(f"Error extracting certificate info: {e}")
-    
+
     return result
 
 
@@ -294,13 +388,13 @@ def _extract_claim_generator(manifest_data: Dict[str, Any]) -> Optional[str]:
     try:
         manifests = manifest_data.get("manifests", {})
         active_manifest_id = manifest_data.get("active_manifest")
-        
+
         manifest = None
         if active_manifest_id and active_manifest_id in manifests:
             manifest = manifests[active_manifest_id]
         elif manifests:
             manifest = next(iter(manifests.values()))
-        
+
         if manifest:
             return manifest.get("claim_generator")
         return None
@@ -326,9 +420,14 @@ def _check_ai_generated(manifest_data: Dict[str, Any]) -> bool:
                 label = assertion.get("label", "")
                 if "c2pa.ai_generated" in label or "c2pa.ai" in label:
                     return True
-                source_type = assertion.get("data", {}).get("digitalSourceType", "")
+                data = assertion.get("data", {})
+                source_type = data.get("digitalSourceType", "")
                 if source_type in AI_SOURCE_TYPES:
                     return True
+                for action in data.get("actions", []):
+                    action_source = action.get("digitalSourceType", "")
+                    if action_source in AI_SOURCE_TYPES:
+                        return True
         return False
     except Exception as e:
         bt.logging.debug(f"Error checking AI generation: {e}")
@@ -337,12 +436,12 @@ def _check_ai_generated(manifest_data: Dict[str, Any]) -> bool:
 
 def _is_trusted_issuer(
     cert_subject: Optional[str],
-    cert_issuer: Optional[str], 
+    cert_issuer: Optional[str],
     claim_generator: Optional[str]
 ) -> bool:
     if not cert_subject and not cert_issuer:
         return False
-    
+
     def check_against_trusted(value: str) -> bool:
         if not value:
             return False
@@ -351,21 +450,21 @@ def _is_trusted_issuer(
             if trusted.lower() in value_lower or value_lower in trusted.lower():
                 return True
         return False
-    
+
     if cert_subject and check_against_trusted(cert_subject):
         return True
-    
+
     if cert_issuer:
         for trusted in TRUSTED_CERT_ISSUERS:
             if trusted.lower() in cert_issuer.lower():
                 return True
-    
+
     if claim_generator and (cert_subject or cert_issuer):
         claim_lower = claim_generator.lower()
         for trusted in TRUSTED_CERT_ISSUERS:
             if trusted.lower() in claim_lower:
                 return True
-    
+
     return False
 
 

@@ -91,11 +91,12 @@ class ContentDB:
                     id TEXT PRIMARY KEY,
                     content TEXT NOT NULL,
                     content_type TEXT NOT NULL CHECK (content_type IN ('prompt', 'search_query')),
+                    modality TEXT CHECK (modality IN ('image', 'video', 'audio')),
                     created_at REAL NOT NULL,
                     used_count INTEGER DEFAULT 0,
                     last_used REAL,
                     source_media_id TEXT,
-                    UNIQUE(content, content_type),
+                    UNIQUE(content, content_type, modality),
                     FOREIGN KEY (source_media_id) REFERENCES media (id)
                 )
             """
@@ -319,6 +320,19 @@ class ContentDB:
                 if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
                     bt.logging.error(f"Unexpected error adding 'c2pa_issuer' column: {e}")
 
+            # Add modality column to prompts table (migration)
+            try:
+                conn.execute("ALTER TABLE prompts ADD COLUMN modality TEXT CHECK (modality IN ('image', 'video', 'audio'))")
+                bt.logging.info("Added 'modality' column to prompts table")
+                conn.commit()
+            except Exception as e:
+                if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
+                    bt.logging.error(f"Unexpected error adding 'modality' column to prompts: {e}")
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_prompts_modality ON prompts (modality)"
+            )
+
             # Temporary data hygiene: prune prompts whose source_media_id no longer exists in media table
             # Note: This only checks DB-level association, not filesystem existence.
             try:
@@ -350,6 +364,7 @@ class ContentDB:
         content: str,
         content_type: str = "prompt",
         source_media_id: Optional[str] = None,
+        modality: Optional[str] = None,
     ) -> str:
         prompt_id = str(uuid.uuid4())
         created_at = time.time()
@@ -358,13 +373,14 @@ class ContentDB:
             try:
                 conn.execute(
                     """
-                    INSERT INTO prompts (id, content, content_type, created_at, source_media_id)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO prompts (id, content, content_type, modality, created_at, source_media_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """,
                     (
                         prompt_id,
                         content,
                         content_type,
+                        modality,
                         created_at,
                         source_media_id,
                     ),
@@ -1237,27 +1253,49 @@ class ContentDB:
         content_type: str = "prompt",
         strategy: str = "random",
         remove: bool = False,
+        modality: Optional[str] = None,
+        min_prompts_threshold: int = 100,
     ) -> List[PromptEntry]:
         """
-        Sample prompts with different strategies. If remove=True, increments used_count and last_used.
+        Sample prompts with different strategies.
+        
+        Args:
+            k: Number of prompts to sample
+            content_type: Type of content ('prompt' or 'search_query')
+            strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
+            remove: If True, deletes sampled prompts (only if enough prompts remain)
+            modality: Optional modality filter ('image', 'video', 'audio')
+            min_prompts_threshold: Minimum prompts to keep when remove=True (default 100)
+        
+        Returns:
+            List of sampled PromptEntry objects
         """
         with self.get_connection() as conn:
             conn.row_factory = sqlite3.Row
 
+            # Build WHERE clause based on modality filter
+            if modality:
+                where_clause = "content_type = ? AND modality = ?"
+                count_params = (content_type, modality)
+                params = (content_type, modality, k)
+            else:
+                where_clause = "content_type = ?"
+                count_params = (content_type,)
+                params = (content_type, k)
+
             if strategy == "random":
-                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY RANDOM() LIMIT ?"
+                query = f"SELECT * FROM prompts WHERE {where_clause} ORDER BY RANDOM() LIMIT ?"
             elif strategy == "least_used":
-                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY used_count ASC, RANDOM() LIMIT ?"
+                query = f"SELECT * FROM prompts WHERE {where_clause} ORDER BY used_count ASC, RANDOM() LIMIT ?"
             elif strategy == "oldest":
-                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at ASC, RANDOM() LIMIT ?"
+                query = f"SELECT * FROM prompts WHERE {where_clause} ORDER BY created_at ASC, RANDOM() LIMIT ?"
             elif strategy == "newest":
-                query = "SELECT * FROM prompts WHERE content_type = ? ORDER BY created_at DESC, RANDOM() LIMIT ?"
+                query = f"SELECT * FROM prompts WHERE {where_clause} ORDER BY created_at DESC, RANDOM() LIMIT ?"
             else:
                 raise ValueError(f"Unknown sampling strategy: {strategy}")
 
-            rows = conn.execute(query, (content_type, k)).fetchall()
+            rows = conn.execute(query, params).fetchall()
             entries: List[PromptEntry] = []
-            now = time.time()
             for row in rows:
                 entries.append(
                     PromptEntry(
@@ -1268,13 +1306,33 @@ class ContentDB:
                         used_count=row["used_count"],
                         last_used=row["last_used"],
                         source_media_id=row["source_media_id"],
+                        modality=row["modality"] if "modality" in row.keys() else None,
                     )
                 )
-                if remove:
+
+            # If remove=True, delete sampled prompts (only if enough remain after deletion)
+            if remove and entries:
+                count_query = f"SELECT COUNT(*) FROM prompts WHERE {where_clause}"
+                current_count = conn.execute(count_query, count_params).fetchone()[0]
+                
+                remaining_after_delete = current_count - len(entries)
+                if remaining_after_delete >= min_prompts_threshold:
+                    ids_to_delete = [entry.id for entry in entries]
+                    placeholders = ",".join("?" * len(ids_to_delete))
                     conn.execute(
-                        "UPDATE prompts SET used_count = used_count + 1, last_used = ? WHERE id = ?",
-                        (now, row["id"]),
+                        f"DELETE FROM prompts WHERE id IN ({placeholders})",
+                        ids_to_delete,
                     )
+                    bt.logging.debug(
+                        f"Deleted {len(ids_to_delete)} sampled prompts "
+                        f"({remaining_after_delete} remaining for {content_type}/{modality or 'all'})"
+                    )
+                else:
+                    bt.logging.debug(
+                        f"Skipping prompt deletion: only {current_count} prompts available, "
+                        f"need at least {min_prompts_threshold + len(entries)} to delete {len(entries)}"
+                    )
+
             conn.commit()
             return entries
 

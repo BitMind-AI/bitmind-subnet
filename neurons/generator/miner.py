@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from gas.protocol.epistula import get_verifier
 from gas.types import NeuronType, MinerType
 from gas.utils import print_info
+from gas.verification import detect_media_format
 from neurons.base import BaseNeuron
 from neurons.generator.task_manager import TaskManager, GenerationTask, TaskStatus
 from gas.protocol.webhooks import send_success_webhook, send_failure_webhook
@@ -282,7 +283,7 @@ class GenerativeMiner(BaseNeuron):
         if not save_locally:
             return
 
-        ext = "png" if task.modality == "image" else "mp4"
+        ext = self._detect_extension(data, task.modality)
         media_path = self.output_dir / f"{task.task_id}.{ext}"
         meta_path = self.output_dir / f"{task.task_id}.json"
 
@@ -306,6 +307,13 @@ class GenerativeMiner(BaseNeuron):
             meta_path.write_text(json.dumps(metadata, indent=2))
         except Exception as e:
             bt.logging.warning(f"Failed to save metadata to {meta_path}: {e}")
+
+    def _detect_extension(self, data: bytes, modality: str) -> str:
+        """Detect file extension from binary data magic bytes."""
+        ext = detect_media_format(data)
+        if ext != ".bin":
+            return ext.lstrip(".")
+        return "png" if modality == "image" else "mp4"
 
     # API Endpoints
     async def _handle_generation_request(self, request: Request, modality: str):

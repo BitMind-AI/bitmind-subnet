@@ -27,7 +27,8 @@ class ContentManager:
 		enable_source_limits: bool = True,
 		prune_strategy: str = "oldest",
 		remove_on_sample: bool = True,
-		min_source_threshold: float = 0.8
+		min_source_threshold: float = 0.8,
+		min_prompts_threshold: int = 100,
 	):
 		"""
 		Initialize the content manager.
@@ -39,6 +40,7 @@ class ContentManager:
 			prune_strategy: Strategy for pruning ('oldest', 'least_used', 'random')
 			remove_on_sample: Whether to remove items when sampled
 			min_source_threshold: Minimum items before triggering download
+			min_prompts_threshold: Minimum prompts to keep per modality when sampling with remove=True
 		"""
 		if base_dir is None:
 			base_dir = Path("~/.cache/sn34").expanduser()
@@ -54,15 +56,17 @@ class ContentManager:
 		self.remove_on_sample = remove_on_sample
 		min_source_threshold = 0.8 if min_source_threshold is None else min_source_threshold
 		self.min_source_threshold = int(max_per_source * float(min_source_threshold))
+		self.min_prompts_threshold = min_prompts_threshold
 
-	def write_prompt(self, content: str, content_type: str = "prompt", source_media_id: Optional[str] = None) -> str:
+	def write_prompt(self, content: str, content_type: str = "prompt", source_media_id: Optional[str] = None, modality: Optional[str] = None) -> str:
 		try:
 			prompt_id = self.content_db.add_prompt_entry(
 				content=content,
 				content_type=content_type,
-				source_media_id=source_media_id
+				source_media_id=source_media_id,
+				modality=modality
 			)
-			bt.logging.debug(f"Added {content_type} to database with ID: {prompt_id}")
+			bt.logging.debug(f"Added {content_type} (modality={modality}) to database with ID: {prompt_id}")
 			return prompt_id
 		except Exception as e:
 			bt.logging.error(f"Error writing {content_type} to database: {e}")
@@ -353,10 +357,26 @@ class ContentManager:
         self, k: 
         int = 1, 
         remove: bool = False, 
-        strategy: str = "random"
+        strategy: str = "random",
+        modality: Optional[str] = None
 	) -> List[PromptEntry]:
+		"""
+		Sample prompts from the database.
+		
+		Args:
+			k: Number of prompts to sample
+			remove: If True, deletes sampled prompts (only if min_prompts_threshold remain)
+			strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
+			modality: Optional modality filter ('image', 'video', 'audio')
+		"""
 		return self.content_db.sample_prompt_entries(
-			k=k, remove=remove, strategy=strategy, content_type="prompt")
+			k=k, 
+			remove=remove, 
+			strategy=strategy, 
+			content_type="prompt", 
+			modality=modality,
+			min_prompts_threshold=self.min_prompts_threshold,
+		)
 
 	def sample_search_queries(
         self, 
@@ -364,8 +384,21 @@ class ContentManager:
         remove: bool = False, 
         strategy: str = "random"
 	) -> List[PromptEntry]:
+		"""
+		Sample search queries from the database.
+		
+		Args:
+			k: Number of queries to sample
+			remove: If True, deletes sampled queries (only if min_prompts_threshold remain)
+			strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
+		"""
 		return self.content_db.sample_prompt_entries(
-			k=k, remove=remove, strategy=strategy, content_type="search_query")
+			k=k, 
+			remove=remove, 
+			strategy=strategy, 
+			content_type="search_query",
+			min_prompts_threshold=self.min_prompts_threshold,
+		)
 
 	def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
 		return self.content_db.get_prompt_by_id(prompt_id)
@@ -464,7 +497,11 @@ class ContentManager:
 		Returns a list of { 'prompt': PromptEntry, 'media': media_item }.
 		"""
 		prompt_entries = self.content_db.sample_prompt_entries(
-			k=k, remove=remove, strategy=strategy, content_type="prompt"
+			k=k, 
+			remove=remove, 
+			strategy=strategy, 
+			content_type="prompt",
+			min_prompts_threshold=self.min_prompts_threshold,
 		)
 		results: List[Dict[str, Any]] = []
 		for prompt in prompt_entries:

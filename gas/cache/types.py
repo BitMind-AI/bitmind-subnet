@@ -39,6 +39,7 @@ class PromptEntry:
     used_count: int = 0
     last_used: Optional[float] = None
     source_media_id: Optional[str] = None  # ID of the media that was used to generate this prompt
+    modality: Optional[str] = None  # "image", "video", or "audio"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
