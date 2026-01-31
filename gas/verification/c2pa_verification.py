@@ -43,10 +43,8 @@ TRUSTED_CA_ISSUERS = {
     "Amazon", "Google", "Microsoft", "Apple", "Cloudflare",
     "Comodo", "GeoTrust", "Thawte", "VeriSign", "GoDaddy",
     "IdenTrust", "Symantec", "QuoVadis", "SwissSign",
-    # AI companies (appear as cert issuers in some C2PA manifests)
-    "Black Forest Labs", "OpenAI", "Adobe", "Meta",
-    "Stability AI", "Runway", "Midjourney", "Luma",
-    "Ideogram", "Leonardo", "Kuaishou", "Kling", "ByteDance",
+    # AI companies (may appear as cert issuers in C2PA manifests)
+    *TRUSTED_CERT_ISSUERS,
 }
 
 AI_SOURCE_TYPES = {
