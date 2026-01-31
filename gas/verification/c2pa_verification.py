@@ -16,21 +16,35 @@ import c2pa
 
 
 TRUSTED_CERT_ISSUERS = {
-    "OpenAI, Inc.", "OpenAI", "openai.com",
-    "Google LLC", "Google Inc.", "google.com",
-    "Adobe Inc.", "Adobe Systems Incorporated", "adobe.com", "Adobe Content Authenticity",
-    "Microsoft Corporation", "microsoft.com",
-    "Meta Platforms, Inc.", "meta.com",
-    "Runway AI, Inc.", "RunwayML, Inc.", "runwayml.com",
-    "Stability AI Ltd.", "Stability AI", "stability.ai",
-    "Pika Labs, Inc.", "pika.art",
-    "Canva Pty Ltd", "canva.com",
-    "Shutterstock, Inc.", "shutterstock.com",
+    "OpenAI",           # DALL-E, Sora
+    "Google",           # Imagen, Gemini, Veo
+    "Adobe",            # Firefly
+    "Microsoft",        # Copilot, Designer
+    "Meta",             # Imagine
+    "Runway",           # Gen-3
+    "Stability AI",     # Stable Diffusion, Stable Video
+    "Black Forest Labs",  # FLUX
+    "Midjourney",
+    "Pika",             # Pika Labs
+    "Luma",             # Dream Machine
+    "Ideogram",
+    "Leonardo",         # Leonardo.AI
+    "Kuaishou", "Kling",  # Kling AI
+    "MiniMax",
+    "Haiper",
+    "Lightricks",       # LTX Studio
+    "Shutterstock",
+    "ByteDance",        # Seedream, Seedance
 }
 
 TRUSTED_CA_ISSUERS = {
+    # Traditional Certificate Authorities
     "DigiCert", "GlobalSign", "Entrust", "Sectigo", "Let's Encrypt",
     "Amazon", "Google", "Microsoft", "Apple", "Cloudflare",
+    "Comodo", "GeoTrust", "Thawte", "VeriSign", "GoDaddy",
+    "IdenTrust", "Symantec", "QuoVadis", "SwissSign",
+    # AI companies (may appear as cert issuers in C2PA manifests)
+    *TRUSTED_CERT_ISSUERS,
 }
 
 AI_SOURCE_TYPES = {
