@@ -1254,16 +1254,21 @@ class ContentDB:
         strategy: str = "random",
         remove: bool = False,
         modality: Optional[str] = None,
+        min_prompts_threshold: int = 100,
     ) -> List[PromptEntry]:
         """
-        Sample prompts with different strategies. If remove=True, increments used_count and last_used.
+        Sample prompts with different strategies.
         
         Args:
             k: Number of prompts to sample
             content_type: Type of content ('prompt' or 'search_query')
             strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
-            remove: If True, increments used_count and last_used
+            remove: If True, deletes sampled prompts (only if enough prompts remain)
             modality: Optional modality filter ('image', 'video', 'audio')
+            min_prompts_threshold: Minimum prompts to keep when remove=True (default 100)
+        
+        Returns:
+            List of sampled PromptEntry objects
         """
         with self.get_connection() as conn:
             conn.row_factory = sqlite3.Row
@@ -1271,9 +1276,11 @@ class ContentDB:
             # Build WHERE clause based on modality filter
             if modality:
                 where_clause = "content_type = ? AND modality = ?"
+                count_params = (content_type, modality)
                 params = (content_type, modality, k)
             else:
                 where_clause = "content_type = ?"
+                count_params = (content_type,)
                 params = (content_type, k)
 
             if strategy == "random":
@@ -1289,7 +1296,6 @@ class ContentDB:
 
             rows = conn.execute(query, params).fetchall()
             entries: List[PromptEntry] = []
-            now = time.time()
             for row in rows:
                 entries.append(
                     PromptEntry(
@@ -1303,11 +1309,30 @@ class ContentDB:
                         modality=row["modality"] if "modality" in row.keys() else None,
                     )
                 )
-                if remove:
+
+            # If remove=True, delete sampled prompts (only if enough remain after deletion)
+            if remove and entries:
+                count_query = f"SELECT COUNT(*) FROM prompts WHERE {where_clause}"
+                current_count = conn.execute(count_query, count_params).fetchone()[0]
+                
+                remaining_after_delete = current_count - len(entries)
+                if remaining_after_delete >= min_prompts_threshold:
+                    ids_to_delete = [entry.id for entry in entries]
+                    placeholders = ",".join("?" * len(ids_to_delete))
                     conn.execute(
-                        "UPDATE prompts SET used_count = used_count + 1, last_used = ? WHERE id = ?",
-                        (now, row["id"]),
+                        f"DELETE FROM prompts WHERE id IN ({placeholders})",
+                        ids_to_delete,
                     )
+                    bt.logging.debug(
+                        f"Deleted {len(ids_to_delete)} sampled prompts "
+                        f"({remaining_after_delete} remaining for {content_type}/{modality or 'all'})"
+                    )
+                else:
+                    bt.logging.debug(
+                        f"Skipping prompt deletion: only {current_count} prompts available, "
+                        f"need at least {min_prompts_threshold + len(entries)} to delete {len(entries)}"
+                    )
+
             conn.commit()
             return entries
 

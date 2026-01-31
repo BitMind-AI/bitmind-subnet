@@ -83,12 +83,12 @@ class GenerativeChallengeManager:
         prompt_entry = None
         for _ in range(retries):
             # Try to get a prompt for the selected modality
-            prompts = self.content_manager.sample_prompts(k=1, modality=modality.value)
+            prompts = self.content_manager.sample_prompts(k=1, modality=modality.value, remove=True)
             if len(prompts) > 0:
                 prompt_entry = prompts[0]
                 break
             # Fallback: try without modality filter (for backwards compatibility with old prompts)
-            prompts = self.content_manager.sample_prompts(k=1)
+            prompts = self.content_manager.sample_prompts(k=1, remove=True)
             if len(prompts) > 0:
                 prompt_entry = prompts[0]
                 bt.logging.debug(f"Using legacy prompt without modality for {modality.value} challenge")
