@@ -368,7 +368,7 @@ class Validator(BaseNeuron):
         try:
             blocks_till = self.config.epoch_length - (block % self.config.epoch_length)
             bt.logging.info(
-                f"Forward Block: {self.subtensor.block} | Blocks till Set Weights: {blocks_till}"
+                f"Forward Block: {block} | Blocks till Set Weights: {blocks_till}"
             )
             print_info(
                 self.metagraph,
