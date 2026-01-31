@@ -170,9 +170,6 @@ class ContentDB:
                 "CREATE INDEX IF NOT EXISTS idx_prompts_content_type ON prompts (content_type)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_prompts_modality ON prompts (modality)"
-            )
-            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_prompts_used_count ON prompts (used_count)"
             )
             conn.execute(
@@ -327,13 +324,14 @@ class ContentDB:
             try:
                 conn.execute("ALTER TABLE prompts ADD COLUMN modality TEXT CHECK (modality IN ('image', 'video', 'audio'))")
                 bt.logging.info("Added 'modality' column to prompts table")
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_prompts_modality ON prompts (modality)"
-                )
                 conn.commit()
             except Exception as e:
                 if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
                     bt.logging.error(f"Unexpected error adding 'modality' column to prompts: {e}")
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_prompts_modality ON prompts (modality)"
+            )
 
             # Temporary data hygiene: prune prompts whose source_media_id no longer exists in media table
             # Note: This only checks DB-level association, not filesystem existence.
