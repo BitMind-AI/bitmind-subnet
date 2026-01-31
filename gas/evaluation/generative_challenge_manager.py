@@ -1,24 +1,31 @@
 import asyncio
-import time
+import io
 import os
 import pickle
+import random
+import tempfile
+import time
+
 import aiohttp
 import bittensor as bt
+import cv2
 import numpy as np
-import random
+import requests
 import uvicorn
 from bittensor.core.axon import FastAPIThreadedServer
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.responses import Response
-from typing import Dict, Any, Optional
 from pathlib import Path
+from PIL import Image
+from typing import Any, Dict, Optional
 
-from gas.protocol.epistula import get_verifier, generate_header
-from gas.protocol.validator_requests import query_generative_miner
-from gas.types import MinerType, Modality, MediaType
 from gas.cache.content_db import PromptEntry
 from gas.cache.content_manager import ContentManager
-import requests
+from gas.protocol.epistula import generate_header, get_verifier
+from gas.protocol.validator_requests import query_generative_miner
+from gas.types import MediaType, MinerType, Modality
+from gas.verification.c2pa_verification import verify_c2pa
+from gas.verification.duplicate_detection import compute_media_hash, DEFAULT_HAMMING_THRESHOLD
 
 
 class GenerativeChallengeManager:
@@ -202,7 +209,7 @@ class GenerativeChallengeManager:
                 f"type: {content_type}, size: {len(binary_data)} bytes (IP: {client_ip})"
             )
 
-            filepath = await self.store_binary_content(
+            filepath, error_message = await self.store_binary_content(
                 binary_data, content_type, generator_uid, task_id
             )
             if filepath:
@@ -214,17 +221,19 @@ class GenerativeChallengeManager:
                 miner_hotkey = self.metagraph.hotkeys[generator_uid]
                 self.generator_last_seen[miner_hotkey] = time.time()
                 bt.logging.debug(f"Updated liveness for generator {miner_hotkey[:16]}... (UID {generator_uid})")
+                
+                del self.challenge_tasks[task_id]
+                return Response(status_code=200, content="Binary content received")
             else:
                 challenge_info["status"] = "failed"
-                challenge_info["error_message"] = "Failed to store binary content"
-
-            del self.challenge_tasks[task_id]
+                challenge_info["error_message"] = error_message or "Failed to store binary content"
                 
-        return Response(status_code=200, content="Binary content received")
+                del self.challenge_tasks[task_id]
+                return Response(status_code=400, content=error_message or "Failed to store binary content")
 
     async def store_binary_content(
         self, binary_data: bytes, content_type: str, generator_uid: int, task_id: str
-    ) -> Optional[str]:
+    ) -> tuple[Optional[str], Optional[str]]:
         """
         Store binary content directly uploaded by miner using ContentManager.
         
@@ -234,6 +243,10 @@ class GenerativeChallengeManager:
         - Corrupted/unreadable media
         
         Only content that passes all checks is stored and eligible for HuggingFace upload.
+        
+        Returns:
+            Tuple of (filepath, error_message). On success, filepath is set and error is None.
+            On failure, filepath is None and error contains the rejection reason.
         """
         try:
             bt.logging.trace(f"Storing binary content for task {task_id}, size: {len(binary_data)} bytes")
@@ -242,7 +255,7 @@ class GenerativeChallengeManager:
             task_info = self.challenge_tasks.get(task_id)
             if not task_info:
                 bt.logging.error(f"Task {task_id} not found in challenge tasks")
-                return None
+                return None, "Task not found in challenge tasks"
 
             modality = task_info["modality"]
             media_type = task_info["media_type"] 
@@ -260,15 +273,13 @@ class GenerativeChallengeManager:
                         f"REJECTED corrupted media from UID {generator_uid} task {task_id}: "
                         f"media is unreadable or invalid"
                     )
-                    return None
+                    return None, "Corrupted or unreadable media"
             except Exception as e:
                 bt.logging.debug(f"Corruption check error (allowing): {e}")
 
             # Step 2: Compute perceptual hash and check for duplicates within same prompt
             perceptual_hash = None
             try:
-                from gas.verification.duplicate_detection import compute_media_hash, DEFAULT_HAMMING_THRESHOLD
-
                 perceptual_hash = compute_media_hash(binary_data, modality=modality_str)
                 if perceptual_hash:
                     duplicate_info = self.content_manager.check_duplicate(
@@ -282,7 +293,7 @@ class GenerativeChallengeManager:
                             f"REJECTED duplicate from UID {generator_uid} task {task_id}: "
                             f"matches media {dup_media_id} with distance {dup_distance}"
                         )
-                        return None  # Reject duplicates
+                        return None, "Duplicate content detected"
             except Exception as e:
                 bt.logging.debug(f"Duplicate detection skipped: {e}")
 
@@ -290,15 +301,6 @@ class GenerativeChallengeManager:
             c2pa_verified = False
             c2pa_issuer = None
             try:
-                from gas.verification.c2pa_verification import verify_c2pa, C2PA_AVAILABLE
-
-                if not C2PA_AVAILABLE:
-                    bt.logging.error(
-                        f"REJECTED from UID {generator_uid} task {task_id}: "
-                        f"c2pa-python library not installed - required for verification"
-                    )
-                    return None
-
                 c2pa_result = verify_c2pa(binary_data)
                 if c2pa_result.verified and c2pa_result.is_trusted_issuer:
                     c2pa_verified = True
@@ -313,19 +315,13 @@ class GenerativeChallengeManager:
                         f"REJECTED from UID {generator_uid} task {task_id}: "
                         f"C2PA check failed ({rejection_reason})"
                     )
-                    return None
-            except ImportError:
-                bt.logging.error(
-                    f"REJECTED from UID {generator_uid} task {task_id}: "
-                    f"c2pa-python library not installed - required for verification"
-                )
-                return None
+                    return None, f"C2PA verification failed: {rejection_reason}"
             except Exception as e:
                 bt.logging.error(
                     f"REJECTED from UID {generator_uid} task {task_id}: "
                     f"C2PA verification error: {e}"
                 )
-                return None
+                return None, f"C2PA verification error: {e}"
 
             # Step 4: All checks passed - store the media
             filepath = self.content_manager.write_miner_media(
@@ -349,14 +345,14 @@ class GenerativeChallengeManager:
                     f"hash: {perceptual_hash[:16] if perceptual_hash else 'N/A'}..., "
                     f"c2pa_issuer: {c2pa_issuer})"
                 )
-                return filepath
+                return filepath, None
             else:
                 bt.logging.error("ContentManager failed to store binary content")
-                return None
+                return None, "Failed to store binary content"
 
         except Exception as e:
             bt.logging.error(f"Error storing binary content: {e}")
-            return None
+            return None, f"Internal error: {e}"
 
     def _check_media_corrupted(self, binary_data: bytes, modality: str) -> bool:
         """
@@ -365,18 +361,12 @@ class GenerativeChallengeManager:
         Returns:
             True if corrupted, False if valid
         """
-        import io
-        
         try:
             if modality == "image":
-                from PIL import Image
                 img = Image.open(io.BytesIO(binary_data))
                 img.verify()  # Verify it's a valid image
                 return False
             elif modality == "video":
-                import tempfile
-                import cv2
-                
                 # Write to temp file and try to open with cv2
                 with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                     tmp.write(binary_data)
@@ -396,7 +386,6 @@ class GenerativeChallengeManager:
                     
                     return False
                 finally:
-                    import os
                     os.unlink(tmp_path)
             else:
                 return False  # Unknown modality, don't reject
