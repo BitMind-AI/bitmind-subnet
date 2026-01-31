@@ -309,7 +309,6 @@ class GenerativeChallengeManager:
                         f"C2PA verified for UID {generator_uid}: issuer={c2pa_issuer}"
                     )
                 else:
-                    # Reject if no valid C2PA from trusted source - use actual error message
                     rejection_reason = c2pa_result.error or (
                         "untrusted issuer" if c2pa_result.signature_valid else "no valid C2PA manifest"
                     )

@@ -139,7 +139,6 @@ const apps = [
     max_restarts: 10,
     min_uptime: '10s',
     restart_delay: 4000,
-    // Use PM2 default log location (~/.pm2/logs/)
     time: true,
   }
 ];
