@@ -255,7 +255,13 @@ class Validator(BaseNeuron):
                 # Scale ONLY active (non-special) weights
                 remaining_pct = 1 - burn_pct - audio_pct
                 g_pct = (1. - d_pct)
-                active_mask = np.array([uid not in special_uids for uid in range(len(normed_weights))])
+
+                active_uids_set = set(active_uids)
+                for uid in range(len(normed_weights)):
+                    if uid not in special_uids and uid not in active_uids_set:
+                        normed_weights[uid] = 0.0
+
+                active_mask = np.array([uid in active_uids_set for uid in range(len(normed_weights))])
                 normed_weights[active_mask] *= remaining_pct * g_pct
 
                 # Set special weights (only once, no prior scaling)
