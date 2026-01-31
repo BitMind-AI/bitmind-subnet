@@ -16,21 +16,77 @@ import c2pa
 
 
 TRUSTED_CERT_ISSUERS = {
+    # OpenAI (DALL-E, Sora)
     "OpenAI, Inc.", "OpenAI", "openai.com",
+    # Google (Imagen, Gemini, Veo)
     "Google LLC", "Google Inc.", "google.com",
+    # Adobe (Firefly)
     "Adobe Inc.", "Adobe Systems Incorporated", "adobe.com", "Adobe Content Authenticity",
+    # Microsoft (Copilot, Designer)
     "Microsoft Corporation", "microsoft.com",
+    # Meta (Imagine)
     "Meta Platforms, Inc.", "meta.com",
+    # Runway (Gen-3)
     "Runway AI, Inc.", "RunwayML, Inc.", "runwayml.com",
+    # Stability AI (Stable Diffusion, Stable Video)
     "Stability AI Ltd.", "Stability AI", "stability.ai",
+    # Black Forest Labs (FLUX)
+    "Black Forest Labs Inc.", "Black Forest Labs", "Black Forest Labs GmbH", "blackforestlabs.ai",
+    # Midjourney
+    "Midjourney, Inc.", "Midjourney", "midjourney.com",
+    # Pika Labs
     "Pika Labs, Inc.", "pika.art",
+    # Luma AI (Dream Machine)
+    "Luma AI, Inc.", "Luma AI", "lumalabs.ai",
+    # Ideogram
+    "Ideogram, Inc.", "Ideogram", "ideogram.ai",
+    # Leonardo AI
+    "Leonardo.AI Pty Ltd", "Leonardo AI", "leonardo.ai",
+    # Kling / Kuaishou
+    "Kuaishou Technology", "Kuaishou", "kling.ai",
+    # Minimax
+    "MiniMax Technology", "MiniMax", "minimax.io",
+    # Haiper
+    "Haiper AI", "Haiper", "haiper.ai",
+    # Lightricks (Lensa, Facetune, LTX Studio)
+    "Lightricks Ltd.", "Lightricks", "lightricks.com",
+    # ElevenLabs (audio)
+    "ElevenLabs, Inc.", "ElevenLabs", "elevenlabs.io",
+    # Suno (audio)
+    "Suno, Inc.", "Suno", "suno.ai",
+    # Udio (audio)
+    "Udio, Inc.", "Udio", "udio.com",
+    # Canva
     "Canva Pty Ltd", "canva.com",
+    # Shutterstock
     "Shutterstock, Inc.", "shutterstock.com",
+    # ByteDance (various AI tools)
+    "ByteDance Ltd.", "ByteDance", "bytedance.com",
+    # Anthropic (future-proofing)
+    "Anthropic, PBC", "Anthropic", "anthropic.com",
 }
 
 TRUSTED_CA_ISSUERS = {
+    # Traditional Certificate Authorities
     "DigiCert", "GlobalSign", "Entrust", "Sectigo", "Let's Encrypt",
     "Amazon", "Google", "Microsoft", "Apple", "Cloudflare",
+    "Comodo", "GeoTrust", "Thawte", "VeriSign", "GoDaddy",
+    "IdenTrust", "Symantec", "QuoVadis", "SwissSign",
+    # AI Companies that appear as certificate issuers in C2PA manifests
+    "Black Forest Labs", "Black Forest Labs Inc.", "Black Forest Labs GmbH",
+    "OpenAI", "OpenAI, Inc.",
+    "Adobe", "Adobe Inc.",
+    "Google LLC", "Google Inc.",
+    "Microsoft Corporation",
+    "Meta Platforms", "Meta Platforms, Inc.",
+    "Stability AI", "Stability AI Ltd.",
+    "Runway AI", "Runway AI, Inc.", "RunwayML",
+    "Midjourney", "Midjourney, Inc.",
+    "Luma AI", "Luma AI, Inc.",
+    "Ideogram", "Ideogram, Inc.",
+    "Leonardo.AI", "Leonardo.AI Pty Ltd",
+    "Kuaishou", "Kuaishou Technology",
+    "ByteDance", "ByteDance Ltd.",
 }
 
 AI_SOURCE_TYPES = {
