@@ -30,7 +30,7 @@ TRUSTED_CERT_ISSUERS = {
 
 TRUSTED_CA_ISSUERS = {
     "DigiCert", "GlobalSign", "Entrust", "Sectigo", "Let's Encrypt",
-    "Amazon", "Google Trust Services", "Microsoft", "Apple", "Cloudflare",
+    "Amazon", "Google", "Microsoft", "Apple", "Cloudflare",
 }
 
 AI_SOURCE_TYPES = {
