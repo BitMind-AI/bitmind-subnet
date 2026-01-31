@@ -11,7 +11,7 @@ import bittensor as bt
 import torch
 
 from gas import __spec_version__ as spec_version
-from gas.protocol.validator_requests import get_benchmark_results
+from gas.protocol.validator_requests import get_benchmark_results, get_escrow_addresses
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
@@ -182,6 +182,24 @@ class Validator(BaseNeuron):
         if generator_uids is None:
             generator_uids = []
             bt.logging.warning("No generator rewards available; using empty generator_uids")
+
+        escrow_addresses = await get_escrow_addresses(
+            self.wallet.hotkey,
+            base_url=self.config.benchmark.api_url,
+        )
+        
+        # Use fetched addresses or fall back to defaults
+        if escrow_addresses:
+            bt.logging.info("Using escrow addresses from API")
+            active_ss58_addresses = {
+                "burn": SS58_ADDRESSES["burn"],
+                "video_escrow": escrow_addresses.get("video_escrow", SS58_ADDRESSES["video_escrow"]),
+                "image_escrow": escrow_addresses.get("image_escrow", SS58_ADDRESSES["image_escrow"]),
+                "audio_escrow": escrow_addresses.get("audio_escrow", SS58_ADDRESSES["audio_escrow"]),
+            }
+        else:
+            bt.logging.warning("Failed to fetch escrow addresses from API, using defaults")
+            active_ss58_addresses = SS58_ADDRESSES
         
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
@@ -201,22 +219,22 @@ class Validator(BaseNeuron):
                 burn_pct = .7
                 audio_pct = .01
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["burn"],
+                    hotkey_ss58=active_ss58_addresses["burn"],
                     netuid=self.config.netuid, 
                     block=block
                 )
 
                 d_pct = .8
                 video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["video_escrow"],
+                    hotkey_ss58=active_ss58_addresses["video_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
                 image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["image_escrow"],
+                    hotkey_ss58=active_ss58_addresses["image_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
                 audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=SS58_ADDRESSES["audio_escrow"],
+                    hotkey_ss58=active_ss58_addresses["audio_escrow"],
                      netuid=self.config.netuid, 
                      block=block)
 
@@ -269,8 +287,9 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
-        # Get verification stats for only unrewarded media to quickly slash for submissions that fail verification
-        verification_stats = self.content_manager.get_unrewarded_verification_stats(include_all=True)
+        # Get verification stats for ONLY unrewarded media - prevents double-counting of already-rewarded submissions
+        # (include_all=True was a bug that counted already-rewarded media again)
+        verification_stats = self.content_manager.get_unrewarded_verification_stats(include_all=False)
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
         generator_results, discriminator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
@@ -278,10 +297,26 @@ class Validator(BaseNeuron):
         #bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
         #bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
-        reward_multipliers = get_generator_reward_multipliers(generator_results, self.metagraph)
-        all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
+        # Get generator liveness data for filtering inactive generators
+        generator_liveness = None
+        max_inactive_hours = 24  # Hours of inactivity before generator rewards are zeroed
+        if hasattr(self, 'generative_challenge_manager') and self.generative_challenge_manager:
+            generator_liveness = self.generative_challenge_manager.get_all_generator_last_seen()
+            if generator_liveness:
+                bt.logging.debug(f"Using liveness data for {len(generator_liveness)} generators")
+        
+        reward_multipliers = get_generator_reward_multipliers(
+            generator_results, 
+            self.metagraph,
+            generator_liveness=generator_liveness,
+            max_inactive_hours=max_inactive_hours,
+        )
+        # Only reward generators that have BOTH local verified submissions AND benchmark results
+        # This enforces minimum 1 submission per epoch: miners must be in generator_base_rewards
+        # (which requires at least 1 unrewarded verified submission) to receive any rewards
+        all_generator_uids = set(generator_base_rewards.keys()) & set(reward_multipliers.keys())
         rewards = {
-            uid: generator_base_rewards.get(uid, 1e-4) * reward_multipliers.get(uid, .01)
+            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, .01)
             for uid in all_generator_uids 
         }
 
@@ -295,8 +330,23 @@ class Validator(BaseNeuron):
 
         reward_arr = np.array([rewards.get(i, 0) for i in range(len(self.scores))])
 
-        alpha = 0.1
+        # Alpha for generator score EMA - higher = faster decay, less reward persistence
+        # 0.5 = 50% new rewards, 50% historical (aggressive decay for inactive miners)
+        alpha = 0.5
         self.scores = alpha * reward_arr + (1 - alpha) * self.scores
+
+        # Hard cutoff: zero out scores for generators not active within liveness window
+        # This prevents inactive miners from retaining any accumulated score via EMA decay
+        if generator_liveness:
+            inactive_count = 0
+            for uid in range(len(self.scores)):
+                if uid < len(self.metagraph.hotkeys):
+                    hotkey = self.metagraph.hotkeys[uid]
+                    if hotkey not in generator_liveness and self.scores[uid] > 0:
+                        self.scores[uid] = 0
+                        inactive_count += 1
+            if inactive_count > 0:
+                bt.logging.info(f"Zeroed scores for {inactive_count} inactive generators (not seen in {max_inactive_hours}h)")
 
         bt.logging.info(
             f"Updated scores for {len(rewards)} miners with EMA (alpha={alpha})"

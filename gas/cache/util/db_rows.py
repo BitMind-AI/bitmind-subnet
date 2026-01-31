@@ -148,9 +148,9 @@ def display_media_table(db_path: Path, n_rows: int, source_type_filter: str = No
                            dataset_source_file, dataset_index, created_at, generation_args,
                            mask_path, timestamp, resolution, file_size, format, uid, hotkey,
                            verified, failed_verification, rewarded
-                    FROM media 
+                    FROM media m
                     {where_clause}
-                    ORDER BY created_at DESC 
+                    ORDER BY m.created_at DESC 
                     LIMIT ?
                 """
             

@@ -179,6 +179,53 @@ async def query_generative_miner(
     return response
 
 
+async def get_escrow_addresses(
+    hotkey,
+    base_url: str = "https://gas.bitmind.ai",
+    activity_hours: int = 24,
+) -> Optional[Dict[str, str]]:
+    """
+    Fetch escrow addresses from the gas-api /escrow-addresses endpoint.
+
+    The endpoint returns escrow addresses for eligible validators based on:
+    - Whitelist membership
+    - Recent gasstation activity
+
+    Args:
+        hotkey: Validator hotkey Keypair for signing the request
+        base_url: Base URL for the gas API
+        activity_hours: Hours to look back for activity verification
+
+    Returns:
+        Dictionary with keys: image_escrow, video_escrow, audio_escrow
+        Each value is the SS58 address. Returns None on failure.
+    """
+    try:
+        bt.logging.info(f"Fetching escrow addresses from {base_url}/api/v1/validator/escrow-addresses")
+
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            url = f"{base_url}/api/v1/validator/escrow-addresses?activity_hours={activity_hours}"
+            epistula_headers = generate_header(hotkey, b"", None)
+
+            async with session.get(url, headers=epistula_headers) as response:
+                if response.status == 200:
+                    addresses = await response.json()
+                    bt.logging.info(f"Successfully fetched escrow addresses: {list(addresses.keys())}")
+                    return addresses
+                else:
+                    error_text = await response.text()
+                    bt.logging.warning(
+                        f"Failed to fetch escrow addresses: HTTP {response.status}, response: {error_text}"
+                    )
+                    return None
+
+    except Exception as e:
+        bt.logging.error(f"Error fetching escrow addresses from API: {e}")
+        bt.logging.error(traceback.format_exc())
+        return None
+
+
 async def get_benchmark_results(
     hotkey, metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai", 
 ):
