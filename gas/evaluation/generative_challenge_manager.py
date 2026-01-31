@@ -47,13 +47,13 @@ class GenerativeChallengeManager:
 
         self.challenge_tasks = {}
         self.challenge_lock = asyncio.Lock()
-        
+
         # Track generator liveness: hotkey -> last activity timestamp
         # Updated when a generator successfully responds to a challenge
         self.generator_last_seen: Dict[str, float] = {}
 
         self.external_port = (
-            getattr(self.config.neuron, 'external_callback_port', None) or 
+            getattr(self.config.neuron, 'external_callback_port', None) or
             self.config.neuron.callback_port
         )
 
@@ -85,7 +85,7 @@ class GenerativeChallengeManager:
 
         # First select a random modality, then sample a prompt matching that modality
         modality = random.choice([Modality.IMAGE, Modality.VIDEO])
-        
+
         retries = 3
         prompt_entry = None
         for _ in range(retries):
@@ -155,7 +155,7 @@ class GenerativeChallengeManager:
         content_type = request.headers.get("content-type", "").lower()
         task_id = request.headers.get("task-id")
         client_ip = request.client.host if request.client else "unknown"
-        
+
         uid = "unknown"
         signed_by = request.headers.get("Epistula-Signed-By")
         if task_id and task_id in self.challenge_tasks:
@@ -165,7 +165,7 @@ class GenerativeChallengeManager:
                 uid = self.metagraph.hotkeys.index(signed_by)
             except (ValueError, AttributeError):
                 pass
-        
+
         bt.logging.debug(f"Generative callback request from UID {uid} (IP: {client_ip}), task_id: {task_id}, content_type: {content_type}")
 
         # Helper function to format UID with hotkey for better debugging
@@ -175,22 +175,22 @@ class GenerativeChallengeManager:
             return f"UID {uid}"
 
         if not (
-            content_type.startswith("image/") or 
-            content_type.startswith("video/") or 
+            content_type.startswith("image/") or
+            content_type.startswith("video/") or
             content_type == "application/octet-stream"
         ):
             bt.logging.error(f"Invalid content type: {content_type} from {format_uid_info()} (IP: {client_ip}). Only image/*, video/*, and application/octet-stream are supported.")
             return Response(status_code=400, content="Only image, video, and application/octet-stream content types are supported")
-        
+
         if not task_id:
             bt.logging.error(f"Binary upload missing task-id header from {format_uid_info()} (IP: {client_ip})")
             return Response(status_code=400, content="Missing task-id header")
-            
+
         binary_data = await request.body()
         if not binary_data:
             bt.logging.error(f"Task {task_id} from {format_uid_info()} (IP: {client_ip}): Empty binary payload received")
             return Response(status_code=400, content="Empty binary payload")
-            
+
         async with self.challenge_lock:
             bt.logging.debug(f"Callback for task {task_id}: Current active tasks: {list(self.challenge_tasks.keys())}")
             if task_id not in self.challenge_tasks:
@@ -202,7 +202,7 @@ class GenerativeChallengeManager:
 
             challenge_info = self.challenge_tasks[task_id]
             generator_uid = challenge_info["uid"]
-            
+
             auth_uid_msg = f" (auth UID: {uid})" if uid != generator_uid and uid != "unknown" else ""
             bt.logging.info(
                 f"Received binary upload for task {task_id}, UID {generator_uid}{auth_uid_msg}, "
@@ -216,18 +216,18 @@ class GenerativeChallengeManager:
                 challenge_info["status"] = "completed"
                 challenge_info["filepath"] = filepath
                 bt.logging.success(f"Task {task_id} completed with binary upload: {filepath}")
-                
+
                 # Track generator liveness - record when they successfully responded
                 miner_hotkey = self.metagraph.hotkeys[generator_uid]
                 self.generator_last_seen[miner_hotkey] = time.time()
                 bt.logging.debug(f"Updated liveness for generator {miner_hotkey[:16]}... (UID {generator_uid})")
-                
+
                 del self.challenge_tasks[task_id]
                 return Response(status_code=200, content="Binary content received")
             else:
                 challenge_info["status"] = "failed"
                 challenge_info["error_message"] = error_message or "Failed to store binary content"
-                
+
                 del self.challenge_tasks[task_id]
                 return Response(status_code=400, content=error_message or "Failed to store binary content")
 
@@ -236,14 +236,14 @@ class GenerativeChallengeManager:
     ) -> tuple[Optional[str], Optional[str]]:
         """
         Store binary content directly uploaded by miner using ContentManager.
-        
+
         Performs pre-storage validation and REJECTS:
         - Duplicate content (perceptual hash match)
         - Content without valid C2PA from trusted AI generators
         - Corrupted/unreadable media
-        
+
         Only content that passes all checks is stored and eligible for HuggingFace upload.
-        
+
         Returns:
             Tuple of (filepath, error_message). On success, filepath is set and error is None.
             On failure, filepath is None and error contains the rejection reason.
@@ -258,7 +258,7 @@ class GenerativeChallengeManager:
                 return None, "Task not found in challenge tasks"
 
             modality = task_info["modality"]
-            media_type = task_info["media_type"] 
+            media_type = task_info["media_type"]
             prompt_id = task_info["prompt_id"]
 
             # Get modality string for checks
@@ -283,7 +283,7 @@ class GenerativeChallengeManager:
                 perceptual_hash = compute_media_hash(binary_data, modality=modality_str)
                 if perceptual_hash:
                     duplicate_info = self.content_manager.check_duplicate(
-                        perceptual_hash, 
+                        perceptual_hash,
                         threshold=DEFAULT_HAMMING_THRESHOLD,
                         prompt_id=prompt_id,
                     )
@@ -309,8 +309,10 @@ class GenerativeChallengeManager:
                         f"C2PA verified for UID {generator_uid}: issuer={c2pa_issuer}"
                     )
                 else:
-                    # Reject if no valid C2PA from trusted source
-                    rejection_reason = "no C2PA manifest" if not c2pa_result.verified else "untrusted issuer"
+                    # Reject if no valid C2PA from trusted source - use actual error message
+                    rejection_reason = c2pa_result.error or (
+                        "untrusted issuer" if c2pa_result.signature_valid else "no valid C2PA manifest"
+                    )
                     bt.logging.warning(
                         f"REJECTED from UID {generator_uid} task {task_id}: "
                         f"C2PA check failed ({rejection_reason})"
@@ -357,7 +359,7 @@ class GenerativeChallengeManager:
     def _check_media_corrupted(self, binary_data: bytes, modality: str) -> bool:
         """
         Check if media data is corrupted/unreadable.
-        
+
         Returns:
             True if corrupted, False if valid
         """
@@ -371,25 +373,25 @@ class GenerativeChallengeManager:
                 with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                     tmp.write(binary_data)
                     tmp_path = tmp.name
-                
+
                 try:
                     cap = cv2.VideoCapture(tmp_path)
                     if not cap.isOpened():
                         return True
-                    
+
                     # Try to read at least one frame
                     ret, frame = cap.read()
                     cap.release()
-                    
+
                     if not ret or frame is None:
                         return True
-                    
+
                     return False
                 finally:
                     os.unlink(tmp_path)
             else:
                 return False  # Unknown modality, don't reject
-                
+
         except Exception as e:
             bt.logging.debug(f"Media corruption check failed: {e}")
             return True  # If we can't verify, assume corrupted
@@ -442,52 +444,52 @@ class GenerativeChallengeManager:
 
     def get_generator_last_seen(self, hotkey: str) -> Optional[float]:
         """Get the last activity timestamp for a generator.
-        
+
         Args:
             hotkey: The generator's hotkey (SS58 address)
-            
+
         Returns:
             Unix timestamp of last activity, or None if never seen
         """
         return self.generator_last_seen.get(hotkey)
-    
+
     def get_all_generator_last_seen(self) -> Dict[str, float]:
         """Get all generator last seen timestamps.
-        
+
         Returns:
             Dict mapping hotkey to last activity timestamp
         """
         return self.generator_last_seen.copy()
-    
+
     def is_generator_active(self, hotkey: str, max_inactive_hours: int = 24) -> bool:
         """Check if a generator has been active within the specified window.
-        
+
         Args:
             hotkey: The generator's hotkey (SS58 address)
             max_inactive_hours: Maximum hours of inactivity before considered inactive
-            
+
         Returns:
             True if generator was active within the window, False otherwise
         """
         last_seen = self.generator_last_seen.get(hotkey)
         if last_seen is None:
             return False
-        
+
         hours_since_seen = (time.time() - last_seen) / 3600
         return hours_since_seen <= max_inactive_hours
-    
+
     def get_active_generators(self, max_inactive_hours: int = 24) -> Dict[str, float]:
         """Get all generators that have been active within the specified window.
-        
+
         Args:
             max_inactive_hours: Maximum hours of inactivity before considered inactive
-            
+
         Returns:
             Dict mapping hotkey to last activity timestamp for active generators
         """
         current_time = time.time()
         max_inactive_seconds = max_inactive_hours * 3600
-        
+
         return {
             hotkey: last_seen
             for hotkey, last_seen in self.generator_last_seen.items()
@@ -521,12 +523,12 @@ class GenerativeChallengeManager:
             with open(filepath, 'wb') as f:
                 pickle.dump(self.challenge_tasks, f)
             bt.logging.info(f"Successfully saved {len(self.challenge_tasks)} active challenge tasks to {filepath}")
-            
+
             # Save generator liveness data (keep entries from last 7 days)
             liveness_filepath = os.path.join(save_dir, "generator_liveness.pkl")
             max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
             valid_liveness = {
-                hotkey: ts 
+                hotkey: ts
                 for hotkey, ts in self.generator_last_seen.items()
                 if (current_time - ts) <= max_liveness_age
             }
@@ -560,18 +562,18 @@ class GenerativeChallengeManager:
             if os.path.exists(liveness_filepath):
                 with open(liveness_filepath, 'rb') as f:
                     loaded_liveness = pickle.load(f)
-                
+
                 # Only keep entries from last 7 days
                 current_time = time.time()
                 max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
                 valid_liveness = {
-                    hotkey: ts 
+                    hotkey: ts
                     for hotkey, ts in loaded_liveness.items()
                     if (current_time - ts) <= max_liveness_age
                 }
                 self.generator_last_seen = valid_liveness
                 bt.logging.info(f"Loaded liveness data for {len(valid_liveness)} generators")
-            
+
             return True  # Success
         except Exception as e:
             bt.logging.error(f"Failed to load challenge tasks state: {e}")
