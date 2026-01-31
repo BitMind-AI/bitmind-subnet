@@ -76,12 +76,23 @@ class GenerativeChallengeManager:
 
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
+        # First select a random modality, then sample a prompt matching that modality
+        modality = random.choice([Modality.IMAGE, Modality.VIDEO])
+        
         retries = 3
         prompt_entry = None
         for _ in range(retries):
+            # Try to get a prompt for the selected modality
+            prompts = self.content_manager.sample_prompts(k=1, modality=modality.value)
+            if len(prompts) > 0:
+                prompt_entry = prompts[0]
+                break
+            # Fallback: try without modality filter (for backwards compatibility with old prompts)
             prompts = self.content_manager.sample_prompts(k=1)
             if len(prompts) > 0:
                 prompt_entry = prompts[0]
+                bt.logging.debug(f"Using legacy prompt without modality for {modality.value} challenge")
+                break
 
         if not prompt_entry:
             bt.logging.info(
@@ -90,14 +101,13 @@ class GenerativeChallengeManager:
             return
 
         await asyncio.gather(
-            *[self.send_generative_request(uid, prompt_entry) for uid in miner_uids]
+            *[self.send_generative_request(uid, prompt_entry, modality) for uid in miner_uids]
         )
 
-    async def send_generative_request(self, uid: int, prompt_entry):
+    async def send_generative_request(self, uid: int, prompt_entry, modality: Modality):
         """Scoring is handled by the callback in GeneratorEvaluator"""
 
         #parameters = {"width": 1024, "height": 1024}
-        modality = random.choice([Modality.IMAGE, Modality.VIDEO])
 
         async with aiohttp.ClientSession() as session:
             response_data = await query_generative_miner(

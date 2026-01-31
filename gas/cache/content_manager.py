@@ -55,14 +55,15 @@ class ContentManager:
 		min_source_threshold = 0.8 if min_source_threshold is None else min_source_threshold
 		self.min_source_threshold = int(max_per_source * float(min_source_threshold))
 
-	def write_prompt(self, content: str, content_type: str = "prompt", source_media_id: Optional[str] = None) -> str:
+	def write_prompt(self, content: str, content_type: str = "prompt", source_media_id: Optional[str] = None, modality: Optional[str] = None) -> str:
 		try:
 			prompt_id = self.content_db.add_prompt_entry(
 				content=content,
 				content_type=content_type,
-				source_media_id=source_media_id
+				source_media_id=source_media_id,
+				modality=modality
 			)
-			bt.logging.debug(f"Added {content_type} to database with ID: {prompt_id}")
+			bt.logging.debug(f"Added {content_type} (modality={modality}) to database with ID: {prompt_id}")
 			return prompt_id
 		except Exception as e:
 			bt.logging.error(f"Error writing {content_type} to database: {e}")
@@ -353,10 +354,11 @@ class ContentManager:
         self, k: 
         int = 1, 
         remove: bool = False, 
-        strategy: str = "random"
+        strategy: str = "random",
+        modality: Optional[str] = None
 	) -> List[PromptEntry]:
 		return self.content_db.sample_prompt_entries(
-			k=k, remove=remove, strategy=strategy, content_type="prompt")
+			k=k, remove=remove, strategy=strategy, content_type="prompt", modality=modality)
 
 	def sample_search_queries(
         self, 

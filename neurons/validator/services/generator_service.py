@@ -501,6 +501,7 @@ class GeneratorService:
                             content=prompt,
                             content_type=content_type,
                             source_media_id=item["id"],
+                            modality=modality.value,  # Store the intended modality
                         )
                         generated += 1
 
