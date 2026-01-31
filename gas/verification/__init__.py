@@ -24,4 +24,5 @@ from .c2pa_verification import (
     C2PAVerificationResult,
     TRUSTED_CERT_ISSUERS,
     TRUSTED_CA_ISSUERS,
+    detect_media_format,
 )

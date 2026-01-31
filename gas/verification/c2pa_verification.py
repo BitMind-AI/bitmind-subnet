@@ -84,14 +84,18 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
     """Verify C2PA credentials with full cryptographic validation."""
     temp_file = None
     try:
+        # Always read bytes to detect actual format (file extension might be wrong)
         if isinstance(media_data, bytes):
-            suffix = _detect_format(media_data)
-            temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-            temp_file.write(media_data)
-            temp_file.close()
-            file_path = temp_file.name
+            data = media_data
         else:
-            file_path = str(media_data)
+            data = Path(media_data).read_bytes()
+
+        # Create temp file with correct extension based on magic bytes
+        suffix = detect_media_format(data)
+        temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        temp_file.write(data)
+        temp_file.close()
+        file_path = temp_file.name
 
         try:
             with c2pa.Reader(file_path) as reader:
@@ -194,7 +198,7 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
                 pass
 
 
-def _detect_format(data: bytes) -> str:
+def detect_media_format(data: bytes) -> str:
     """
     Detect media format from magic bytes.
 

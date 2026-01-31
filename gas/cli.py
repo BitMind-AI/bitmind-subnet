@@ -93,7 +93,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Service names
 VALIDATOR = "sn34-validator"
-GENERATOR = "sn34-generator" 
+GENERATOR = "sn34-generator"
 DATA = "sn34-data"
 GENERATIVE_MINER = "bitmind-generative-miner"
 ALL_SERVICES = [VALIDATOR, GENERATOR, DATA]
@@ -189,7 +189,7 @@ def start_validator_services(no_generation=False, no_data_downloads=False):
 
     # Start services using ecosystem config
     result = subprocess.run(["pm2", "start", str(ecosystem_path)])
-    
+
     if result.returncode == 0:
         services_started = ["validator"]
         if not no_generation:
@@ -199,7 +199,7 @@ def start_validator_services(no_generation=False, no_data_downloads=False):
         click.echo(f"Validator services started: {', '.join(services_started)}")
     else:
         click.echo("Some validator services failed to start", err=True)
-    
+
     return result.returncode == 0
 
 
@@ -250,7 +250,7 @@ def start(no_generation, no_data_downloads):
     """Start validator services"""
     # Load environment variables from .env.validator
     load_env()
-    
+
     # Start services using the unified function
     return start_validator_services(no_generation, no_data_downloads)
 
@@ -346,7 +346,7 @@ def db_stats(db_path, base_dir, detailed):
         "--base-dir",
         base_dir,
     ]
-    
+
     # Add detailed flag if requested
     if detailed:
         cmd.append("--detailed")
@@ -407,22 +407,22 @@ def db_rows(db_path, table, rows, source_type, miner_uid, last_24h, filepaths_on
     if source_type and table != "media":
         click.echo("❌ --source-type can only be used with --table media", err=True)
         sys.exit(1)
-    
+
     # Validate miner-uid is only used with media table and source-type=miner
     if miner_uid and (table != "media" or source_type != "miner"):
         click.echo("❌ --miner-uid can only be used with --table media and --source-type miner", err=True)
         sys.exit(1)
-    
+
     # Validate last-24h is only used with media table
     if last_24h and table != "media":
         click.echo("❌ --last-24h can only be used with --table media", err=True)
         sys.exit(1)
-    
+
     # Validate filepaths-only is only used with media table
     if filepaths_only and table != "media":
         click.echo("❌ --filepaths-only can only be used with --table media", err=True)
         sys.exit(1)
-    
+
     # Validate include-prompts is only used with media table
     if include_prompts and table != "media":
         click.echo("❌ --include-prompts can only be used with --table media", err=True)
@@ -453,19 +453,19 @@ def db_rows(db_path, table, rows, source_type, miner_uid, last_24h, filepaths_on
     # Add source-type filter if provided
     if source_type:
         cmd.extend(["--source-type", source_type])
-    
+
     # Add miner-uid filter if provided
     if miner_uid:
         cmd.extend(["--miner-uid", str(miner_uid)])
-    
+
     # Add last-24h filter if provided
     if last_24h:
         cmd.append("--last-24h")
-    
+
     # Add filepaths-only flag if provided
     if filepaths_only:
         cmd.append("--filepaths-only")
-    
+
     # Add include-prompts flag if provided
     if include_prompts:
         cmd.append("--include-prompts")
@@ -517,7 +517,7 @@ def push_discriminator(
     if not image_model and not video_model and not audio_model:
         click.echo("Error: At least one model must be provided (--image-model, --video-model, or --audio-model)", err=True)
         return
-    
+
     # Build command arguments for the push_model script
     cmd = [sys.executable, "-m", "neurons.discriminator.push_model"]
 
@@ -564,11 +564,11 @@ def benchmark(ctx, image_model, video_model, audio_model):
     if not image_model and not video_model and not audio_model:
         click.echo("Error: At least one model must be provided (--image-model, --video-model, or --audio-model)", err=True)
         return
- 
+
     def run_gasbench(model_path, modality_flag):
         click.echo(f"Running benchmark on {model_path}...")
         cmd = ["gasbench", "run", modality_flag, model_path] + ctx.args
-  
+
         try:
             result = subprocess.run(cmd, check=True)
             if result.returncode == 0:
@@ -579,10 +579,10 @@ def benchmark(ctx, image_model, video_model, audio_model):
         except Exception as e:
             click.echo(f"❌ Error running benchmark: {e}", err=True)
             sys.exit(1)
- 
+
     if image_model:
         run_gasbench(image_model, "--image-model")
- 
+
     if video_model:
         run_gasbench(video_model, "--video-model")
 
@@ -642,14 +642,14 @@ def start_miner_services():
 
     # Start miner using ecosystem config
     result = subprocess.run(["pm2", "start", str(ecosystem_path)])
-    
+
     if result.returncode == 0:
         click.echo("✅ Generative miner started successfully!")
         # Show status
         subprocess.run(["pm2", "show", GENERATIVE_MINER])
     else:
         click.echo("❌ Generative miner failed to start", err=True)
-    
+
     return result.returncode == 0
 
 
@@ -696,13 +696,13 @@ def status():
 @click.option("--follow", "-f", is_flag=True, help="Follow log output")
 def logs(lines, follow):
     """Show generative miner logs"""
-    
+
     if follow:
         # Follow logs in real-time
         subprocess.run(["pm2", "logs", GENERATIVE_MINER, "--lines", str(lines)])
     else:
         # Show recent logs
-        result = subprocess.run(["pm2", "logs", GENERATIVE_MINER, "--lines", str(lines), "--nostream"], 
+        result = subprocess.run(["pm2", "logs", GENERATIVE_MINER, "--lines", str(lines), "--nostream"],
                               capture_output=True, text=True)
         if result.stdout:
             click.echo(result.stdout)
@@ -714,7 +714,7 @@ def logs(lines, follow):
 def info():
     """Show generative miner information and configuration"""
     load_miner_env()
-    
+
     click.echo("=== Generative Miner Configuration ===")
     click.echo(f"Wallet Name: {os.environ.get('BT_WALLET_NAME', 'miner1')}")
     click.echo(f"Wallet Hotkey: {os.environ.get('BT_WALLET_HOTKEY', 'default')}")
@@ -724,28 +724,51 @@ def info():
     click.echo(f"Device: {os.environ.get('MINER_DEVICE', 'auto')}")
     click.echo(f"Output Directory: {os.environ.get('MINER_OUTPUT_DIR', '/tmp/generated_content')}")
     click.echo(f"Max Concurrent Tasks: {os.environ.get('MINER_MAX_CONCURRENT_TASKS', '5')}")
-    
+
     click.echo("\n=== API Keys Status ===")
-    
+
     # Dynamically get API key requirements from all available services
     try:
         sys.path.insert(0, str(PROJECT_ROOT))
         from neurons.generator.services.service_registry import ServiceRegistry
-        
+
         registry = ServiceRegistry()
         api_keys = registry.get_all_api_key_requirements()
-        
+
         if api_keys:
             for key, description in api_keys.items():
                 status = "✅ Configured" if os.environ.get(key) else "❌ Not configured"
                 click.echo(f"{description}: {status}")
         else:
             click.echo("No API key requirements found from services")
-            
+
     except Exception as e:
         click.echo(f"❌ Could not load service API key requirements: {e}")
         # Fallback to basic message
         click.echo("Run the generator to see API key status")
+
+
+@generator.command(name="verify-c2pa")
+@click.argument("files", nargs=-1, required=True, type=click.Path(exists=True))
+@click.option("-v", "--verbose", is_flag=True, help="Show raw manifest data")
+@click.option("--json", "as_json", is_flag=True, help="Output results as JSON")
+def verify_c2pa_cmd(files, verbose, as_json):
+    """Verify C2PA credentials on image/video files.
+
+    Tests whether files have valid C2PA signatures from trusted AI generators.
+    This is the same verification validators use to accept/reject submissions.
+
+    Examples:
+        gascli generator verify-c2pa image.png
+        gascli generator verify-c2pa *.png --verbose
+        gascli generator verify-c2pa video.mp4 --json
+    """
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from neurons.generator.helper.verify_c2pa import run_verification
+
+    all_passed = run_verification(list(files), verbose=verbose, as_json=as_json)
+    if not all_passed:
+        sys.exit(1)
 
 
 # =============================================================================
@@ -768,19 +791,19 @@ def status():
 def install_py_deps(clear_venv):
     """Install Python dependencies via uv"""
     click.echo("Installing Python dependencies...")
-    
+
     # Get the path to install.sh in the project root
     install_script = PROJECT_ROOT / "install.sh"
-    
+
     if not install_script.exists():
         click.echo("Error: install.sh not found in project root.", err=True)
         return False
-    
+
     # Build command args
     cmd_args = [str(install_script), "--py-deps-only"]
     if clear_venv:
         cmd_args.append("--clear-venv")
-    
+
     # Run install.sh with appropriate flags
     try:
         result = subprocess.run(cmd_args, check=True)
@@ -799,19 +822,19 @@ def install_py_deps(clear_venv):
 def install_sys_deps(clear_venv):
     """Install system dependencies"""
     click.echo("Installing system dependencies...")
-    
+
     # Get the path to install.sh in the project root
     install_script = PROJECT_ROOT / "install.sh"
-    
+
     if not install_script.exists():
         click.echo("Error: install.sh not found in project root.", err=True)
         return False
-    
+
     # Build command args
     cmd_args = [str(install_script), "--sys-deps-only"]
     if clear_venv:
         cmd_args.append("--clear-venv")
-    
+
     # Run install.sh with appropriate flags
     try:
         result = subprocess.run(cmd_args, check=True)
@@ -830,19 +853,19 @@ def install_sys_deps(clear_venv):
 def install(clear_venv):
     """Run full installation (system + Python dependencies)"""
     click.echo("Running full installation...")
-    
+
     # Get the path to install.sh in the project root
     install_script = PROJECT_ROOT / "install.sh"
-    
+
     if not install_script.exists():
         click.echo("Error: install.sh not found in project root.", err=True)
         return False
-    
+
     # Build command args
     cmd_args = [str(install_script)]
     if clear_venv:
         cmd_args.append("--clear-venv")
-    
+
     # Run install.sh with appropriate flags
     try:
         result = subprocess.run(cmd_args, check=True)

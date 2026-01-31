@@ -17,6 +17,31 @@ from gas.protocol.epistula import generate_header
 if TYPE_CHECKING:
     from neurons.generator.task_manager import GenerationTask
 
+from gas.verification import detect_media_format
+
+_EXT_TO_MIME = {
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+}
+
+
+def _detect_content_type(data: bytes, modality: str) -> str:
+    """Detect content type from binary data magic bytes."""
+    ext = detect_media_format(data)
+    if ext in _EXT_TO_MIME:
+        return _EXT_TO_MIME[ext]
+    # Fallback based on modality
+    if modality == "image":
+        return "image/png"
+    elif modality == "video":
+        return "video/mp4"
+    return "application/octet-stream"
+
 
 @dataclass
 class ValidatorStats:
@@ -471,12 +496,7 @@ def _attempt_webhook_send(
             payload_size = len(binary_data)
             bt.logging.info(f"Webhook payload for task {task.task_id}: {payload_size} bytes of {task.modality} data")
 
-            if task.modality == "image":
-                content_type = "image/png"
-            elif task.modality == "video":
-                content_type = "video/mp4"
-            else:
-                content_type = "application/octet-stream"
+            content_type = _detect_content_type(binary_data, task.modality)
 
             headers = {
                 "Content-Type": content_type,
