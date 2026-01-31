@@ -420,9 +420,14 @@ def _check_ai_generated(manifest_data: Dict[str, Any]) -> bool:
                 label = assertion.get("label", "")
                 if "c2pa.ai_generated" in label or "c2pa.ai" in label:
                     return True
-                source_type = assertion.get("data", {}).get("digitalSourceType", "")
+                data = assertion.get("data", {})
+                source_type = data.get("digitalSourceType", "")
                 if source_type in AI_SOURCE_TYPES:
                     return True
+                for action in data.get("actions", []):
+                    action_source = action.get("digitalSourceType", "")
+                    if action_source in AI_SOURCE_TYPES:
+                        return True
         return False
     except Exception as e:
         bt.logging.debug(f"Error checking AI generation: {e}")
