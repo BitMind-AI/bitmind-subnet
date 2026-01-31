@@ -50,20 +50,10 @@ TRUSTED_CERT_ISSUERS = {
     "Haiper AI", "Haiper", "haiper.ai",
     # Lightricks (Lensa, Facetune, LTX Studio)
     "Lightricks Ltd.", "Lightricks", "lightricks.com",
-    # ElevenLabs (audio)
-    "ElevenLabs, Inc.", "ElevenLabs", "elevenlabs.io",
-    # Suno (audio)
-    "Suno, Inc.", "Suno", "suno.ai",
-    # Udio (audio)
-    "Udio, Inc.", "Udio", "udio.com",
-    # Canva
-    "Canva Pty Ltd", "canva.com",
     # Shutterstock
     "Shutterstock, Inc.", "shutterstock.com",
-    # ByteDance (various AI tools)
+    # ByteDance (Seedream, Seedance)
     "ByteDance Ltd.", "ByteDance", "bytedance.com",
-    # Anthropic (future-proofing)
-    "Anthropic, PBC", "Anthropic", "anthropic.com",
 }
 
 TRUSTED_CA_ISSUERS = {
