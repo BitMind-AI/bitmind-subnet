@@ -12,12 +12,7 @@ from typing import Optional, Dict, Any, List, Union
 
 import bittensor as bt
 
-try:
-    import c2pa
-    C2PA_AVAILABLE = True
-except ImportError:
-    C2PA_AVAILABLE = False
-    bt.logging.warning("c2pa-python not installed. C2PA verification will be disabled.")
+import c2pa
 
 
 TRUSTED_CERT_ISSUERS = {
@@ -87,9 +82,6 @@ class C2PAVerificationResult:
 
 def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
     """Verify C2PA credentials with full cryptographic validation."""
-    if not C2PA_AVAILABLE:
-        return C2PAVerificationResult(verified=False, error="c2pa-python library not installed")
-
     temp_file = None
     try:
         if isinstance(media_data, bytes):
