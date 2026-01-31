@@ -139,9 +139,7 @@ const apps = [
     max_restarts: 10,
     min_uptime: '10s',
     restart_delay: 4000,
-    error_file: path.join(config.outputDir, 'logs', 'miner-error.log'),
-    out_file: path.join(config.outputDir, 'logs', 'miner-out.log'),
-    log_file: path.join(config.outputDir, 'logs', 'miner-combined.log'),
+    // Use PM2 default log location (~/.pm2/logs/)
     time: true,
   }
 ];
