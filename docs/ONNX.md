@@ -1,5 +1,10 @@
 # ONNX Model Creation Guide
 
+> **⚠️ DEPRECATED**: ONNX format is no longer accepted for Subnet 34 competition submissions. 
+> Please use **safetensors format** instead. See the [Safetensors Guide](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md) for requirements.
+
+---
+
 This guide explains how to create ONNX models for discriminative mining using the example scripts in `neurons/discriminator/onnx_examples`.
 
 ## Key Requirements
