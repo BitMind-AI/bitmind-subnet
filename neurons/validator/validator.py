@@ -216,7 +216,7 @@ class Validator(BaseNeuron):
                         "responses from miners, or a bug in your reward functions."
                     )
 
-                burn_pct = .7
+                burn_pct = .5
                 audio_pct = .01
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["burn"],
@@ -224,7 +224,7 @@ class Validator(BaseNeuron):
                     block=block
                 )
 
-                d_pct = .8
+                d_pct = .84
                 video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["video_escrow"],
                      netuid=self.config.netuid, 
