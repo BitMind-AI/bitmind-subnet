@@ -7,7 +7,9 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 ## Discriminative Mining Overview
 
 - Miners are tasked with training multiclass classifiers that discern between genuine and AI-generated content, and are rewarded based on their accuracy. 
-- For each challenge, a miner's model is presented an image, video, or audio and is required to respond with a multiclass prediction [$p_{real}$, $p_{synthetic}$, $p_{semisynthetic}$] indicating whether the media is real, fully generated, or partially modified by AI. 
+- For each challenge, a miner's model is presented an image, video, or audio and is required to respond with a binary prediction [$p_{real}$, $p_{synthetic}$] indicating whether the media is real, fully generated, or partially modified by AI. 
+
+*Note that some datasets are labeled as semisynthetic  (e.g. inpainting, faceswaps), but for scoring we conflate this with the `synthetic` class*
 
 ## Model Preparation
 
