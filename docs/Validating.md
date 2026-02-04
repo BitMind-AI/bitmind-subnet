@@ -22,17 +22,19 @@ WALLET_HOTKEY=
 # API Keys
 WANDB_API_KEY=
 HUGGINGFACE_HUB_TOKEN=
+OPEN_ROUTER_API_KEY= # optional
 
 # Network
 CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
 # OTF public finney endpoint:  wss://entrypoint-finney.opentensor.ai:443
 # OTF public testnet endpoint: wss://test.finney.opentensor.ai:443/
 
-# Benchmark API (optional - defaults to https://gas.bitmind.ai)
-BENCHMARK_API_URL=https://gas.bitmind.ai
+CALLBACK_PORT=
+#EXTERNAL_CALLBACK_PORT=  # Optional
 
 # Cache config
 SN34_CACHE_DIR=~/.cache/sn34
+HF_HOME=~/.cache/huggingface
 HEARTBEAT=true
 
 # Generator config
