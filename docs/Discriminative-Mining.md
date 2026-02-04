@@ -11,11 +11,13 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 
 ## Model Preparation
 
-Discriminative miners can submit models in two formats:
-- **ONNX Format** - Traditional ONNX Runtime models (single .onnx file)
-- **Safetensors Format** - Custom PyTorch architectures with native weights
+> **⚠️ Important**: Competition submissions now require **safetensors format**. ONNX is no longer accepted.
 
-**📖 [How to Create ONNX Models](ONNX.md)** - Guide for creating compatible ONNX models
+Discriminative miners must submit models in **safetensors format**:
+- Directory containing: `model_config.yaml`, `model.py`, `*.safetensors`
+- ZIP archive of the directory for upload
+
+**📖 [Safetensors Model Specification](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md)** - Requirements for model submission
 
 You can submit models for any combination of modalities:
 - `image_detector.zip` - Image classification model
