@@ -49,6 +49,40 @@ SS58_ADDRESSES = {
 }
 
 
+def normalize_escrow_response(escrow_addresses):
+    """
+    Convert escrow API response to normalized format for backwards compatibility.
+    
+    Handles both old format (single address string) and new format (list of weighted addresses).
+    
+    Args:
+        escrow_addresses: Response from get_escrow_addresses API, either:
+            - Old format: {"image_escrow": "5EUJ...", ...}
+            - New format: {"image_escrow": [{"hotkey": "5EUJ...", "pct": 0.6}, ...], ...}
+    
+    Returns:
+        Normalized format: {"image_escrow": [{"hotkey": "...", "pct": float}], ...}
+        Returns None if input is None.
+    """
+    if escrow_addresses is None:
+        return None
+    
+    result = {}
+    for key, value in escrow_addresses.items():
+        if isinstance(value, str):
+            # Old format: single address string -> convert to list with 100%
+            result[key] = [{"hotkey": value, "pct": 1.0}]
+        elif isinstance(value, list):
+            # New format: list of {hotkey, pct} dicts
+            result[key] = value
+        else:
+            # Unknown format, skip
+            bt.logging.warning(f"Unknown escrow format for {key}: {type(value)}")
+            continue
+    
+    return result
+
+
 class Validator(BaseNeuron):
     neuron_type = NeuronType.VALIDATOR
 
@@ -183,23 +217,21 @@ class Validator(BaseNeuron):
             generator_uids = []
             bt.logging.warning("No generator rewards available; using empty generator_uids")
 
-        escrow_addresses = await get_escrow_addresses(
+        escrow_addresses_raw = await get_escrow_addresses(
             self.wallet.hotkey,
             base_url=self.config.benchmark.api_url,
         )
         
-        # Use fetched addresses or fall back to defaults
-        if escrow_addresses:
-            bt.logging.info("Using escrow addresses from API")
-            active_ss58_addresses = {
-                "burn": SS58_ADDRESSES["burn"],
-                "video_escrow": escrow_addresses.get("video_escrow", SS58_ADDRESSES["video_escrow"]),
-                "image_escrow": escrow_addresses.get("image_escrow", SS58_ADDRESSES["image_escrow"]),
-                "audio_escrow": escrow_addresses.get("audio_escrow", SS58_ADDRESSES["audio_escrow"]),
+        # Normalize escrow response (handles both old and new format)
+        escrow_addresses = normalize_escrow_response(escrow_addresses_raw)
+        
+        # Fall back to defaults if API failed
+        if not escrow_addresses:
+            escrow_addresses = {
+                "image_escrow": [{"hotkey": SS58_ADDRESSES["image_escrow"], "pct": 1.0}],
+                "video_escrow": [{"hotkey": SS58_ADDRESSES["video_escrow"], "pct": 1.0}],
+                "audio_escrow": [{"hotkey": SS58_ADDRESSES["audio_escrow"], "pct": 1.0}],
             }
-        else:
-            bt.logging.warning("Failed to fetch escrow addresses from API, using defaults")
-            active_ss58_addresses = SS58_ADDRESSES
         
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
@@ -219,26 +251,28 @@ class Validator(BaseNeuron):
                 burn_pct = .5
                 audio_pct = .01
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["burn"],
+                    hotkey_ss58=SS58_ADDRESSES["burn"],
                     netuid=self.config.netuid, 
                     block=block
                 )
 
                 d_pct = .84
-                video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["video_escrow"],
-                     netuid=self.config.netuid, 
-                     block=block)
-                image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["image_escrow"],
-                     netuid=self.config.netuid, 
-                     block=block)
-                audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["audio_escrow"],
-                     netuid=self.config.netuid, 
-                     block=block)
-
-                special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
+                
+                # Build special_uids set including all escrow UIDs across all modalities
+                special_uids = {burn_uid}
+                escrow_uid_map = {}  # {modality: [(uid, pct), ...]}
+                
+                for modality in ["image_escrow", "video_escrow", "audio_escrow"]:
+                    escrow_uid_map[modality] = []
+                    for entry in escrow_addresses.get(modality, []):
+                        uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                            hotkey_ss58=entry["hotkey"],
+                            netuid=self.config.netuid,
+                            block=block
+                        )
+                        special_uids.add(uid)
+                        escrow_uid_map[modality].append((uid, entry["pct"]))
+                
                 bt.logging.info(f"Special UIDs to exclude: {special_uids}")
 
                 # Compute norm excluding specials
@@ -264,14 +298,24 @@ class Validator(BaseNeuron):
                 active_mask = np.array([uid in active_uids_set for uid in range(len(normed_weights))])
                 normed_weights[active_mask] *= remaining_pct * g_pct
 
-                # Set special weights (only once, no prior scaling)
+                # Set burn weight
                 normed_weights[burn_uid] = burn_pct
-                normed_weights[audio_escrow_uid] = audio_pct
-                normed_weights[image_escrow_uid] = remaining_pct * d_pct / 2
-                normed_weights[video_escrow_uid] = remaining_pct * d_pct / 2
-                bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
-                bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
-                bt.logging.info(f"Audio escrow UID: {audio_escrow_uid}")
+                
+                # Distribute escrow weights across multiple UIDs per modality
+                image_total = remaining_pct * d_pct / 2
+                video_total = remaining_pct * d_pct / 2
+                
+                # Image escrow distribution
+                for uid, pct in escrow_uid_map.get("image_escrow", []):
+                    normed_weights[uid] = image_total * pct
+                
+                # Video escrow distribution
+                for uid, pct in escrow_uid_map.get("video_escrow", []):
+                    normed_weights[uid] = video_total * pct
+                
+                # Audio escrow distribution
+                for uid, pct in escrow_uid_map.get("audio_escrow", []):
+                    normed_weights[uid] = audio_pct * pct
 
                 # Verify burn rate
                 total_weight = np.sum(normed_weights)

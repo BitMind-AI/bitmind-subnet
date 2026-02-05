@@ -183,11 +183,11 @@ async def get_escrow_addresses(
     hotkey,
     base_url: str = "https://gas.bitmind.ai",
     activity_hours: int = 24,
-) -> Optional[Dict[str, str]]:
+) -> Optional[Dict[str, Any]]:
     """
     Fetch escrow addresses from the gas-api /escrow-addresses endpoint.
 
-    The endpoint returns escrow addresses for eligible validators based on:
+    The endpoint returns weighted escrow address distributions for eligible validators based on:
     - Whitelist membership
     - Recent gasstation activity
 
@@ -198,7 +198,9 @@ async def get_escrow_addresses(
 
     Returns:
         Dictionary with keys: image_escrow, video_escrow, audio_escrow
-        Each value is the SS58 address. Returns None on failure.
+        Each value is a list of {"hotkey": str, "pct": float} entries that sum to 1.0
+        Example: {"image_escrow": [{"hotkey": "5EUJ...", "pct": 0.6}, {"hotkey": "5E2N...", "pct": 0.4}]}
+        Returns None on failure.
     """
     try:
         bt.logging.info(f"Fetching escrow addresses from {base_url}/api/v1/validator/escrow-addresses")
