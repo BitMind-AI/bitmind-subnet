@@ -521,7 +521,7 @@ class GeneratorService:
         start = time.time()
         entries = self.content_manager.sample_prompts_with_source_media(
             k=k,
-            remove=True,
+            remove=False,
             strategy="least_used",
         )
 
