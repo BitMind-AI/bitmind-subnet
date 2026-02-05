@@ -600,5 +600,26 @@ def add_data_service_args(parser):
         default=200,
     )
 
+    parser.add_argument(
+        "--cleanup-interval",
+        type=int,
+        help="Cleanup interval in blocks for removing uploaded media (default: 7200 = ~24 hours)",
+        default=7200,
+    )
+
+    parser.add_argument(
+        "--cleanup-min-age-hours",
+        type=float,
+        help="Minimum age in hours before uploaded media can be cleaned up (default: 48)",
+        default=48.0,
+    )
+
+    parser.add_argument(
+        "--cleanup-batch-size",
+        type=int,
+        help="Number of media entries to clean up per batch (default: 1000)",
+        default=1000,
+    )
+
     # Shared source-limit args
     add_source_limit_args(parser)

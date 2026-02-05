@@ -970,3 +970,71 @@ class ContentManager:
 		is_duplicate = duplicate_info is not None
 
 		return perceptual_hash, is_duplicate, duplicate_info
+
+	def cleanup_uploaded_media(
+		self,
+		min_age_hours: float = 24.0,
+		require_rewarded: bool = True,
+		batch_size: int = 1000,
+	) -> Dict[str, int]:
+		"""
+		Clean up media that has been uploaded to HuggingFace (and optionally rewarded).
+		Deletes both database entries and files from disk.
+
+		Args:
+			min_age_hours: Minimum age in hours before media can be cleaned up
+			require_rewarded: If True, only delete media that is both uploaded AND rewarded
+			batch_size: Maximum number of entries to delete per call
+
+		Returns:
+			Dict with cleanup statistics: {'media_deleted', 'prompts_deleted', 'files_deleted'}
+		"""
+		total_media = 0
+		total_prompts = 0
+		total_files = 0
+
+		try:
+			while True:
+				media_deleted, prompts_deleted, file_paths = self.content_db.cleanup_uploaded_media(
+					min_age_hours=min_age_hours,
+					require_rewarded=require_rewarded,
+					batch_size=batch_size,
+				)
+
+				if media_deleted == 0:
+					break
+
+				total_media += media_deleted
+				total_prompts += prompts_deleted
+
+				# Delete files from disk
+				for file_path in file_paths:
+					try:
+						path = Path(file_path)
+						if path.exists():
+							path.unlink()
+							total_files += 1
+					except Exception as e:
+						bt.logging.warning(f"[CLEANUP] Failed to delete file {file_path}: {e}")
+
+				bt.logging.info(
+					f"[CLEANUP] Batch complete: {media_deleted} media, {prompts_deleted} prompts, "
+					f"{len(file_paths)} files"
+				)
+
+			if total_media > 0:
+				bt.logging.success(
+					f"[CLEANUP] Total cleaned: {total_media} media entries, "
+					f"{total_prompts} orphaned prompts, {total_files} files from disk"
+				)
+
+		except Exception as e:
+			bt.logging.error(f"[CLEANUP] Error during cleanup: {e}")
+			import traceback
+			bt.logging.error(traceback.format_exc())
+
+		return {
+			'media_deleted': total_media,
+			'prompts_deleted': total_prompts,
+			'files_deleted': total_files,
+		}
