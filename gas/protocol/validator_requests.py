@@ -211,7 +211,7 @@ async def get_escrow_addresses(
             async with session.get(url, headers=epistula_headers) as response:
                 if response.status == 200:
                     addresses = await response.json()
-                    bt.logging.info(f"Successfully fetched escrow addresses: {list(addresses.keys())}")
+                    #bt.logging.info(f"Successfully fetched escrow addresses: {list(addresses.keys())}")
                     return addresses
                 else:
                     error_text = await response.text()
