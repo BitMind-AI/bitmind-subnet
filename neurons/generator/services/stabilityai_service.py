@@ -188,8 +188,11 @@ class StabilityAIService(BaseGenerationService):
             img_bytes = response.content
             gen_time = time.time() - start_time
 
-            # Extract C2PA (embedded in image)
+            # Check for C2PA (already embedded in image binary, validator will extract it)
             c2pa_metadata = self._extract_c2pa_metadata(img_bytes, output_format)
+            has_c2pa = c2pa_metadata is not None
+            if has_c2pa:
+                bt.logging.debug(f"StabilityAI image has embedded C2PA credentials")
 
             # Return final miner-compatible result
             return {
@@ -199,7 +202,7 @@ class StabilityAIService(BaseGenerationService):
                     "provider": "stability.ai",
                     "format": output_format.upper(),
                     "generation_time": gen_time,
-                    "c2pa": c2pa_metadata,
+                    "has_c2pa": has_c2pa,
                 }
             }
 
