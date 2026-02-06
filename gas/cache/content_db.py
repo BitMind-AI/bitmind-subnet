@@ -1183,6 +1183,56 @@ class ContentDB:
             bt.logging.error(f"Error getting unrewarded verified miner media: {e}")
             return []
 
+    def get_recent_verified_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
+        """
+        Get verified miner media entries from the last N hours.
+        
+        Uses time-based lookback instead of rewarded flag to ensure miners with
+        recent verified submissions are always eligible for rewards, even if their
+        previous submissions were already rewarded in a prior epoch.
+
+        Args:
+            lookback_hours: Number of hours to look back (default: 2.0)
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of MediaEntry objects where source_type='miner', verified=1, 
+            created_at >= (now - lookback_hours)
+        """
+        try:
+            import time
+            if limit is None:
+                limit = 1000
+            limit = int(limit)
+            
+            # Calculate cutoff timestamp (seconds since epoch)
+            cutoff_timestamp = time.time() - (lookback_hours * 3600)
+
+            with self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                query = """
+                    SELECT * FROM media 
+                    WHERE source_type = 'miner' 
+                    AND verified = 1 
+                    AND created_at >= ?
+                    ORDER BY created_at DESC 
+                    LIMIT ?
+                """
+
+                cursor = conn.execute(query, (cutoff_timestamp, limit))
+                rows = cursor.fetchall()
+
+                entries = []
+                for row in rows:
+                    entry = self._row_to_media_entry(row)
+                    entries.append(entry)
+
+                bt.logging.debug(f"Found {len(entries)} verified miner media in last {lookback_hours}h")
+                return entries
+        except Exception as e:
+            bt.logging.error(f"Error getting recent verified miner media: {e}")
+            return []
+
     def prune_source_media(
         self,
         source_type: SourceType,

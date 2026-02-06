@@ -669,7 +669,11 @@ class ContentManager:
 		"""Get verified miner media entries that haven't been rewarded yet."""
 		return self.content_db.get_unrewarded_verified_miner_media(limit=limit)
 
-	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False) -> Dict[str, Dict[str, Any]]:
+	def get_recent_verified_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
+		"""Get verified miner media entries from the last N hours."""
+		return self.content_db.get_recent_verified_miner_media(lookback_hours=lookback_hours, limit=limit)
+
+	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False, lookback_hours: float = None) -> Dict[str, Dict[str, Any]]:
 		"""
 		Get verification statistics for miner media (pass rates, etc.).
 		Returns raw statistics without computing rewards - that's done in rewards.py.
@@ -678,6 +682,10 @@ class ContentManager:
 			limit: Maximum number of entries to consider per miner
 			include_all: If False (default), only return stats for unrewarded media.
 						If True, return stats for ALL verified media (rewarded + unrewarded)
+			lookback_hours: If provided, use time-based lookback instead of rewarded flag.
+						   Returns all verified media from the last N hours regardless of
+						   rewarded status. This ensures miners with recent verified submissions
+						   are always eligible for rewards.
 
 		Returns:
 			Dict mapping miner hotkey to verification stats:
@@ -695,14 +703,35 @@ class ContentManager:
 			}
 		"""
 		try:
-			if include_all:
+			if lookback_hours is not None:
+				# Time-based lookback: get all verified media from last N hours
+				verified_media = self.get_recent_verified_miner_media(
+					lookback_hours=lookback_hours, 
+					limit=limit or 1000
+				)
+				media_type = f"verified miner media from last {lookback_hours}h"
+				
+				# Diagnostic: also check what the old rewarded-flag approach would have found
+				unrewarded_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
+				if len(unrewarded_media) == 0 and len(verified_media) > 0:
+					bt.logging.warning(
+						f"Time-based lookback found {len(verified_media)} verified media, "
+						f"but rewarded-flag approach found 0. This indicates a timing edge case."
+					)
+				elif len(unrewarded_media) != len(verified_media):
+					bt.logging.debug(
+						f"Time-based: {len(verified_media)} media, rewarded-flag: {len(unrewarded_media)} media"
+					)
+			elif include_all:
 				verified_media = self.get_miner_media(verification_status="verified")
 				if limit and len(verified_media) > limit:
 					verified_media = verified_media[:limit]
+				media_type = "verified miner media"
 			else:
 				verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
+				media_type = "unrewarded verified miner media"
+			
 			if not verified_media:
-				media_type = "verified miner media" if include_all else "unrewarded verified miner media"
 				bt.logging.debug(f"No {media_type} found")
 				return {}
 
