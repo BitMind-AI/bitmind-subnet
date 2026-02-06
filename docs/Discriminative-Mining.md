@@ -81,28 +81,9 @@ At least one model (image, video, or audio) must be provided.
 
 ---
 
-## Model Formats
+## Model Format (Safetensors)
 
-### ONNX Format (Traditional)
-
-Package your ONNX model in a ZIP file:
-
-```bash
-# Package image model
-zip image_detector.zip image_detector.onnx
-
-# Package video model  
-zip video_detector.zip video_detector.onnx
-
-# Package audio model
-zip audio_detector.zip audio_detector.onnx
-```
-
-The ZIP should contain a single `.onnx` file.
-
-### Safetensors Format (PyTorch Native Weights)
-
-For custom PyTorch architectures, package these three required files:
+Package these three required files in your submission:
 
 ```
 model_submission.zip
@@ -184,18 +165,37 @@ def load_model(weights_path: str, num_classes: int = 2) -> nn.Module:
 ```
 
 **Allowed imports:**
-- `torch`, `torch.nn`, `torch.nn.functional`
+
+*ML Frameworks:*
+- `torch`, `torch.nn`, `torch.nn.functional`, `torch.cuda.amp`
 - `torchvision`, `torchvision.models`, `torchvision.transforms`
-- `torchaudio`, `transformers`,
-- `numpy`, `math`, `functools`, `typing`
+- `torchaudio`, `transformers`
 - `safetensors`, `safetensors.torch`
 - `timm`, `einops`
+- `flash_attn` (efficient attention for transformers)
+
+*Image/Video Processing:*
+- `PIL`, `PIL.Image`
+- `cv2` (opencv-python)
+- `skimage` (scikit-image)
+- `decord` (video decoding)
+- `fvcore`
+
+*Scientific Computing:*
+- `numpy`
+- `scipy`, `scipy.ndimage`, `scipy.signal`
+
+*Python Standard Library:*
+- `math`, `functools`, `typing`, `collections`, `dataclasses`, `enum`, `abc`, `pathlib`
 
 **Blocked imports (security):**
 - `os`, `sys`, `subprocess` - system access
 - `requests`, `socket`, `urllib` - network access
-- `pickle`, `marshal` - serialization/code execution
+- `pickle`, `marshal`, `joblib` - serialization (security risk)
 - `eval`, `exec`, `__import__` - dynamic code execution
+- `apex`, `deepspeed` - training-only
+- `boto3`, `google.cloud`, `azure` - cloud SDKs
+- `sqlite3`, `psycopg2`, `redis` - database access
 
 #### Creating safetensors weights
 
