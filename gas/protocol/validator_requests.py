@@ -230,55 +230,26 @@ async def get_benchmark_results(
     hotkey, metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai", 
 ):
     """
-    Query the remote benchmark API for discriminator MCC scores and generator fool rates.
+    Query the remote benchmark API for generator fool rates.
     Only returns results from the last week based on the finished_at field.
 
     Args:
+        hotkey: Validator hotkey for authentication
         metagraph: Bittensor metagraph for SS58 to UID mapping
         base_url: Base URL for the benchmark API
 
     Returns:
-        tuple: (generator_results, discriminator_results) - lists containing API response data
+        list: generator_results containing API response data
     """
     generator_results = []
-    discriminator_results = []
 
     one_week_ago = datetime.now() - timedelta(weeks=1)
-
-    def filter_recent_results(results):
-        """Filter results to only include those from the last week"""
-        filtered = []
-        for result in results:
-            try:
-                finished_at = datetime.fromisoformat(result['finished_at'].replace('Z', '+00:00'))
-                if finished_at.tzinfo is not None:
-                    finished_at = finished_at.replace(tzinfo=None)
-                if finished_at >= one_week_ago:
-                    filtered.append(result)
-            except (ValueError, TypeError) as e:
-                bt.logging.warning(f"Failed to parse finished_at timestamp: {result.get('finished_at')}, error: {e}")
-        return filtered
 
     try:
         bt.logging.info(f"Fetching benchmark results from {base_url}")
 
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            discriminator_url = f"{base_url}/api/v1/validator/discriminator-results"
-            bt.logging.debug(f"Requesting discriminator results from: {discriminator_url}")
-
-            epistula_headers = generate_header(hotkey, b"", None)
-            async with session.get(discriminator_url, headers=epistula_headers) as response:
-                if response.status == 200:
-                    all_discriminator_results = await response.json()
-                    discriminator_results = filter_recent_results(all_discriminator_results)
-                    bt.logging.info(f"Successfully fetched {len(all_discriminator_results)} discriminator results, {len(discriminator_results)} from last week")
-                else:
-                    error_text = await response.text()
-                    bt.logging.warning(
-                        f"Failed to fetch discriminator results: HTTP {response.status}, response: {error_text}"
-                    )
-
             after_timestamp = one_week_ago.isoformat()
             generator_url = f"{base_url}/api/v1/validator/generator-results?validator_address={hotkey.ss58_address}&after={after_timestamp}"
             bt.logging.debug(f"Requesting generator results from: {generator_url}")
@@ -296,6 +267,5 @@ async def get_benchmark_results(
 
     except Exception as e:
         bt.logging.error(f"Error fetching benchmark results: {e}")
-        #bt.logging.error(traceback.format_exc())
 
-    return generator_results, discriminator_results
+    return generator_results
