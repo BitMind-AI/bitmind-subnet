@@ -1,0 +1,25 @@
+services:
+  validator:
+    build: .
+    env_file: .env.validator
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "${CALLBACK_PORT:-10525}:${CALLBACK_PORT:-10525}"
+    volumes:
+      - sn34-cache:/root/.cache/sn34
+      - hf-cache:/root/.cache/huggingface
+      - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    shm_size: '16gb'
+
+volumes:
+  sn34-cache:
+  hf-cache:
