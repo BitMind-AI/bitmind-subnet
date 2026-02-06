@@ -101,28 +101,26 @@ class StabilityAIService(BaseGenerationService):
 
         return self._generate_image(task)
 
-    # ---------------------------------------------------------------------
-    # C2PA extractor
-    # ---------------------------------------------------------------------
-    def _extract_c2pa_metadata(self, img_bytes: bytes, output_format: str) -> Optional[Dict[str, Any]]:
-        """Extract embedded C2PA manifest from image bytes."""
-
+    def _check_c2pa(self, img_bytes: bytes, output_format: str) -> bool:
+        """Check if image has embedded C2PA credentials and log result."""
         mime_map = {
             "png": "image/png",
             "jpeg": "image/jpeg",
             "jpg": "image/jpeg",
             "webp": "image/webp",
         }
-
         mime_type = mime_map.get(output_format.lower(), "application/octet-stream")
 
         try:
             with io.BytesIO(img_bytes) as f:
                 with c2pa.Reader(mime_type, f) as reader:
-                    return reader.json()
-        except Exception as e:
-            bt.logging.warning(f"No C2PA metadata detected or failed to read: {e}")
-            return None
+                    manifest = reader.json()
+                    if manifest:
+                        bt.logging.debug("StabilityAI image has embedded C2PA credentials")
+                        return True
+        except Exception:
+            pass
+        return False
 
     def _get_endpoint(self, model: str) -> str:
         if model not in MODEL_INFO:
@@ -188,11 +186,8 @@ class StabilityAIService(BaseGenerationService):
             img_bytes = response.content
             gen_time = time.time() - start_time
 
-            # Check for C2PA (already embedded in image binary, validator will extract it)
-            c2pa_metadata = self._extract_c2pa_metadata(img_bytes, output_format)
-            has_c2pa = c2pa_metadata is not None
-            if has_c2pa:
-                bt.logging.debug(f"StabilityAI image has embedded C2PA credentials")
+            # Log C2PA detection (credentials are embedded in binary, validator extracts them)
+            self._check_c2pa(img_bytes, output_format)
 
             # Return final miner-compatible result
             return {
@@ -202,7 +197,6 @@ class StabilityAIService(BaseGenerationService):
                     "provider": "stability.ai",
                     "format": output_format.upper(),
                     "generation_time": gen_time,
-                    "has_c2pa": has_c2pa,
                 }
             }
 
