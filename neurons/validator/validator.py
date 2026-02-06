@@ -299,11 +299,9 @@ class Validator(BaseNeuron):
         # where no unrewarded media exists at epoch boundary.
         verification_stats = self.content_manager.get_unrewarded_verification_stats(lookback_hours=2.0)
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
-        generator_results, discriminator_results = await get_benchmark_results(
+        generator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
         )
-        #bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
-        #bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
         # Get generator liveness data for filtering inactive generators
         generator_liveness = None
