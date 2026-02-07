@@ -509,6 +509,10 @@ def _attempt_webhook_send(
             if result.get("metadata"):
                 metadata = result["metadata"]
                 for key, value in metadata.items():
+                    # Skip complex objects (dicts, lists) - they can't be serialized to HTTP headers
+                    # C2PA manifests are already embedded in the binary data
+                    if isinstance(value, (dict, list)) or value is None:
+                        continue
                     header_key = f"x-meta-{key.replace('_', '-')}"
                     headers[header_key] = str(value)
 

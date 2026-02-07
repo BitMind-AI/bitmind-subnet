@@ -128,6 +128,7 @@ class DataService:
             #self.start_scraper_cycle,
             self.start_dataset_download,
             self.start_upload_cycle,
+            self.start_cleanup_cycle,
         ]
 
     async def start(self):
@@ -557,6 +558,36 @@ class DataService:
             bt.logging.info(f"[DATA-SERVICE] Block: {block} | Step: {self.step}")
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Error in log_on_block: {e}")
+
+    @on_block_interval("cleanup_interval")
+    async def start_cleanup_cycle(self, block):
+        """
+        Clean up uploaded+rewarded media to free disk space.
+        Runs once per cleanup_interval (default ~24 hours).
+        """
+        try:
+            bt.logging.info(f"[DATA-SERVICE] Starting cleanup cycle at block {block}")
+            
+            min_age_hours = getattr(self.config, 'cleanup_min_age_hours', 48.0)
+            batch_size = getattr(self.config, 'cleanup_batch_size', 1000)
+            
+            stats = self.content_manager.cleanup_uploaded_media(
+                min_age_hours=min_age_hours,
+                require_rewarded=True,
+                batch_size=batch_size,
+            )
+            
+            if stats['media_deleted'] > 0:
+                bt.logging.success(
+                    f"[DATA-SERVICE] Cleanup complete: {stats['media_deleted']} media, "
+                    f"{stats['prompts_deleted']} prompts, {stats['files_deleted']} files removed"
+                )
+            else:
+                bt.logging.info("[DATA-SERVICE] Cleanup complete: no eligible media to clean")
+                
+        except Exception as e:
+            bt.logging.error(f"[DATA-SERVICE] Error in cleanup cycle: {e}")
+            bt.logging.error(traceback.format_exc())
 
     def log_status(self):
         """Log current service status."""

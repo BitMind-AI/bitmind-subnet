@@ -239,7 +239,7 @@ class Validator(BaseNeuron):
                      block=block)
 
                 special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
-                bt.logging.info(f"Special UIDs to exclude: {special_uids}")
+                #bt.logging.info(f"Special UIDs to exclude: {special_uids}")
 
                 # Compute norm excluding specials
                 norm = np.ones_like(self.scores)
@@ -269,9 +269,9 @@ class Validator(BaseNeuron):
                 normed_weights[audio_escrow_uid] = audio_pct
                 normed_weights[image_escrow_uid] = remaining_pct * d_pct / 2
                 normed_weights[video_escrow_uid] = remaining_pct * d_pct / 2
-                bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
-                bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
-                bt.logging.info(f"Audio escrow UID: {audio_escrow_uid}")
+                #bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
+                #bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
+                #bt.logging.info(f"Audio escrow UID: {audio_escrow_uid}")
 
                 # Verify burn rate
                 total_weight = np.sum(normed_weights)
@@ -293,15 +293,15 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
-        # Get verification stats for ONLY unrewarded media - prevents double-counting of already-rewarded submissions
-        # (include_all=True was a bug that counted already-rewarded media again)
-        verification_stats = self.content_manager.get_unrewarded_verification_stats(include_all=False)
+        # Use time-based lookback (2 hours) instead of rewarded flag to ensure miners with
+        # recent verified submissions are always eligible for rewards, even if their previous
+        # submissions were already rewarded in a prior epoch. This prevents the race condition
+        # where no unrewarded media exists at epoch boundary.
+        verification_stats = self.content_manager.get_unrewarded_verification_stats(lookback_hours=2.0)
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
-        generator_results, discriminator_results = await get_benchmark_results(
+        generator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
         )
-        #bt.logging.debug(f"discriminator_results: {json.dumps(discriminator_results, indent=2)}")
-        #bt.logging.debug(f"generator_results: {json.dumps(generator_results, indent=2)}")
 
         # Get generator liveness data for filtering inactive generators
         generator_liveness = None

@@ -4,6 +4,7 @@ import os
 import pickle
 import random
 import tempfile
+import threading
 import time
 
 import aiohttp
@@ -46,7 +47,9 @@ class GenerativeChallengeManager:
         self.content_manager = ContentManager(self.config.cache.base_dir)
 
         self.challenge_tasks = {}
-        self.challenge_lock = asyncio.Lock()
+        # Use threading.Lock instead of asyncio.Lock because FastAPIThreadedServer
+        # runs in a separate thread with its own event loop
+        self.challenge_lock = threading.Lock()
 
         # Track generator liveness: hotkey -> last activity timestamp
         # Updated when a generator successfully responds to a challenge
@@ -131,7 +134,7 @@ class GenerativeChallengeManager:
 
         if response_data and response_data.get("task_id"):
             miner_task_id = response_data.get("task_id")
-            async with self.challenge_lock:
+            with self.challenge_lock:
                 self.challenge_tasks[miner_task_id] = {
                     "uid": uid,
                     "prompt_id": prompt_entry.id,
@@ -191,7 +194,8 @@ class GenerativeChallengeManager:
             bt.logging.error(f"Task {task_id} from {format_uid_info()} (IP: {client_ip}): Empty binary payload received")
             return Response(status_code=400, content="Empty binary payload")
 
-        async with self.challenge_lock:
+        # copy the challenge info and release the lock before doing async work.
+        with self.challenge_lock:
             bt.logging.debug(f"Callback for task {task_id}: Current active tasks: {list(self.challenge_tasks.keys())}")
             if task_id not in self.challenge_tasks:
                 # Check if this might be a stale task from a previous session
@@ -200,21 +204,33 @@ class GenerativeChallengeManager:
                 # while still indicating the task wasn't found in our debug logs
                 return Response(status_code=200, content="Task not found in current session")
 
-            challenge_info = self.challenge_tasks[task_id]
+            # Copy the challenge info so we can release the lock before async work
+            challenge_info = self.challenge_tasks[task_id].copy()
             generator_uid = challenge_info["uid"]
 
-            auth_uid_msg = f" (auth UID: {uid})" if uid != generator_uid and uid != "unknown" else ""
-            bt.logging.info(
-                f"Received binary upload for task {task_id}, UID {generator_uid}{auth_uid_msg}, "
-                f"type: {content_type}, size: {len(binary_data)} bytes (IP: {client_ip})"
-            )
+        auth_uid_msg = f" (auth UID: {uid})" if uid != generator_uid and uid != "unknown" else ""
+        bt.logging.info(
+            f"Received binary upload for task {task_id}, UID {generator_uid}{auth_uid_msg}, "
+            f"type: {content_type}, size: {len(binary_data)} bytes (IP: {client_ip})"
+        )
 
-            filepath, error_message = await self.store_binary_content(
-                binary_data, content_type, generator_uid, task_id
-            )
+        # Perform async storage work outside the lock
+        filepath, error_message = await self.store_binary_content(
+            binary_data, content_type, generator_uid, task_id
+        )
+
+        # Re-acquire lock to update task status and clean up
+        with self.challenge_lock:
+            # Check if task still exists (could have been cleaned up by another process)
+            if task_id not in self.challenge_tasks:
+                if filepath:
+                    bt.logging.debug(f"Task {task_id} already removed, but content was stored at {filepath}")
+                    return Response(status_code=200, content="Binary content received")
+                return Response(status_code=200, content="Task already processed")
+
             if filepath:
-                challenge_info["status"] = "completed"
-                challenge_info["filepath"] = filepath
+                self.challenge_tasks[task_id]["status"] = "completed"
+                self.challenge_tasks[task_id]["filepath"] = filepath
                 bt.logging.success(f"Task {task_id} completed with binary upload: {filepath}")
 
                 # Track generator liveness - record when they successfully responded
@@ -225,8 +241,8 @@ class GenerativeChallengeManager:
                 del self.challenge_tasks[task_id]
                 return Response(status_code=200, content="Binary content received")
             else:
-                challenge_info["status"] = "failed"
-                challenge_info["error_message"] = error_message or "Failed to store binary content"
+                self.challenge_tasks[task_id]["status"] = "failed"
+                self.challenge_tasks[task_id]["error_message"] = error_message or "Failed to store binary content"
 
                 del self.challenge_tasks[task_id]
                 return Response(status_code=400, content=error_message or "Failed to store binary content")
@@ -505,27 +521,27 @@ class GenerativeChallengeManager:
     def save_state(self, save_dir: str, filename: str):
         """Save challenge tasks state and generator liveness to disk"""
         try:
-            bt.logging.info(f"Saving challenge tasks state: {len(self.challenge_tasks)} active tasks")
-            # Clean up stale tasks before saving (older than 2 hours)
-            current_time = time.time()
-            stale_tasks = []
-            for task_id, task_info in self.challenge_tasks.items():
-                if current_time - task_info.get("sent_at", 0) > 7200:  # 2 hours
-                    stale_tasks.append(task_id)
+            with self.challenge_lock:
+                bt.logging.info(f"Saving challenge tasks state: {len(self.challenge_tasks)} active tasks")
+                current_time = time.time()
+                stale_tasks = []
+                for task_id, task_info in self.challenge_tasks.items():
+                    if current_time - task_info.get("sent_at", 0) > 7200:
+                        stale_tasks.append(task_id)
 
-            for task_id in stale_tasks:
-                del self.challenge_tasks[task_id]
-                bt.logging.debug(f"Removed stale task {task_id} during state save")
+                for task_id in stale_tasks:
+                    del self.challenge_tasks[task_id]
+                    bt.logging.debug(f"Removed stale task {task_id} during state save")
 
-            # Save challenge tasks
+                tasks_to_save = self.challenge_tasks.copy()
+
             filepath = os.path.join(save_dir, filename)
             with open(filepath, 'wb') as f:
-                pickle.dump(self.challenge_tasks, f)
-            bt.logging.info(f"Successfully saved {len(self.challenge_tasks)} active challenge tasks to {filepath}")
+                pickle.dump(tasks_to_save, f)
+            bt.logging.info(f"Successfully saved {len(tasks_to_save)} active challenge tasks to {filepath}")
 
-            # Save generator liveness data (keep entries from last 7 days)
             liveness_filepath = os.path.join(save_dir, "generator_liveness.pkl")
-            max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
+            max_liveness_age = 7 * 24 * 3600
             valid_liveness = {
                 hotkey: ts
                 for hotkey, ts in self.generator_last_seen.items()
@@ -541,6 +557,7 @@ class GenerativeChallengeManager:
         """Load challenge tasks state and generator liveness from disk"""
         try:
             filepath = os.path.join(save_dir, filename)
+            valid_tasks = {}
             if not os.path.exists(filepath):
                 bt.logging.debug(f"No challenge tasks state file found at {filepath}")
             else:
@@ -548,34 +565,35 @@ class GenerativeChallengeManager:
                     loaded_tasks = pickle.load(f)
 
                 current_time = time.time()
-                valid_tasks = {}
                 for task_id, task_info in loaded_tasks.items():
-                    if current_time - task_info.get("sent_at", 0) <= 7200:  # 2 hours
+                    if current_time - task_info.get("sent_at", 0) <= 7200:
                         valid_tasks[task_id] = task_info
 
-                self.challenge_tasks = valid_tasks
-                bt.logging.info(f"Loaded {len(self.challenge_tasks)} active challenge tasks from {filepath}")
-
-            # Load generator liveness data
+            valid_liveness = {}
             liveness_filepath = os.path.join(save_dir, "generator_liveness.pkl")
             if os.path.exists(liveness_filepath):
                 with open(liveness_filepath, 'rb') as f:
                     loaded_liveness = pickle.load(f)
 
-                # Only keep entries from last 7 days
                 current_time = time.time()
-                max_liveness_age = 7 * 24 * 3600  # 7 days in seconds
+                max_liveness_age = 7 * 24 * 3600  # 7 days
                 valid_liveness = {
                     hotkey: ts
                     for hotkey, ts in loaded_liveness.items()
                     if (current_time - ts) <= max_liveness_age
                 }
-                self.generator_last_seen = valid_liveness
-                bt.logging.info(f"Loaded liveness data for {len(valid_liveness)} generators")
 
-            return True  # Success
+            with self.challenge_lock:
+                self.challenge_tasks = valid_tasks
+                self.generator_last_seen = valid_liveness
+
+            bt.logging.info(f"Loaded {len(valid_tasks)} active challenge tasks from {filepath}")
+            bt.logging.info(f"Loaded liveness data for {len(valid_liveness)} generators")
+
+            return True
         except Exception as e:
             bt.logging.error(f"Failed to load challenge tasks state: {e}")
-            self.challenge_tasks = {}
-            self.generator_last_seen = {}
-            return False  # Failure
+            with self.challenge_lock:
+                self.challenge_tasks = {}
+                self.generator_last_seen = {}
+            return False

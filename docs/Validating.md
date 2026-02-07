@@ -84,3 +84,107 @@ gascli v logs
 gascli v --help
 ```
 
+---
+
+## Docker Deployment
+
+As an alternative to the PM2-based setup above, you can run the validator entirely in Docker. The Docker setup runs all 3 services (`sn34-validator`, `sn34-generator`, `sn34-data`) inside a single container managed by supervisord.
+
+### Prerequisites
+
+- **Docker** (with Docker Compose v2)
+- **NVIDIA Container Toolkit** for GPU passthrough. Install guide: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+- **Bittensor wallet** files already created on the host (typically at `~/.bittensor/wallets/`)
+
+### Quick Start
+
+1. **Clone the repository** (if not already done):
+   ```bash
+   git clone <repository-url>
+   cd bitmind-subnet
+   ```
+
+2. **Create your `.env.validator`** file:
+   ```bash
+   cp .env.validator.template .env.validator
+   ```
+   Fill in your wallet name, hotkey, API keys, and network settings. See the template for all available options.
+
+3. **Build and start**:
+   ```bash
+   docker compose up -d --build
+   ```
+
+4. **View logs**:
+   ```bash
+   docker compose logs -f validator
+   ```
+
+### Configuration
+
+The Docker setup uses the same `.env.validator` file as the PM2 setup. All environment variables work identically, with these notes:
+
+| Variable | Docker behavior |
+|---|---|
+| `SN34_CACHE_DIR` | Overridden to `/root/.cache/sn34` inside the container (persisted via Docker volume) |
+| `HF_HOME` | Overridden to `/root/.cache/huggingface` inside the container (persisted via Docker volume) |
+| `AUTO_UPDATE` | Always disabled. Update by rebuilding the image (see below) |
+| `NETUID` | Auto-derived from `CHAIN_ENDPOINT`. Set explicitly if using a custom endpoint |
+| `START_VALIDATOR` | Set to `false` to disable the validator process |
+| `START_GENERATOR` | Set to `false` to disable the generator process |
+| `START_DATA` | Set to `false` to disable the data process |
+
+### Wallet Files
+
+Wallet files are bind-mounted from the host. By default, docker-compose mounts `~/.bittensor/wallets/`. To use a custom path, set `WALLET_PATH` before starting:
+
+```bash
+export WALLET_PATH=/path/to/your/wallets
+docker compose up -d
+```
+
+### Persistent Storage
+
+The Docker setup uses named volumes to persist data across container restarts:
+
+- **`sn34-cache`** -- SQLite database, media files, state files (`/root/.cache/sn34/`)
+- **`hf-cache`** -- HuggingFace model downloads (`/root/.cache/huggingface/`)
+
+> **Note**: The first startup will download 100+ GB of ML models into the `hf-cache` volume. Subsequent restarts reuse the cached models.
+
+### Common Operations
+
+```bash
+# Start the validator
+docker compose up -d
+
+# Stop the validator
+docker compose down
+
+# View live logs
+docker compose logs -f validator
+
+# Rebuild after code changes
+docker compose build && docker compose up -d
+
+# Restart the container
+docker compose restart validator
+
+# Check container status
+docker compose ps
+
+# Shell into the running container
+docker compose exec validator bash
+```
+
+### Updating
+
+Auto-update is disabled in Docker (containers are immutable). To update to a new version:
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+This rebuilds the image with the latest code while preserving all cached data in the Docker volumes.

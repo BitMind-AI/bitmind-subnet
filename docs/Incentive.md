@@ -142,36 +142,33 @@ This design incentivizes generators to:
 
 ## Discriminator Rewards
 
-The discriminator incentive mechanism uses a winner-take-all approach with a dynamic threshold system that gradually decays over time. This ensures that only the best-performing discriminators receive rewards while maintaining competition over extended periods. Currently, scores are mean of image and video multiclass MCCs. In the future, this may be broken out into individual image and video thresholds. 
+Discriminators are scored using the **sn34_score**, which is calculated as:
 
-### Threshold Function
+$$\text{sn34\_score} = 0.5 \times \text{MCC} + 0.5 \times (1 - \text{Brier})$$
 
-The threshold function $T(x)$ is defined as:
+### Matthews Correlation Coefficient (MCC)
 
-$$T(x) = \max \left( S + \varepsilon, (S + \text{boost}) e^{-kx} \right)$$
+MCC measures classification quality for binary classification, ranging from -1 to +1 where +1 is perfect prediction:
+
+$$\text{MCC} = \frac{TP \times TN - FP \times FN}{\sqrt{(TP + FP)(TP + FN)(TN + FP)(TN + FN)}}$$
 
 Where:
-- $S$ = new leader's score (e.g., 0.87)
-- $\varepsilon$ = floor margin (use 0.01 $\Rightarrow$ floor = $S + 0.01$)
-- $\text{boost} = \min(\text{cap}, g \cdot \Delta)$, with $\Delta = S - S_{\text{prev}}$
-  - pick $g = 2.5$ and $\text{cap} = 0.05$
-  - (so a +0.02 improvement $\Rightarrow 2.5 \times 0.02 = 0.05 \Rightarrow$ full 5-point boost)
-- We choose $k$ by duration (lands exactly on the floor at $H$ epochs):
+- $TP$ = True Positives (correctly identified synthetic)
+- $TN$ = True Negatives (correctly identified real)
+- $FP$ = False Positives (real misclassified as synthetic)
+- $FN$ = False Negatives (synthetic misclassified as real)
 
-$$k = \frac{1}{H} \ln \left( \frac{S + \text{boost}}{S + \varepsilon} \right)$$
+### Brier Score
 
-- with $H = 140$ epochs (~1 week)
+Brier score measures probability calibration, ranging from 0 (perfect) to 1 (worst):
 
-### Example
+$$\text{Brier} = \frac{1}{N} \sum_{i=1}^{N} (p_i - y_i)^2$$
 
-Using the scenario from the threshold calculation:
-- $S_{\text{prev}} = 0.85$, $S = 0.87$, $\Delta = 0.02$
-- $\text{boost} = \min(0.05, 2.5 \times 0.02) = 0.05 \Rightarrow$ initial $T(0) = 0.92$
-- $\varepsilon = 0.01 \Rightarrow$ floor $= 0.88$
-- $k = \frac{1}{140} \ln(0.92/0.88) \approx 3.17 \times 10^{-4}$
-- Then $T(x)$ decays smoothly: $\sim 0.900$ around 70 epochs, and clamps to 0.88 at 140.
+Where:
+- $p_i$ = predicted probability of synthetic for sample $i$
+- $y_i$ = actual label (1 for synthetic, 0 for real)
+- $N$ = total number of samples
 
+### Final Score
 
-The following plot illustrates how the threshold function decays over time using the example parameters above:
-
-![Threshold Decay Function](static/threshold_decay.png)
+The final sn34_score ranges from 0 to 1, with higher scores indicating better performance. This scoring balances both classification accuracy (MCC) and confidence calibration (Brier score), rewarding models that are not only accurate but also well-calibrated in their probability predictions.

@@ -52,8 +52,8 @@ def create_set_weights(version: int, netuid: int):
             metagraph=metagraph,
         )
 
-        bt.logging.info("Setting Weights: " + str(processed_weights))
-        bt.logging.info("Weight Uids: " + str(processed_weight_uids))
+        #bt.logging.info("Setting Weights: " + str(processed_weights))
+        #bt.logging.info("Weight Uids: " + str(processed_weight_uids))
         for _ in range(3):
             result, message = subtensor.set_weights(
                 wallet=wallet,

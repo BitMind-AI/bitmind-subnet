@@ -669,7 +669,11 @@ class ContentManager:
 		"""Get verified miner media entries that haven't been rewarded yet."""
 		return self.content_db.get_unrewarded_verified_miner_media(limit=limit)
 
-	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False) -> Dict[str, Dict[str, Any]]:
+	def get_recent_verified_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
+		"""Get verified miner media entries from the last N hours."""
+		return self.content_db.get_recent_verified_miner_media(lookback_hours=lookback_hours, limit=limit)
+
+	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False, lookback_hours: float = None) -> Dict[str, Dict[str, Any]]:
 		"""
 		Get verification statistics for miner media (pass rates, etc.).
 		Returns raw statistics without computing rewards - that's done in rewards.py.
@@ -678,6 +682,10 @@ class ContentManager:
 			limit: Maximum number of entries to consider per miner
 			include_all: If False (default), only return stats for unrewarded media.
 						If True, return stats for ALL verified media (rewarded + unrewarded)
+			lookback_hours: If provided, use time-based lookback instead of rewarded flag.
+						   Returns all verified media from the last N hours regardless of
+						   rewarded status. This ensures miners with recent verified submissions
+						   are always eligible for rewards.
 
 		Returns:
 			Dict mapping miner hotkey to verification stats:
@@ -695,14 +703,35 @@ class ContentManager:
 			}
 		"""
 		try:
-			if include_all:
+			if lookback_hours is not None:
+				# Time-based lookback: get all verified media from last N hours
+				verified_media = self.get_recent_verified_miner_media(
+					lookback_hours=lookback_hours, 
+					limit=limit or 1000
+				)
+				media_type = f"verified miner media from last {lookback_hours}h"
+				
+				# Diagnostic: also check what the old rewarded-flag approach would have found
+				unrewarded_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
+				if len(unrewarded_media) == 0 and len(verified_media) > 0:
+					bt.logging.warning(
+						f"Time-based lookback found {len(verified_media)} verified media, "
+						f"but rewarded-flag approach found 0. This indicates a timing edge case."
+					)
+				elif len(unrewarded_media) != len(verified_media):
+					bt.logging.debug(
+						f"Time-based: {len(verified_media)} media, rewarded-flag: {len(unrewarded_media)} media"
+					)
+			elif include_all:
 				verified_media = self.get_miner_media(verification_status="verified")
 				if limit and len(verified_media) > limit:
 					verified_media = verified_media[:limit]
+				media_type = "verified miner media"
 			else:
 				verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
+				media_type = "unrewarded verified miner media"
+			
 			if not verified_media:
-				media_type = "verified miner media" if include_all else "unrewarded verified miner media"
 				bt.logging.debug(f"No {media_type} found")
 				return {}
 
@@ -970,3 +999,71 @@ class ContentManager:
 		is_duplicate = duplicate_info is not None
 
 		return perceptual_hash, is_duplicate, duplicate_info
+
+	def cleanup_uploaded_media(
+		self,
+		min_age_hours: float = 24.0,
+		require_rewarded: bool = True,
+		batch_size: int = 1000,
+	) -> Dict[str, int]:
+		"""
+		Clean up media that has been uploaded to HuggingFace (and optionally rewarded).
+		Deletes both database entries and files from disk.
+
+		Args:
+			min_age_hours: Minimum age in hours before media can be cleaned up
+			require_rewarded: If True, only delete media that is both uploaded AND rewarded
+			batch_size: Maximum number of entries to delete per call
+
+		Returns:
+			Dict with cleanup statistics: {'media_deleted', 'prompts_deleted', 'files_deleted'}
+		"""
+		total_media = 0
+		total_prompts = 0
+		total_files = 0
+
+		try:
+			while True:
+				media_deleted, prompts_deleted, file_paths = self.content_db.cleanup_uploaded_media(
+					min_age_hours=min_age_hours,
+					require_rewarded=require_rewarded,
+					batch_size=batch_size,
+				)
+
+				if media_deleted == 0:
+					break
+
+				total_media += media_deleted
+				total_prompts += prompts_deleted
+
+				# Delete files from disk
+				for file_path in file_paths:
+					try:
+						path = Path(file_path)
+						if path.exists():
+							path.unlink()
+							total_files += 1
+					except Exception as e:
+						bt.logging.warning(f"[CLEANUP] Failed to delete file {file_path}: {e}")
+
+				bt.logging.info(
+					f"[CLEANUP] Batch complete: {media_deleted} media, {prompts_deleted} prompts, "
+					f"{len(file_paths)} files"
+				)
+
+			if total_media > 0:
+				bt.logging.success(
+					f"[CLEANUP] Total cleaned: {total_media} media entries, "
+					f"{total_prompts} orphaned prompts, {total_files} files from disk"
+				)
+
+		except Exception as e:
+			bt.logging.error(f"[CLEANUP] Error during cleanup: {e}")
+			import traceback
+			bt.logging.error(traceback.format_exc())
+
+		return {
+			'media_deleted': total_media,
+			'prompts_deleted': total_prompts,
+			'files_deleted': total_files,
+		}

@@ -1183,6 +1183,56 @@ class ContentDB:
             bt.logging.error(f"Error getting unrewarded verified miner media: {e}")
             return []
 
+    def get_recent_verified_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
+        """
+        Get verified miner media entries from the last N hours.
+        
+        Uses time-based lookback instead of rewarded flag to ensure miners with
+        recent verified submissions are always eligible for rewards, even if their
+        previous submissions were already rewarded in a prior epoch.
+
+        Args:
+            lookback_hours: Number of hours to look back (default: 2.0)
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of MediaEntry objects where source_type='miner', verified=1, 
+            created_at >= (now - lookback_hours)
+        """
+        try:
+            import time
+            if limit is None:
+                limit = 1000
+            limit = int(limit)
+            
+            # Calculate cutoff timestamp (seconds since epoch)
+            cutoff_timestamp = time.time() - (lookback_hours * 3600)
+
+            with self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                query = """
+                    SELECT * FROM media 
+                    WHERE source_type = 'miner' 
+                    AND verified = 1 
+                    AND created_at >= ?
+                    ORDER BY created_at DESC 
+                    LIMIT ?
+                """
+
+                cursor = conn.execute(query, (cutoff_timestamp, limit))
+                rows = cursor.fetchall()
+
+                entries = []
+                for row in rows:
+                    entry = self._row_to_media_entry(row)
+                    entries.append(entry)
+
+                bt.logging.debug(f"Found {len(entries)} verified miner media in last {lookback_hours}h")
+                return entries
+        except Exception as e:
+            bt.logging.error(f"Error getting recent verified miner media: {e}")
+            return []
+
     def prune_source_media(
         self,
         source_type: SourceType,
@@ -1494,3 +1544,99 @@ class ContentDB:
                 return items
 
             raise ValueError(f"Unknown sampling strategy: {strategy}")
+
+    def cleanup_uploaded_media(
+        self,
+        min_age_hours: float = 24.0,
+        require_rewarded: bool = True,
+        batch_size: int = 1000,
+    ) -> Tuple[int, int, List[str]]:
+        """
+        Delete media entries that have been uploaded (and optionally rewarded).
+        Also cleans up orphaned prompts that no longer have associated media.
+
+        Args:
+            min_age_hours: Minimum age in hours before media can be cleaned up
+            require_rewarded: If True, only delete media that is both uploaded AND rewarded
+            batch_size: Maximum number of entries to delete per call
+
+        Returns:
+            Tuple of (media_deleted, prompts_deleted, list of file_paths to delete from disk)
+        """
+        try:
+            cutoff_time = time.time() - (min_age_hours * 3600)
+            
+            with self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                
+                # Build the WHERE clause
+                if require_rewarded:
+                    where_clause = """
+                        uploaded = 1 
+                        AND rewarded = 1 
+                        AND created_at < ?
+                    """
+                else:
+                    where_clause = """
+                        uploaded = 1 
+                        AND created_at < ?
+                    """
+                
+                # Get media entries to delete (with file paths for disk cleanup)
+                query = f"""
+                    SELECT id, file_path, prompt_id FROM media 
+                    WHERE {where_clause}
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                """
+                cursor = conn.execute(query, (cutoff_time, batch_size))
+                rows = cursor.fetchall()
+                
+                if not rows:
+                    return (0, 0, [])
+                
+                media_ids = [row["id"] for row in rows]
+                file_paths = [row["file_path"] for row in rows if row["file_path"]]
+                prompt_ids = set(row["prompt_id"] for row in rows if row["prompt_id"])
+                
+                # Delete media entries
+                placeholders = ",".join("?" * len(media_ids))
+                conn.execute(
+                    f"DELETE FROM media WHERE id IN ({placeholders})",
+                    media_ids
+                )
+                media_deleted = len(media_ids)
+                
+                # Clean up orphaned prompts (prompts with no remaining media references)
+                prompts_deleted = 0
+                if prompt_ids:
+                    for prompt_id in prompt_ids:
+                        # Check if any media still references this prompt
+                        remaining = conn.execute(
+                            "SELECT COUNT(*) FROM media WHERE prompt_id = ?",
+                            (prompt_id,)
+                        ).fetchone()[0]
+                        
+                        if remaining == 0:
+                            # Also check if any media uses this prompt's source_media_id
+                            # (prompts can be sources for other media)
+                            conn.execute(
+                                "DELETE FROM prompts WHERE id = ?",
+                                (prompt_id,)
+                            )
+                            prompts_deleted += 1
+                
+                conn.commit()
+                
+                bt.logging.info(
+                    f"[CLEANUP] Deleted {media_deleted} uploaded media entries, "
+                    f"{prompts_deleted} orphaned prompts"
+                )
+                
+                return (media_deleted, prompts_deleted, file_paths)
+                
+        except Exception as e:
+            bt.logging.error(f"Error during cleanup of uploaded media: {e}")
+            import traceback
+            bt.logging.error(traceback.format_exc())
+            return (0, 0, [])
