@@ -4,6 +4,10 @@ services:
     env_file: .env.validator
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      # Allow host env to override service toggles (used by gascli flags)
+      - START_VALIDATOR=${START_VALIDATOR:-true}
+      - START_GENERATOR=${START_GENERATOR:-true}
+      - START_DATA=${START_DATA:-true}
     ports:
       - "${CALLBACK_PORT:-10525}:${CALLBACK_PORT:-10525}"
     volumes:
