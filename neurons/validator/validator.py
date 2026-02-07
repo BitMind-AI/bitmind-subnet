@@ -239,7 +239,7 @@ class Validator(BaseNeuron):
                      block=block)
 
                 special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
-                bt.logging.info(f"Special UIDs to exclude: {special_uids}")
+                #bt.logging.info(f"Special UIDs to exclude: {special_uids}")
 
                 # Compute norm excluding specials
                 norm = np.ones_like(self.scores)
@@ -269,9 +269,9 @@ class Validator(BaseNeuron):
                 normed_weights[audio_escrow_uid] = audio_pct
                 normed_weights[image_escrow_uid] = remaining_pct * d_pct / 2
                 normed_weights[video_escrow_uid] = remaining_pct * d_pct / 2
-                bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
-                bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
-                bt.logging.info(f"Audio escrow UID: {audio_escrow_uid}")
+                #bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
+                #bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
+                #bt.logging.info(f"Audio escrow UID: {audio_escrow_uid}")
 
                 # Verify burn rate
                 total_weight = np.sum(normed_weights)
