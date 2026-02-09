@@ -673,6 +673,153 @@ class ContentManager:
 		"""Get verified miner media entries from the last N hours."""
 		return self.content_db.get_recent_verified_miner_media(lookback_hours=lookback_hours, limit=limit)
 
+	def get_recent_failed_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
+		"""Get miner media that failed verification in the last N hours."""
+		return self.content_db.get_recent_failed_miner_media(lookback_hours=lookback_hours, limit=limit)
+
+	def get_verification_stats_last_n_hours(
+		self, lookback_hours: float = 2.0, limit: int = None
+	) -> Dict[str, Dict[str, Any]]:
+		"""
+		Get verification statistics for miner media in the last N hours: pass and fail
+		counts and pass rate. Includes both rewarded and unrewarded verified media.
+		Use for generator base rewards (eligibility = verified submission in last N hours).
+
+		Args:
+			lookback_hours: Number of hours to look back (default 2.0).
+			limit: Maximum number of entries per type to consider (default 1000).
+
+		Returns:
+			Dict mapping miner hotkey to verification stats: total_verified (passed),
+			total_failed (failed), total_evaluated, pass_rate, media_ids (verified only).
+		"""
+		try:
+			limit_val = limit or 1000
+			verified_media = self.get_recent_verified_miner_media(
+				lookback_hours=lookback_hours, limit=limit_val
+			)
+			failed_media = self.get_recent_failed_miner_media(
+				lookback_hours=lookback_hours, limit=limit_val
+			)
+			if not verified_media and not failed_media:
+				bt.logging.debug(f"No verified or failed miner media in last {lookback_hours}h")
+				return {}
+			return self._build_verification_stats_from_verified_and_failed(
+				verified_media, failed_media
+			)
+		except Exception as e:
+			bt.logging.error(f"Error getting verification stats for last {lookback_hours}h: {e}")
+			import traceback
+			bt.logging.error(traceback.format_exc())
+			return {}
+
+	def _build_verification_stats_from_verified_and_failed(
+		self,
+		verified_media: List[MediaEntry],
+		failed_media: List[MediaEntry],
+	) -> Dict[str, Dict[str, Any]]:
+		"""Build verification stats from verified and failed media (e.g. both from last N hours)."""
+		miner_stats = {}
+		for media in verified_media:
+			if not media.hotkey or not media.uid:
+				continue
+			hotkey = media.hotkey
+			if hotkey not in miner_stats:
+				miner_stats[hotkey] = {
+					"uid": media.uid,
+					"verified_media_ids": [],
+					"total_verified": 0,
+					"total_failed": 0,
+					"last_timestamp": media.created_at
+				}
+			miner_stats[hotkey]["verified_media_ids"].append(media.id)
+			miner_stats[hotkey]["total_verified"] += 1
+			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
+				miner_stats[hotkey]["last_timestamp"] = media.created_at
+		for media in failed_media:
+			if not media.hotkey or not media.uid:
+				continue
+			hotkey = media.hotkey
+			if hotkey not in miner_stats:
+				miner_stats[hotkey] = {
+					"uid": media.uid,
+					"verified_media_ids": [],
+					"total_verified": 0,
+					"total_failed": 0,
+					"last_timestamp": media.created_at
+				}
+			miner_stats[hotkey]["total_failed"] += 1
+			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
+				miner_stats[hotkey]["last_timestamp"] = media.created_at
+
+		verification_stats = {}
+		for hotkey, stats in miner_stats.items():
+			verified = stats["total_verified"]
+			failed = stats["total_failed"]
+			total_evaluated = verified + failed
+			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
+			verification_stats[hotkey] = {
+				"uid": stats["uid"],
+				"total_verified": verified,
+				"total_submissions": total_evaluated,
+				"total_failed": failed,
+				"total_evaluated": total_evaluated,
+				"pass_rate": pass_rate,
+				"media_ids": stats["verified_media_ids"],
+				"last_timestamp": stats["last_timestamp"]
+			}
+		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
+		return verification_stats
+
+	def _build_verification_stats_from_verified_media(
+		self, verified_media: List[MediaEntry]
+	) -> Dict[str, Dict[str, Any]]:
+		"""Build verification stats dict from a list of verified media entries (failed from all-time)."""
+		miner_stats = {}
+		for media in verified_media:
+			if not media.hotkey or not media.uid:
+				continue
+			hotkey = media.hotkey
+			if hotkey not in miner_stats:
+				miner_stats[hotkey] = {
+					"uid": media.uid,
+					"verified_media_ids": [],
+					"total_verified": 0,
+					"total_submissions": 0,
+					"total_failed": 0,
+					"last_timestamp": media.created_at
+				}
+			miner_stats[hotkey]["verified_media_ids"].append(media.id)
+			miner_stats[hotkey]["total_verified"] += 1
+			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
+				miner_stats[hotkey]["last_timestamp"] = media.created_at
+
+		for hotkey, stats in miner_stats.items():
+			uid = stats["uid"]
+			all_miner_media = self.get_miner_media(verification_status=None)
+			miner_media = [m for m in all_miner_media if m.hotkey == hotkey and m.uid == uid]
+			stats["total_submissions"] = len(miner_media)
+			stats["total_failed"] = len([m for m in miner_media if m.failed_verification])
+
+		verification_stats = {}
+		for hotkey, stats in miner_stats.items():
+			verified = stats["total_verified"]
+			failed = stats["total_failed"]
+			total_evaluated = verified + failed
+			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
+			verification_stats[hotkey] = {
+				"uid": stats["uid"],
+				"total_verified": verified,
+				"total_submissions": stats["total_submissions"],
+				"total_failed": failed,
+				"total_evaluated": total_evaluated,
+				"pass_rate": pass_rate,
+				"media_ids": stats["verified_media_ids"],
+				"last_timestamp": stats["last_timestamp"]
+			}
+		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
+		return verification_stats
+
 	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False, lookback_hours: float = None) -> Dict[str, Dict[str, Any]]:
 		"""
 		Get verification statistics for miner media (pass rates, etc.).
@@ -704,14 +851,9 @@ class ContentManager:
 		"""
 		try:
 			if lookback_hours is not None:
-				# Time-based lookback: get all verified media from last N hours
 				verified_media = self.get_recent_verified_miner_media(
-					lookback_hours=lookback_hours, 
-					limit=limit or 1000
+					lookback_hours=lookback_hours, limit=limit or 1000
 				)
-				media_type = f"verified miner media from last {lookback_hours}h"
-				
-				# Diagnostic: also check what the old rewarded-flag approach would have found
 				unrewarded_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
 				if len(unrewarded_media) == 0 and len(verified_media) > 0:
 					bt.logging.warning(
@@ -726,73 +868,13 @@ class ContentManager:
 				verified_media = self.get_miner_media(verification_status="verified")
 				if limit and len(verified_media) > limit:
 					verified_media = verified_media[:limit]
-				media_type = "verified miner media"
 			else:
 				verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
-				media_type = "unrewarded verified miner media"
 			
 			if not verified_media:
-				bt.logging.debug(f"No {media_type} found")
+				bt.logging.debug("No verified miner media found")
 				return {}
-
-			miner_stats = {}
-			for media in verified_media:
-				if not media.hotkey or not media.uid:
-					continue
-				
-				hotkey = media.hotkey
-				if hotkey not in miner_stats:
-					miner_stats[hotkey] = {
-						"uid": media.uid,
-						"verified_media_ids": [],
-						"total_verified": 0,
-						"total_submissions": 0,
-						"total_failed": 0,
-						"last_timestamp": media.created_at
-					}
-				
-				miner_stats[hotkey]["verified_media_ids"].append(media.id)
-				miner_stats[hotkey]["total_verified"] += 1
-				if media.created_at > miner_stats[hotkey]["last_timestamp"]:
-					miner_stats[hotkey]["last_timestamp"] = media.created_at
-
-			# Get total submission counts per miner (verified + failed + pending)
-			for hotkey, stats in miner_stats.items():
-				uid = stats["uid"]
-				
-				# Get all miner media for this hotkey/uid
-				all_miner_media = self.get_miner_media(verification_status=None)
-				miner_media = [m for m in all_miner_media if m.hotkey == hotkey and m.uid == uid]
-				
-				stats["total_submissions"] = len(miner_media)
-				stats["total_failed"] = len([m for m in miner_media if m.failed_verification])
-
-			# Calculate pass rates
-			verification_stats = {}
-			for hotkey, stats in miner_stats.items():
-				verified = stats["total_verified"]
-				failed = stats["total_failed"]
-				total_evaluated = verified + failed
-				
-				# pass rate verified media
-				if total_evaluated > 0:
-					pass_rate = verified / total_evaluated
-				else:
-					pass_rate = 0.0
-				
-				verification_stats[hotkey] = {
-					"uid": stats["uid"],
-					"total_verified": verified,
-					"total_submissions": stats["total_submissions"],
-					"total_failed": failed,
-					"total_evaluated": total_evaluated,
-					"pass_rate": pass_rate,
-					"media_ids": stats["verified_media_ids"],
-					"last_timestamp": stats["last_timestamp"]
-				}
-
-			bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
-			return verification_stats
+			return self._build_verification_stats_from_verified_media(verified_media)
 
 		except Exception as e:
 			bt.logging.error(f"Error getting unrewarded verification stats: {e}")

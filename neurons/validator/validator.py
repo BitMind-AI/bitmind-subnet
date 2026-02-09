@@ -293,12 +293,12 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
-        # Use time-based lookback (2 hours) instead of rewarded flag to ensure miners with
-        # recent verified submissions are always eligible for rewards, even if their previous
-        # submissions were already rewarded in a prior epoch. This prevents the race condition
-        # where no unrewarded media exists at epoch boundary.
-        verification_stats = self.content_manager.get_unrewarded_verification_stats(lookback_hours=2.0)
+        # Verification stats from last 2h (all verified, rewarded or not) for base rewards.
+        verification_stats = self.content_manager.get_verification_stats_last_n_hours(
+            lookback_hours=4.0
+        )
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
+
         generator_results = await get_benchmark_results(
             self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
         )
@@ -317,9 +317,6 @@ class Validator(BaseNeuron):
             generator_liveness=generator_liveness,
             max_inactive_hours=max_inactive_hours,
         )
-        # Only reward generators that have BOTH local verified submissions AND benchmark results
-        # This enforces minimum 1 submission per epoch: miners must be in generator_base_rewards
-        # (which requires at least 1 unrewarded verified submission) to receive any rewards
         all_generator_uids = set(generator_base_rewards.keys()) & set(reward_multipliers.keys())
         rewards = {
             uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, .01)
@@ -327,7 +324,14 @@ class Validator(BaseNeuron):
         }
 
         if len(rewards) == 0:
-            bt.logging.trace("No rewards available for score update")
+            if not generator_base_rewards:
+                bt.logging.info(
+                    "No generator rewards: no verified submissions on this validator in the last 2h."
+                )
+            else:
+                bt.logging.trace(
+                    "No generator rewards: no overlap with benchmark multipliers."
+                )
             return
 
         extend_scores = max(list(rewards.keys())) - len(self.scores) + 1
