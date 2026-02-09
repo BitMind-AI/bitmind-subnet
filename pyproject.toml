@@ -60,6 +60,7 @@ dependencies = [
     "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@main",
     "imagehash>=4.3.1",
     "c2pa-python>=0.25.0",
+    "google-genai>=1.62.0",
 ]
 
 [project.scripts]

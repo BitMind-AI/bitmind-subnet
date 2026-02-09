@@ -6,12 +6,14 @@ from .base_service import BaseGenerationService
 from .openai_service import OpenAIService
 from .openrouter_service import OpenRouterService
 from .stabilityai_service import StabilityAIService
+from .google_service import GoogleService
 
 
 SERVICE_MAP = {
     "openai": OpenAIService,
     "openrouter": OpenRouterService,
     "stabilityai": StabilityAIService,
+    "google": GoogleService,
     #"local": LocalService,
 }
 
@@ -21,13 +23,15 @@ class ServiceRegistry:
     Registry for managing generation services.
 
     Set per-modality service via env vars:
-      IMAGE_SERVICE=openai|openrouter|stabilityai|none
-      VIDEO_SERVICE=openai|openrouter|stabilityai|none
+      IMAGE_SERVICE=openai|openrouter|stabilityai|google|none
+      VIDEO_SERVICE=openai|openrouter|stabilityai|google|none
 
     Services:
       - openai: DALL-E 3 (requires OPENAI_API_KEY) - produces C2PA-signed content
       - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY) - produces C2PA-signed content
       - stabilityai: Stability AI (requires STABILITY_API_KEY) - produces C2PA-signed content
+      - google: Google Gemini direct (requires GEMINI_API_KEY) - produces C2PA-signed content.
+               Video via Veo requires additional Vertex AI credentials.
       - none: Disable this modality (requests will be rejected)
 
     If not set, falls back to loading all available services.
@@ -137,8 +141,8 @@ class ServiceRegistry:
     def get_all_api_key_requirements(self) -> Dict[str, str]:
         """Get API key requirements from all services."""
         all_requirements = {
-            "IMAGE_SERVICE": "Service for images: openai, openrouter, stabilityai, or none",
-            "VIDEO_SERVICE": "Service for videos: openai, openrouter, stabilityai, or none",
+            "IMAGE_SERVICE": "Service for images: openai, openrouter, stabilityai, google, or none",
+            "VIDEO_SERVICE": "Service for videos: openai, openrouter, stabilityai, google, or none",
         }
 
         for name, service_class in SERVICE_MAP.items():
