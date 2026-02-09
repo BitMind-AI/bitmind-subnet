@@ -1233,6 +1233,41 @@ class ContentDB:
             bt.logging.error(f"Error getting recent verified miner media: {e}")
             return []
 
+    def get_recent_failed_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
+        """
+        Get miner media that failed verification in the last N hours.
+
+        Args:
+            lookback_hours: Number of hours to look back (default: 2.0)
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of MediaEntry where source_type='miner', failed_verification=1, created_at >= cutoff
+        """
+        try:
+            import time
+            if limit is None:
+                limit = 1000
+            limit = int(limit)
+            cutoff_timestamp = time.time() - (lookback_hours * 3600)
+            with self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                query = """
+                    SELECT * FROM media
+                    WHERE source_type = 'miner'
+                    AND verified = 0 AND failed_verification = 1
+                    AND created_at >= ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """
+                cursor = conn.execute(query, (cutoff_timestamp, limit))
+                entries = [self._row_to_media_entry(row) for row in cursor.fetchall()]
+                bt.logging.debug(f"Found {len(entries)} failed miner media in last {lookback_hours}h")
+                return entries
+        except Exception as e:
+            bt.logging.error(f"Error getting recent failed miner media: {e}")
+            return []
+
     def prune_source_media(
         self,
         source_type: SourceType,
