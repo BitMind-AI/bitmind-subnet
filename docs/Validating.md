@@ -1,11 +1,9 @@
 # Validator Guide
 
-## Before You Proceed
+
+## PM2 setup
 
 Follow the [Installation Guide](Installation.md) to set up your environment before proceeding with validator setup.
-
-
-## Setup Instructions
 
 > Once you've run the installation script, create a `.env.validator` file in the project root. 
 
@@ -66,7 +64,7 @@ The above command will create 3 pm2 processes:
 - **sn34-validator**: Core validator logic. Challenges, scoring, weight setting.
 
 
-## Validator Operations
+### Validator Operations
 
 First, activate the virtual environment:
 ```bash
@@ -84,7 +82,6 @@ gascli v logs
 gascli v --help
 ```
 
----
 
 ## Docker Deployment
 
@@ -110,9 +107,9 @@ As an alternative to the PM2-based setup above, you can run the validator entire
    ```
    Fill in your wallet name, hotkey, API keys, and network settings. See the template for all available options.
 
-3. **Build and start**:
+3. **Build and start** (use `--env-file .env.validator` so the same file drives both container env and Compose options like `WALLET_PATH` and `CALLBACK_PORT`):
    ```bash
-   docker compose up -d --build
+   docker compose --env-file .env.validator up -d --build
    ```
 
 4. **View logs**:
@@ -122,13 +119,14 @@ As an alternative to the PM2-based setup above, you can run the validator entire
 
 ### Configuration
 
-The Docker setup uses the same `.env.validator` file as the PM2 setup. All environment variables work identically, with these notes:
+The Docker setup uses the same `.env.validator` file as the PM2 setup. Run Compose with `--env-file .env.validator` so this single file drives both the container environment and Compose variable substitution (e.g. `WALLET_PATH`, `CALLBACK_PORT`). All variables work identically, with these notes:
 
 | Variable | Docker behavior |
 |---|---|
 | `SN34_CACHE_DIR` | Overridden to `/root/.cache/sn34` inside the container (persisted via Docker volume) |
 | `HF_HOME` | Overridden to `/root/.cache/huggingface` inside the container (persisted via Docker volume) |
 | `AUTO_UPDATE` | Always disabled. Update by rebuilding the image (see below) |
+| `WALLET_PATH` | Host path for wallet bind-mount. Set in `.env.validator`; used by Compose when you pass `--env-file .env.validator` |
 | `NETUID` | Auto-derived from `CHAIN_ENDPOINT`. Set explicitly if using a custom endpoint |
 | `START_VALIDATOR` | Set to `false` to disable the validator process |
 | `START_GENERATOR` | Set to `false` to disable the generator process |
@@ -136,12 +134,7 @@ The Docker setup uses the same `.env.validator` file as the PM2 setup. All envir
 
 ### Wallet Files
 
-Wallet files are bind-mounted from the host. By default, docker-compose mounts `~/.bittensor/wallets/`. To use a custom path, set `WALLET_PATH` before starting:
-
-```bash
-export WALLET_PATH=/path/to/your/wallets
-docker compose up -d
-```
+Wallet files are bind-mounted from the host. Set `WALLET_PATH` in your `.env.validator` file (see the template); the default is `~/.bittensor/wallets`. When you run with `--env-file .env.validator`, Compose uses that value for the volume mount. To override at runtime you can still set it in your shell before running `docker compose`.
 
 ### Persistent Storage
 
@@ -154,9 +147,11 @@ The Docker setup uses named volumes to persist data across container restarts:
 
 ### Common Operations
 
+Use `--env-file .env.validator` so Compose reads `WALLET_PATH`, `CALLBACK_PORT`, and service toggles from your config:
+
 ```bash
 # Start the validator
-docker compose up -d
+docker compose --env-file .env.validator up -d
 
 # Stop the validator
 docker compose down
@@ -165,7 +160,7 @@ docker compose down
 docker compose logs -f validator
 
 # Rebuild after code changes
-docker compose build && docker compose up -d
+docker compose --env-file .env.validator build && docker compose --env-file .env.validator up -d
 
 # Restart the container
 docker compose restart validator
@@ -183,8 +178,8 @@ Auto-update is disabled in Docker (containers are immutable). To update to a new
 
 ```bash
 git pull
-docker compose build
-docker compose up -d
+docker compose --env-file .env.validator build
+docker compose --env-file .env.validator up -d
 ```
 
 This rebuilds the image with the latest code while preserving all cached data in the Docker volumes.
