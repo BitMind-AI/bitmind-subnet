@@ -174,7 +174,9 @@ docker compose exec validator bash
 
 ### Updating
 
-Auto-update is disabled in Docker (containers are immutable). To update to a new version:
+Auto-update is disabled inside the container (containers are immutable). To update to a new version:
+
+**Manual:** rebuild and recreate the container:
 
 ```bash
 git pull
@@ -182,4 +184,10 @@ docker compose --env-file .env.validator build
 docker compose --env-file .env.validator up -d
 ```
 
-This rebuilds the image with the latest code while preserving all cached data in the Docker volumes.
+**Automatic (cron):** use the same VERSION check as the PM2 autoupdater. From the repo root, run `docker/autoupdate.sh`; it fetches the remote `VERSION` from the branch (default `main`), compares to your local `VERSION`, and if a newer version exists it runs `git pull`, rebuilds the image, and brings the stack up. Example crontab (every 5 minutes; check is lightweight when no update):
+
+```bash
+*/5 * * * * /path/to/bitmind-subnet/docker/autoupdate.sh >> /var/log/bitmind-docker-update.log 2>&1
+```
+
+Optional env: `REPO_DIR` (repo root), `BRANCH` (default `main`), `ENV_FILE` (default `.env.validator`). This rebuilds the image with the latest code while preserving all cached data in the Docker volumes.
