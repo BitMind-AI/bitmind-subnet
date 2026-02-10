@@ -227,45 +227,62 @@ async def get_escrow_addresses(
 
 
 async def get_benchmark_results(
-    hotkey, metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai", 
+    hotkey, metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai",
+    max_retries: int = 3,
 ):
     """
     Query the remote benchmark API for generator fool rates.
     Only returns results from the last week based on the finished_at field.
+    Retries on failure so transient errors don't zero out generator weights.
 
     Args:
         hotkey: Validator hotkey for authentication
         metagraph: Bittensor metagraph for SS58 to UID mapping
         base_url: Base URL for the benchmark API
+        max_retries: Number of attempts (default 3)
 
     Returns:
         list: generator_results containing API response data
     """
     generator_results = []
-
     one_week_ago = datetime.now() - timedelta(weeks=1)
+    after_timestamp = one_week_ago.isoformat()
+    generator_url = f"{base_url}/api/v1/validator/generator-results?validator_address={hotkey.ss58_address}&after={after_timestamp}"
+    # API can take 60s+ (DuckDB init + parquet query); avoid client timeout before server responds
+    timeout = aiohttp.ClientTimeout(total=90)
 
-    try:
-        bt.logging.info(f"Fetching benchmark results from {base_url}")
-
-        timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            after_timestamp = one_week_ago.isoformat()
-            generator_url = f"{base_url}/api/v1/validator/generator-results?validator_address={hotkey.ss58_address}&after={after_timestamp}"
+    for attempt in range(max_retries):
+        try:
+            bt.logging.info(
+                f"Fetching benchmark results from {base_url}"
+                + (f" (attempt {attempt + 1}/{max_retries})" if attempt > 0 else "")
+            )
             bt.logging.debug(f"Requesting generator results from: {generator_url}")
 
             epistula_headers = generate_header(hotkey, b"", None)
-            async with session.get(generator_url, headers=epistula_headers) as response:
-                if response.status == 200:
-                    generator_results = await response.json()
-                    bt.logging.info(f"Successfully fetched {len(generator_results)} generator results from last week")
-                else:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(generator_url, headers=epistula_headers) as response:
+                    if response.status == 200:
+                        generator_results = await response.json()
+                        bt.logging.info(
+                            f"Successfully fetched {len(generator_results)} generator results from last week"
+                        )
+                        return generator_results
                     error_text = await response.text()
                     bt.logging.warning(
                         f"Failed to fetch generator results: HTTP {response.status}, response: {error_text}"
                     )
-
-    except Exception as e:
-        bt.logging.error(f"Error fetching benchmark results: {e}")
+        except Exception as e:
+            bt.logging.error(
+                f"Error fetching benchmark results (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}"
+            )
+            bt.logging.debug(traceback.format_exc())
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 * (attempt + 1))
+            else:
+                bt.logging.error(
+                    "Benchmark results unavailable after all retries. "
+                    "Generator weights will use local verification only (fallback)."
+                )
 
     return generator_results
