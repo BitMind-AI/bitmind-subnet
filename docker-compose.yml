@@ -1,3 +1,5 @@
+# Run with: docker compose --env-file .env.validator up -d
+# so .env.validator drives both container env and variable substitution (WALLET_PATH, CALLBACK_PORT).
 services:
   validator:
     build: .
