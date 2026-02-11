@@ -43,9 +43,11 @@ RUN uv sync --frozen
 # Copy full project source
 COPY . .
 
-# Install the gas package (editable) and additional git dependencies
-RUN uv pip install -e . && \
-    uv pip install \
+# Install the gas package (editable) and additional git dependencies.
+# setuptools + --no-build-isolation so git deps that need pkg_resources at build time can see it.
+RUN uv pip install setuptools && \
+    uv pip install -e . && \
+    uv pip install --no-build-isolation \
         git+https://github.com/deepseek-ai/Janus.git \
         git+https://github.com/huggingface/diffusers \
         git+https://github.com/openai/CLIP.git
