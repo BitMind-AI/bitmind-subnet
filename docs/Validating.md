@@ -112,11 +112,14 @@ docker compose --env-file .env.validator up -d
 | `AUTO_UPDATE` | In-container autoupdate is disabled. Use manual rebuild or the cron-based `docker/autoupdate.sh` (see Updating). |
 | `WALLET_PATH` | Host base path for wallets. Only the directory `WALLET_PATH/WALLET_NAME` is mounted (not the whole wallets folder). Set in `.env.validator`. |
 | `WALLET_NAME` | Which wallet dir to mount; with `WALLET_PATH` only that wallet is visible to the container. |
+| `BT_LOGGING_LOGGING_DIR` | Base path for validator state (scores, challenge tasks) and bittensor logs. State lives under `BT_LOGGING_LOGGING_DIR`/`WALLET_NAME`/`WALLET_HOTKEY`/…; bind-mounted so it persists. Default `~/.bittensor`. |
 | `NETUID` | Auto-derived from `CHAIN_ENDPOINT`. Set explicitly if using a custom endpoint. |
 
-### Wallet and cache
+### Wallet, cache, and validator state
 
-Only the **configured wallet** directory (`WALLET_PATH`/`WALLET_NAME`) is bind-mounted. Cache (`SN34_CACHE_DIR`, `HF_HOME`) is also bind-mounted from the host, so PM2 and Docker share the same data and you can switch between them without re-downloading models or losing state.
+- **Wallet:** Only the configured wallet directory (`WALLET_PATH`/`WALLET_NAME`) is bind-mounted, not the entire wallets folder.
+- **Cache:** `SN34_CACHE_DIR` and `HF_HOME` are bind-mounted so PM2 and Docker share the same data (no re-download when switching).
+- **Validator state:** Scores and challenge tasks are saved under bittensor’s logging path (`BT_LOGGING_LOGGING_DIR`/`WALLET_NAME`/`WALLET_HOTKEY`/…). That path is bind-mounted so state persists across container restarts.
 
 > **Note**: The first startup will download 100+ GB of ML models into the HF cache directory. Subsequent restarts reuse the cached models.
 
