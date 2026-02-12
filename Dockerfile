@@ -44,7 +44,10 @@ RUN uv sync --frozen
 COPY . .
 
 # Install the gas package (editable) and additional git dependencies.
-# setuptools + --no-build-isolation so git deps that need pkg_resources at build time can see it.
+# One of these (Janus/diffusers/CLIP) uses setuptools at build time without declaring it,
+# so we install setuptools and use --no-build-isolation for these installs only. In Docker
+# this is safe: the build env is fixed (only uv sync + setuptools), so the build is
+# reproducible. uv's extra-build-dependencies does not work reliably with setuptools.
 RUN uv pip install setuptools && \
     uv pip install -e . && \
     uv pip install --no-build-isolation \
