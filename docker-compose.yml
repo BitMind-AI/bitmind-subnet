@@ -1,5 +1,6 @@
 # Run with: docker compose --env-file .env.validator up -d
 # Three containers (validator, generator, data), one process each; shared volumes for cache and wallet.
+# Validator uses network_mode: host so its FastAPI callback is on the host port miners are told to hit.
 services:
   validator:
     build: .
@@ -7,8 +8,8 @@ services:
     env_file: .env.validator
     environment:
       - SERVICE=validator
-    ports:
-      - "${CALLBACK_PORT:-10525}:${CALLBACK_PORT:-10525}"
+    network_mode: host
+    # FastAPI callback server must be on host so miners hit the right address; port mapping not used with host mode
     volumes:
       - sn34-cache:/root/.cache/sn34
       - hf-cache:/root/.cache/huggingface
