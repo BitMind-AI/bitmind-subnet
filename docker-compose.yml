@@ -13,7 +13,7 @@ services:
     volumes:
       - ${SN34_CACHE_DIR:-~/.cache/sn34}:/root/.cache/sn34
       - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-      - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
+      - ${WALLET_PATH:-~/.bittensor/wallets}/${WALLET_NAME:-default}:/root/.bittensor/wallets/${WALLET_NAME:-default}
     restart: unless-stopped
 
   generator:
@@ -25,7 +25,7 @@ services:
     volumes:
       - ${SN34_CACHE_DIR:-~/.cache/sn34}:/root/.cache/sn34
       - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-      - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
+      - ${WALLET_PATH:-~/.bittensor/wallets}/${WALLET_NAME:-default}:/root/.bittensor/wallets/${WALLET_NAME:-default}
     deploy:
       resources:
         reservations:
@@ -44,5 +44,5 @@ services:
     volumes:
       - ${SN34_CACHE_DIR:-~/.cache/sn34}:/root/.cache/sn34
       - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-      - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
+      - ${WALLET_PATH:-~/.bittensor/wallets}/${WALLET_NAME:-default}:/root/.bittensor/wallets/${WALLET_NAME:-default}
     restart: unless-stopped
