@@ -1,14 +1,31 @@
 # Validator Guide
 
+## Required .env.validator variables (PM2 and Docker)
+
+You **must** set these in `.env.validator` before starting; the rest have defaults in the template.
+
+| Variable | Required? | Notes |
+|----------|-----------|--------|
+| `WALLET_NAME` | **Yes** | Your Bittensor wallet name (e.g. `default` or a name you created). |
+| `WALLET_HOTKEY` | **Yes** | Hotkey for this validator (e.g. `default`). Must be registered on the subnet. |
+| `HUGGINGFACE_HUB_TOKEN` | **Yes** | Needed to download models and upload data. Create at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens). Reach out to a member of the BitMind team to have your account added to the `gasstation` org |
+| `CHAIN_ENDPOINT` | No | Default is mainnet. Set to testnet URL if needed. |
+| `WANDB_API_KEY` | No | Optional; for Weights & Biases logging. |
+| Cache / Docker paths | No | `SN34_CACHE_DIR`, `HF_HOME`, `WALLET_PATH`, `BT_LOGGING_LOGGING_DIR` have defaults; override if you use different paths. |
+
+See [.env.validator.template](../.env.validator.template) for every option.
+
+---
 
 ## PM2 setup
 
 Follow the [Installation Guide](Installation.md) to set up your environment before proceeding with validator setup.
 
-> Once you've run the installation script, create a `.env.validator` file in the project root:
+> Create a `.env.validator` file and **set the required variables above** (wallet, API keys). Then:
 
 ```bash
 $ cp .env.validator.template .env.validator
+# Edit .env.validator: fill in WALLET_NAME, WALLET_HOTKEY, HUGGINGFACE_HUB_TOKEN at minimum
 ```
 
 See [.env.validator.template](../.env.validator.template) for all options. Then activate the virtual environment and start your validator processes:
@@ -69,11 +86,11 @@ As an alternative to the PM2-based setup above, you can run the validator stack 
    cd bitmind-subnet
    ```
 
-2. **Create your `.env.validator`** file:
+2. **Create your `.env.validator`** and set the **required variables** (same as PM2):
    ```bash
    cp .env.validator.template .env.validator
    ```
-   Fill in your wallet name, hotkey, API keys, and network settings. See [.env.validator.template](../.env.validator.template) for all available options.
+   You **must** set: `WALLET_NAME`, `WALLET_HOTKEY`, `HUGGINGFACE_HUB_TOKEN`, `OPEN_ROUTER_API_KEY`. See [Required .env.validator variables](#required-envvalidator-variables-pm2-and-docker) and [.env.validator.template](../.env.validator.template) for the full list.
 
 3. **Build and start** (use `--env-file .env.validator` so the same file drives both container env and Compose options like `WALLET_PATH` and `CALLBACK_PORT`):
    ```bash
