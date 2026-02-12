@@ -64,10 +64,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Runtime system dependencies (gcc needed at import time by diffusers/tokenizers)
+# Runtime system dependencies (gcc + python3.10-dev for Triton/bitsandbytes JIT C compile at import)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3.10-venv \
+    python3.10-dev \
     build-essential \
     ffmpeg \
     supervisor \
