@@ -53,7 +53,7 @@ gascli v --help
 
 ## Docker Deployment
 
-As an alternative to the PM2-based setup above, you can run the validator entirely in Docker. The Docker setup runs all 3 services (`sn34-validator`, `sn34-generator`, `sn34-data`) inside a single container managed by supervisord.
+As an alternative to the PM2-based setup above, you can run the validator stack in Docker. Three containers (validator, generator, data) run one process each and share bind-mounted cache and wallet; the validator container uses `network_mode: host` so its FastAPI callback is on the host port miners are told to hit.
 
 ### Prerequisites
 
@@ -80,24 +80,25 @@ As an alternative to the PM2-based setup above, you can run the validator entire
    docker compose --env-file .env.validator up -d --build
    ```
 
-4. **View logs**:
+4. **View logs** (per service):
    ```bash
-   docker compose logs -f validator
+   docker compose logs -f validator   # or generator, data
    ```
 
 
 ### Updating
 
-Please enable autoupdate by adding the following crontab entry:
+**Automatic (recommended):** add a crontab entry so `docker/autoupdate.sh` runs periodically (it checks VERSION, then pulls, runs `down --remove-orphans`, rebuilds, and brings the stack up):
 
 ```bash
 */5 * * * * /path/to/bitmind-subnet/docker/autoupdate.sh >> /var/log/bitmind-docker-update.log 2>&1
 ```
 
-To manually rebuild and recreate the container:
+**Manual:** rebuild and recreate all services:
 
 ```bash
 git pull
+docker compose --env-file .env.validator down --remove-orphans
 docker compose --env-file .env.validator build
 docker compose --env-file .env.validator up -d
 ```
@@ -106,51 +107,43 @@ docker compose --env-file .env.validator up -d
 
 | Variable | Docker behavior |
 |---|---|
-| `SN34_CACHE_DIR` | Overridden to `/root/.cache/sn34` inside the container (persisted via Docker volume) |
-| `HF_HOME` | Overridden to `/root/.cache/huggingface` inside the container (persisted via Docker volume) |
-| `AUTO_UPDATE` | In-container autoupdate is disabled. Use manual rebuild or the cron-based `docker/autoupdate.sh` (see Updating) |
-| `WALLET_PATH` | Host path for wallet bind-mount. Set in `.env.validator`; used by Compose when you pass `--env-file .env.validator` |
-| `NETUID` | Auto-derived from `CHAIN_ENDPOINT`. Set explicitly if using a custom endpoint |
-| `START_VALIDATOR` | Set to `false` to disable the validator process |
-| `START_GENERATOR` | Set to `false` to disable the generator process |
-| `START_DATA` | Set to `false` to disable the data process |
+| `SN34_CACHE_DIR` | Bind-mounted into the container; same path as PM2 so cache is shared when you switch. Set in `.env.validator`; use `--env-file .env.validator`. |
+| `HF_HOME` | Bind-mounted into the container; same path as PM2 so model cache is shared. Set in `.env.validator`. |
+| `AUTO_UPDATE` | In-container autoupdate is disabled. Use manual rebuild or the cron-based `docker/autoupdate.sh` (see Updating). |
+| `WALLET_PATH` | Host base path for wallets. Only the directory `WALLET_PATH/WALLET_NAME` is mounted (not the whole wallets folder). Set in `.env.validator`. |
+| `WALLET_NAME` | Which wallet dir to mount; with `WALLET_PATH` only that wallet is visible to the container. |
+| `NETUID` | Auto-derived from `CHAIN_ENDPOINT`. Set explicitly if using a custom endpoint. |
 
-### Wallet Files
+### Wallet and cache
 
-Wallet files are bind-mounted from the host. Set `WALLET_PATH` in your `.env.validator` file (see [.env.validator.template](../.env.validator.template)); the default is `~/.bittensor/wallets`. When you run with `--env-file .env.validator`, Compose uses that value for the volume mount. To override at runtime you can still set it in your shell before running `docker compose`.
+Only the **configured wallet** directory (`WALLET_PATH`/`WALLET_NAME`) is bind-mounted. Cache (`SN34_CACHE_DIR`, `HF_HOME`) is also bind-mounted from the host, so PM2 and Docker share the same data and you can switch between them without re-downloading models or losing state.
 
-### Persistent Storage
-
-The Docker setup uses named volumes to persist data across container restarts:
-
-- **`sn34-cache`** -- SQLite database, media files, state files (`/root/.cache/sn34/`)
-- **`hf-cache`** -- HuggingFace model downloads (`/root/.cache/huggingface/`)
-
-> **Note**: The first startup will download 100+ GB of ML models into the `hf-cache` volume. Subsequent restarts reuse the cached models.
+> **Note**: The first startup will download 100+ GB of ML models into the HF cache directory. Subsequent restarts reuse the cached models.
 
 ### Common Operations
 
-Use `--env-file .env.validator` so Compose reads `WALLET_PATH`, `CALLBACK_PORT`, and service toggles from your config:
+Use `--env-file .env.validator` so Compose reads `WALLET_PATH`, `WALLET_NAME`, `CALLBACK_PORT`, and cache paths from your config:
 
 ```bash
-# Start the validator
+# Start all three services (validator, generator, data)
 docker compose --env-file .env.validator up -d
 
-# Stop the validator
+# Stop all
 docker compose down
 
-# View live logs
-docker compose logs -f validator
+# View logs (per service)
+docker compose logs -f validator   # or generator, data
 
 # Rebuild after code changes
+docker compose --env-file .env.validator down --remove-orphans
 docker compose --env-file .env.validator build && docker compose --env-file .env.validator up -d
 
-# Restart the container
-docker compose restart validator
+# Restart one service
+docker compose restart validator   # or generator, data
 
-# Check container status
+# Container status
 docker compose ps
 
-# Shell into the running container
-docker compose exec validator bash
+# Shell into a container
+docker compose exec validator bash   # or generator, data
 ```
