@@ -49,7 +49,10 @@ if [[ "$new_local" != "$remote_version" ]]; then
   exit 1
 fi
 
-log "Rebuilding image and recreating container..."
+log "Tearing down current stack (including orphans)..."
+docker compose --env-file "$ENV_FILE" down --remove-orphans
+
+log "Rebuilding image and bringing stack up..."
 # Use --no-cache to ensure a clean build; omit for faster incremental builds.
 docker compose --env-file "$ENV_FILE" build --no-cache
 docker compose --env-file "$ENV_FILE" up -d
