@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Entrypoint for the bitmind-subnet validator Docker container.
-# Translates environment variables into CLI arguments and generates the
-# supervisord configuration for the 3 validator processes.
+# Entrypoint for bitmind-subnet validator stack.
+# Set SERVICE=validator|generator|data to run one process per container.
+# All three share the same image; compose runs three containers with shared volumes.
 
 set -euo pipefail
 
@@ -16,13 +16,9 @@ set -euo pipefail
 : "${SCRAPER_INTERVAL:=300}"
 : "${DATASET_INTERVAL:=1800}"
 : "${HEARTBEAT:=false}"
-: "${START_VALIDATOR:=true}"
-: "${START_GENERATOR:=true}"
-: "${START_DATA:=true}"
 : "${WANDB_API_KEY:=}"
 
 # ── Derive netuid from chain endpoint ───────────────────────────────────────
-# Mirrors validator.config.js getNetworkSettings()
 if [[ -z "${NETUID:-}" ]]; then
     if [[ "$CHAIN_ENDPOINT" == *"test"* ]]; then
         NETUID=379
@@ -36,7 +32,6 @@ if [[ -z "${NETUID:-}" ]]; then
 fi
 
 # ── Map log level to CLI param ──────────────────────────────────────────────
-# Mirrors validator.config.js getLogParam()
 case "${LOGLEVEL,,}" in
     trace) LOG_PARAM="--logging.trace" ;;
     debug) LOG_PARAM="--logging.debug" ;;
@@ -82,82 +77,39 @@ DATA_CMD+=" --scraper-interval ${SCRAPER_INTERVAL}"
 DATA_CMD+=" --dataset-interval ${DATASET_INTERVAL}"
 DATA_CMD+=" ${LOG_PARAM}"
 
-# ── HuggingFace env ─────────────────────────────────────────────────────────
+# ── Shared env ──────────────────────────────────────────────────────────────
 export HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN:-${HF_TOKEN:-}}"
-
-# ── Generate supervisord.conf ──────────────────────────────────────────────
-CONF=/etc/supervisor/conf.d/supervisord.conf
-
-cat > "$CONF" <<SUPERVISORD_EOF
-[supervisord]
-nodaemon=true
-user=root
-logfile=/dev/null
-logfile_maxbytes=0
-pidfile=/var/run/supervisord.pid
-
-[program:sn34-validator]
-command=${VALIDATOR_CMD}
-directory=/app
-autostart=${START_VALIDATOR}
-autorestart=true
-startretries=10
-startsecs=10
-stopwaitsecs=30
-stdout_logfile=/dev/fd/1
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/fd/2
-stderr_logfile_maxbytes=0
-environment=WANDB_API_KEY="${WANDB_API_KEY}"
-
-[program:sn34-generator]
-command=${GENERATOR_CMD}
-directory=/app
-autostart=${START_GENERATOR}
-autorestart=true
-startretries=10
-startsecs=10
-stopwaitsecs=30
-stdout_logfile=/dev/fd/1
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/fd/2
-stderr_logfile_maxbytes=0
-
-[program:sn34-data]
-command=${DATA_CMD}
-directory=/app
-autostart=${START_DATA}
-autorestart=true
-startretries=10
-startsecs=10
-stopwaitsecs=30
-stdout_logfile=/dev/fd/1
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/fd/2
-stderr_logfile_maxbytes=0
-environment=TMPDIR="/root/.cache/sn34/tmp",TEMP="/root/.cache/sn34/tmp",TMP="/root/.cache/sn34/tmp"
-SUPERVISORD_EOF
-
-# ── Ensure cache directories exist ─────────────────────────────────────────
 mkdir -p /root/.cache/sn34/tmp /root/.cache/huggingface
 
-# ── Start Xvfb for headless Chrome (used by data service scraper) ──────────
-Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp &
-export DISPLAY=:99
-
-echo "========================================"
-echo "  bitmind-subnet Validator (Docker)"
-echo "========================================"
-echo "  WALLET:     ${WALLET_NAME}/${WALLET_HOTKEY}"
-echo "  NETUID:     ${NETUID}"
-echo "  CHAIN:      ${CHAIN_ENDPOINT}"
-echo "  DEVICE:     ${DEVICE}"
-echo "  CALLBACK:   ${CALLBACK_PORT}"
-echo "  LOGLEVEL:   ${LOGLEVEL}"
-echo "  VALIDATOR:  ${START_VALIDATOR}"
-echo "  GENERATOR:  ${START_GENERATOR}"
-echo "  DATA:       ${START_DATA}"
-echo "========================================"
-
-# ── Launch supervisord (foreground) ─────────────────────────────────────────
-exec /usr/bin/supervisord -c "$CONF"
+# ── Run one service ────────────────────────────────────────────────────────
+case "${SERVICE:-}" in
+    validator)
+        echo "========================================"
+        echo "  bitmind-subnet Validator"
+        echo "  WALLET: ${WALLET_NAME}/${WALLET_HOTKEY}  NETUID: ${NETUID}  CALLBACK: ${CALLBACK_PORT}"
+        echo "========================================"
+        export WANDB_API_KEY="${WANDB_API_KEY}"
+        exec /bin/bash -c "cd /app && $VALIDATOR_CMD"
+        ;;
+    generator)
+        echo "========================================"
+        echo "  bitmind-subnet Generator"
+        echo "  WALLET: ${WALLET_NAME}/${WALLET_HOTKEY}  DEVICE: ${DEVICE}"
+        echo "========================================"
+        exec /bin/bash -c "cd /app && $GENERATOR_CMD"
+        ;;
+    data)
+        echo "========================================"
+        echo "  bitmind-subnet Data Service"
+        echo "  WALLET: ${WALLET_NAME}/${WALLET_HOTKEY}  NETUID: ${NETUID}"
+        echo "========================================"
+        Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp &
+        export DISPLAY=:99
+        export TMPDIR=/root/.cache/sn34/tmp TEMP=/root/.cache/sn34/tmp TMP=/root/.cache/sn34/tmp
+        exec /bin/bash -c "cd /app && $DATA_CMD"
+        ;;
+    *)
+        echo "ERROR: Set SERVICE=validator|generator|data (e.g. in docker-compose)"
+        exit 1
+        ;;
+esac

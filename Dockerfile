@@ -1,6 +1,6 @@
-# bitmind-subnet Validator Docker Image
-# Runs all 3 validator services (sn34-validator, sn34-generator, sn34-data)
-# managed by supervisord inside a single container.
+# bitmind-subnet Validator stack image.
+# One image; run as validator, generator, or data via SERVICE=validator|generator|data.
+# Compose starts three containers with shared volumes.
 
 # ---------------------------------------------------------------------------
 # Build stage: install all Python dependencies
@@ -71,7 +71,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10-dev \
     build-essential \
     ffmpeg \
-    supervisor \
     xvfb \
     wget \
     gnupg2 \

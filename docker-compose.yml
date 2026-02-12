@@ -1,17 +1,26 @@
 # Run with: docker compose --env-file .env.validator up -d
-# so .env.validator drives both container env and variable substitution (WALLET_PATH, CALLBACK_PORT).
+# Three containers (validator, generator, data), one process each; shared volumes for cache and wallet.
 services:
   validator:
     build: .
+    image: bitmind-subnet-validator:latest
     env_file: .env.validator
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      # Allow host env to override service toggles (used by gascli flags)
-      - START_VALIDATOR=${START_VALIDATOR:-true}
-      - START_GENERATOR=${START_GENERATOR:-true}
-      - START_DATA=${START_DATA:-true}
+      - SERVICE=validator
     ports:
       - "${CALLBACK_PORT:-10525}:${CALLBACK_PORT:-10525}"
+    volumes:
+      - sn34-cache:/root/.cache/sn34
+      - hf-cache:/root/.cache/huggingface
+      - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
+    restart: unless-stopped
+
+  generator:
+    image: bitmind-subnet-validator:latest
+    env_file: .env.validator
+    environment:
+      - SERVICE=generator
+      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - sn34-cache:/root/.cache/sn34
       - hf-cache:/root/.cache/huggingface
@@ -25,6 +34,17 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
     shm_size: '16gb'
+
+  data:
+    image: bitmind-subnet-validator:latest
+    env_file: .env.validator
+    environment:
+      - SERVICE=data
+    volumes:
+      - sn34-cache:/root/.cache/sn34
+      - hf-cache:/root/.cache/huggingface
+      - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
+    restart: unless-stopped
 
 volumes:
   sn34-cache:
