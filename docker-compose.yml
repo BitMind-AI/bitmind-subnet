@@ -1,5 +1,6 @@
 # Run with: docker compose --env-file .env.validator up -d
-# Three containers (validator, generator, data), one process each; shared volumes for cache and wallet.
+# Three containers (validator, generator, data), one process each.
+# Cache and wallet are bind-mounted from host so PM2 and Docker share the same data (set in .env.validator).
 # Validator uses network_mode: host so its FastAPI callback is on the host port miners are told to hit.
 services:
   validator:
@@ -9,10 +10,9 @@ services:
     environment:
       - SERVICE=validator
     network_mode: host
-    # FastAPI callback server must be on host so miners hit the right address; port mapping not used with host mode
     volumes:
-      - sn34-cache:/root/.cache/sn34
-      - hf-cache:/root/.cache/huggingface
+      - ${SN34_CACHE_DIR:-~/.cache/sn34}:/root/.cache/sn34
+      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
       - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
     restart: unless-stopped
 
@@ -23,8 +23,8 @@ services:
       - SERVICE=generator
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
-      - sn34-cache:/root/.cache/sn34
-      - hf-cache:/root/.cache/huggingface
+      - ${SN34_CACHE_DIR:-~/.cache/sn34}:/root/.cache/sn34
+      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
       - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
     deploy:
       resources:
@@ -42,11 +42,7 @@ services:
     environment:
       - SERVICE=data
     volumes:
-      - sn34-cache:/root/.cache/sn34
-      - hf-cache:/root/.cache/huggingface
+      - ${SN34_CACHE_DIR:-~/.cache/sn34}:/root/.cache/sn34
+      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
       - ${WALLET_PATH:-~/.bittensor/wallets}:/root/.bittensor/wallets
     restart: unless-stopped
-
-volumes:
-  sn34-cache:
-  hf-cache:
