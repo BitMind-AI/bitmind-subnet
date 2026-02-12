@@ -5,46 +5,14 @@
 
 Follow the [Installation Guide](Installation.md) to set up your environment before proceeding with validator setup.
 
-> Once you've run the installation script, create a `.env.validator` file in the project root. 
+> Once you've run the installation script, create a `.env.validator` file in the project root:
 
 ```bash
 $ cp .env.validator.template .env.validator
 ```
 
-```bash
-# ======= Validator Configuration (FILL IN) =======
-# Wallet
-WALLET_NAME=
-WALLET_HOTKEY=
+See [.env.validator.template](../.env.validator.template) for all options. Then activate the virtual environment and start your validator processes:
 
-# API Keys
-WANDB_API_KEY=
-HUGGINGFACE_HUB_TOKEN=
-OPEN_ROUTER_API_KEY= # optional
-
-# Network
-CHAIN_ENDPOINT=wss://entrypoint-finney.opentensor.ai:443
-# OTF public finney endpoint:  wss://entrypoint-finney.opentensor.ai:443
-# OTF public testnet endpoint: wss://test.finney.opentensor.ai:443/
-
-CALLBACK_PORT=
-#EXTERNAL_CALLBACK_PORT=  # Optional
-
-# Cache config
-SN34_CACHE_DIR=~/.cache/sn34
-HF_HOME=~/.cache/huggingface
-HEARTBEAT=true
-
-# Generator config
-GENERATION_BATCH_SIZE=3
-DEVICE=cuda
-
-# Other
-LOGLEVEL=INFO
-AUTO_UPDATE=true
-```
-
-> Once you've populated `.env.validator`, activate the virtual environment and start your validator processes
 ```bash
 $ source .venv/bin/activate
 $ gascli validator start
@@ -60,7 +28,7 @@ The above command will create 3 pm2 processes:
 └────┴───────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
 ```
 - **sn34-data**: Handles data downloads
-- **sn34-generator**: Responsible for generating prompts and synthetic/semisynthetic media
+- **sn34-generator**: Responsible for generating prompts, synthetic media, and validating miner-generated data
 - **sn34-validator**: Core validator logic. Challenges, scoring, weight setting.
 
 
@@ -105,7 +73,7 @@ As an alternative to the PM2-based setup above, you can run the validator entire
    ```bash
    cp .env.validator.template .env.validator
    ```
-   Fill in your wallet name, hotkey, API keys, and network settings. See the template for all available options.
+   Fill in your wallet name, hotkey, API keys, and network settings. See [.env.validator.template](../.env.validator.template) for all available options.
 
 3. **Build and start** (use `--env-file .env.validator` so the same file drives both container env and Compose options like `WALLET_PATH` and `CALLBACK_PORT`):
    ```bash
@@ -117,15 +85,30 @@ As an alternative to the PM2-based setup above, you can run the validator entire
    docker compose logs -f validator
    ```
 
-### Configuration
 
-The Docker setup uses the same `.env.validator` file as the PM2 setup. Run Compose with `--env-file .env.validator` so this single file drives both the container environment and Compose variable substitution (e.g. `WALLET_PATH`, `CALLBACK_PORT`). All variables work identically, with these notes:
+### Updating
+
+Please enable autoupdate by adding the following crontab entry:
+
+```bash
+*/5 * * * * /path/to/bitmind-subnet/docker/autoupdate.sh >> /var/log/bitmind-docker-update.log 2>&1
+```
+
+To manually rebuild and recreate the container:
+
+```bash
+git pull
+docker compose --env-file .env.validator build
+docker compose --env-file .env.validator up -d
+```
+
+### Configuration
 
 | Variable | Docker behavior |
 |---|---|
 | `SN34_CACHE_DIR` | Overridden to `/root/.cache/sn34` inside the container (persisted via Docker volume) |
 | `HF_HOME` | Overridden to `/root/.cache/huggingface` inside the container (persisted via Docker volume) |
-| `AUTO_UPDATE` | Always disabled. Update by rebuilding the image (see below) |
+| `AUTO_UPDATE` | In-container autoupdate is disabled. Use manual rebuild or the cron-based `docker/autoupdate.sh` (see Updating) |
 | `WALLET_PATH` | Host path for wallet bind-mount. Set in `.env.validator`; used by Compose when you pass `--env-file .env.validator` |
 | `NETUID` | Auto-derived from `CHAIN_ENDPOINT`. Set explicitly if using a custom endpoint |
 | `START_VALIDATOR` | Set to `false` to disable the validator process |
@@ -134,7 +117,7 @@ The Docker setup uses the same `.env.validator` file as the PM2 setup. Run Compo
 
 ### Wallet Files
 
-Wallet files are bind-mounted from the host. Set `WALLET_PATH` in your `.env.validator` file (see the template); the default is `~/.bittensor/wallets`. When you run with `--env-file .env.validator`, Compose uses that value for the volume mount. To override at runtime you can still set it in your shell before running `docker compose`.
+Wallet files are bind-mounted from the host. Set `WALLET_PATH` in your `.env.validator` file (see [.env.validator.template](../.env.validator.template)); the default is `~/.bittensor/wallets`. When you run with `--env-file .env.validator`, Compose uses that value for the volume mount. To override at runtime you can still set it in your shell before running `docker compose`.
 
 ### Persistent Storage
 
@@ -171,23 +154,3 @@ docker compose ps
 # Shell into the running container
 docker compose exec validator bash
 ```
-
-### Updating
-
-Auto-update is disabled inside the container (containers are immutable). To update to a new version:
-
-**Manual:** rebuild and recreate the container:
-
-```bash
-git pull
-docker compose --env-file .env.validator build
-docker compose --env-file .env.validator up -d
-```
-
-**Automatic (cron):** use the same VERSION check as the PM2 autoupdater. From the repo root, run `docker/autoupdate.sh`; it fetches the remote `VERSION` from the branch (default `main`), compares to your local `VERSION`, and if a newer version exists it runs `git pull`, rebuilds the image, and brings the stack up. Example crontab (every 5 minutes; check is lightweight when no update):
-
-```bash
-*/5 * * * * /path/to/bitmind-subnet/docker/autoupdate.sh >> /var/log/bitmind-docker-update.log 2>&1
-```
-
-Optional env: `REPO_DIR` (repo root), `BRANCH` (default `main`), `ENV_FILE` (default `.env.validator`). This rebuilds the image with the latest code while preserving all cached data in the Docker volumes.
