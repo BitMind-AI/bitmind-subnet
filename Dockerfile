@@ -64,10 +64,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Runtime system dependencies
+# Runtime system dependencies (gcc needed at import time by diffusers/tokenizers)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3.10-venv \
+    build-essential \
     ffmpeg \
     supervisor \
     xvfb \
