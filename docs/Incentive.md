@@ -8,135 +8,18 @@ Each modality (image, video, audio) is scored independently using the `sn34_scor
 <details>
 <summary><strong>Evaluation Datasets</strong></summary>
 
-Benchmark datasets are regularly expanded. The current evaluation set includes ~50 image datasets, ~40 video datasets, and ~25 audio datasets drawn from the sources below.
+Benchmark datasets are regularly expanded. Each modality includes a mix of real, synthetic, and semi-synthetic content from diverse sources (including continuously-updated [GAS-Station](https://huggingface.co/gasstation) data from generative miners).
 
-### Image Datasets (~50,000 sample benchmark)
+| Modality | Benchmark Size | Dataset Count |
+|----------|---------------|---------------|
+| Image | ~50,000 samples | ~50 datasets |
+| Video | ~20,000 samples | ~40 datasets |
+| Audio | ~30,000 samples | ~25 datasets |
 
-**Real Images:**
-- [gasstation/gs-images-v3](https://huggingface.co/datasets/gasstation/gs-images-v3) (GAS-Station generated - continuously updated)
-- [drawthingsai/megalith-10m](https://huggingface.co/datasets/drawthingsai/megalith-10m)
-- [bitmind/bm-eidon-image](https://huggingface.co/datasets/bitmind/bm-eidon-image)
-- [bitmind/open-image-v7-256](https://huggingface.co/datasets/bitmind/open-image-v7-256)
-- [bitmind/celeb-a-hq](https://huggingface.co/datasets/bitmind/celeb-a-hq)
-- [bitmind/ffhq-256](https://huggingface.co/datasets/bitmind/ffhq-256)
-- [bitmind/MS-COCO-unique-256](https://huggingface.co/datasets/bitmind/MS-COCO-unique-256)
-- [bitmind/AFHQ](https://huggingface.co/datasets/bitmind/AFHQ)
-- [bitmind/lfw](https://huggingface.co/datasets/bitmind/lfw)
-- [bitmind/caltech-256](https://huggingface.co/datasets/bitmind/caltech-256)
-- [bitmind/caltech-101](https://huggingface.co/datasets/bitmind/caltech-101)
-- [bitmind/dtd](https://huggingface.co/datasets/bitmind/dtd)
-- [bitmind/idoc-mugshots-images](https://huggingface.co/datasets/bitmind/idoc-mugshots-images)
-- [nlphuji/flickr30k](https://huggingface.co/datasets/nlphuji/flickr30k)
-- [detection-datasets/fashionpedia](https://huggingface.co/datasets/detection-datasets/fashionpedia)
-- [allenai/CoSyn-400K](https://huggingface.co/datasets/allenai/CoSyn-400K)
-- [CausalLM/Retrievatar](https://huggingface.co/datasets/CausalLM/Retrievatar)
-- [YongchengYAO/MedVision](https://huggingface.co/datasets/YongchengYAO/MedVision)
-- [ethz/food101](https://huggingface.co/datasets/ethz/food101)
-- [MMMU/MMMU](https://huggingface.co/datasets/MMMU/MMMU)
-- [FreedomIntelligence/PubMedVision](https://huggingface.co/datasets/FreedomIntelligence/PubMedVision)
-- [MMMGBench/MMMG](https://huggingface.co/datasets/MMMGBench/MMMG)
-- [huggan/wikiart](https://huggingface.co/datasets/huggan/wikiart)
-- [OpenDriveLab/OpenScene](https://huggingface.co/datasets/OpenDriveLab/OpenScene)
-- [bitmind/FakeClue](https://huggingface.co/datasets/bitmind/FakeClue) (real subsets: doc, ff++, genimage, satellite)
-
-**Synthetic Images:**
-- [bitmind/JourneyDB](https://huggingface.co/datasets/bitmind/JourneyDB)
-- [bitmind/GenImage_MidJourney](https://huggingface.co/datasets/bitmind/GenImage_MidJourney)
-- [bitmind/bm-aura-imagegen](https://huggingface.co/datasets/bitmind/bm-aura-imagegen)
-- [bitmind/bm-imagine](https://huggingface.co/datasets/bitmind/bm-imagine)
-- [bitmind/ideogram-27k](https://huggingface.co/datasets/bitmind/ideogram-27k)
-- [bitmind/Dalle-3-1M](https://huggingface.co/datasets/bitmind/Dalle-3-1M)
-- [bitmind/SyntheticFacesHQ](https://huggingface.co/datasets/bitmind/SyntheticFacesHQ) (parts 1-4)
-- [bitmind/Deepfake-leonardo-stablecog](https://huggingface.co/datasets/bitmind/Deepfake-leonardo-stablecog)
-- [bitmind/klingai-images](https://huggingface.co/datasets/bitmind/klingai-images)
-- [bitmind/FakeClue](https://huggingface.co/datasets/bitmind/FakeClue) (fake subsets: chameleon, doc, ff++, genimage, satellite)
-- [Andrew613/PICA-100K](https://huggingface.co/datasets/Andrew613/PICA-100K)
-- [jackyhate/text-to-image-2M](https://huggingface.co/datasets/jackyhate/text-to-image-2M)
-- [bitmind/Nano-banana-150k](https://huggingface.co/datasets/bitmind/Nano-banana-150k)
-- [Rapidata/bananamark-dataset](https://huggingface.co/datasets/Rapidata/bananamark-dataset)
-- [cactuslab/IDNet-2025](https://huggingface.co/datasets/cactuslab/IDNet-2025)
-
-**Semi-synthetic Images:**
-- [bitmind/face-swap](https://huggingface.co/datasets/bitmind/face-swap)
-
-### Video Datasets (~20,000 sample benchmark)
-
-**Real Videos:**
-- [bitmind/bm-eidon-video](https://huggingface.co/datasets/bitmind/bm-eidon-video)
-- [shangxd/imagenet-vidvrd](https://huggingface.co/datasets/shangxd/imagenet-vidvrd)
-- [facebook/PE-Video](https://huggingface.co/datasets/facebook/PE-Video)
-- [faridlab/deepaction_v1](https://huggingface.co/datasets/faridlab/deepaction_v1) (Pexels subset)
-- [Hemgg/deep-fake-detection-dfd-entire-original-datasett](https://huggingface.co/datasets/Hemgg/deep-fake-detection-dfd-entire-original-datasett) (original sequences)
-- [Hemgg/Physics-101-Video-dataset](https://huggingface.co/datasets/Hemgg/Physics-101-Video-dataset)
-- [Pai3dot14/Moments_in_Time_Raw_50k](https://huggingface.co/datasets/Pai3dot14/Moments_in_Time_Raw_50k)
-- [bitmind/UCF101Fullvideo](https://huggingface.co/datasets/bitmind/UCF101Fullvideo)
-- [yeray142/first-impressions-v2](https://huggingface.co/datasets/yeray142/first-impressions-v2)
-- [SushantGautam/SoccerNet-10s-5Class](https://huggingface.co/datasets/SushantGautam/SoccerNet-10s-5Class)
-- [HopLeeTop/Sports-QA](https://huggingface.co/datasets/HopLeeTop/Sports-QA)
-- [builddotai/Egocentric-100K](https://huggingface.co/datasets/builddotai/Egocentric-100K)
-- [OpenDriveLab/FreeTacMan](https://huggingface.co/datasets/OpenDriveLab/FreeTacMan)
-- [USC-GVL/humanoid-everyday](https://huggingface.co/datasets/USC-GVL/humanoid-everyday)
-- [34data/workout-vids](https://huggingface.co/datasets/34data/workout-vids)
-- [cz-5f/LoVoRA](https://huggingface.co/datasets/cz-5f/LoVoRA) (real subset)
-
-**Synthetic Videos:**
-- [gasstation/gs-videos-v3](https://huggingface.co/datasets/gasstation/gs-videos-v3) (GAS-Station generated - continuously updated)
-- [Rapidata/text-2-video-human-preferences-veo3](https://huggingface.co/datasets/Rapidata/text-2-video-human-preferences-veo3)
-- [Rapidata/text-2-video-human-preferences-veo2](https://huggingface.co/datasets/Rapidata/text-2-video-human-preferences-veo2)
-- [Rapidata/text-2-video-human-preferences-wan2.1](https://huggingface.co/datasets/Rapidata/text-2-video-human-preferences-wan2.1)
-- [bitmind/aura-video](https://huggingface.co/datasets/bitmind/aura-video)
-- [bitmind/aislop-videos](https://huggingface.co/datasets/bitmind/aislop-videos)
-- [bitmind/klingai-videos](https://huggingface.co/datasets/bitmind/klingai-videos)
-- [bitmind/VidProM](https://huggingface.co/datasets/bitmind/VidProM)
-- [faridlab/deepaction_v1](https://huggingface.co/datasets/faridlab/deepaction_v1) (BDAnimateDiffLightning, CogVideoX5B, RunwayML, StableDiffusion, Veo, VideoPoet subsets)
-- [hi-paris/FakeParts](https://huggingface.co/datasets/hi-paris/FakeParts) (T2V subset)
-- [saiyan-world/Goku-MovieGenBench](https://huggingface.co/datasets/saiyan-world/Goku-MovieGenBench)
-- [kevinzzz8866/ByteDance_Synthetic_Videos](https://huggingface.co/datasets/kevinzzz8866/ByteDance_Synthetic_Videos)
-- [BianYx/VAP-Data](https://huggingface.co/datasets/BianYx/VAP-Data)
-- [WenhaoWang/VideoUFO](https://huggingface.co/datasets/WenhaoWang/VideoUFO)
-- [chungimungi/VideoDPO-10k](https://huggingface.co/datasets/chungimungi/VideoDPO-10k)
-- [aadityaubhat/synthetic-emotions](https://huggingface.co/datasets/aadityaubhat/synthetic-emotions)
-- [sophiaa/Open-VFX](https://huggingface.co/datasets/sophiaa/Open-VFX)
-- [cz-5f/LoVoRA](https://huggingface.co/datasets/cz-5f/LoVoRA) (synthetic subset)
-- [SENORITADATASET/Senorita](https://huggingface.co/datasets/SENORITADATASET/Senorita) (controllable videos, inpainting, local style transfer, obj removal, obj swap, style transfer)
-
-**Semi-synthetic Videos:**
-- [bitmind/semisynthetic-video](https://huggingface.co/datasets/bitmind/semisynthetic-video)
-- [hi-paris/FakeParts](https://huggingface.co/datasets/hi-paris/FakeParts) (Faceswap, Inpainting, Outpainting, Change of style subsets)
-- [Hemgg/deep-fake-detection-dfd-entire-original-datasett](https://huggingface.co/datasets/Hemgg/deep-fake-detection-dfd-entire-original-datasett) (manipulated sequences)
-
-### Audio Datasets (~30,000 sample benchmark)
-
-**Real Audio:**
-- [fixie-ai/common_voice_17_0](https://huggingface.co/datasets/fixie-ai/common_voice_17_0) (Mozilla Common Voice 17.0 - 100+ languages)
-- [facebook/voxpopuli](https://huggingface.co/datasets/facebook/voxpopuli) (EU Parliament speeches - 18 languages)
-- [edinburghcstr/ami](https://huggingface.co/datasets/edinburghcstr/ami) (AMI meeting corpus)
-- [facebook/omnilingual-asr-corpus](https://huggingface.co/datasets/facebook/omnilingual-asr-corpus) (1600+ languages)
-- [speechcolab/gigaspeech](https://huggingface.co/datasets/speechcolab/gigaspeech) (10K hours English)
-- [MLCommons/peoples_speech](https://huggingface.co/datasets/MLCommons/peoples_speech)
-- [parler-tts/mls_eng_10k](https://huggingface.co/datasets/parler-tts/mls_eng_10k) (MLS English 10K subset)
-- [ylacombe/english_dialects](https://huggingface.co/datasets/ylacombe/english_dialects)
-- [myleslinder/crema-d](https://huggingface.co/datasets/myleslinder/crema-d) (CREMA-D emotional speech)
-- [CSALT/deepfake_detection_dataset_urdu](https://huggingface.co/datasets/CSALT/deepfake_detection_dataset_urdu) (real subset)
-- [language-and-voice-lab/samromur_children](https://huggingface.co/datasets/language-and-voice-lab/samromur_children)
-- [language-and-voice-lab/raddromur_asr](https://huggingface.co/datasets/language-and-voice-lab/raddromur_asr)
-- [qmeeus/slurp](https://huggingface.co/datasets/qmeeus/slurp)
-- [ymoslem/MediaSpeech](https://huggingface.co/datasets/ymoslem/MediaSpeech)
-- [simon3000/genshin-voice](https://huggingface.co/datasets/simon3000/genshin-voice)
-
-**Synthetic Audio:**
-- [DeepFake-Audio-Rangers/Arabic_Audio_Deepfake](https://huggingface.co/datasets/DeepFake-Audio-Rangers/Arabic_Audio_Deepfake)
-- [CSALT/deepfake_detection_dataset_urdu](https://huggingface.co/datasets/CSALT/deepfake_detection_dataset_urdu) (spoofed subset)
-- [yhaha/EmoVoice-DB](https://huggingface.co/datasets/yhaha/EmoVoice-DB) (synthetic emotional voices)
-- [tutu0604/UltraVoice](https://huggingface.co/datasets/tutu0604/UltraVoice) (CJK TTS voices)
-- [unfake/fake_voices](https://huggingface.co/datasets/unfake/fake_voices)
-- [skypro1111/elevenlabs_dataset](https://huggingface.co/datasets/skypro1111/elevenlabs_dataset)
-- [velocity-engg/eleven_labs_dataset](https://huggingface.co/datasets/velocity-engg/eleven_labs_dataset)
-- [Sh1man/elevenlabs](https://huggingface.co/datasets/Sh1man/elevenlabs)
-- [NeoBoy/elevenlabsSpeechTest](https://huggingface.co/datasets/NeoBoy/elevenlabsSpeechTest)
-- [velocity-engg/eleven_labs_datase_latin](https://huggingface.co/datasets/velocity-engg/eleven_labs_datase_latin)
-- [Thorsten-Voice/TV-44kHz-Full](https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full) (German TTS)
-- [ash56/ShiftySpeech](https://huggingface.co/datasets/ash56/ShiftySpeech) (7 domains, 6 TTS systems, 12 vocoders, 3 languages)
+The complete, up-to-date dataset lists are defined in the gasbench config files:
+- **Image**: [`image_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/image_datasets.yaml)
+- **Video**: [`video_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/video_datasets.yaml)
+- **Audio**: [`audio_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/audio_datasets.yaml)
 
 </details>
 
