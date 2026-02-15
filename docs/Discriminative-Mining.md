@@ -87,7 +87,7 @@ At least one model (image, video, or audio) must be provided.
 
 Each model is scored per modality using the `sn34_score`, a geometric mean of normalized MCC and Brier score:
 
-$$\text{sn34\_score} = \sqrt{\text{MCC\_norm}^{\alpha} \cdot \text{Brier\_norm}^{\beta}}$$
+$$sn34_{score} = \sqrt{MCC_{norm}^{\alpha} \cdot Brier_{norm}^{\beta}}$$
 
 Where $\alpha = 1.2$ and $\beta = 1.8$. This rewards both discrimination accuracy (MCC) and calibration quality (Brier). See [Incentive Mechanism](Incentive.md) for the full formula.
 

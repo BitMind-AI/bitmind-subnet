@@ -119,11 +119,11 @@ Each discriminator model is scored per modality using the `sn34_score`, which co
 
 These are combined as follows:
 
-$$\text{mcc\_norm} = \left(\frac{\text{MCC} + 1}{2}\right)^{\alpha}$$
+$$MCC_{norm} = \left(\frac{MCC + 1}{2}\right)^{\alpha}$$
 
-$$\text{brier\_score} = \left(\frac{0.25 - \text{Brier}}{0.25}\right)^{\beta}$$
+$$Brier_{norm} = \left(\frac{0.25 - Brier}{0.25}\right)^{\beta}$$
 
-$$\text{sn34\_score} = \sqrt{\text{mcc\_norm} \cdot \text{brier\_score}}$$
+$$sn34_{score} = \sqrt{MCC_{norm} \cdot Brier_{norm}}$$
 
 With default parameters $\alpha = 1.2$ and $\beta = 1.8$. The geometric mean penalizes models that are strong on one axis but weak on the other -- a model must be both accurate *and* well-calibrated to score highly.
 
