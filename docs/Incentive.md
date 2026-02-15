@@ -10,13 +10,6 @@ Each modality (image, video, audio) is scored independently using the `sn34_scor
 
 Benchmark datasets are regularly expanded. Each modality includes a mix of real, synthetic, and semi-synthetic content from diverse sources (including continuously-updated [GAS-Station](https://huggingface.co/gasstation) data from generative miners).
 
-| Modality | Benchmark Size | Dataset Count |
-|----------|---------------|---------------|
-| Image | ~50,000 samples | ~50 datasets |
-| Video | ~20,000 samples | ~40 datasets |
-| Audio | ~30,000 samples | ~25 datasets |
-
-The complete, up-to-date dataset lists are defined in the gasbench config files:
 - **Image**: [`image_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/image_datasets.yaml)
 - **Video**: [`video_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/video_datasets.yaml)
 - **Audio**: [`audio_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/audio_datasets.yaml)
