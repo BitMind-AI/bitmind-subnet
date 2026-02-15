@@ -33,7 +33,7 @@ pip install uv
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/BitMind-AI/bitmind-subnet.git
    cd bitmind-subnet
    ```
 
@@ -74,13 +74,15 @@ Once the virtual environment is activated, you can use the GAS CLI:
 ```bash
 gascli --help                    # Show main help
 gascli validator --help          # Validator commands help
-gascli miner --help              # Miner commands help
+gascli discriminator --help      # Discriminative miner commands help
+gascli generator --help          # Generative miner commands help
 ```
 
 ### Available Aliases
 
 - `validator` → `vali`, `v`
-- `miner` → `m`
+- `discriminator` → `d`
+- `generator` → `gen`, `g`
 
 ### Global Commands
 
