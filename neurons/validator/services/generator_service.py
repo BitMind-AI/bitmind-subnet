@@ -674,7 +674,7 @@ class GeneratorService:
             try:
                 from gas.verification import clear_clip_models
                 clear_clip_models()
-            except:
+            except Exception:
                 pass
 
     def _cleanup(self):
