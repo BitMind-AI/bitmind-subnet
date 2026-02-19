@@ -48,8 +48,7 @@ def is_zip_complete(zip_path: Union[str, Path], testzip=False) -> bool:
 
 def is_parquet_complete(path: Path) -> bool:
     try:
-        with open(path, "rb") as f:
-            pq.read_metadata(f)
+        pq.read_metadata(path)
         return True
     except Exception as e:
         bt.logging.error(f"Parquet file {path} is incomplete or corrupted: {e}")
