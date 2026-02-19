@@ -18,7 +18,7 @@ dependencies = [
     "pillow==10.4.0",
     "substrate-interface==1.7.11",
     "numpy==2.0.1",
-    "pandas==2.3.0",
+    "pandas==3.0.1",
     "torch==2.7.1",
     "torchvision==0.22.1",
     #"flash-attn>=2.7.0",

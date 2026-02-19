@@ -9,6 +9,11 @@ from datetime import datetime, timezone
 
 import bittensor as bt
 import pandas as pd
+# pandas 3.0: Copy-on-Write is now the default; explicit .copy() calls are no
+# longer needed to avoid SettingWithCopyWarning. Chained assignment now raises
+# ChainedAssignmentError instead of a warning — use .loc[]/.iloc[] for all
+# in-place modifications. Deprecated APIs removed: DataFrame.bool(),
+# DataFrame.first()/last(), Series.iteritems() → use items() instead.
 from huggingface_hub import HfApi, create_repo, CommitOperationAdd
 from datasets import Dataset, Features, Value, Image as HFImage
 from PIL import Image
