@@ -180,30 +180,38 @@ def _common_metadata(dataset: DatasetConfig, source_path: Path) -> Dict[str, Any
     }
 
 
-def _process_parquet(source_path: Path, dataset: DatasetConfig, num_items: int):
-    table = pq.read_table(source_path)
-    df = table.to_pandas()
-    sample_df = df.sample(n=min(num_items, len(df)))
+def _pick_media_column(columns, modality):
+    """Pick the best media column name from a list of column names."""
+    cols = [str(c) for c in columns]
+    if modality == Modality.IMAGE:
+        return (
+            next((c for c in cols if c.lower() == "image"), None)
+            or next((c for c in cols if "image" in c.lower() and "_id" not in c.lower() and "width" not in c.lower() and "height" not in c.lower()), None)
+            or next((c for c in cols if "image" in c.lower()), None)
+        )
+    candidates = ["video", "bytes", "content", "data"]
+    return (
+        next((c for c in cols if c.lower() in candidates), None)
+        or next((c for c in cols if any(k in c.lower() for k in candidates) and "_id" not in c.lower()), None)
+        or next((c for c in cols if any(k in c.lower() for k in candidates)), None)
+    )
 
-    if dataset.modality == Modality.IMAGE:
-        media_col = (
-            next((c for c in sample_df.columns if c.lower() == "image"), None)
-            or next((c for c in sample_df.columns if "image" in c.lower() and "_id" not in c.lower() and "width" not in c.lower() and "height" not in c.lower()), None)
-            or next((c for c in sample_df.columns if "image" in c.lower()), None)
-        )
-    else:
-        candidates = ["video", "bytes", "content", "data"]
-        media_col = (
-            next((c for c in sample_df.columns if c.lower() in candidates), None)
-            or next((c for c in sample_df.columns if any(k in c.lower() for k in candidates) and "_id" not in c.lower()), None)
-            or next((c for c in sample_df.columns if any(k in c.lower() for k in candidates)), None)
-        )
+
+def _process_parquet(source_path: Path, dataset: DatasetConfig, num_items: int):
+    # memory_map=True avoids copying file data into memory (pyarrow 20+)
+    pf = pq.ParquetFile(source_path, memory_map=True)
+    media_col = _pick_media_column(pf.schema_arrow.names, dataset.modality)
 
     if not media_col:
         bt.logging.warning(f"No media column found in {source_path} for modality {dataset.modality}")
         return
 
     bt.logging.debug(f"Selected media column '{media_col}' from {source_path}")
+
+    # Read only the media column to reduce memory usage on large parquets
+    table = pf.read(columns=[media_col])
+    df = table.to_pandas()
+    sample_df = df.sample(n=min(num_items, len(df)))
 
     for _, row in sample_df.iterrows():
         try:
