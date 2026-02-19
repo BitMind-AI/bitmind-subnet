@@ -13,7 +13,10 @@ import cv2
 import numpy as np
 import requests
 import uvicorn
-from bittensor.core.axon import FastAPIThreadedServer
+try:
+    from bittensor.core.axon import FastAPIThreadedServer
+except ImportError:
+    from bittensor.axon import FastAPIThreadedServer
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.responses import Response
 from pathlib import Path

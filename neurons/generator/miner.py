@@ -13,8 +13,14 @@ from pathlib import Path
 import bittensor as bt
 import uvicorn
 from fastapi import FastAPI, APIRouter, Request, Response, Depends
-from bittensor.core.axon import FastAPIThreadedServer
-from bittensor.core.extrinsics.serving import serve_extrinsic
+try:
+    from bittensor.core.axon import FastAPIThreadedServer
+except ImportError:
+    from bittensor.axon import FastAPIThreadedServer
+try:
+    from bittensor.core.extrinsics.serving import serve_extrinsic
+except ImportError:
+    from bittensor.extrinsics.serving import serve_extrinsic
 from dotenv import load_dotenv
 
 from gas.protocol.epistula import get_verifier

@@ -13,7 +13,7 @@ license = { text = "" }
 urls = { homepage = "http://bitmind.ai" }
 
 dependencies = [
-    "bittensor==9.9.0",
+    "bittensor==10.1.0",
     "bittensor-cli",
     "pillow==10.4.0",
     "substrate-interface==1.7.11",

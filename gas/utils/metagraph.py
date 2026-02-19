@@ -3,7 +3,10 @@ import asyncio
 from typing import Callable, List, Tuple
 import numpy as np
 import bittensor as bt
-from bittensor.utils.weight_utils import process_weights_for_netuid
+try:
+    from bittensor.utils.weight_utils import process_weights_for_netuid
+except ImportError:
+    from bittensor.core.utils.weight_utils import process_weights_for_netuid
 from async_substrate_interface import AsyncSubstrateInterface
 
 from gas.utils import fail_with_none

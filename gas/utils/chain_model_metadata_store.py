@@ -43,8 +43,12 @@ class ChainModelMetadataStore:
     ) -> Optional[ModelMetadata]:
         """Retrieves model metadata on this subnet for specific hotkey"""
 
+        try:
+            from bittensor.core.extrinsics.serving import get_metadata as _get_metadata
+        except ImportError:
+            from bittensor.extrinsics.serving import get_metadata as _get_metadata
         metadata_partial = functools.partial(
-            bt.core.extrinsics.serving.get_metadata,
+            _get_metadata,
             self.subtensor,
             self.netuid,
             hotkey,
