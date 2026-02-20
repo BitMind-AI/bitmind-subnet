@@ -216,45 +216,46 @@ class Validator(BaseNeuron):
                         "responses from miners, or a bug in your reward functions."
                     )
 
-                burn_pct = .5
-                audio_pct = .01
+                # Weight budget (must sum to 1.0)
+                burn_pct      = .40
+                video_pct     = .31
+                image_pct     = .21
+                audio_pct     = .01
+                generator_pct = 1 - burn_pct - video_pct - image_pct - audio_pct  # .07
+
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["burn"],
-                    netuid=self.config.netuid, 
+                    netuid=self.config.netuid,
+                    block=block
+                )
+                video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58=active_ss58_addresses["video_escrow"],
+                    netuid=self.config.netuid,
+                    block=block
+                )
+                image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58=active_ss58_addresses["image_escrow"],
+                    netuid=self.config.netuid,
+                    block=block
+                )
+                audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                    hotkey_ss58=active_ss58_addresses["audio_escrow"],
+                    netuid=self.config.netuid,
                     block=block
                 )
 
-                d_pct = .84
-                video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["video_escrow"],
-                     netuid=self.config.netuid, 
-                     block=block)
-                image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["image_escrow"],
-                     netuid=self.config.netuid, 
-                     block=block)
-                audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["audio_escrow"],
-                     netuid=self.config.netuid, 
-                     block=block)
-
                 special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
-                #bt.logging.info(f"Special UIDs to exclude: {special_uids}")
 
                 # Compute norm excluding specials
                 norm = np.ones_like(self.scores)
                 active_uids = [uid for uid in generator_uids if uid not in special_uids]
                 if active_uids:
                     norm[active_uids] = np.linalg.norm(self.scores[active_uids], ord=1)
-                
+
                 if np.any(norm == 0) or np.isnan(norm).any():
                     norm = np.ones_like(norm)
 
                 normed_weights = self.scores / norm
-
-                # Scale ONLY active (non-special) weights
-                remaining_pct = 1 - burn_pct - audio_pct
-                g_pct = (1. - d_pct)
 
                 active_uids_set = set(active_uids)
                 for uid in range(len(normed_weights)):
@@ -262,18 +263,14 @@ class Validator(BaseNeuron):
                         normed_weights[uid] = 0.0
 
                 active_mask = np.array([uid in active_uids_set for uid in range(len(normed_weights))])
-                normed_weights[active_mask] *= remaining_pct * g_pct
+                normed_weights[active_mask] *= generator_pct
 
-                # Set special weights (only once, no prior scaling)
-                normed_weights[burn_uid] = burn_pct
+                normed_weights[burn_uid]         = burn_pct
+                normed_weights[video_escrow_uid] = video_pct
+                normed_weights[image_escrow_uid] = image_pct
                 normed_weights[audio_escrow_uid] = audio_pct
-                normed_weights[image_escrow_uid] = remaining_pct * d_pct / 2
-                normed_weights[video_escrow_uid] = remaining_pct * d_pct / 2
-                #bt.logging.info(f"Image discriminator escrow UID: {image_escrow_uid}")
-                #bt.logging.info(f"Video discriminator escrow UID: {video_escrow_uid}")
-                #bt.logging.info(f"Audio escrow UID: {audio_escrow_uid}")
 
-                # Verify burn rate
+                # Verify allocations
                 total_weight = np.sum(normed_weights)
                 actual_burn_rate = normed_weights[burn_uid] / total_weight if total_weight > 0 else 0
                 bt.logging.info(f"Total weight sum: {total_weight:.4f}, Actual burn rate: {actual_burn_rate:.4f} (target: {burn_pct})")
