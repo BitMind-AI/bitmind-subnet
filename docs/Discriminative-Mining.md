@@ -6,10 +6,10 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 
 ## Discriminative Mining Overview
 
-- Miners are tasked with training multiclass classifiers that discern between genuine and AI-generated content, and are rewarded based on their accuracy. 
-- For each challenge, a miner's model is presented an image, video, or audio and is required to respond with a binary prediction [$p_{real}$, $p_{synthetic}$] indicating whether the media is real, fully generated, or partially modified by AI. 
-
-*Note that some datasets are labeled as semisynthetic  (e.g. inpainting, faceswaps), but for scoring we conflate this with the `synthetic` class*
+- Miners submit binary classifiers that distinguish genuine content from AI-generated or AI-manipulated content across three modalities: **image**, **video**, and **audio**.
+- For each evaluation sample, a model receives a media input and must produce a binary prediction $[p_{\text{real}}, p_{\text{synthetic}}]$ -- a probability distribution over two classes.
+- Some datasets contain semisynthetic content (e.g., inpainting, faceswaps). For scoring purposes, semisynthetic is treated as `synthetic`.
+- Models are evaluated on cloud infrastructure -- miners do not need to host hardware for inference.
 
 ## Model Preparation
 
@@ -63,7 +63,7 @@ gascli d push \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name \
   --netuid 34 \
-  --chain-endpoint wss://test.finney.opentensor.ai:443/ \
+  --chain-endpoint wss://entrypoint-finney.opentensor.ai:443/ \
   --retry-delay 60
 ```
 
@@ -74,145 +74,64 @@ gascli d push \
 - `--wallet-name`: Bittensor wallet name (default: "default")
 - `--wallet-hotkey`: Bittensor hotkey name (default: "default") 
 - `--netuid`: Subnet UID (default: 34)
-- `--chain-endpoint`: Subtensor network endpoint (default: "wss://test.finney.opentensor.ai:443/")
+- `--chain-endpoint`: Subtensor network endpoint (default: "wss://entrypoint-finney.opentensor.ai:443/")
 - `--retry-delay`: Retry delay in seconds (default: 60)
 
 At least one model (image, video, or audio) must be provided.
 
 ---
 
-## Model Formats
+## Competition Rules and Constraints
 
-### ONNX Format (Traditional)
+### Scoring
 
-Package your ONNX model in a ZIP file:
+Each model is scored per modality using the `sn34_score`, a geometric mean of normalized MCC and Brier score:
 
-```bash
-# Package image model
-zip image_detector.zip image_detector.onnx
+$$sn34_{score} = \sqrt{MCC_{norm}^{\alpha} \cdot Brier_{norm}^{\beta}}$$
 
-# Package video model  
-zip video_detector.zip video_detector.onnx
+Where $\alpha = 1.2$ and $\beta = 1.8$. This rewards both discrimination accuracy (MCC) and calibration quality (Brier). See [Incentive Mechanism](Incentive.md) for the full formula.
 
-# Package audio model
-zip audio_detector.zip audio_detector.onnx
+### Model Requirements
+
+- **Format**: Safetensors only (ONNX is no longer accepted)
+- **Three model per modality per hotkey**: You can submit up to three image, three video, and three audio model per registered hotkey
+
+### Sandbox and Import Restrictions
+
+Your `model.py` is checked by a static analyzer and executed in a sandboxed environment. Key allowed imports include `torch`, `torchvision`, `torchaudio`, `transformers`, `timm`, `einops`, `flash_attn`, `PIL`, `cv2`, `scipy`, `numpy`, and `safetensors`. Network access, system calls, serialization libraries, and dynamic code execution are all blocked.
+
+For the complete list of allowed and blocked imports, see the [Safetensors Model Specification](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md#allowed-imports).
+
+### Evaluation
+
+- Models are benchmarked on cloud infrastructure (not miner hardware)
+- Evaluation runs against a diverse dataset of image samples, video samples, and audio samples per benchmark cycle
+- Datasets are refreshed weekly with new GAS-Station data alongside static benchmark datasets
+
+---
+
+## Model Format
+
+For the full model specification including `model_config.yaml` structure, `model.py` requirements, input/output specs per modality, and complete examples, see:
+
+**📖 [Safetensors Model Specification](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md)**
+
+In short, your submission ZIP must contain:
+
 ```
-
-The ZIP should contain a single `.onnx` file.
-
-### Safetensors Format (PyTorch Native Weights)
-
-For custom PyTorch architectures, package these three required files:
-
-```
-model_submission.zip
+my_detector.zip
 ├── model_config.yaml    # Metadata and preprocessing config
+├── config.json          # (optional) Include if using AutoModel.from_pretrained()
 ├── model.py             # Model architecture with load_model() function
 └── model.safetensors    # Trained weights
 ```
 
-#### model_config.yaml
-
-Configuration file specifying model settings and input shape:
-
-```yaml
-model:
-  weights_file: "model.safetensors"
-  num_classes: 2
-
-preprocessing:
-  # For image/video models:
-  resize: [224, 224]
-  
-  # For audio models (instead of resize):
-  # sample_rate: 16000
-  # duration_seconds: 6.0
-```
-
-**Required fields:**
-- `model.weights_file`: Name of the weights file (usually `model.safetensors`)
-- `model.num_classes`: Number of output classes (1-100)
-- `preprocessing.resize`: Input image size `[height, width]` for image/video models
-
-**Note:** Input normalization should be handled inside your `model.py` forward pass, not in the config.
-
-#### model.py
-
-Python file defining your model architecture. **Must define a `load_model()` function:**
-
-```python
-import torch
-import torch.nn as nn
-from safetensors.torch import load_file
-
-class MyDetector(nn.Module):
-    def __init__(self, num_classes=2):
-        super().__init__()
-        self.backbone = nn.Sequential(
-            nn.Conv2d(3, 64, 3, padding=1),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d(1)
-        )
-        self.classifier = nn.Linear(64, num_classes)
-    
-    def forward(self, x):
-        # Input: [B, C, H, W] uint8 pixels (0-255)
-        # Output: [B, num_classes] logits
-        
-        # Normalize input (gasbench sends raw 0-255 pixel values)
-        x = x / 255.0
-        
-        x = self.backbone(x)
-        x = x.flatten(1)
-        return self.classifier(x)
-
-def load_model(weights_path: str, num_classes: int = 2) -> nn.Module:
-    """Required entry point - called by gasbench.
-    
-    Args:
-        weights_path: Path to the .safetensors file
-        num_classes: Number of output classes from config
-        
-    Returns:
-        Loaded PyTorch model ready for inference
-    """
-    model = MyDetector(num_classes=num_classes)
-    state_dict = load_file(weights_path)
-    model.load_state_dict(state_dict)
-    model.eval()
-    return model
-```
-
-**Allowed imports:**
-- `torch`, `torch.nn`, `torch.nn.functional`
-- `torchvision`, `torchvision.models`, `torchvision.transforms`
-- `torchaudio`, `transformers`,
-- `numpy`, `math`, `functools`, `typing`
-- `safetensors`, `safetensors.torch`
-- `timm`, `einops`
-
-**Blocked imports (security):**
-- `os`, `sys`, `subprocess` - system access
-- `requests`, `socket`, `urllib` - network access
-- `pickle`, `marshal` - serialization/code execution
-- `eval`, `exec`, `__import__` - dynamic code execution
-
-#### Creating safetensors weights
-
-Save your trained model weights using safetensors:
-
-```python
-from safetensors.torch import save_file
-
-# After training your model
-state_dict = model.state_dict()
-save_file(state_dict, "model.safetensors")
-```
-
-#### Packaging safetensors submission
+Package and push:
 
 ```bash
-zip my_detector.zip model_config.yaml model.py model.safetensors
+cd my_model/
+zip -r ../my_detector.zip model_config.yaml model.py model.safetensors
+gascli d push --image-model my_detector.zip
 ```
 
 ---

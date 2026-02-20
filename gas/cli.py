@@ -158,37 +158,41 @@ def clean_existing_services(services: List[str]):
             time.sleep(1)
 
 
+def run_docker_compose(args: List[str], capture=False):
+    """Run a docker compose command from the project root"""
+    cmd = ["docker", "compose"] + args
+    if capture:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(PROJECT_ROOT))
+        return result
+    else:
+        result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
+        return result
+
+
 def start_validator_services(no_generation=False, no_data_downloads=False):
-    """Start validator services using ecosystem config"""
-    click.echo("Starting validator services...")
+    """Start validator services using Docker Compose"""
+    click.echo("Starting validator services via Docker...")
 
-    # Login to W&B if API key is provided (only needed for validator)
-    wandb_key = os.environ.get("WANDB_API_KEY")
-    if wandb_key:
-        subprocess.run(["wandb", "login", wandb_key])
-
-    # Use ecosystem config to start services
-    ecosystem_path = PROJECT_ROOT / VALIDATOR_CONFIG
-    if not ecosystem_path.exists():
-        click.echo(f"Error: {VALIDATOR_CONFIG} not found in project root.", err=True)
+    compose_file = PROJECT_ROOT / "docker-compose.yml"
+    if not compose_file.exists():
+        click.echo("Error: docker-compose.yml not found in project root.", err=True)
         return False
 
-    # Set environment variables for service selection
+    env_file = PROJECT_ROOT / ENV_VALIDATOR
+    if not env_file.exists():
+        click.echo(
+            f"Error: {ENV_VALIDATOR} not found. Copy .env.validator.template and fill it in.",
+            err=True,
+        )
+        return False
+
+    # Set service toggles in host env (docker-compose.yml reads these)
     os.environ["START_VALIDATOR"] = "true"
     os.environ["START_GENERATOR"] = "false" if no_generation else "true"
     os.environ["START_DATA"] = "false" if no_data_downloads else "true"
 
-    # Clean up existing services
-    services_to_clean = []
-    if not no_generation:
-        services_to_clean.append(GENERATOR)
-    if not no_data_downloads:
-        services_to_clean.append(DATA)
-    services_to_clean.append(VALIDATOR)
-    clean_existing_services(services_to_clean)
-
-    # Start services using ecosystem config
-    result = subprocess.run(["pm2", "start", str(ecosystem_path)])
+    # Build and start
+    result = run_docker_compose(["up", "-d", "--build"])
 
     if result.returncode == 0:
         services_started = ["validator"]
@@ -197,8 +201,9 @@ def start_validator_services(no_generation=False, no_data_downloads=False):
         if not no_data_downloads:
             services_started.append("data")
         click.echo(f"Validator services started: {', '.join(services_started)}")
+        click.echo("View logs: docker compose logs -f validator")
     else:
-        click.echo("Some validator services failed to start", err=True)
+        click.echo("Failed to start validator services", err=True)
 
     return result.returncode == 0
 
@@ -256,67 +261,39 @@ def start(no_generation, no_data_downloads):
 
 
 @validator.command()
-@click.option(
-    "--service",
-    default="all",
-    help="Service to stop (validator, generator, data, or all)",
-)
-def stop(service):
+def stop():
     """Stop validator services"""
     click.echo("Stopping validator services...")
-
-    if service == "all":
-        for service_name in ALL_SERVICES:
-            run_pm2_command("stop", service_name)
-    else:
-        service_map = {"validator": VALIDATOR, "generator": GENERATOR, "data": DATA}
-        pm2_service = service_map.get(service, service)
-        run_pm2_command("stop", pm2_service)
+    run_docker_compose(["stop"])
 
 
 @validator.command()
-@click.option(
-    "--service",
-    default="all",
-    help="Service to delete (validator, generator, data, or all)",
-)
-def delete(service):
-    """Delete validator services"""
+def delete():
+    """Delete validator services and containers"""
     click.echo("Deleting validator services...")
-
-    if service == "all":
-        for service_name in ALL_SERVICES:
-            run_pm2_command("delete", service_name)
-    else:
-        service_map = {"validator": VALIDATOR, "generator": GENERATOR, "data": DATA}
-        pm2_service = service_map.get(service, service)
-        run_pm2_command("delete", pm2_service)
+    run_docker_compose(["down"])
 
 
 @validator.command()
 def status():
     """Show status of validator services"""
-    result = subprocess.run(["pm2", "list"], capture_output=True, text=True)
-    if result.stdout:
+    result = run_docker_compose(["ps"], capture=True)
+    if result.stdout and result.stdout.strip():
         click.echo(result.stdout)
     else:
-        click.echo("No validator services found")
+        click.echo("No validator services running")
 
 
 @validator.command()
-@click.option(
-    "--service",
-    default="all",
-    help="Service to show logs for (validator, generator, data, or all)",
-)
-def logs(service):
+@click.option("--follow", "-f", is_flag=True, default=True, help="Follow log output")
+@click.option("--tail", default="100", help="Number of lines to show from end of logs")
+def logs(follow, tail):
     """Show logs for validator services"""
-    if service == "all":
-        subprocess.run(["pm2", "logs"])
-    else:
-        service_map = {"validator": VALIDATOR, "generator": GENERATOR, "data": DATA}
-        pm2_service = service_map.get(service, service)
-        subprocess.run(["pm2", "logs", pm2_service])
+    args = ["logs", "--tail", tail]
+    if follow:
+        args.append("-f")
+    args.append("validator")
+    run_docker_compose(args)
 
 
 @validator.command()
