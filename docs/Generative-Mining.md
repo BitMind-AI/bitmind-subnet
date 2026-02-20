@@ -6,10 +6,12 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 
 ## Generative Mining Overview
 
-Generative miners create synthetic media (images and videos) according to prompts from validators. Miners are rewarded based on their ability to:
-- Generate high-quality content that passes validation checks (prompt alignment, C2PA metadata)
-- Create convincing synthetic media that fools discriminative miners  
-- Maintain consistent uptime and availability
+Generative miners create synthetic media (images and videos) according to prompts from validators. Miners are rewarded based on:
+1. **Data validation pass rate** -- content must pass C2PA signature checks and prompt alignment validation
+2. **Adversarial performance** -- synthetic media that fools discriminative miners earns a multiplier bonus
+3. **Sample volume** -- processing more evaluations provides a logarithmic bonus up to 2x
+
+See [Incentive Mechanism](Incentive.md) for the full reward formula.
 
 Generative miners operate as FastAPI servers that receive generation requests from validators and respond asynchronously via webhooks.
 
@@ -42,9 +44,26 @@ You must configure at least one generation method for your miner to be functiona
 
 ### OpenRouter Service  
 - **API Key**: `OPEN_ROUTER_API_KEY`
-- **Supported**: Image generation
+- **Supported**: Image and video generation
 - **Models**: Google Gemini Flash Image Preview, various other models
 - **Website**: [OpenRouter.ai](https://openrouter.ai)
+
+### Stability AI Service
+- **API Key**: `STABILITY_API_KEY`
+- **Supported**: Image generation
+- **Models**: Stable Diffusion, Stable Image Ultra, and other Stability AI models
+- **Website**: [stability.ai](https://stability.ai)
+
+### Service Selection
+
+Configure which service handles each modality in your `.env.gen_miner` file:
+
+```bash
+IMAGE_SERVICE=openrouter    # openai, openrouter, stabilityai, or none
+VIDEO_SERVICE=openrouter    # openrouter or none
+```
+
+All configured services must produce **C2PA-signed content**. Setting a modality to `none` disables it (requests will be rejected).
 
 
 ## Starting the Miner
@@ -110,7 +129,7 @@ gascli generator delete
 Your miner exposes these endpoints for validators:
 
 - `POST /gen_image` - Image generation requests
-- `POST /gen_video` - Video generation requests (coming soon)
+- `POST /gen_video` - Video generation requests
 - `GET /health` - Health check endpoint
 - `GET /miner_info` - Miner information and capabilities
 - `GET /status/{task_id}` - Task status queries

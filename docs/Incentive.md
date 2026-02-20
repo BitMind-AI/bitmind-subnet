@@ -1,61 +1,28 @@
 # Incentive Mechanism
 
 ## Benchmark Runs
-Submitted discriminator miners are evaluated against a subset of the data sources listed below. A portion of the evaluation data comes from generative miners, who are rewarded based on their ability to submit data that both pass validator sanity checks (prompt alignment, etc.) and fool discriminators in benchmark runs.
+Submitted discriminator miners are evaluated against a subset of the data sources listed below. Models are evaluated on cloud infrastructure -- miners do not need to host hardware for inference. A portion of the evaluation data comes from generative miners, who are rewarded based on their ability to submit data that both pass validator sanity checks (prompt alignment, etc.) and fool discriminators in benchmark runs.
+
+Each modality (image, video, audio) is scored independently using the `sn34_score` metric, which combines discrimination accuracy (MCC) with calibration quality (Brier score).
 
 <details>
 <summary><strong>Evaluation Datasets</strong></summary>
 
-### Image Datasets
+Benchmark datasets are regularly expanded. Each modality includes a mix of real, synthetic, and semi-synthetic content from diverse sources (including continuously-updated [GAS-Station](https://huggingface.co/gasstation) data from generative miners).
 
-**Real Images:**
-- [drawthingsai/megalith-10m](https://huggingface.co/datasets/drawthingsai/megalith-10m)
-- [bitmind/bm-eidon-image](https://huggingface.co/datasets/bitmind/bm-eidon-image)
-- [bitmind/bm-real](https://huggingface.co/datasets/bitmind/bm-real)
-- [bitmind/open-image-v7-256](https://huggingface.co/datasets/bitmind/open-image-v7-256)
-- [bitmind/celeb-a-hq](https://huggingface.co/datasets/bitmind/celeb-a-hq)
-- [bitmind/ffhq-256](https://huggingface.co/datasets/bitmind/ffhq-256)
-- [bitmind/MS-COCO-unique-256](https://huggingface.co/datasets/bitmind/MS-COCO-unique-256)
-- [bitmind/AFHQ](https://huggingface.co/datasets/bitmind/AFHQ)
-- [bitmind/lfw](https://huggingface.co/datasets/bitmind/lfw)
-- [bitmind/caltech-256](https://huggingface.co/datasets/bitmind/caltech-256)
-- [bitmind/caltech-101](https://huggingface.co/datasets/bitmind/caltech-101)
-- [bitmind/dtd](https://huggingface.co/datasets/bitmind/dtd)
-- [bitmind/idoc-mugshots-images](https://huggingface.co/datasets/bitmind/idoc-mugshots-images)
+**Public datasets** (available for training via gasbench):
+- **Image**: [`image_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/image_datasets.yaml)
+- **Video**: [`video_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/video_datasets.yaml)
+- **Audio**: [`audio_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/audio_datasets.yaml)
 
-**Synthetic Images:**
-- [bitmind/JourneyDB](https://huggingface.co/datasets/bitmind/JourneyDB)
-- [bitmind/GenImage_MidJourney](https://huggingface.co/datasets/bitmind/GenImage_MidJourney)
-- [bitmind/bm-aura-imagegen](https://huggingface.co/datasets/bitmind/bm-aura-imagegen)
-- [bitmind/bm-imagine](https://huggingface.co/datasets/bitmind/bm-imagine)
-- [Yejy53/Echo-4o-Image](https://huggingface.co/datasets/Yejy53/Echo-4o-Image)
-
-**Semi-synthetic Images:**
-- [bitmind/face-swap](https://huggingface.co/datasets/bitmind/face-swap)
-
-### Video Datasets
-
-**Real Videos:**
-- [bitmind/bm-eidon-video](https://huggingface.co/datasets/bitmind/bm-eidon-video)
-- [shangxd/imagenet-vidvrd](https://huggingface.co/datasets/shangxd/imagenet-vidvrd)
-- [nkp37/OpenVid-1M](https://huggingface.co/datasets/nkp37/OpenVid-1M)
-- [facebook/PE-Video](https://huggingface.co/datasets/facebook/PE-Video)
-
-**Semi-synthetic Videos:**
-- [bitmind/semisynthetic-video](https://huggingface.co/datasets/bitmind/semisynthetic-video)
-
-**Synthetic Videos:**
-- [Rapidata/text-2-video-human-preferences-veo3](https://huggingface.co/datasets/Rapidata/text-2-video-human-preferences-veo3)
-- [Rapidata/text-2-video-human-preferences-veo2](https://huggingface.co/datasets/Rapidata/text-2-video-human-preferences-veo2)
-- [bitmind/aura-video](https://huggingface.co/datasets/bitmind/aura-video)
-- [bitmind/aislop-videos](https://huggingface.co/datasets/bitmind/aislop-videos)
+**Holdout datasets**: In addition to the public datasets above, each benchmark round includes holdout datasets that are not publicly available during the round. Holdout data is critical to ensure models generalize well and to mitigate overfitting. At the end of each round, many of the holdout datasets are released and added to the public gasbench datasets for future training. Some holdout datasets cannot be released publicly due to licensing or other restrictions.
 
 </details>
 
 <details>
 <summary><strong>Generative Models</strong></summary>
 
-The following models run by validators to produce a continual, fresh stream of synthetic and semisynthetic data. The outputs of these models are uploaded at regular intervals to public datasets in the [GAS-Station](https://huggingface.co/gasstation) Hugging Face org for miner training and evaluation.
+The following models are run by validators to produce a continual, fresh stream of synthetic and semisynthetic data. The outputs of these models are uploaded at regular intervals to public datasets in the [GAS-Station](https://huggingface.co/gasstation) Hugging Face org for miner training and evaluation.
 
 ### Text-to-Image Models
 
@@ -102,7 +69,7 @@ $$R_{\text{base}} = p \cdot \min(n, 10)$$
 
 Where:
 - $p$ = pass rate (proportion of generated content that passes validation)
-- $n$ = number of verified samples (`min(p, 10)` creates a rampup of incentive for the first 10 samples)
+- $n$ = number of verified samples (`min(n, 10)` creates a rampup of incentive for the first 10 samples)
 
 ### Fool Rate Multiplier (Adversarial Performance)
 
@@ -142,33 +109,37 @@ This design incentivizes generators to:
 
 ## Discriminator Rewards
 
-Discriminators are scored using the **sn34_score**, which is calculated as:
+### Scoring: `sn34_score`
 
-$$\text{sn34\_score} = 0.5 \times \text{MCC} + 0.5 \times (1 - \text{Brier})$$
+Each discriminator model is scored per modality using the `sn34_score`, which combines two metrics:
 
-### Matthews Correlation Coefficient (MCC)
+1. **Binary MCC (Matthews Correlation Coefficient)** -- measures how well the model discriminates between real and synthetic content. Ranges from -1 (worst) to +1 (perfect).
 
-MCC measures classification quality for binary classification, ranging from -1 to +1 where +1 is perfect prediction:
+2. **Brier Score** -- measures calibration quality (how well predicted probabilities match actual outcomes). Ranges from 0 (perfect) to 0.25 (random baseline).
 
-$$\text{MCC} = \frac{TP \times TN - FP \times FN}{\sqrt{(TP + FP)(TP + FN)(TN + FP)(TN + FN)}}$$
+These are combined as follows:
 
-Where:
-- $TP$ = True Positives (correctly identified synthetic)
-- $TN$ = True Negatives (correctly identified real)
-- $FP$ = False Positives (real misclassified as synthetic)
-- $FN$ = False Negatives (synthetic misclassified as real)
+$$MCC_{norm} = \left(\frac{MCC + 1}{2}\right)^{\alpha}$$
 
-### Brier Score
+$$Brier_{norm} = \left(\frac{0.25 - Brier}{0.25}\right)^{\beta}$$
 
-Brier score measures probability calibration, ranging from 0 (perfect) to 1 (worst):
+$$sn34_{score} = \sqrt{MCC_{norm} \cdot Brier_{norm}}$$
 
-$$\text{Brier} = \frac{1}{N} \sum_{i=1}^{N} (p_i - y_i)^2$$
+With default parameters $\alpha = 1.2$ and $\beta = 1.8$. The geometric mean penalizes models that are strong on one axis but weak on the other -- a model must be both accurate *and* well-calibrated to score highly.
 
-Where:
-- $p_i$ = predicted probability of synthetic for sample $i$
-- $y_i$ = actual label (1 for synthetic, 0 for real)
-- $N$ = total number of samples
+### Competition Rounds
 
-### Final Score
+The discriminator competition is organized into **rounds**. Each round introduces new benchmark datasets and evaluates all submitted models. Winners are determined **per modality** (image, video, audio) independently.
 
-The final sn34_score ranges from 0 to 1, with higher scores indicating better performance. This scoring balances both classification accuracy (MCC) and confidence calibration (Brier score), rewarding models that are not only accurate but also well-calibrated in their probability predictions.
+#### How Rounds Work
+
+1. **New round begins**: Benchmark datasets are updated (new GAS-Station data, potentially new static datasets). All modalities share the same benchmark version number.
+2. **Models are benchmarked**: All submitted discriminator models are evaluated against the current round's datasets and scored using `sn34_score`.
+3. **Winner determined per modality**: The highest-scoring model for each modality wins that round.
+4. **Alpha reward**: The round winner for each modality receives an alpha reward.
+
+#### Winner-Take-All Per Round
+
+Each round is winner-take-all -- only the top-scoring discriminator for each modality receives the alpha reward for that round. This incentivizes miners to continuously improve their models and push the state of the art in AI-generated content detection.
+
+Rounds progress as benchmark versions are incremented, ensuring that models are always evaluated against fresh, evolving data.
