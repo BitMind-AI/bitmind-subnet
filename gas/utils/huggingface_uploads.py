@@ -263,6 +263,7 @@ def _process_media_entries(
                 "generator_uid": generator_uid,
                 "generator_type": generator_type,
                 "model_name": media_entry.model_name or "unknown",
+                "c2pa_issuer": getattr(media_entry, "c2pa_issuer", None) or "",
                 "prompt_id": media_entry.prompt_id or "",
                 "prompt_content": prompt_content,
                 "modality": media_entry.modality.value,
@@ -313,6 +314,7 @@ def _prepare_image_operations(
         "generator_uid": [],
         "generator_type": [],
         "model_name": [],
+        "c2pa_issuer": [],
         "prompt_id": [],
         "prompt_content": [],
         "modality": [],
@@ -338,6 +340,7 @@ def _prepare_image_operations(
         dataset_dict["generator_uid"].append(metadata["generator_uid"])
         dataset_dict["generator_type"].append(metadata["generator_type"])
         dataset_dict["model_name"].append(metadata["model_name"])
+        dataset_dict["c2pa_issuer"].append(metadata["c2pa_issuer"])
         dataset_dict["prompt_id"].append(metadata["prompt_id"])
         dataset_dict["prompt_content"].append(metadata["prompt_content"])
         dataset_dict["modality"].append(metadata["modality"])
@@ -366,6 +369,7 @@ def _prepare_image_operations(
         "generator_uid": Value("int64"),
         "generator_type": Value("string"),
         "model_name": Value("string"),
+        "c2pa_issuer": Value("string"),
         "prompt_id": Value("string"),
         "prompt_content": Value("string"),
         "modality": Value("string"),
@@ -442,6 +446,7 @@ def _prepare_video_dataset_and_archives(
         "generator_uid": [],
         "generator_type": [],
         "model_name": [],
+        "c2pa_issuer": [],
         "prompt_id": [],
         "prompt_content": [],
         "modality": [],
@@ -467,6 +472,7 @@ def _prepare_video_dataset_and_archives(
         dataset_dict["generator_uid"].append(metadata["generator_uid"])
         dataset_dict["generator_type"].append(metadata["generator_type"])
         dataset_dict["model_name"].append(metadata["model_name"])
+        dataset_dict["c2pa_issuer"].append(metadata["c2pa_issuer"])
         dataset_dict["prompt_id"].append(metadata["prompt_id"])
         dataset_dict["prompt_content"].append(metadata["prompt_content"])
         dataset_dict["modality"].append(metadata["modality"])
@@ -495,6 +501,7 @@ def _prepare_video_dataset_and_archives(
         "generator_uid": Value("int64"),
         "generator_type": Value("string"),
         "model_name": Value("string"),
+        "c2pa_issuer": Value("string"),
         "prompt_id": Value("string"),
         "prompt_content": Value("string"),
         "modality": Value("string"),

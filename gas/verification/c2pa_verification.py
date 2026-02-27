@@ -65,6 +65,7 @@ class C2PAVerificationResult:
         is_trusted_issuer: bool = False,
         is_self_signed: bool = False,
         ai_generated: bool = False,
+        model_name: Optional[str] = None,
         manifest_data: Optional[Dict[str, Any]] = None,
         validation_errors: Optional[List[str]] = None,
         error: Optional[str] = None,
@@ -76,6 +77,7 @@ class C2PAVerificationResult:
         self.is_trusted_issuer = is_trusted_issuer
         self.is_self_signed = is_self_signed
         self.ai_generated = ai_generated
+        self.model_name = model_name
         self.manifest_data = manifest_data or {}
         self.validation_errors = validation_errors or []
         self.error = error
@@ -89,6 +91,7 @@ class C2PAVerificationResult:
             "is_trusted_issuer": self.is_trusted_issuer,
             "is_self_signed": self.is_self_signed,
             "ai_generated": self.ai_generated,
+            "model_name": self.model_name,
             "validation_errors": self.validation_errors,
             "error": self.error,
         }
@@ -184,10 +187,11 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
             )
 
         ai_generated = _check_ai_generated(manifest_data)
+        model_name = _extract_model_name(manifest_data)
 
         bt.logging.info(
-            f"C2PA verified: issuer={claim_generator}, cert_subject={cert_subject}, "
-            f"cert_issuer={cert_issuer}, ai_generated={ai_generated}"
+            f"C2PA verified: issuer={claim_generator}, model_name={model_name}, "
+            f"cert_subject={cert_subject}, cert_issuer={cert_issuer}, ai_generated={ai_generated}"
         )
 
         return C2PAVerificationResult(
@@ -198,6 +202,7 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
             is_trusted_issuer=True,
             is_self_signed=False,
             ai_generated=ai_generated,
+            model_name=model_name,
             manifest_data={"raw": manifest_json},
         )
 
@@ -409,12 +414,99 @@ def _extract_claim_generator(manifest_data: Dict[str, Any]) -> Optional[str]:
         elif manifests:
             manifest = next(iter(manifests.values()))
 
-        if manifest:
-            return manifest.get("claim_generator")
+        if not manifest:
+            return None
+
+        # Older c2pa-rs format: plain string
+        claim_generator = manifest.get("claim_generator")
+        if claim_generator:
+            return claim_generator
+
+        # Newer C2PA spec format (e.g. Google): structured list
+        info_list = manifest.get("claim_generator_info", [])
+        if info_list:
+            name = info_list[0].get("name")
+            if name:
+                return name
+
         return None
     except Exception as e:
         bt.logging.debug(f"Error extracting claim generator: {e}")
         return None
+
+
+def _extract_model_name(manifest_data: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract a specific model name from a C2PA manifest.
+
+    Only returns a value when the manifest contains an unambiguous model
+    identifier — not generic library/infrastructure names or marketing text.
+
+    Checks (in priority order):
+    1. `softwareAgent` on c2pa.actions assertions (e.g. older Adobe/Firefly)
+    2. `claim_generator` UA string, filtered to non-infrastructure tokens
+       (e.g. "DALL-E 3/1.0 c2pa-rs/0.36.1" -> "DALL-E 3")
+
+    Google's manifests don't expose the specific model (Imagen/Veo/etc.) in
+    either field, so this returns None for them.
+    """
+    try:
+        manifests = manifest_data.get("manifests", {})
+        active_manifest_id = manifest_data.get("active_manifest")
+
+        manifest = None
+        if active_manifest_id and active_manifest_id in manifests:
+            manifest = manifests[active_manifest_id]
+        elif manifests:
+            manifest = next(iter(manifests.values()))
+
+        if not manifest:
+            return None
+
+        for assertion in manifest.get("assertions", []):
+            if "c2pa.actions" not in assertion.get("label", ""):
+                continue
+            for action in assertion.get("data", {}).get("actions", []):
+                software_agent = action.get("softwareAgent")
+                if software_agent:
+                    return _parse_product_name(software_agent)
+
+        claim_generator = manifest.get("claim_generator")
+        if claim_generator:
+            return _parse_product_name(claim_generator)
+
+    except Exception as e:
+        bt.logging.debug(f"Error extracting model name: {e}")
+
+    return None
+
+
+def _parse_product_name(ua_string: str) -> Optional[str]:
+    """
+    Extract the primary product name from a UA-style string.
+
+    Examples:
+        "DALL-E 3/1.0 c2pa-rs/0.36.1"  -> "DALL-E 3"
+        "Adobe Firefly/3.0"             -> "Adobe Firefly"
+        "Google Imagen/3"               -> "Google Imagen"
+        "c2pa-rs/0.36.1"               -> None  (infrastructure-only)
+    """
+    if not ua_string:
+        return None
+
+    # Skip known C2PA infrastructure library tokens
+    INFRA_PREFIXES = ("c2pa", "libc2pa", "contentauth", "trustedpublisher")
+
+    tokens = ua_string.strip().split()
+    for token in tokens:
+        product = token.split("/")[0].strip()
+        if not product:
+            continue
+        if any(product.lower().startswith(p) for p in INFRA_PREFIXES):
+            continue
+        return product
+
+    return None
 
 
 def _is_trusted_ca(issuer: Optional[str]) -> bool:
