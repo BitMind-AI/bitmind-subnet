@@ -316,13 +316,15 @@ class GenerativeChallengeManager:
             # Step 3: Verify C2PA content credentials - REQUIRE trusted issuer
             c2pa_verified = False
             c2pa_issuer = None
+            c2pa_model_name = None
             try:
                 c2pa_result = verify_c2pa(binary_data)
                 if c2pa_result.verified and c2pa_result.is_trusted_issuer:
                     c2pa_verified = True
                     c2pa_issuer = c2pa_result.issuer
+                    c2pa_model_name = c2pa_result.model_name
                     bt.logging.info(
-                        f"C2PA verified for UID {generator_uid}: issuer={c2pa_issuer}"
+                        f"C2PA verified for UID {generator_uid}: issuer={c2pa_issuer}, model_name={c2pa_model_name}"
                     )
                 else:
                     rejection_reason = c2pa_result.error or (
@@ -350,7 +352,7 @@ class GenerativeChallengeManager:
                 media_content=binary_data,
                 content_type=content_type,
                 task_id=task_id,
-                model_name=None,
+                model_name=c2pa_model_name,
                 perceptual_hash=perceptual_hash,
                 c2pa_verified=c2pa_verified,
                 c2pa_issuer=c2pa_issuer,
@@ -360,7 +362,7 @@ class GenerativeChallengeManager:
                 bt.logging.success(
                     f"Stored verified content: {filepath} (size: {len(binary_data)} bytes, "
                     f"hash: {perceptual_hash[:16] if perceptual_hash else 'N/A'}..., "
-                    f"c2pa_issuer: {c2pa_issuer})"
+                    f"c2pa_issuer: {c2pa_issuer}, model_name: {c2pa_model_name})"
                 )
                 return filepath, None
             else:
