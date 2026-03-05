@@ -587,6 +587,13 @@ def add_data_service_args(parser):
     )
 
     parser.add_argument(
+        "--upload-max-duration-hours",
+        type=float,
+        help="Safety measure:Maximum hours an uploader thread may run before being treated as hung (default: 2)",
+        default=2.0,
+    )
+
+    parser.add_argument(
         "--images-per-archive",
         type=int,
         help="Number of images per tar archive (target ~100-200MB per archive)",

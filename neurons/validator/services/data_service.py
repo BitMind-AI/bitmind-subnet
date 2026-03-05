@@ -107,6 +107,7 @@ class DataService:
         self.scraper_thread: Optional[Thread] = None
         self.downloader_thread: Optional[Thread] = None
         self.uploader_thread: Optional[Thread] = None
+        self.uploader_thread_start_time: Optional[float] = None
         self.stop_event = Event()
 
         # Service state
@@ -496,7 +497,16 @@ class DataService:
     async def start_upload_cycle(self, block):
         """Start uploader thread if not already running and threshold met."""
         if self.uploader_thread and self.uploader_thread.is_alive():
-            return
+            # Treat threads running longer than upload_max_duration_hours as hung
+            max_duration = self.config.upload_max_duration_hours * 3600
+            elapsed = time.time() - (self.uploader_thread_start_time or 0)
+            if elapsed < max_duration:
+                return
+            bt.logging.warning(
+                f"[DATA-SERVICE] Uploader thread has been alive for {elapsed / 3600:.1f}h "
+                f"(max {self.config.upload_max_duration_hours:.1f}h) — treating as hung, allowing new upload cycle"
+            )
+            self.uploader_thread = None
 
         try:
             total = 0
@@ -548,8 +558,10 @@ class DataService:
                 bt.logging.error(traceback.format_exc())
             finally:
                 self.uploader_thread = None
+                self.uploader_thread_start_time = None
 
         self.uploader_thread = Thread(target=_worker, daemon=True)
+        self.uploader_thread_start_time = time.time()
         self.uploader_thread.start()
 
     async def log_on_block(self, block):
