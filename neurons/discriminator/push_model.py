@@ -104,13 +104,6 @@ async def push_separate_models(
     if audio_model_path and not os.path.exists(audio_model_path):
         raise FileNotFoundError(f"Audio model file not found: {audio_model_path}")
 
-    if image_model_path:
-        print_info(f"Image model: {image_model_path}")
-    if video_model_path:
-        print_info(f"Video model: {video_model_path}")
-    if audio_model_path:
-        print_info(f"Audio model: {audio_model_path}")
-
     results = {}
     upload_count = 0
     total_uploads = (1 if image_model_path else 0) + \
@@ -133,6 +126,8 @@ async def push_separate_models(
             if not image_result['success']:
                 print_error(f"Image model upload failed at step: {image_result.get('step', 'unknown')}")
                 print_error(f"Error: {image_result.get('error', 'Unknown error')}")
+                if image_result.get('response'):
+                    print_error(f"Server response: {image_result['response']}")
                 return False
             
             print_success("Image model uploaded successfully!")
@@ -156,6 +151,8 @@ async def push_separate_models(
             if not video_result['success']:
                 print_error(f"Video model upload failed at step: {video_result.get('step', 'unknown')}")
                 print_error(f"Error: {video_result.get('error', 'Unknown error')}")
+                if video_result.get('response'):
+                    print_error(f"Server response: {video_result['response']}")
                 return False
 
             print_success("Video model uploaded successfully!")
@@ -179,20 +176,14 @@ async def push_separate_models(
             if not audio_result['success']:
                 print_error(f"Audio model upload failed at step: {audio_result.get('step', 'unknown')}")
                 print_error(f"Error: {audio_result.get('error', 'Unknown error')}")
+                if audio_result.get('response'):
+                    print_error(f"Server response: {audio_result['response']}")
                 return False
             
             print_success("Audio model uploaded successfully!")
         except Exception as e:
             print_error(f"Audio model upload failed with exception: {e}")
             return False
-
-    # Display discriminator IDs for uploaded models
-    if 'image' in results:
-        print_info(f"Image Discriminator ID: {results['image']['model_id']}")
-    if 'video' in results:
-        print_info(f"Video Discriminator ID: {results['video']['model_id']}")
-    if 'audio' in results:
-        print_info(f"Audio Discriminator ID: {results['audio']['model_id']}")
 
     print()
     print_step(upload_count + 1, total_uploads + 1, "Registering model metadata on blockchain...")
@@ -320,8 +311,7 @@ def main():
 
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Starting Model Push ==={Style.RESET_ALL}")
 
-   # Initialize wallet
-    print_info(f"Initializing wallet: {args.wallet_name}/{args.wallet_hotkey}")
+    # Initialize wallet
     try:
         wallet = bt.wallet(name=args.wallet_name, hotkey=args.wallet_hotkey)
         print_info(f"Hotkey: {wallet.hotkey.ss58_address}")
