@@ -143,6 +143,57 @@ gascli d push --image-model my_detector.zip
 3. **Blockchain Registration**: Model metadata is registered on the Bittensor blockchain
 4. **Verification**: The system verifies the registration was successful
 
+---
+
+## Evaluation Pipeline
+
+After a successful push, your model goes through a two-stage evaluation process automatically.
+
+### Stage 1: Entrance Exam (`--small` mode)
+
+Before your model is ever scored on the network, it must pass an **entrance exam** — a fast sanity check run against a reduced sample of the benchmark datasets.
+
+- Internally this runs `gasbench run --small`, which downloads one archive per dataset and evaluates roughly 100 samples per dataset
+- Your model must achieve **≥ 80% accuracy** averaged across all submitted modalities to pass
+- The exam has a **maximum wall-clock timeout of 1 hour 25 minutes** (5,100 seconds); models that exceed this are treated as failed
+- The exam runs in an **isolated cloud sandbox** — your code has no network access and cannot interact with the host environment
+- ONNX models are additionally scanned for cheat patterns (embedded lookup tables or memorization artifacts) before the exam runs; detection results in an immediate block
+
+**Model status during the exam:**
+
+| Status | Meaning |
+|---|---|
+| `examining` | Entrance exam is currently running |
+| `confirmed` | Exam passed — model is eligible for full benchmarking |
+| `exam_failed` | Accuracy below 80% — model will not be scored |
+| `blocked` | Cheat pattern detected — model is permanently blocked |
+
+You can use `gasbench run --small` locally to replicate exam conditions before pushing:
+
+```bash
+gasbench run --image-model ./my_image_model/ --small
+gasbench run --video-model ./my_video_model/ --small
+gasbench run --audio-model ./my_audio_model/ --small
+```
+
+### Stage 2: Full Benchmark (`--full` mode)
+
+Models that pass the entrance exam are benchmarked against the **complete dataset suite**, which includes:
+
+- All public benchmark datasets across image, video, and audio modalities
+- **Private holdout datasets** — curated datasets not visible to miners, used to prevent overfitting to the public benchmark set
+- Refreshed weekly with new data from the GAS-Station pipeline
+
+The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. The benchmark score from this stage determines your **TAO emissions** on Subnet 34. Scores are computed using the `sn34_score` formula (see [Incentive Mechanism](Incentive.md)).
+
+You can simulate a full benchmark run locally (without holdouts) to get a sense of your model's performance:
+
+```bash
+gasbench run --image-model ./my_image_model/ --full
+```
+
+> **Note**: Local full runs will not include the private holdout datasets used in the actual network evaluation.
+
 ### Getting Help
 
 ```bash

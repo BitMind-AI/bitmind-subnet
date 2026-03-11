@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -24,7 +25,6 @@ def generate_presigned_url(
 ) -> dict:
     """Generate presigned upload URL from the API with optional modality parameter."""
     
-    # Prepare request payload
     payload = {
         'filename': filename,
         'file_size': file_size,
@@ -41,14 +41,8 @@ def generate_presigned_url(
     headers = generate_header(wallet.hotkey, payload_bytes)
     headers['Content-Type'] = 'application/json'
     
-    print(f"\n📡 Requesting presigned URL...")
-    print(f"  Request signed by: {headers['Epistula-Signed-By']}")
-    
-    # Make the presigned URL request
     try:
         presigned_endpoint = upload_endpoint.rstrip('/') + '/presigned'
-        print(f"  Endpoint: {presigned_endpoint}")
-        
         response = requests.post(
             presigned_endpoint,
             data=payload_bytes,
@@ -56,7 +50,6 @@ def generate_presigned_url(
             timeout=30
         )
 
-        # Parse response
         try:
             result = response.json()
         except json.JSONDecodeError:
@@ -78,13 +71,7 @@ def generate_presigned_url(
 
 def upload_to_r2(presigned_url: str, file_content: bytes, content_type: str = 'application/octet-stream') -> dict:
     """Upload file directly to R2 using presigned URL."""
-    
-    print(f"🚢 Uploading file to R2...")
-    print(f"  Content type: {content_type}")
-    print(f"  File size: {len(file_content)} bytes")
-    
     try:
-        # Upload using PUT request to presigned URL
         response = requests.put(
             presigned_url,
             data=file_content,
@@ -92,13 +79,19 @@ def upload_to_r2(presigned_url: str, file_content: bytes, content_type: str = 'a
             timeout=300  # 5 minutes for large files
         )
         
+        error_detail = None
+        if response.status_code != 200:
+            text = response.text or ""
+            match = re.search(r'<Message>(.*?)</Message>', text) or \
+                    re.search(r'<Code>(.*?)</Code>', text)
+            error_detail = match.group(1) if match else (text[:200] or "Upload failed")
+
         return {
             "status_code": response.status_code,
             "success": response.status_code == 200,
             "response": {
-                "message": "Upload successful" if response.status_code == 200 else "Upload failed",
+                "message": "Upload successful" if response.status_code == 200 else error_detail,
                 "etag": response.headers.get('ETag', ''),
-                "response_text": response.text
             }
         }
         
@@ -123,10 +116,6 @@ def confirm_upload(wallet: bt.wallet, upload_endpoint: str, model_id: int, file_
     
     headers = generate_header(wallet.hotkey, payload_bytes)
     headers['Content-Type'] = 'application/json'
-    
-    print(f"📡 Confirming upload...")
-    print(f"  Model ID: {model_id}")
-    print(f"  File hash: {file_hash}")
     
     try:
         confirm_endpoint = upload_endpoint.rstrip('/') + '/confirm'
@@ -174,15 +163,16 @@ def upload_single_modality(
     file_size = len(file_content)
     filename = file_path_obj.name
 
-    print(f"\n{'='*70}")
-    print(f"UPLOADING {modality.upper()} MODEL")
-    print(f"{'='*70}")
-    print(f"📁 File: {filename}")
-    print(f"📊 Size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
-    print(f"🔐 Hash: {file_hash}")
+    print(f"  File: {filename} ({file_size / 1024 / 1024:.2f} MB)")
+    print(f"  Hash: {file_hash}")
 
-    # Step 1: Generate presigned URL with modality
-    print(f"\n[1/3] Generating presigned URL...")
+    def extract_error(result: dict) -> str:
+        resp = result.get('response', {})
+        msg = resp.get('detail') or resp.get('error') or resp.get('message') or str(resp)
+        status = result.get('status_code', 0)
+        return f"HTTP {status}: {msg}" if status else str(msg)
+
+    print(f"  [1/3] Requesting presigned URL...", end=' ', flush=True)
     presigned_result = generate_presigned_url(
         wallet,
         upload_endpoint,
@@ -194,52 +184,51 @@ def upload_single_modality(
     )
 
     if not presigned_result['success']:
+        print("FAILED")
         return {
             "success": False,
             "modality": modality,
             "step": "presigned_url_generation",
-            "error": presigned_result['response'].get('error', 'Unknown error'),
+            "error": extract_error(presigned_result),
             "response": presigned_result['response']
         }
+    print("done")
 
     presigned_data = presigned_result['response']['data']
     model_id = presigned_data['model_id']
     presigned_url = presigned_data['presigned_url']
     r2_key = presigned_data['r2_key']
 
-    print(f"✅ Presigned URL generated!")
-    print(f"  Model ID: {model_id}")
-    print(f"  R2 Key: {r2_key}")
-    print(f"\n[2/3] Uploading to R2...")
+    print(f"  [2/3] Uploading to R2...", end=' ', flush=True)
     upload_result = upload_to_r2(presigned_url, file_content, 'application/octet-stream')
 
     if not upload_result['success']:
+        print("FAILED")
         return {
             "success": False,
             "modality": modality,
             "step": "r2_upload",
             "model_id": model_id,
-            "error": upload_result['response'].get('error', 'Unknown error'),
+            "error": extract_error(upload_result),
             "response": upload_result['response']
         }
+    print("done")
 
-    print(f"✅ File uploaded to R2!")
-    print(f"  ETag: {upload_result['response'].get('etag', 'N/A')}")
-
-    print(f"\n[3/3] Confirming upload...")
+    print(f"  [3/3] Confirming upload...", end=' ', flush=True)
     confirm_result = confirm_upload(wallet, upload_endpoint, model_id, file_hash)
 
     if not confirm_result['success']:
+        print("FAILED")
         return {
             "success": False,
             "modality": modality,
             "step": "upload_confirmation",
             "model_id": model_id,
-            "error": confirm_result['response'].get('error', 'Unknown error'),
+            "error": extract_error(confirm_result),
             "response": confirm_result['response']
         }
+    print("done")
 
-    print(f"✅ Upload confirmed!")
     return {
         "success": True,
         "modality": modality,
