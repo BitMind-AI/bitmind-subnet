@@ -81,6 +81,15 @@ def print_step(step_num: int, total_steps: int, message: str):
     print(f"{Fore.CYAN}[{step_num}/{total_steps}] {message}{Style.RESET_ALL}")
 
 
+def _print_submission_count(result: dict, modality: str, hotkey: str):
+    """Print submission slot usage if the server returned count info."""
+    submissions_used = result.get('submissions_used')
+    submissions_max = result.get('submissions_max')
+    if submissions_used is not None and submissions_max is not None:
+        count_after = submissions_used + 1
+        print_info(f"{count_after}/{submissions_max} {modality} models submitted for {hotkey}")
+
+
 async def push_separate_models(
     image_model_path: Optional[str] = None,
     video_model_path: Optional[str] = None,
@@ -131,6 +140,7 @@ async def push_separate_models(
                 return False
             
             print_success("Image model uploaded successfully!")
+            _print_submission_count(image_result, 'image', wallet.hotkey.ss58_address)
         except Exception as e:
             print_error(f"Image model upload failed with exception: {e}")
             return False
@@ -156,6 +166,7 @@ async def push_separate_models(
                 return False
 
             print_success("Video model uploaded successfully!")
+            _print_submission_count(video_result, 'video', wallet.hotkey.ss58_address)
         except Exception as e:
             print_error(f"Video model upload failed with exception: {e}")
             return False
@@ -181,6 +192,7 @@ async def push_separate_models(
                 return False
             
             print_success("Audio model uploaded successfully!")
+            _print_submission_count(audio_result, 'audio', wallet.hotkey.ss58_address)
         except Exception as e:
             print_error(f"Audio model upload failed with exception: {e}")
             return False

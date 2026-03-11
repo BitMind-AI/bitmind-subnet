@@ -198,6 +198,8 @@ def upload_single_modality(
     model_id = presigned_data['model_id']
     presigned_url = presigned_data['presigned_url']
     r2_key = presigned_data['r2_key']
+    submissions_used = presigned_data.get('submissions_used')
+    submissions_max = presigned_data.get('submissions_max')
 
     print(f"  [2/3] Uploading to R2...", end=' ', flush=True)
     upload_result = upload_to_r2(presigned_url, file_content, 'application/octet-stream')
@@ -235,5 +237,7 @@ def upload_single_modality(
         "model_id": model_id,
         "r2_key": r2_key,
         "file_hash": file_hash,
-        "file_size": file_size
+        "file_size": file_size,
+        "submissions_used": submissions_used,
+        "submissions_max": submissions_max,
     } 
