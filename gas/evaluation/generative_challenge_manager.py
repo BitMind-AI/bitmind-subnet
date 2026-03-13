@@ -425,8 +425,10 @@ class GenerativeChallengeManager:
         self.api = FastAPI()
         self.router = APIRouter()
 
+        # httptools streams the body — handler is invoked on headers, so now is
+        # captured before the upload
         verifier = get_verifier(
-            self.wallet, self.metagraph, no_force_validator_permit=True
+            self.wallet, self.metagraph, no_force_validator_permit=True,
         )
 
         self.router.add_api_route(
@@ -444,6 +446,7 @@ class GenerativeChallengeManager:
             port=self.config.neuron.callback_port,
             log_level="info",
             loop="asyncio",
+            http="httptools",
         )
         self.fast_api = FastAPIThreadedServer(config=fast_config)
         self.fast_api.start()

@@ -62,7 +62,8 @@ def generate_header(
 
 
 def verify_signature(
-    signature, body: bytes, timestamp, uuid, signed_for, signed_by, now
+    signature, body: bytes, timestamp, uuid, signed_for, signed_by, now,
+    allowed_delta_ms: int = 15000,
 ) -> Optional[Annotated[str, "Error Message"]]:
     if not isinstance(signature, str):
         return "Invalid Signature"
@@ -77,12 +78,11 @@ def verify_signature(
         return "Invalid uuid"
     if not isinstance(body, bytes):
         return "Body is not of type bytes"
-    ALLOWED_DELTA_MS = 15000
     keypair = Keypair(ss58_address=signed_by)
-    if timestamp + ALLOWED_DELTA_MS < now:
+    if timestamp + allowed_delta_ms < now:
         staleness_ms = now - timestamp
         staleness_seconds = staleness_ms / 1000.0
-        return f"Request is too stale: {staleness_seconds:.1f}s old (limit: {ALLOWED_DELTA_MS/1000.0}s)"
+        return f"Request is too stale: {staleness_seconds:.1f}s old (limit: {allowed_delta_ms/1000.0}s)"
     message = f"{sha256(body).hexdigest()}.{uuid}.{timestamp}.{signed_for}"
     verified = keypair.verify(message, signature)
     if not verified:
@@ -102,10 +102,10 @@ async def _verify_request(
     request: Request,
     wallet: bt.Wallet,
     metagraph: bt.Metagraph,
-    no_force_validator_permit: bool
+    no_force_validator_permit: bool,
+    allowed_delta_ms: int = 15000,
 ):
     now = round(time.time() * 1000)
-
     signed_by = request.headers.get("Epistula-Signed-By")
     signed_for = request.headers.get("Epistula-Signed-For")
     client_ip = request.client.host if request.client else "unknown"
@@ -115,7 +115,7 @@ async def _verify_request(
         raise HTTPException(
             status_code=400, detail="Bad Request, message is not intended for self"
         )
-    
+
     if signed_by not in metagraph.hotkeys:
         bt.logging.error(f"Signer not in metagraph: {signed_by} (IP: {client_ip})")
         raise HTTPException(status_code=401, detail="Signer not in metagraph")
@@ -138,6 +138,7 @@ async def _verify_request(
         signed_for,
         signed_by,
         now,
+        allowed_delta_ms=allowed_delta_ms,
     )
 
     if err:
@@ -149,11 +150,12 @@ async def determine_epistula_version_and_verify(
     request: Request,
     wallet: bt.Wallet,
     metagraph: bt.Metagraph,
-    no_force_validator_permit: bool
+    no_force_validator_permit: bool,
+    allowed_delta_ms: int = 15000,
 ):
     version = request.headers.get("Epistula-Version")
     if version == EPISTULA_VERSION:
-        await _verify_request(request, wallet, metagraph, no_force_validator_permit)
+        await _verify_request(request, wallet, metagraph, no_force_validator_permit, allowed_delta_ms)
         return
     raise HTTPException(status_code=400, detail="Unknown Epistula version")
 
@@ -161,7 +163,8 @@ async def determine_epistula_version_and_verify(
 def get_verifier(
     wallet: bt.Wallet,
     metagraph: bt.Metagraph,
-    no_force_validator_permit: bool = False
+    no_force_validator_permit: bool = False,
+    allowed_delta_ms: int = 15000,
 ):
     async def verifier(request: Request):
         await determine_epistula_version_and_verify(
@@ -169,5 +172,6 @@ def get_verifier(
             wallet,
             metagraph,
             no_force_validator_permit,
+            allowed_delta_ms,
         )
     return verifier
