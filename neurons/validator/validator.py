@@ -290,7 +290,7 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
-        # Verification stats from last 2h (all verified, rewarded or not) for base rewards.
+        # Verification stats from last 4h (all verified, rewarded or not) for base rewards.
         verification_stats = self.content_manager.get_verification_stats_last_n_hours(
             lookback_hours=4.0
         )
@@ -314,7 +314,11 @@ class Validator(BaseNeuron):
             generator_liveness=generator_liveness,
             max_inactive_hours=max_inactive_hours,
         )
-        all_generator_uids = set(generator_base_rewards.keys()) & set(reward_multipliers.keys())
+        # Union: a generator earns rewards if they appear in either source.
+        # Generators with verified content but no benchmark fool data yet still receive
+        # their base reward scaled by the minimum multiplier (.01) rather than being
+        # excluded entirely by an intersection.
+        all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
         rewards = {
             uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, .01)
             for uid in all_generator_uids 
@@ -323,11 +327,11 @@ class Validator(BaseNeuron):
         if len(rewards) == 0:
             if not generator_base_rewards:
                 bt.logging.info(
-                    "No generator rewards: no verified submissions on this validator in the last 2h."
+                    "No generator rewards: no verified submissions on this validator in the last 4h."
                 )
             else:
                 bt.logging.trace(
-                    "No generator rewards: no overlap with benchmark multipliers."
+                    "No generator rewards: no base rewards or multipliers available."
                 )
             return
 

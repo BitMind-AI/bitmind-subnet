@@ -514,6 +514,7 @@ class GenerativeMiner(BaseNeuron):
             port=self.config.axon.port,
             log_level="info",
             loop="asyncio",
+            http="httptools",
         )
         self.fast_api = FastAPIThreadedServer(config=fast_config)
         self.fast_api.start()
