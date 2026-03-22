@@ -133,6 +133,12 @@ async def push_separate_models(
             results['image'] = image_result
             
             if not image_result['success']:
+                if image_result.get('already_uploaded'):
+                    print_warning("Image model already uploaded — skipping (model is already accepted by the server)")
+                    # Still need r2_key for blockchain registration; server returned 409 so we
+                    # don't have it here.  The miner must use the r2_key from the original upload.
+                    print_error("Cannot retrieve r2_key for already-uploaded image model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                    return False
                 print_error(f"Image model upload failed at step: {image_result.get('step', 'unknown')}")
                 print_error(f"Error: {image_result.get('error', 'Unknown error')}")
                 if image_result.get('response'):
@@ -159,6 +165,10 @@ async def push_separate_models(
             results['video'] = video_result
             
             if not video_result['success']:
+                if video_result.get('already_uploaded'):
+                    print_warning("Video model already uploaded — skipping (model is already accepted by the server)")
+                    print_error("Cannot retrieve r2_key for already-uploaded video model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                    return False
                 print_error(f"Video model upload failed at step: {video_result.get('step', 'unknown')}")
                 print_error(f"Error: {video_result.get('error', 'Unknown error')}")
                 if video_result.get('response'):
@@ -185,6 +195,10 @@ async def push_separate_models(
             results['audio'] = audio_result
             
             if not audio_result['success']:
+                if audio_result.get('already_uploaded'):
+                    print_warning("Audio model already uploaded — skipping (model is already accepted by the server)")
+                    print_error("Cannot retrieve r2_key for already-uploaded audio model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                    return False
                 print_error(f"Audio model upload failed at step: {audio_result.get('step', 'unknown')}")
                 print_error(f"Error: {audio_result.get('error', 'Unknown error')}")
                 if audio_result.get('response'):

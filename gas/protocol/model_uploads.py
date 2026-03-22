@@ -185,6 +185,17 @@ def upload_single_modality(
 
     if not presigned_result['success']:
         print("FAILED")
+        # 409 means this hash was already accepted — the file is already in R2.
+        # Return a soft error so the caller can decide whether to skip or abort.
+        if presigned_result.get('status_code') == 409:
+            return {
+                "success": False,
+                "modality": modality,
+                "step": "presigned_url_generation",
+                "error": extract_error(presigned_result),
+                "response": presigned_result['response'],
+                "already_uploaded": True,
+            }
         return {
             "success": False,
             "modality": modality,
