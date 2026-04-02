@@ -50,10 +50,10 @@ except ImportError:
 
 from gas.types import DiscriminatorModelId as ModelId
 from gas.utils.chain_model_metadata_store import ChainModelMetadataStore
-from gas.protocol.model_uploads import upload_single_modality
+from gas.protocol.miner_requests import upload_single_modality
 
 
-MODEL_UPLOAD_ENDPOINT = "https://upload.bitmind.ai/upload"
+MODEL_UPLOAD_ENDPOINT = "https://bitmind-staging--model-upload-model-upload-api.modal.run/upload"
 
 
 def print_success(message: str):
@@ -98,6 +98,7 @@ async def push_separate_models(
     retry_delay_secs: int = 60,
     netuid: int = 34,
     chain_endpoint: Optional[str] = None,
+    vertical: str = "general",
 ):
     """Pushes separate image, video, and/or audio detector models and registers on the Bittensor blockchain.
     
@@ -128,11 +129,18 @@ async def push_separate_models(
                 wallet,
                 image_model_path,
                 'image',
-                MODEL_UPLOAD_ENDPOINT
+                MODEL_UPLOAD_ENDPOINT,
+                vertical=vertical,
             )
             results['image'] = image_result
             
             if not image_result['success']:
+                if image_result.get('already_uploaded'):
+                    print_warning("Image model already uploaded — skipping (model is already accepted by the server)")
+                    # Still need r2_key for blockchain registration; server returned 409 so we
+                    # don't have it here.  The miner must use the r2_key from the original upload.
+                    print_error("Cannot retrieve r2_key for already-uploaded image model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                    return False
                 print_error(f"Image model upload failed at step: {image_result.get('step', 'unknown')}")
                 print_error(f"Error: {image_result.get('error', 'Unknown error')}")
                 if image_result.get('response'):
@@ -154,11 +162,16 @@ async def push_separate_models(
                 wallet,
                 video_model_path,
                 'video',
-                MODEL_UPLOAD_ENDPOINT
+                MODEL_UPLOAD_ENDPOINT,
+                vertical=vertical,
             )
             results['video'] = video_result
             
             if not video_result['success']:
+                if video_result.get('already_uploaded'):
+                    print_warning("Video model already uploaded — skipping (model is already accepted by the server)")
+                    print_error("Cannot retrieve r2_key for already-uploaded video model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                    return False
                 print_error(f"Video model upload failed at step: {video_result.get('step', 'unknown')}")
                 print_error(f"Error: {video_result.get('error', 'Unknown error')}")
                 if video_result.get('response'):
@@ -180,11 +193,16 @@ async def push_separate_models(
                 wallet,
                 audio_model_path,
                 'audio',
-                MODEL_UPLOAD_ENDPOINT
+                MODEL_UPLOAD_ENDPOINT,
+                vertical=vertical,
             )
             results['audio'] = audio_result
             
             if not audio_result['success']:
+                if audio_result.get('already_uploaded'):
+                    print_warning("Audio model already uploaded — skipping (model is already accepted by the server)")
+                    print_error("Cannot retrieve r2_key for already-uploaded audio model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                    return False
                 print_error(f"Audio model upload failed at step: {audio_result.get('step', 'unknown')}")
                 print_error(f"Error: {audio_result.get('error', 'Unknown error')}")
                 if audio_result.get('response'):
@@ -301,12 +319,23 @@ def main():
         default=60,
         help="Retry delay in seconds"
     )
+    parser.add_argument(
+        "--vertical",
+        default="general",
+        choices=["general", "human"],
+        help="Competition vertical (default: general)"
+    )
 
     args = parser.parse_args()
 
-    # Validate at least one model is provided
     if not args.image_model and not args.video_model and not args.audio_model:
         parser.error("At least one model must be provided: --image-model, --video-model, or --audio-model")
+
+    if args.vertical == "human" and (args.video_model or args.audio_model):
+        parser.error(
+            "The 'human' vertical is only available for image models. "
+            "Remove --video-model / --audio-model, or use --vertical general."
+        )
 
     print()
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Model Push Configuration ==={Style.RESET_ALL}")
@@ -319,6 +348,7 @@ def main():
     print(f"Wallet: {args.wallet_name}/{args.wallet_hotkey}")
     print(f"Subnet UID: {args.netuid}")
     print(f"Chain Endpoint: {args.chain_endpoint}")
+    print(f"Vertical: {args.vertical}")
     print()
 
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Starting Model Push ==={Style.RESET_ALL}")
@@ -348,7 +378,8 @@ def main():
                 wallet=wallet,
                 retry_delay_secs=args.retry_delay,
                 netuid=netuid,
-                chain_endpoint=args.chain_endpoint
+                chain_endpoint=args.chain_endpoint,
+                vertical=args.vertical,
             )
         )
         

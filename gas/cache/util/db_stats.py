@@ -221,25 +221,55 @@ def get_miner_breakdown(db: ContentDB) -> dict:
 
     try:
         with sqlite3.connect(db.db_path) as conn:
-            cursor = conn.execute(
-                """
-                SELECT hotkey, uid, verified, COUNT(*) as count
-                FROM media 
-                WHERE source_type = 'miner' AND hotkey IS NOT NULL
-                GROUP BY hotkey, uid, verified
-                ORDER BY uid, verified DESC
-            """
-            )
+            col_names = [
+                row[1]
+                for row in conn.execute("PRAGMA table_info(media)").fetchall()
+            ]
+            has_failed_col = "failed_verification" in col_names
 
-            for hotkey, uid, verified, count in cursor.fetchall():
-                # Truncate hotkey for display (first 8 and last 8 characters)
+            if has_failed_col:
+                cursor = conn.execute(
+                    """
+                    SELECT hotkey, uid, verified, failed_verification, COUNT(*) as count
+                    FROM media
+                    WHERE source_type = 'miner' AND hotkey IS NOT NULL
+                    GROUP BY hotkey, uid, verified, failed_verification
+                    ORDER BY uid, verified DESC, failed_verification ASC
+                    """
+                )
+                rows = [
+                    (hotkey, uid, verified, failed_verification, count)
+                    for hotkey, uid, verified, failed_verification, count in cursor.fetchall()
+                ]
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT hotkey, uid, verified, COUNT(*) as count
+                    FROM media
+                    WHERE source_type = 'miner' AND hotkey IS NOT NULL
+                    GROUP BY hotkey, uid, verified
+                    ORDER BY uid, verified DESC
+                    """
+                )
+                rows = [
+                    (hotkey, uid, verified, 0, count)
+                    for hotkey, uid, verified, count in cursor.fetchall()
+                ]
+
+            for hotkey, uid, verified, failed_verification, count in rows:
                 if len(hotkey) > 16:
                     display_hotkey = f"{hotkey[:8]}...{hotkey[-8:]}"
                 else:
                     display_hotkey = hotkey
-                
-                verification_status = "✅ verified" if verified else "⏳ unverified"
-                key = f"UID {uid} ({display_hotkey}) - {verification_status}"
+
+                if verified:
+                    status_label = "✅ verified"
+                elif failed_verification:
+                    status_label = "❌ failed"
+                else:
+                    status_label = "⏳ pending"
+
+                key = f"UID {uid} ({display_hotkey}) - {status_label}"
                 breakdown[key] = count
                 total_miner += count
 
@@ -250,37 +280,69 @@ def get_miner_breakdown(db: ContentDB) -> dict:
 
 
 def get_miner_verification_stats(db: ContentDB) -> dict:
-    """Get verification statistics for miner media."""
+    """Get verification statistics for miner media (verified / pending / failed)."""
     import sqlite3
-    
+
     stats = {
         "verified": {"image": 0, "video": 0, "total": 0},
-        "unverified": {"image": 0, "video": 0, "total": 0},
-        "total": {"image": 0, "video": 0, "total": 0}
+        "pending": {"image": 0, "video": 0, "total": 0},
+        "failed": {"image": 0, "video": 0, "total": 0},
+        "total": {"image": 0, "video": 0, "total": 0},
     }
-    
+
     try:
         with sqlite3.connect(db.db_path) as conn:
-            cursor = conn.execute(
-                """
-                SELECT modality, verified, COUNT(*) as count
-                FROM media 
-                WHERE source_type = 'miner'
-                GROUP BY modality, verified
-            """
-            )
-            
-            for modality, verified, count in cursor.fetchall():
-                if modality in ["image", "video"]:
-                    status = "verified" if verified else "unverified"
-                    stats[status][modality] = count
+            # Check whether failed_verification column exists
+            col_names = [
+                row[1]
+                for row in conn.execute("PRAGMA table_info(media)").fetchall()
+            ]
+            has_failed_col = "failed_verification" in col_names
+
+            if has_failed_col:
+                cursor = conn.execute(
+                    """
+                    SELECT modality, verified, failed_verification, COUNT(*) as count
+                    FROM media
+                    WHERE source_type = 'miner'
+                    GROUP BY modality, verified, failed_verification
+                    """
+                )
+                for modality, verified, failed_verification, count in cursor.fetchall():
+                    if modality not in ["image", "video"]:
+                        continue
+                    if verified:
+                        status = "verified"
+                    elif failed_verification:
+                        status = "failed"
+                    else:
+                        status = "pending"
+                    stats[status][modality] += count
                     stats[status]["total"] += count
                     stats["total"][modality] += count
                     stats["total"]["total"] += count
-                    
+            else:
+                # Fallback: no failed_verification column — treat non-verified as pending
+                cursor = conn.execute(
+                    """
+                    SELECT modality, verified, COUNT(*) as count
+                    FROM media
+                    WHERE source_type = 'miner'
+                    GROUP BY modality, verified
+                    """
+                )
+                for modality, verified, count in cursor.fetchall():
+                    if modality not in ["image", "video"]:
+                        continue
+                    status = "verified" if verified else "pending"
+                    stats[status][modality] += count
+                    stats[status]["total"] += count
+                    stats["total"][modality] += count
+                    stats["total"]["total"] += count
+
     except Exception as e:
         print(f"Warning: Could not get miner verification stats: {e}")
-        
+
     return stats
 
 
@@ -339,26 +401,32 @@ def print_detailed_breakdowns(db: ContentDB):
 
     # Get miner verification stats
     verification_stats = get_miner_verification_stats(db)
-    
+
     if verification_stats["total"]["total"] > 0:
         print(f"\n{Colors.CYAN}🔍 Miner Media Verification Status{Colors.END}")
         print("-" * 50)
-        
+
         verified_total = verification_stats["verified"]["total"]
-        unverified_total = verification_stats["unverified"]["total"]
+        pending_total = verification_stats["pending"]["total"]
+        failed_total = verification_stats["failed"]["total"]
         total_total = verification_stats["total"]["total"]
-        
+
         verified_pct = (verified_total / total_total * 100) if total_total > 0 else 0
-        unverified_pct = (unverified_total / total_total * 100) if total_total > 0 else 0
-        
+        pending_pct = (pending_total / total_total * 100) if total_total > 0 else 0
+        failed_pct = (failed_total / total_total * 100) if total_total > 0 else 0
+
         print(f"{Colors.GREEN}✅ Verified:{Colors.END} {verified_total:,} ({verified_pct:.1f}%)")
         print(f"   • Images: {verification_stats['verified']['image']:,}")
         print(f"   • Videos: {verification_stats['verified']['video']:,}")
-        
-        print(f"{Colors.YELLOW}⏳ Unverified:{Colors.END} {unverified_total:,} ({unverified_pct:.1f}%)")
-        print(f"   • Images: {verification_stats['unverified']['image']:,}")
-        print(f"   • Videos: {verification_stats['unverified']['video']:,}")
-        
+
+        print(f"{Colors.YELLOW}⏳ Pending:{Colors.END} {pending_total:,} ({pending_pct:.1f}%)")
+        print(f"   • Images: {verification_stats['pending']['image']:,}")
+        print(f"   • Videos: {verification_stats['pending']['video']:,}")
+
+        print(f"{Colors.RED}❌ Failed:{Colors.END} {failed_total:,} ({failed_pct:.1f}%)")
+        print(f"   • Images: {verification_stats['failed']['image']:,}")
+        print(f"   • Videos: {verification_stats['failed']['video']:,}")
+
         print(f"{Colors.BOLD}Total Miner Media:{Colors.END} {total_total:,}")
 
 
@@ -389,7 +457,8 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
                 "generated": 0,
                 "miner": 0,
                 "miner_verified": 0,
-                "miner_unverified": 0,
+                "miner_pending": 0,
+                "miner_failed": 0,
                 "total": 0,
             },
             "video": {
@@ -401,7 +470,8 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
                 "generated": 0,
                 "miner": 0,
                 "miner_verified": 0,
-                "miner_unverified": 0,
+                "miner_pending": 0,
+                "miner_failed": 0,
                 "total": 0,
             },
         }
@@ -422,7 +492,8 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
             
             # Miner verification breakdown
             totals[modality]["miner_verified"] = verification_stats["verified"].get(modality, 0)
-            totals[modality]["miner_unverified"] = verification_stats["unverified"].get(modality, 0)
+            totals[modality]["miner_pending"] = verification_stats["pending"].get(modality, 0)
+            totals[modality]["miner_failed"] = verification_stats["failed"].get(modality, 0)
 
             # Calculate total for this modality
             totals[modality]["total"] = sum(
@@ -432,7 +503,7 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
         # Print header
         print(f"{Colors.BOLD}{Colors.HEADER}📊 GAS Database Statistics{Colors.END}")
         print(f"{Colors.CYAN}📍 Database: {db_path}{Colors.END}")
-        print("╔" + "═" * 155 + "╗")
+        print("╔" + "═" * 168 + "╗")
 
         # Print table header
         columns = [
@@ -443,7 +514,8 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
             "scraper",
             "generated",
             "miner_verified",
-            "miner_unverified",
+            "miner_pending",
+            "miner_failed",
             "total",
         ]
         header = f"║ {Colors.BOLD}{'Modality':<10}{Colors.END}"
@@ -452,13 +524,15 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
                 header += f"{Colors.BOLD}{col.title():<8}"
             elif col == "miner_verified":
                 header += f" {Colors.BOLD}{'Miner ✅':<12}"
-            elif col == "miner_unverified":
+            elif col == "miner_pending":
                 header += f" {Colors.BOLD}{'Miner ⏳':<12}"
+            elif col == "miner_failed":
+                header += f" {Colors.BOLD}{'Miner ❌':<12}"
             else:
                 header += f" {Colors.BOLD}{col.title():<12}"
         header += f" ║"
         print(header)
-        print("╟" + "─" * 155 + "╢")
+        print("╟" + "─" * 168 + "╢")
 
         # Print table rows
         for modality in ["image", "video"]:
@@ -481,7 +555,7 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
             row += f" ║"
             print(row)
 
-        print("╚" + "═" * 155 + "╝")
+        print("╚" + "═" * 168 + "╝")
 
         # Print summary statistics
         print(f"\n{Colors.BOLD}{Colors.GREEN}📈 Summary Statistics{Colors.END}")
