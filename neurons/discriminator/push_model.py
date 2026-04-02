@@ -53,7 +53,7 @@ from gas.utils.chain_model_metadata_store import ChainModelMetadataStore
 from gas.protocol.model_uploads import upload_single_modality
 
 
-MODEL_UPLOAD_ENDPOINT = "https://upload.bitmind.ai/upload"
+MODEL_UPLOAD_ENDPOINT = "https://bitmind-staging--model-upload-model-upload-api.modal.run/upload"
 
 
 def print_success(message: str):
@@ -314,9 +314,14 @@ def main():
 
     args = parser.parse_args()
 
-    # Validate at least one model is provided
     if not args.image_model and not args.video_model and not args.audio_model:
         parser.error("At least one model must be provided: --image-model, --video-model, or --audio-model")
+
+    if args.vertical == "human" and (args.video_model or args.audio_model):
+        parser.error(
+            "The 'human' vertical is only available for image models. "
+            "Remove --video-model / --audio-model, or use --vertical general."
+        )
 
     print()
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Model Push Configuration ==={Style.RESET_ALL}")

@@ -573,19 +573,25 @@ cli.add_command(discriminator, name="d")
 @click.option("--netuid", default=34, help="Subnet UID")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
+@click.option("--vertical", type=click.Choice(["general", "human"]), default="general", help="Competition vertical (default: general)")
 def push_discriminator(
-    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
+    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay, vertical
 ):
     """Push discriminator model(s) and register on blockchain. At least one model zip file (image, video, or audio) must be provided."""
-    # Validate at least one model is provided
     if not image_model and not video_model and not audio_model:
         click.echo("Error: At least one model must be provided (--image-model, --video-model, or --audio-model)", err=True)
         return
 
-    # Build command arguments for the push_model script
+    if vertical == "human" and (video_model or audio_model):
+        click.echo(
+            "Error: The 'human' vertical is only available for image models. "
+            "Remove --video-model / --audio-model, or use --vertical general.",
+            err=True
+        )
+        return
+
     cmd = [sys.executable, "-m", "neurons.discriminator.push_model"]
 
-    # Add model arguments
     if image_model:
         cmd.extend(["--image-model", image_model])
     if video_model:
@@ -593,7 +599,6 @@ def push_discriminator(
     if audio_model:
         cmd.extend(["--audio-model", audio_model])
 
-    # Add optional arguments
     cmd.extend(["--wallet-name", wallet_name])
     cmd.extend(["--wallet-hotkey", wallet_hotkey])
     cmd.extend(["--netuid", str(netuid)])
@@ -602,6 +607,7 @@ def push_discriminator(
         cmd.extend(["--chain-endpoint", chain_endpoint])
 
     cmd.extend(["--retry-delay", str(retry_delay)])
+    cmd.extend(["--vertical", vertical])
 
     # Execute the push_model script
     try:
