@@ -21,9 +21,10 @@ def generate_presigned_url(
     file_size: int, 
     file_hash: str, 
     content_type: Optional[str] = None,
-    modality: Optional[str] = None
+    modality: Optional[str] = None,
+    vertical: Optional[str] = None
 ) -> dict:
-    """Generate presigned upload URL from the API with optional modality parameter."""
+    """Generate presigned upload URL from the API with modality and vertical parameters."""
     
     payload = {
         'filename': filename,
@@ -34,6 +35,8 @@ def generate_presigned_url(
         payload['content_type'] = content_type
     if modality:
         payload['modality'] = modality
+    if vertical:
+        payload['vertical'] = vertical
     
     payload_json = json.dumps(payload, separators=(',', ':'))
     payload_bytes = payload_json.encode('utf-8')
@@ -149,7 +152,8 @@ def upload_single_modality(
     wallet: bt.wallet,
     file_path: str,
     modality: str,
-    upload_endpoint: str
+    upload_endpoint: str,
+    vertical: str = "general"
 ) -> dict:
     """Upload a single modality file (image or video model)."""
     file_path_obj = Path(file_path)
@@ -180,7 +184,8 @@ def upload_single_modality(
         file_size,
         file_hash,
         'application/octet-stream',
-        modality
+        modality,
+        vertical
     )
 
     if not presigned_result['success']:

@@ -98,6 +98,7 @@ async def push_separate_models(
     retry_delay_secs: int = 60,
     netuid: int = 34,
     chain_endpoint: Optional[str] = None,
+    vertical: str = "general",
 ):
     """Pushes separate image, video, and/or audio detector models and registers on the Bittensor blockchain.
     
@@ -128,7 +129,8 @@ async def push_separate_models(
                 wallet,
                 image_model_path,
                 'image',
-                MODEL_UPLOAD_ENDPOINT
+                MODEL_UPLOAD_ENDPOINT,
+                vertical=vertical,
             )
             results['image'] = image_result
             
@@ -154,7 +156,8 @@ async def push_separate_models(
                 wallet,
                 video_model_path,
                 'video',
-                MODEL_UPLOAD_ENDPOINT
+                MODEL_UPLOAD_ENDPOINT,
+                vertical=vertical,
             )
             results['video'] = video_result
             
@@ -180,7 +183,8 @@ async def push_separate_models(
                 wallet,
                 audio_model_path,
                 'audio',
-                MODEL_UPLOAD_ENDPOINT
+                MODEL_UPLOAD_ENDPOINT,
+                vertical=vertical,
             )
             results['audio'] = audio_result
             
@@ -301,6 +305,12 @@ def main():
         default=60,
         help="Retry delay in seconds"
     )
+    parser.add_argument(
+        "--vertical",
+        default="general",
+        choices=["general", "human"],
+        help="Competition vertical (default: general)"
+    )
 
     args = parser.parse_args()
 
@@ -319,6 +329,7 @@ def main():
     print(f"Wallet: {args.wallet_name}/{args.wallet_hotkey}")
     print(f"Subnet UID: {args.netuid}")
     print(f"Chain Endpoint: {args.chain_endpoint}")
+    print(f"Vertical: {args.vertical}")
     print()
 
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Starting Model Push ==={Style.RESET_ALL}")
@@ -348,7 +359,8 @@ def main():
                 wallet=wallet,
                 retry_delay_secs=args.retry_delay,
                 netuid=netuid,
-                chain_endpoint=args.chain_endpoint
+                chain_endpoint=args.chain_endpoint,
+                vertical=args.vertical,
             )
         )
         
