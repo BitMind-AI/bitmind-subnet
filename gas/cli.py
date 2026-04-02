@@ -639,29 +639,81 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
         sys.exit(1)
 
     addr = wallet.hotkey.ss58_address
-    click.echo(f"Querying performance for {addr[:8]}...{addr[-6:]}")
+
+    click.echo()
+    click.echo(f"  ⛽  {addr}")
+    click.echo()
 
     result = fetch_performance(wallet, modality=modality, vertical=vertical, api_url=api_url)
 
     if not result["success"]:
-        click.echo(result["error"], err=True)
+        click.echo(f"  ❌  {result['error']}", err=True)
         sys.exit(1)
 
     runs = result["runs"]
     if not runs:
-        click.echo("No benchmark runs found.")
+        click.echo("  No benchmark runs found.")
         return
 
-    hdr = f"{'RUN ID':<38} {'STATUS':<10} {'MOD':<6} {'VERT':<8} {'SN34':>8} {'MCC':>8} {'BRIER':>8}"
-    click.echo(hdr)
-    click.echo("-" * len(hdr))
-    for r in runs:
-        sn34 = f"{r['sn34_score']:.4f}" if r.get("sn34_score") is not None else "     —"
-        mcc = f"{r['mcc']:.4f}" if r.get("mcc") is not None else "     —"
-        brier = f"{r['brier']:.4f}" if r.get("brier") is not None else "     —"
-        click.echo(f"{r['run_id']:<38} {r['status']:<10} {r['modality']:<6} {r['vertical']:<8} {sn34:>8} {mcc:>8} {brier:>8}")
+    from datetime import datetime, timezone
 
-    click.echo(f"\n{len(runs)} run(s) total.")
+    def elapsed_str(started_at):
+        if not started_at:
+            return ""
+        try:
+            t = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            delta = datetime.now(timezone.utc) - t
+            secs = int(delta.total_seconds())
+            if secs < 60:
+                return f"{secs}s"
+            mins = secs // 60
+            if mins < 60:
+                return f"{mins}m {secs % 60}s"
+            hrs = mins // 60
+            return f"{hrs}h {mins % 60}m"
+        except (ValueError, TypeError):
+            return ""
+
+    STATUS_STYLE = {
+        "success": ("✅", "\033[32m"),   # green
+        "running": ("⏳", "\033[33m"),   # yellow
+        "queued":  ("🕐", "\033[36m"),   # cyan
+        "failed":  ("❌", "\033[31m"),   # red
+    }
+    RESET = "\033[0m"
+    DIM = "\033[2m"
+    BOLD = "\033[1m"
+
+    for r in runs:
+        icon, color = STATUS_STYLE.get(r["status"], ("•", ""))
+        status_str = f"{color}{icon} {r['status'].upper()}{RESET}"
+
+        mod = r["modality"].upper()
+        vert = r["vertical"]
+        vert_tag = f"\033[33m{vert}\033[0m" if vert == "human" else f"{DIM}{vert}{RESET}"
+
+        elapsed = elapsed_str(r.get("started_at")) if r["status"] in ("running", "queued") else ""
+        time_tag = f"  {DIM}({elapsed}){RESET}" if elapsed else ""
+        click.echo(f"  ┌─ {mod} │ {vert_tag} │ {status_str}{time_tag}")
+
+        if r.get("sn34_score") is not None:
+            sn34 = r["sn34_score"]
+            mcc = r.get("mcc")
+            brier = r.get("brier")
+
+            bar_len = 20
+            filled = int(sn34 * bar_len)
+            bar = f"\033[32m{'█' * filled}\033[0m{DIM}{'░' * (bar_len - filled)}{RESET}"
+
+            click.echo(f"  │  SN34  {bar} {BOLD}{sn34:.4f}{RESET}")
+            click.echo(f"  │  MCC   {mcc:.4f}    Brier  {brier:.4f}" if mcc is not None and brier is not None else f"  │  MCC   —         Brier  —")
+        else:
+            click.echo(f"  │  {DIM}Scores pending…{RESET}")
+
+        click.echo(f"  └─ {DIM}{r['run_id']}{RESET}")
+        click.echo()
+
+    click.echo(f"  {len(runs)} run(s) total.")
 
 
 discriminator.add_command(perf, name="perf")
