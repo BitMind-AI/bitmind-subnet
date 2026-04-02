@@ -686,15 +686,9 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
 
     for r in runs:
         icon, color = STATUS_STYLE.get(r["status"], ("•", ""))
-        status_str = f"{color}{icon} {r['status'].upper()}{RESET}"
-
         mod = r["modality"].upper()
         vert = r["vertical"]
         vert_tag = f"\033[33m{vert}\033[0m" if vert == "human" else f"{DIM}{vert}{RESET}"
-
-        elapsed = elapsed_str(r.get("started_at")) if r["status"] in ("running", "queued") else ""
-        time_tag = f"  {DIM}({elapsed}){RESET}" if elapsed else ""
-        click.echo(f"  ┌─ {mod} │ {vert_tag} │ {status_str}{time_tag}")
 
         if r.get("sn34_score") is not None:
             sn34 = r["sn34_score"]
@@ -705,9 +699,13 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
             filled = int(sn34 * bar_len)
             bar = f"\033[32m{'█' * filled}\033[0m{DIM}{'░' * (bar_len - filled)}{RESET}"
 
-            click.echo(f"  │  {bar}")
+            click.echo(f"  ┌─ {mod} │ {vert_tag} │ {bar}")
             click.echo(f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  {mcc:.4f}    Brier  {brier:.4f}" if mcc is not None and brier is not None else f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  —         Brier  —")
         else:
+            status_str = f"{color}{icon} {r['status'].upper()}{RESET}"
+            elapsed = elapsed_str(r.get("started_at")) if r["status"] in ("running", "queued") else ""
+            time_tag = f"  {DIM}({elapsed}){RESET}" if elapsed else ""
+            click.echo(f"  ┌─ {mod} │ {vert_tag} │ {status_str}{time_tag}")
             click.echo(f"  │  {DIM}Scores pending…{RESET}")
 
         click.echo(f"  └─ {DIM}{r['run_id']}{RESET}")
