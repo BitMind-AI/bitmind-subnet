@@ -194,11 +194,30 @@ gasbench run --image-model ./my_image_model/ --full
 
 > **Note**: Local full runs will not include the private holdout datasets used in the actual network evaluation.
 
+### Checking Your Performance
+
+Once your model has been benchmarked, you can query your scores directly from the CLI. This is authenticated with your hotkey so you can only see your own results — including the active round that isn't shown on the public leaderboard.
+
+```bash
+# View all your benchmark runs
+gascli d perf
+
+# Filter by modality or vertical
+gascli d perf --modality image
+gascli d perf --modality image --vertical human
+
+# Use a specific wallet
+gascli d perf --wallet-name miner1 --wallet-hotkey default
+```
+
+Each row shows the run ID, status (`queued`/`running`/`success`/`failed`), modality, vertical, SN34 score, MCC, and Brier score.
+
 ### Getting Help
 
 ```bash
 gascli discriminator --help        # Miner help
 gascli d push --help               # Push command help
+gascli d perf --help               # Performance query help
 ```
 
 **Note**: Remember to activate the virtual environment first with `source .venv/bin/activate` before running any `gascli` commands.

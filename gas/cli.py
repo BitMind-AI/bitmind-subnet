@@ -621,6 +621,70 @@ def push_discriminator(
 discriminator.add_command(push_discriminator, name="push")
 
 
+GAS_API_BASE_URL = "https://gas.bitmind.ai"
+
+
+@discriminator.command(name="performance")
+@click.option("--wallet-name", default="default", help="Bittensor wallet name")
+@click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
+@click.option("--modality", type=click.Choice(["image", "video", "audio"]), default=None, help="Filter by modality")
+@click.option("--vertical", type=click.Choice(["general", "human"]), default=None, help="Filter by vertical")
+@click.option("--api-url", default=None, help="GAS API base URL (default: production)")
+def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
+    """Query your discriminator's benchmark performance (epistula-authenticated)."""
+    import bittensor as bt
+    import httpx
+    from gas.protocol.epistula import generate_header
+
+    try:
+        wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
+        keypair = wallet.hotkey
+    except Exception as e:
+        click.echo(f"Error loading wallet: {e}", err=True)
+        sys.exit(1)
+
+    base = api_url or os.environ.get("GAS_API_URL", GAS_API_BASE_URL)
+    url = f"{base}/api/v1/miner/performance"
+    params = {}
+    if modality:
+        params["modality"] = modality
+    if vertical:
+        params["vertical"] = vertical
+
+    headers = generate_header(keypair, b"")
+
+    click.echo(f"Querying performance for {keypair.ss58_address[:8]}...{keypair.ss58_address[-6:]}")
+
+    try:
+        resp = httpx.get(url, headers=headers, params=params, timeout=30)
+    except httpx.RequestError as e:
+        click.echo(f"Request failed: {e}", err=True)
+        sys.exit(1)
+
+    if resp.status_code != 200:
+        click.echo(f"API error {resp.status_code}: {resp.text}", err=True)
+        sys.exit(1)
+
+    runs = resp.json()
+    if not runs:
+        click.echo("No benchmark runs found.")
+        return
+
+    hdr = f"{'RUN ID':<38} {'STATUS':<10} {'MOD':<6} {'VERT':<8} {'SN34':>8} {'MCC':>8} {'BRIER':>8}"
+    click.echo(hdr)
+    click.echo("-" * len(hdr))
+    for r in runs:
+        sn34 = f"{r['sn34_score']:.4f}" if r.get("sn34_score") is not None else "     —"
+        mcc = f"{r['mcc']:.4f}" if r.get("mcc") is not None else "     —"
+        brier = f"{r['brier']:.4f}" if r.get("brier") is not None else "     —"
+        click.echo(f"{r['run_id']:<38} {r['status']:<10} {r['modality']:<6} {r['vertical']:<8} {sn34:>8} {mcc:>8} {brier:>8}")
+
+    click.echo(f"\n{len(runs)} run(s) total.")
+
+
+discriminator.add_command(perf, name="perf")
+
+
 @discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.option("--image-model", help="Path to image detector ONNX model or zip file")
 @click.option("--video-model", help="Path to video detector ONNX model or zip file")
