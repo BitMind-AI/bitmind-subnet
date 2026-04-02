@@ -705,8 +705,8 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
             filled = int(sn34 * bar_len)
             bar = f"\033[32m{'█' * filled}\033[0m{DIM}{'░' * (bar_len - filled)}{RESET}"
 
-            click.echo(f"  │  SN34  {bar} {BOLD}{sn34:.4f}{RESET}")
-            click.echo(f"  │  MCC   {mcc:.4f}    Brier  {brier:.4f}" if mcc is not None and brier is not None else f"  │  MCC   —         Brier  —")
+            click.echo(f"  │  {bar}")
+            click.echo(f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  {mcc:.4f}    Brier  {brier:.4f}" if mcc is not None and brier is not None else f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  —         Brier  —")
         else:
             click.echo(f"  │  {DIM}Scores pending…{RESET}")
 
