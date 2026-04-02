@@ -3,6 +3,28 @@ C2PA Content Credentials verification for miner-submitted media.
 
 Validates that content has authentic provenance from trusted AI generators
 like OpenAI (DALL-E), Google (Gemini/Imagen), Adobe Firefly, etc.
+
+Trust Anchors
+-------------
+c2pa-python >= 0.29.0 enforces trust anchor checking by default. Any cert not
+chaining to a root in c2pa-rs's built-in store fires signingCredential.untrusted.
+
+Several AI providers use private or non-CAI CAs that are not in that store:
+  - Stability AI      → GlobalSign GCC R6 SMIME CA 2023 → GlobalSign Root CA - R6
+  - Runway (pre-Gen4) → GlobalSign GCC R6 SMIME CA 2023 → GlobalSign Root CA - R6
+  - Runway Gen4       → private CN=Stability AI self-signed root
+  - Black Forest Labs → GlobalSign GCC R6 SMIME CA 2023 → GlobalSign Root CA - R6
+  - Microsoft         → Microsoft Supply Chain RSA Root CA 2022 (private self-signed)
+  - OpenAI (Truepic)  → Truepic WebClaimSigningCA (Truepic RootCA not embedded)
+  - Adobe             → Adobe Product Services G4 → Adobe Root CA G2 (likely trusted natively)
+  - Google            → Google C2PA Root CA G3 (fetched from pki.goog/c2pa/root-g3.crt)
+
+PEM cert chains for these providers live in:
+  gas/verification/trust_anchors/
+
+When running on >= 0.29.0, _build_c2pa_reader() supplies them via the
+Settings/Context API so signingCredential.untrusted is not raised for
+legitimate content from these providers.
 """
 
 import json
@@ -13,6 +35,70 @@ from typing import Optional, Dict, Any, List, Union
 import bittensor as bt
 
 import c2pa
+
+
+TRUST_ANCHORS_DIR = Path(__file__).parent / "trust_anchors"
+
+# PEM files whose root CAs are NOT in c2pa-rs's built-in CAI trust list.
+# Loaded at module init; gracefully skipped if files are absent.
+_PRIVATE_CA_PEM_FILES = [
+    "stability_ai.pem",       # GlobalSign GCC R6 SMIME chain
+    "runway.pem",             # GlobalSign GCC R6 SMIME chain
+    "runway_gen4.pem",        # private CN=Stability AI self-signed root
+    "black_forest_labs.pem",  # GlobalSign GCC R6 SMIME chain
+    "microsoft.pem",          # Microsoft Supply Chain RSA Root CA 2022
+    "openai_truepic.pem",     # Truepic WebClaimSigningCA chain
+    "adobe.pem",              # Adobe Product Services G4 chain
+    "google_c2pa.pem",        # Google C2PA Root CA G3 (fetched from pki.goog)
+]
+
+
+def _load_trust_anchors() -> Optional[str]:
+    """
+    Concatenate all custom trust-anchor PEM files into one string.
+
+    Returns None if the trust_anchors directory is missing or empty, so callers
+    can fall back to c2pa.Reader without a Context on older library versions.
+    """
+    if not TRUST_ANCHORS_DIR.is_dir():
+        return None
+    pem_parts: List[str] = []
+    for fname in _PRIVATE_CA_PEM_FILES:
+        fpath = TRUST_ANCHORS_DIR / fname
+        if fpath.exists():
+            pem_parts.append(fpath.read_text())
+    return "".join(pem_parts) if pem_parts else None
+
+
+# Cached at import time — avoids re-reading PEM files on every verification call.
+_TRUST_ANCHORS_PEM: Optional[str] = _load_trust_anchors()
+
+# Detect whether the installed c2pa-python supports the Settings/Context API
+# (added in 0.29.0). We probe once at import and cache the result.
+_C2PA_HAS_CONTEXT_API: bool = hasattr(c2pa, "Settings") and hasattr(c2pa, "Context")
+
+
+def _open_c2pa_reader(file_path: str):
+    """
+    Return a c2pa.Reader context manager, optionally configured with custom
+    trust anchors when the Settings/Context API is available (>= 0.29.0).
+
+    Usage::
+
+        with _open_c2pa_reader(path) as reader:
+            manifest_json = reader.json()
+    """
+    if _C2PA_HAS_CONTEXT_API and _TRUST_ANCHORS_PEM:
+        try:
+            settings = c2pa.Settings.from_dict({
+                "verify": {"verify_cert_anchors": True},
+                "trust": {"user_anchors": _TRUST_ANCHORS_PEM},
+            })
+            ctx = c2pa.Context(settings)
+            return c2pa.Reader(file_path, context=ctx)
+        except Exception as e:
+            bt.logging.debug(f"Could not build c2pa Context with trust anchors: {e}; falling back")
+    return c2pa.Reader(file_path)
 
 
 TRUSTED_CERT_ISSUERS = {
@@ -115,7 +201,7 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
         file_path = temp_file.name
 
         try:
-            with c2pa.Reader(file_path) as reader:
+            with _open_c2pa_reader(file_path) as reader:
                 manifest_json = reader.json()
         except Exception as e:
             return C2PAVerificationResult(verified=False, error=f"No C2PA manifest found: {str(e)}")

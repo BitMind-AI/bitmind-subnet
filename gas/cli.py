@@ -573,19 +573,25 @@ cli.add_command(discriminator, name="d")
 @click.option("--netuid", default=34, help="Subnet UID")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
+@click.option("--vertical", type=click.Choice(["general", "human"]), default="general", help="Competition vertical (default: general)")
 def push_discriminator(
-    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay
+    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay, vertical
 ):
     """Push discriminator model(s) and register on blockchain. At least one model zip file (image, video, or audio) must be provided."""
-    # Validate at least one model is provided
     if not image_model and not video_model and not audio_model:
         click.echo("Error: At least one model must be provided (--image-model, --video-model, or --audio-model)", err=True)
         return
 
-    # Build command arguments for the push_model script
+    if vertical == "human" and (video_model or audio_model):
+        click.echo(
+            "Error: The 'human' vertical is only available for image models. "
+            "Remove --video-model / --audio-model, or use --vertical general.",
+            err=True
+        )
+        return
+
     cmd = [sys.executable, "-m", "neurons.discriminator.push_model"]
 
-    # Add model arguments
     if image_model:
         cmd.extend(["--image-model", image_model])
     if video_model:
@@ -593,7 +599,6 @@ def push_discriminator(
     if audio_model:
         cmd.extend(["--audio-model", audio_model])
 
-    # Add optional arguments
     cmd.extend(["--wallet-name", wallet_name])
     cmd.extend(["--wallet-hotkey", wallet_hotkey])
     cmd.extend(["--netuid", str(netuid)])
@@ -602,6 +607,7 @@ def push_discriminator(
         cmd.extend(["--chain-endpoint", chain_endpoint])
 
     cmd.extend(["--retry-delay", str(retry_delay)])
+    cmd.extend(["--vertical", vertical])
 
     # Execute the push_model script
     try:
@@ -613,6 +619,102 @@ def push_discriminator(
 
 
 discriminator.add_command(push_discriminator, name="push")
+
+
+@discriminator.command(name="performance")
+@click.option("--wallet-name", default="default", help="Bittensor wallet name")
+@click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
+@click.option("--modality", type=click.Choice(["image", "video", "audio"]), default=None, help="Filter by modality")
+@click.option("--vertical", type=click.Choice(["general", "human"]), default=None, help="Filter by vertical")
+@click.option("--api-url", default=None, help="GAS API base URL (default: production)")
+def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
+    """Query your discriminator's benchmark performance (epistula-authenticated)."""
+    import bittensor as bt
+    from gas.protocol.miner_requests import fetch_performance
+
+    try:
+        wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
+    except Exception as e:
+        click.echo(f"Error loading wallet: {e}", err=True)
+        sys.exit(1)
+
+    addr = wallet.hotkey.ss58_address
+
+    click.echo()
+    click.echo(f"  ⛽  {addr}")
+    click.echo()
+
+    result = fetch_performance(wallet, modality=modality, vertical=vertical, api_url=api_url)
+
+    if not result["success"]:
+        click.echo(f"  ❌  {result['error']}", err=True)
+        sys.exit(1)
+
+    runs = result["runs"]
+    if not runs:
+        click.echo("  No benchmark runs found.")
+        return
+
+    from datetime import datetime, timezone
+
+    def elapsed_str(started_at):
+        if not started_at:
+            return ""
+        try:
+            t = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            delta = datetime.now(timezone.utc) - t
+            secs = int(delta.total_seconds())
+            if secs < 60:
+                return f"{secs}s"
+            mins = secs // 60
+            if mins < 60:
+                return f"{mins}m {secs % 60}s"
+            hrs = mins // 60
+            return f"{hrs}h {mins % 60}m"
+        except (ValueError, TypeError):
+            return ""
+
+    STATUS_STYLE = {
+        "success": ("✅", "\033[32m"),   # green
+        "running": ("⏳", "\033[33m"),   # yellow
+        "queued":  ("🕐", "\033[36m"),   # cyan
+        "failed":  ("❌", "\033[31m"),   # red
+    }
+    RESET = "\033[0m"
+    DIM = "\033[2m"
+    BOLD = "\033[1m"
+
+    for r in runs:
+        icon, color = STATUS_STYLE.get(r["status"], ("•", ""))
+        mod = r["modality"].upper()
+        vert = r["vertical"]
+        vert_tag = f"\033[33m{vert}\033[0m" if vert == "human" else f"{DIM}{vert}{RESET}"
+
+        if r.get("sn34_score") is not None:
+            sn34 = r["sn34_score"]
+            mcc = r.get("mcc")
+            brier = r.get("brier")
+
+            bar_len = 20
+            filled = int(sn34 * bar_len)
+            bar = f"\033[32m{'█' * filled}\033[0m{DIM}{'░' * (bar_len - filled)}{RESET}"
+
+            click.echo(f"  ┌─ {mod} │ {vert_tag} │ {bar}")
+            click.echo(f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  {mcc:.4f}    Brier  {brier:.4f}" if mcc is not None and brier is not None else f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  —         Brier  —")
+        else:
+            status_str = f"{color}{icon} {r['status'].upper()}{RESET}"
+            elapsed = elapsed_str(r.get("started_at")) if r["status"] in ("running", "queued") else ""
+            time_tag = f"  {DIM}({elapsed}){RESET}" if elapsed else ""
+            click.echo(f"  ┌─ {mod} │ {vert_tag} │ {status_str}{time_tag}")
+            click.echo(f"  │  {DIM}Scores pending…{RESET}")
+
+        click.echo(f"  └─ {DIM}{r['run_id']}{RESET}")
+        click.echo()
+
+    click.echo(f"  {len(runs)} run(s) total.")
+
+
+discriminator.add_command(perf, name="perf")
 
 
 @discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})

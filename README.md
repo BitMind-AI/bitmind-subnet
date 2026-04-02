@@ -82,6 +82,11 @@ gascli d push \
 gascli d push --image-model image_detector.zip
 gascli d push --video-model video_detector.zip
 gascli d push --audio-model audio_detector.zip
+
+# Miners: Check your benchmark performance (epistula-authenticated)
+gascli d perf --wallet-name default --wallet-hotkey default
+gascli d perf --modality image              # filter by modality
+gascli d perf --modality image --vertical human  # filter by vertical
 ```
 
 **Available Aliases:**
