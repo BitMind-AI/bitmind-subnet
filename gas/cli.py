@@ -621,9 +621,6 @@ def push_discriminator(
 discriminator.add_command(push_discriminator, name="push")
 
 
-GAS_API_BASE_URL = "https://gas.bitmind.ai"
-
-
 @discriminator.command(name="performance")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
@@ -633,39 +630,24 @@ GAS_API_BASE_URL = "https://gas.bitmind.ai"
 def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
     """Query your discriminator's benchmark performance (epistula-authenticated)."""
     import bittensor as bt
-    import httpx
-    from gas.protocol.epistula import generate_header
+    from gas.protocol.miner_requests import fetch_performance
 
     try:
         wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
-        keypair = wallet.hotkey
     except Exception as e:
         click.echo(f"Error loading wallet: {e}", err=True)
         sys.exit(1)
 
-    base = api_url or os.environ.get("GAS_API_URL", GAS_API_BASE_URL)
-    url = f"{base}/api/v1/miner/performance"
-    params = {}
-    if modality:
-        params["modality"] = modality
-    if vertical:
-        params["vertical"] = vertical
+    addr = wallet.hotkey.ss58_address
+    click.echo(f"Querying performance for {addr[:8]}...{addr[-6:]}")
 
-    headers = generate_header(keypair, b"")
+    result = fetch_performance(wallet, modality=modality, vertical=vertical, api_url=api_url)
 
-    click.echo(f"Querying performance for {keypair.ss58_address[:8]}...{keypair.ss58_address[-6:]}")
-
-    try:
-        resp = httpx.get(url, headers=headers, params=params, timeout=30)
-    except httpx.RequestError as e:
-        click.echo(f"Request failed: {e}", err=True)
+    if not result["success"]:
+        click.echo(result["error"], err=True)
         sys.exit(1)
 
-    if resp.status_code != 200:
-        click.echo(f"API error {resp.status_code}: {resp.text}", err=True)
-        sys.exit(1)
-
-    runs = resp.json()
+    runs = result["runs"]
     if not runs:
         click.echo("No benchmark runs found.")
         return

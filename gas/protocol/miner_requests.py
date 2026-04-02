@@ -1,13 +1,18 @@
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 import bittensor as bt
+import httpx
 import requests
 
 from gas.protocol.epistula import generate_header
+
+#GAS_API_BASE_URL = "https://gas.bitmind.ai"
+GAS_API_BASE_URL = "https://bitmind-staging--gas-api-gas-api.modal.run"
 
 
 def calculate_sha256(data: bytes) -> str:
@@ -245,4 +250,41 @@ def upload_single_modality(
         "file_size": file_size,
         "submissions_used": submissions_used,
         "submissions_max": submissions_max,
-    } 
+    }
+
+
+def fetch_performance(
+    wallet: bt.wallet,
+    modality: Optional[str] = None,
+    vertical: Optional[str] = None,
+    api_url: Optional[str] = None,
+) -> Dict:
+    """Query the miner's own benchmark performance via the GAS API.
+
+    Returns a dict with 'success', 'runs' (list of dicts), and optionally 'error'.
+    Each run dict contains: run_id, status, modality, vertical, sn34_score, mcc, brier.
+    """
+    base = api_url or os.environ.get("GAS_API_URL", GAS_API_BASE_URL)
+    url = f"{base}/api/v1/miner/performance"
+
+    params: Dict[str, str] = {}
+    if modality:
+        params["modality"] = modality
+    if vertical:
+        params["vertical"] = vertical
+
+    headers = generate_header(wallet.hotkey, b"")
+
+    try:
+        resp = httpx.get(url, headers=headers, params=params, timeout=30)
+    except httpx.RequestError as e:
+        return {"success": False, "runs": [], "error": f"Request failed: {e}"}
+
+    if resp.status_code != 200:
+        return {
+            "success": False,
+            "runs": [],
+            "error": f"API error {resp.status_code}: {resp.text}",
+        }
+
+    return {"success": True, "runs": resp.json()}

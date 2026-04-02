@@ -50,7 +50,7 @@ except ImportError:
 
 from gas.types import DiscriminatorModelId as ModelId
 from gas.utils.chain_model_metadata_store import ChainModelMetadataStore
-from gas.protocol.model_uploads import upload_single_modality
+from gas.protocol.miner_requests import upload_single_modality
 
 
 MODEL_UPLOAD_ENDPOINT = "https://bitmind-staging--model-upload-model-upload-api.modal.run/upload"
