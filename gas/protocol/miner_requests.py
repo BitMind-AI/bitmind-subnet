@@ -11,8 +11,7 @@ import requests
 
 from gas.protocol.epistula import generate_header
 
-#GAS_API_BASE_URL = "https://gas.bitmind.ai"
-GAS_API_BASE_URL = "https://bitmind-staging--gas-api-gas-api.modal.run"
+GAS_API_BASE_URL = "https://gas.bitmind.ai"
 
 
 def calculate_sha256(data: bytes) -> str:

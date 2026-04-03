@@ -53,7 +53,7 @@ from gas.utils.chain_model_metadata_store import ChainModelMetadataStore
 from gas.protocol.miner_requests import upload_single_modality
 
 
-MODEL_UPLOAD_ENDPOINT = "https://bitmind-staging--model-upload-model-upload-api.modal.run/upload"
+MODEL_UPLOAD_ENDPOINT = "https://upload.bitmind.ai/upload"
 
 
 def print_success(message: str):
