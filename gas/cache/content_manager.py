@@ -892,8 +892,12 @@ class ContentManager:
 		validator_hotkey: str = None,
 		validator_uid: int = None,
 		num_batches: int = 1
-	):
-		"""Upload unuploaded media from database to HuggingFace, separated by source (miner vs validator) and modality"""
+	) -> int:
+		"""Upload unuploaded media from database to HuggingFace, separated by source (miner vs validator) and modality.
+
+		Returns:
+			Total number of media entries successfully uploaded and marked in DB (0 on failure / nothing to upload).
+		"""
 		try:
 			if num_batches is None or num_batches < 1:
 				bt.logging.warning(f"Invalid num_batches value: {num_batches}, using default of 1")
@@ -983,10 +987,13 @@ class ContentManager:
 			if total_uploaded_all_batches > 0:
 				bt.logging.info(f"✅ Upload cycle complete: {total_uploaded_all_batches} total files uploaded across {batch_num + 1} batches")
 
+			return total_uploaded_all_batches
+
 		except Exception as e:
 			bt.logging.error(f"Error uploading batch to HuggingFace: {e}")
 			import traceback
 			bt.logging.error(traceback.format_exc())
+			return 0
 
 	def get_dataset_media_counts(self) -> Dict[str, int]:
 		"""

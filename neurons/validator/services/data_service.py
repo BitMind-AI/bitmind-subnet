@@ -23,6 +23,10 @@ from gas.scraping import GoogleScraper
 from gas.types import MediaType, Modality, SourceType
 from gas.utils import on_block_interval
 from gas.utils.metagraph import SubstrateConnectionManager
+from gas.protocol.gas_api_validator import post_generator_verification_upload
+
+# Same window as generator base rewards in neurons/validator/validator.py
+_VERIFICATION_STATS_LOOKBACK_HOURS = 4.0
 
 
 class DataService:
@@ -543,7 +547,7 @@ class DataService:
                 bt.logging.info(
                     f"[DATA-SERVICE] Uploading {batches} batch(es) of {self.config.upload_batch_size} files per modality"
                 )
-                self.content_manager.upload_batch_to_huggingface(
+                uploaded = self.content_manager.upload_batch_to_huggingface(
                     hf_token=self.hf_token,
                     hf_dataset_repos=self.hf_dataset_repos,
                     upload_batch_size=self.config.upload_batch_size,
@@ -553,6 +557,16 @@ class DataService:
                     validator_uid=self.validator_uid,
                     num_batches=batches,
                 )
+                if uploaded and uploaded > 0 and self.validator_wallet:
+                    stats = self.content_manager.get_verification_stats_last_n_hours(
+                        lookback_hours=_VERIFICATION_STATS_LOOKBACK_HOURS,
+                    )
+                    post_generator_verification_upload(
+                        self.validator_wallet,
+                        self.config.benchmark.api_url,
+                        _VERIFICATION_STATS_LOOKBACK_HOURS,
+                        stats,
+                    )
             except Exception as e:
                 bt.logging.error(f"[DATA-SERVICE] Uploader error: {e}")
                 bt.logging.error(traceback.format_exc())
