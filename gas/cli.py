@@ -582,10 +582,10 @@ def push_discriminator(
         click.echo("Error: At least one model must be provided (--image-model, --video-model, or --audio-model)", err=True)
         return
 
-    if vertical == "human" and (video_model or audio_model):
+    if vertical == "human" and audio_model:
         click.echo(
-            "Error: The 'human' vertical is only available for image models. "
-            "Remove --video-model / --audio-model, or use --vertical general.",
+            "Error: The 'human' vertical is only available for image and video models. "
+            "Remove --audio-model, or use --vertical general.",
             err=True
         )
         return

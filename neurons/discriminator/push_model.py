@@ -331,10 +331,10 @@ def main():
     if not args.image_model and not args.video_model and not args.audio_model:
         parser.error("At least one model must be provided: --image-model, --video-model, or --audio-model")
 
-    if args.vertical == "human" and (args.video_model or args.audio_model):
+    if args.vertical == "human" and args.audio_model:
         parser.error(
-            "The 'human' vertical is only available for image models. "
-            "Remove --video-model / --audio-model, or use --vertical general."
+            "The 'human' vertical is only available for image and video models. "
+            "Remove --audio-model, or use --vertical general."
         )
 
     print()
