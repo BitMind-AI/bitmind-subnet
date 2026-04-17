@@ -914,6 +914,105 @@ def info():
         click.echo("Run the generator to see API key status")
 
 
+@generator.command(name="performance")
+@click.option(
+    "--wallet-name",
+    default=None,
+    help="Bittensor wallet name (default: BT_WALLET_NAME from .env.gen_miner, else 'default')",
+)
+@click.option(
+    "--wallet-hotkey",
+    default=None,
+    help="Bittensor hotkey name (default: BT_WALLET_HOTKEY from .env.gen_miner, else 'default')",
+)
+@click.option("--modality", type=click.Choice(["image", "video", "audio"]), default=None, help="Filter fool-rate aggregate by modality")
+@click.option("--lookback-days", default=7, type=int, show_default=True, help="Fool-rate parquet lookback (days)")
+@click.option("--api-url", default=None, help="GAS API base URL (default: GAS_API_URL env or production)")
+@click.option("--json", "as_json", is_flag=True, help="Print raw API JSON")
+def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_json):
+    """Query your generator verification stats + aggregated fool rate (Epistula-authenticated GAS API).
+
+    The request is signed with your hotkey (same Epistula flow as discriminator ``d perf``).
+    """
+    import json as json_lib
+
+    import bittensor as bt
+    from gas.protocol.miner_requests import fetch_generator_performance
+
+    load_miner_env()
+    wn = wallet_name or os.environ.get("BT_WALLET_NAME", "default")
+    wh = wallet_hotkey or os.environ.get("BT_WALLET_HOTKEY", "default")
+
+    try:
+        wallet = bt.wallet(name=wn, hotkey=wh)
+    except Exception as e:
+        click.echo(f"Error loading wallet: {e}", err=True)
+        sys.exit(1)
+
+    addr = wallet.hotkey.ss58_address
+    click.echo()
+    click.echo(f"  ⛽  generator  {addr}")
+    click.echo()
+
+    result = fetch_generator_performance(
+        wallet,
+        modality=modality,
+        lookback_days=lookback_days,
+        api_url=api_url,
+    )
+
+    if not result["success"]:
+        click.echo(f"  ❌  {result['error']}", err=True)
+        sys.exit(1)
+
+    data = result["data"]
+    if as_json:
+        click.echo(json_lib.dumps(data, indent=2, default=str))
+        return
+
+    ver = data.get("verification") or {}
+    fool = data.get("fool_aggregate") or {}
+
+    click.echo("  Verification (validator uploads, latest snapshot per validator)")
+    click.echo(
+        f"    validators reporting: {ver.get('validator_count', 0)}"
+        f"    │    aggregate pass rate: {ver.get('aggregate_pass_rate')!s}"
+    )
+    click.echo(
+        f"    total verified / failed / evaluated: "
+        f"{ver.get('total_verified', 0)} / {ver.get('total_failed', 0)} / {ver.get('total_evaluated', 0)}"
+    )
+    by_v = ver.get("by_validator") or []
+    if by_v:
+        click.echo("    per-validator:")
+        for row in by_v:
+            vhk = (row.get("validator_hotkey") or "")[:16] + "…"
+            pr = row.get("pass_rate")
+            click.echo(
+                f"      {vhk}  pass_rate={pr!s}  "
+                f"v={row.get('total_verified', 0)}  f={row.get('total_failed', 0)}  "
+                f"lookback_h={row.get('lookback_hours')!s}"
+            )
+    else:
+        click.echo("    (no verification rows yet)")
+    click.echo()
+
+    click.echo(f"  Fool rate aggregate (benchmark parquets, last {lookback_days}d)")
+    ts = fool.get("total_samples", 0)
+    if ts:
+        click.echo(
+            f"    fool_rate={fool.get('fool_rate')!s}    samples={ts}    "
+            f"fooled={fool.get('fooled_count', 0)}    not_fooled={fool.get('not_fooled_count', 0)}    "
+            f"benchmark_runs={fool.get('benchmark_run_count', 0)}"
+        )
+    else:
+        click.echo("    (no benchmark samples in window)")
+    click.echo()
+
+
+generator.add_command(gen_perf, name="perf")
+
+
 @generator.command(name="verify-c2pa")
 @click.argument("files", nargs=-1, required=True, type=click.Path(exists=True))
 @click.option("-v", "--verbose", is_flag=True, help="Show raw manifest data")

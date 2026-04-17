@@ -298,3 +298,39 @@ def fetch_performance(
         }
 
     return {"success": True, "runs": resp.json()}
+
+
+def fetch_generator_performance(
+    wallet: bt.wallet,
+    modality: Optional[str] = None,
+    lookback_days: int = 7,
+    api_url: Optional[str] = None,
+) -> Dict:
+    """Query the generator's own verification + fool aggregate via the GAS API.
+
+    Signs the GET with ``generate_header(wallet.hotkey, b\"\")`` (Epistula v2, empty body).
+    """
+    base = api_url or os.environ.get("GAS_API_URL", GAS_API_BASE_URL)
+    url = f"{base}/api/v1/generator/performance"
+
+    params: Dict[str, str] = {}
+    if modality:
+        params["modality"] = modality
+    params["lookback_days"] = str(lookback_days)
+
+    headers = generate_header(wallet.hotkey, b"")
+
+    try:
+        # DuckDB + cache can exceed 30s on cold start
+        resp = httpx.get(url, headers=headers, params=params, timeout=120.0)
+    except httpx.RequestError as e:
+        return {"success": False, "data": None, "error": f"Request failed: {e}"}
+
+    if resp.status_code != 200:
+        return {
+            "success": False,
+            "data": None,
+            "error": f"API error {resp.status_code}: {resp.text}",
+        }
+
+    return {"success": True, "data": resp.json()}
