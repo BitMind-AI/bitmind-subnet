@@ -361,7 +361,6 @@ if [ "$SYS_DEPS_ONLY" = false ]; then
     log_info "Installing additional git dependencies..."
     source .venv/bin/activate &&\
      uv pip install git+https://github.com/deepseek-ai/Janus.git &&\
-     uv pip install git+https://github.com/huggingface/diffusers &&\
      uv pip install git+https://github.com/openai/CLIP.git
     log_success "Git dependencies installed ✓"
 
