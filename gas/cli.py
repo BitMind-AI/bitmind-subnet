@@ -657,22 +657,59 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
 
     from datetime import datetime, timezone
 
-    def elapsed_str(started_at):
+    def parse_started_at(started_at):
         if not started_at:
-            return ""
+            return None
         try:
-            t = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-            delta = datetime.now(timezone.utc) - t
-            secs = int(delta.total_seconds())
-            if secs < 60:
-                return f"{secs}s"
-            mins = secs // 60
-            if mins < 60:
-                return f"{mins}m {secs % 60}s"
-            hrs = mins // 60
-            return f"{hrs}h {mins % 60}m"
+            return datetime.fromisoformat(started_at.replace("Z", "+00:00"))
         except (ValueError, TypeError):
+            return None
+
+    def elapsed_str(started_at):
+        t = parse_started_at(started_at)
+        if not t:
             return ""
+        delta = datetime.now(timezone.utc) - t
+        secs = int(delta.total_seconds())
+        if secs < 60:
+            return f"{secs}s"
+        mins = secs // 60
+        if mins < 60:
+            return f"{mins}m {secs % 60}s"
+        hrs = mins // 60
+        return f"{hrs}h {mins % 60}m"
+
+    def ago_str(started_at):
+        t = parse_started_at(started_at)
+        if not t:
+            return ""
+        delta = datetime.now(timezone.utc) - t
+        total_mins = int(delta.total_seconds()) // 60
+        if total_mins < 1:
+            return "just now"
+        if total_mins < 60:
+            return f"{total_mins} minute{'s' if total_mins != 1 else ''} ago"
+        hrs = total_mins // 60
+        mins = total_mins % 60
+        if hrs < 24:
+            parts = [f"{hrs} hour{'s' if hrs != 1 else ''}"]
+            if mins:
+                parts.append(f"{mins} min")
+            return " ".join(parts) + " ago"
+        days = hrs // 24
+        rem_hrs = hrs % 24
+        parts = [f"{days} day{'s' if days != 1 else ''}"]
+        if rem_hrs:
+            parts.append(f"{rem_hrs}h")
+        return " ".join(parts) + " ago"
+
+    def fmt_started_at(started_at):
+        t = parse_started_at(started_at)
+        if not t:
+            return ""
+        ts = t.strftime("%Y-%m-%d %H:%M UTC")
+        ago = ago_str(started_at)
+        return f"{ts} ({ago})" if ago else ts
 
     STATUS_STYLE = {
         "success": ("✅", "\033[32m"),   # green
@@ -708,7 +745,9 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
             click.echo(f"  ┌─ {mod} │ {vert_tag} │ {status_str}{time_tag}")
             click.echo(f"  │  {DIM}Scores pending…{RESET}")
 
-        click.echo(f"  └─ {DIM}{r['run_id']}{RESET}")
+        started_tag = fmt_started_at(r.get("started_at"))
+        time_suffix = f"  •  {started_tag}" if started_tag else ""
+        click.echo(f"  └─ {DIM}{r['run_id']}{time_suffix}{RESET}")
         click.echo()
 
     click.echo(f"  {len(runs)} run(s) total.")
