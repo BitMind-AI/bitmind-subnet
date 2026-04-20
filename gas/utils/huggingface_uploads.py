@@ -141,7 +141,7 @@ def upload_media_to_hf(
 
         try:
             create_repo(dataset_repo, repo_type="dataset", exist_ok=True, token=hf_token)
-        except:
+        except Exception:
             pass
 
         archive_operations = []
@@ -177,7 +177,7 @@ def upload_media_to_hf(
             for temp_file in all_temp_files:
                 try:
                     os.unlink(temp_file)
-                except:
+                except Exception:
                     pass
 
         return successfully_processed_ids
@@ -589,7 +589,7 @@ def create_image_archives(
         for temp_file in temp_files_to_cleanup:
             try:
                 os.unlink(temp_file)
-            except:
+            except Exception:
                 pass
         raise
 
@@ -668,7 +668,7 @@ def create_video_archives(
         for temp_file in temp_files_to_cleanup:
             try:
                 os.unlink(temp_file)
-            except:
+            except Exception:
                 pass
         raise
 

@@ -368,7 +368,7 @@ class GoogleScraper(BaseScraper):
                                     break
                             if full_size_img:
                                 break
-                        except:
+                        except Exception:
                             continue
 
                     if full_size_img and full_size_img not in image_urls:
@@ -385,7 +385,7 @@ class GoogleScraper(BaseScraper):
                         time.sleep(random.uniform(0.2, 0.8))
                         close_button.click()
                         time.sleep(random.uniform(0.3, 0.7))
-                    except:
+                    except Exception:
                         pass
 
                 except Exception as e:
