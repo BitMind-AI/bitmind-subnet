@@ -223,26 +223,57 @@ class Validator(BaseNeuron):
                 audio_pct     = .01
                 generator_pct = 1 - burn_pct - video_pct - image_pct - audio_pct  # .07
 
-                burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["burn"],
-                    netuid=self.config.netuid,
-                    block=block
-                )
-                video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["video_escrow"],
-                    netuid=self.config.netuid,
-                    block=block
-                )
-                image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["image_escrow"],
-                    netuid=self.config.netuid,
-                    block=block
-                )
-                audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["audio_escrow"],
-                    netuid=self.config.netuid,
-                    block=block
-                )
+                # Resolve each special hotkey to a UID. Fall back to the hardcoded
+                # default if the API-provided hotkey isn't registered on the subnet
+                # at this block. If neither resolves, abort weight setting -- otherwise
+                # the `normed_weights[None] = pct` lines below would broadcast and
+                # assign that pct to *every* UID (numpy treats None as np.newaxis),
+                # which is what caused the flat "everyone gets weight" bug.
+                def resolve_uid(role: str):
+                    api_hotkey = active_ss58_addresses.get(role)
+                    default_hotkey = SS58_ADDRESSES[role]
+                    for hotkey in (api_hotkey, default_hotkey):
+                        if not hotkey:
+                            continue
+                        uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+                            hotkey_ss58=hotkey,
+                            netuid=self.config.netuid,
+                            block=block,
+                        )
+                        if uid is not None:
+                            if hotkey != default_hotkey:
+                                bt.logging.debug(
+                                    f"Resolved {role} hotkey {hotkey} -> uid {uid}"
+                                )
+                            else:
+                                bt.logging.warning(
+                                    f"Falling back to default {role} hotkey "
+                                    f"{default_hotkey} -> uid {uid} "
+                                    f"(api hotkey {api_hotkey} not registered)"
+                                )
+                            return uid
+                    return None
+
+                burn_uid = resolve_uid("burn")
+                video_escrow_uid = resolve_uid("video_escrow")
+                image_escrow_uid = resolve_uid("image_escrow")
+                audio_escrow_uid = resolve_uid("audio_escrow")
+
+                missing_roles = [
+                    role for role, uid in (
+                        ("burn", burn_uid),
+                        ("video_escrow", video_escrow_uid),
+                        ("image_escrow", image_escrow_uid),
+                        ("audio_escrow", audio_escrow_uid),
+                    ) if uid is None
+                ]
+                if missing_roles:
+                    bt.logging.error(
+                        f"Could not resolve UIDs for special hotkeys: {missing_roles}. "
+                        f"Aborting weight set to avoid distributing uniform weight "
+                        f"to all miners."
+                    )
+                    return False
 
                 special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
 
@@ -274,6 +305,16 @@ class Validator(BaseNeuron):
                 total_weight = np.sum(normed_weights)
                 actual_burn_rate = normed_weights[burn_uid] / total_weight if total_weight > 0 else 0
                 bt.logging.info(f"Total weight sum: {total_weight:.4f}, Actual burn rate: {actual_burn_rate:.4f} (target: {burn_pct})")
+
+                # Sanity check: the weights should sum to ~1.0. If they don't, something
+                # is wrong with the allocation logic (e.g. an unexpected broadcast) and
+                # we'd rather skip this epoch than push a malformed weight vector.
+                if not np.isfinite(total_weight) or abs(total_weight - 1.0) > 0.05:
+                    bt.logging.error(
+                        f"Computed weights have invalid sum {total_weight:.4f} "
+                        f"(expected ~1.0). Skipping weight set this epoch."
+                    )
+                    return False
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
