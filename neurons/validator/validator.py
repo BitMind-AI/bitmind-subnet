@@ -11,7 +11,8 @@ import bittensor as bt
 import torch
 
 from gas import __spec_version__ as spec_version
-from gas.protocol.validator_requests import get_benchmark_results, get_escrow_addresses
+from gas.protocol.validator_requests import get_benchmark_results
+from gas.protocol.validator_requests import get_escrow_addresses  # noqa: F401  HOTFIX: temporarily unused
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
@@ -152,7 +153,7 @@ class Validator(BaseNeuron):
             "\N{GRINNING FACE WITH SMILING EYES}",
             f"Initialization Complete. Validator starting at block: {self.subtensor.block}",
         )
-
+        await self.set_weights(0)
         while not self.exit_context.isExiting:
             self.step += 1
             if self.config.autoupdate and (self.step == 0 or not self.step % 300):
@@ -183,23 +184,9 @@ class Validator(BaseNeuron):
             generator_uids = []
             bt.logging.warning("No generator rewards available; using empty generator_uids")
 
-        escrow_addresses = await get_escrow_addresses(
-            self.wallet.hotkey,
-            base_url=self.config.benchmark.api_url,
-        )
-        
-        # Use fetched addresses or fall back to defaults
-        if escrow_addresses:
-            bt.logging.info("Using escrow addresses from API")
-            active_ss58_addresses = {
-                "burn": SS58_ADDRESSES["burn"],
-                "video_escrow": escrow_addresses.get("video_escrow", SS58_ADDRESSES["video_escrow"]),
-                "image_escrow": escrow_addresses.get("image_escrow", SS58_ADDRESSES["image_escrow"]),
-                "audio_escrow": escrow_addresses.get("audio_escrow", SS58_ADDRESSES["audio_escrow"]),
-            }
-        else:
-            bt.logging.warning("Failed to fetch escrow addresses from API, using defaults")
-            active_ss58_addresses = SS58_ADDRESSES
+        # HOTFIX: API unstable; always use hardcoded escrow addresses.
+        bt.logging.info("HOTFIX: using hardcoded default escrow addresses")
+        active_ss58_addresses = SS58_ADDRESSES
         
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
@@ -314,14 +301,18 @@ class Validator(BaseNeuron):
             generator_liveness=generator_liveness,
             max_inactive_hours=max_inactive_hours,
         )
-        # Union: a generator earns rewards if they appear in either source.
-        # Generators with verified content but no benchmark fool data yet still receive
-        # their base reward scaled by the minimum multiplier (.01) rather than being
-        # excluded entirely by an intersection.
+        # HOTFIX: default fool-rate fallback lowered from 0.01 to 0.005.
+        DEFAULT_FOOL_RATE_FALLBACK = 0.005
         all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
+        if not reward_multipliers:
+            bt.logging.warning(
+                f"No benchmark multipliers; applying default fool rate "
+                f"{DEFAULT_FOOL_RATE_FALLBACK} to {len(all_generator_uids)} generators"
+            )
         rewards = {
-            uid: generator_base_rewards.get(uid, 0) * reward_multipliers.get(uid, .01)
-            for uid in all_generator_uids 
+            uid: generator_base_rewards.get(uid, 0)
+            * reward_multipliers.get(uid, DEFAULT_FOOL_RATE_FALLBACK)
+            for uid in all_generator_uids
         }
 
         if len(rewards) == 0:
