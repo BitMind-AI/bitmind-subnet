@@ -90,7 +90,7 @@ class ContentDB:
                 CREATE TABLE IF NOT EXISTS prompts (
                     id TEXT PRIMARY KEY,
                     content TEXT NOT NULL,
-                    content_type TEXT NOT NULL CHECK (content_type IN ('prompt', 'search_query')),
+                    content_type TEXT NOT NULL CHECK (content_type = 'prompt'),
                     modality TEXT CHECK (modality IN ('image', 'video', 'audio')),
                     created_at REAL NOT NULL,
                     used_count INTEGER DEFAULT 0,
@@ -1346,7 +1346,8 @@ class ContentDB:
         
         Args:
             k: Number of prompts to sample
-            content_type: Type of content ('prompt' or 'search_query')
+            content_type: Always 'prompt'. Kept as a parameter for forward
+                compatibility if additional content types are reintroduced.
             strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
             remove: If True, deletes sampled prompts (only if enough prompts remain)
             modality: Optional modality filter ('image', 'video', 'audio')

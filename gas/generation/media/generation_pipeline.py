@@ -1,4 +1,5 @@
 import gc
+import inspect
 import json
 import os
 import random
@@ -16,8 +17,9 @@ import cv2
 from gas.types import ModelTask, Modality
 from gas.generation.util.image import create_random_mask, is_black_output
 from gas.generation.util.prompt import truncate_prompt_if_too_long
-from gas.generation.model_registry import ModelRegistry
-from gas.generation.models import initialize_model_registry
+from gas.generation.media.model_registry import ModelRegistry
+from gas.generation.media.models import initialize_model_registry
+from gas.generation.prompts.model_prompt_styles import adapt_for_local_model
 from gas.generation.util.model import (
     create_pipeline_generator,
     enable_model_optimizations,
@@ -288,7 +290,24 @@ class GenerationPipeline:
             gen_args["width"] = gen_args["resolution"][1]
             del gen_args["resolution"]
 
-        truncated_prompt = truncate_prompt_if_too_long(prompt, self.model)
+        # Per-local-model adaptation: applies prefix/suffix/quality tags from
+        # MODEL_STYLES and produces a matching negative_prompt where the
+        # underlying pipeline supports one. The canonical (miner-bound)
+        # prompt is left untouched in the DB; only the local generation call
+        # sees the adapted variant.
+        is_video_task = task in ("t2v", "i2v")
+        adapted = adapt_for_local_model(
+            prompt, model_name, is_video=is_video_task
+        )
+        adapted_prompt = adapted.prompt
+        if (
+            adapted.negative_prompt
+            and "negative_prompt" not in gen_args
+            and self._pipeline_accepts_negative_prompt()
+        ):
+            gen_args["negative_prompt"] = adapted.negative_prompt
+
+        truncated_prompt = truncate_prompt_if_too_long(adapted_prompt, self.model)
         bt.logging.debug(f"Generating media from prompt: {truncated_prompt}")
         bt.logging.debug(f"Generation args: {gen_args}")
 
@@ -376,6 +395,24 @@ class GenerationPipeline:
         gc.collect()
         torch.cuda.empty_cache()
         return output
+
+    def _pipeline_accepts_negative_prompt(self) -> bool:
+        """Return True iff the loaded diffusers pipeline takes negative_prompt.
+
+        Most image diffusers pipelines accept it; many recent video pipelines
+        (e.g. HunyuanVideo, Mochi, CogVideoX) do not. We probe the signature
+        instead of guessing per model so newly added pipelines work without
+        a code change here. Multi-stage pipelines are checked on stage1.
+        """
+        try:
+            target = self.model["stage1"] if isinstance(self.model, dict) else self.model
+            call = getattr(target, "__call__", None)
+            if call is None:
+                return False
+            sig = inspect.signature(call)
+            return "negative_prompt" in sig.parameters
+        except (TypeError, ValueError):
+            return False
 
     def _validate_model_names(self, model_names, tasks) -> str:
         if model_names is None:

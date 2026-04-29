@@ -1,15 +1,29 @@
-"""
-Model-specific prompt optimization configurations.
+"""Per-local-model prompt configuration and runtime adaptation.
 
-This module provides per-model prompt formatting rules and best practices
-to optimize generation quality for different AI image/video models.
+Two layers live here:
+
+* **Configuration data** (``ModelPromptConfig``, ``MODEL_STYLES``,
+  ``DEFAULT_CONFIG``): per-family rules for how each local diffusers model
+  prefers its prompts shaped (prefix, suffix, quality tags, negative
+  prompt usage).
+* **Runtime adaptation** (``adapt_for_local_model``, ``AdaptedPrompt``):
+  applies that configuration to a canonical (LLM-composed) prompt at
+  generation time, returning the adapted prompt and an optional
+  ``negative_prompt`` for pipelines that accept one.
+
+The canonical (miner-bound) prompt produced by ``PromptGenerator`` is
+never altered by this module's data - it is only reshaped at gen-time
+when it gets dispatched to a local pipeline inside ``GenerationPipeline``.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 import random
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
 
-from gas.generation.prompt_modifiers import PromptModifiers, MODIFIERS
+from gas.generation.prompts.prompt_modifiers import MODIFIERS
+from gas.generation.prompts.scene import SceneDescription
 
 
 @dataclass
@@ -382,220 +396,155 @@ DEFAULT_CONFIG = ModelPromptConfig(
 
 
 # =============================================================================
-# PROMPT OPTIMIZER CLASS
+# CONFIG LOOKUP
 # =============================================================================
 
-class ModelPromptOptimizer:
-    """
-    Optimizes prompts based on target model characteristics.
-    """
-    
-    def __init__(self, modifiers: Optional[PromptModifiers] = None):
-        """
-        Initialize the optimizer.
-        
-        Args:
-            modifiers: Optional PromptModifiers instance for enhancement.
-        """
-        self.modifiers = modifiers or PromptModifiers()
-        self.model_configs = MODEL_STYLES
-    
-    def get_model_config(self, model_name: str) -> ModelPromptConfig:
-        """
-        Get the configuration for a specific model.
-        
-        Args:
-            model_name: The model name or path.
-            
-        Returns:
-            ModelPromptConfig for the model.
-        """
-        # Normalize model name
-        model_lower = model_name.lower()
-        
-        # Try exact match first
-        if model_lower in self.model_configs:
-            return self.model_configs[model_lower]
-        
-        # Try partial matches
-        for key, config in self.model_configs.items():
-            if key in model_lower or model_lower in key:
-                return config
-        
-        # Check for known patterns
-        if "flux" in model_lower:
-            return self.model_configs.get("flux", DEFAULT_CONFIG)
-        elif "sdxl" in model_lower or "xl" in model_lower:
-            return self.model_configs.get("sdxl", DEFAULT_CONFIG)
-        elif "cogvideo" in model_lower:
-            return self.model_configs.get("cogvideo", DEFAULT_CONFIG)
-        elif "hunyuan" in model_lower:
-            return self.model_configs.get("hunyuan", DEFAULT_CONFIG)
-        elif "wan" in model_lower:
-            return self.model_configs.get("wan", DEFAULT_CONFIG)
-        elif "mochi" in model_lower:
-            return self.model_configs.get("mochi", DEFAULT_CONFIG)
-        elif "hidream" in model_lower:
-            return self.model_configs.get("hidream", DEFAULT_CONFIG)
-        elif "animatediff" in model_lower:
-            return self.model_configs.get("animatediff", DEFAULT_CONFIG)
-        elif "inpaint" in model_lower:
-            return self.model_configs.get("inpainting", DEFAULT_CONFIG)
-        
-        return DEFAULT_CONFIG
-    
-    def optimize_prompt(
-        self,
-        prompt: str,
-        model_name: str,
-        add_modifiers: bool = True,
-        content_type: str = "general",
-    ) -> Dict[str, Any]:
-        """
-        Optimize a prompt for a specific model.
-        
-        Args:
-            prompt: The base prompt to optimize.
-            model_name: Target model name.
-            add_modifiers: Whether to add enhancement modifiers.
-            content_type: Type of content ("portrait", "landscape", "action", "general")
-            
-        Returns:
-            Dictionary containing optimized prompt and optional negative prompt.
-        """
-        config = self.get_model_config(model_name)
-        
-        # Start with the base prompt
-        optimized = prompt.strip()
-        
-        # Add prefix if specified
-        if config.prefix:
-            optimized = f"{config.prefix} {optimized}"
-        
-        # Add modifiers if requested
-        if add_modifiers:
-            # Sample from preferred categories
-            modifier_parts = []
-            for category in config.preferred_modifier_categories:
-                if random.random() < 0.5:  # 50% chance per category
-                    modifier = self.modifiers.sample_modifier(category)
-                    if modifier:
-                        modifier_parts.append(modifier)
-            
-            if modifier_parts:
-                if config.format == "tag_based":
-                    # Tag-based format: append as comma-separated tags
-                    optimized = f"{optimized}, {', '.join(modifier_parts)}"
-                else:
-                    # Natural language: integrate more smoothly
-                    optimized = f"{optimized}, {', '.join(modifier_parts)}"
-        
-        # Add quality tags if the model benefits from them
-        if config.quality_tags:
-            quality_samples = random.sample(
-                MODIFIERS.get("quality_tags", []),
-                min(2, len(MODIFIERS.get("quality_tags", [])))
-            )
-            optimized = f"{optimized}, {', '.join(quality_samples)}"
-        
-        # Add suffix if specified
-        if config.suffix:
-            optimized = f"{optimized} {config.suffix}"
-        
-        # Build result
-        result = {
-            "prompt": optimized,
-            "model_config": config,
-        }
-        
-        # Add negative prompt if model uses it
-        if config.negative_prompt:
-            negative = config.negative_base
-            if content_type == "portrait":
-                negative += ", " + ", ".join(random.sample(
-                    MODIFIERS.get("negative_portrait", []),
-                    min(3, len(MODIFIERS.get("negative_portrait", [])))
-                ))
-            elif content_type == "landscape":
-                negative += ", " + ", ".join(random.sample(
-                    MODIFIERS.get("negative_landscape", []),
-                    min(3, len(MODIFIERS.get("negative_landscape", [])))
-                ))
-            result["negative_prompt"] = negative
-        
-        return result
-    
-    def format_for_video(
-        self,
-        prompt: str,
-        model_name: str,
-        motion_level: str = "moderate",
-    ) -> str:
-        """
-        Format a prompt for video generation with appropriate motion descriptors.
-        
-        Args:
-            prompt: The base prompt.
-            model_name: Target video model name.
-            motion_level: Level of motion ("subtle", "moderate", "dynamic")
-            
-        Returns:
-            Prompt formatted for video generation.
-        """
-        config = self.get_model_config(model_name)
-        
-        if not config.motion_emphasis:
-            return prompt
-        
-        # Motion intensity descriptors
-        motion_descriptors = {
-            "subtle": ["gentle", "slight", "minimal", "soft", "delicate"],
-            "moderate": ["smooth", "steady", "natural", "flowing", "continuous"],
-            "dynamic": ["energetic", "bold", "dramatic", "intense", "powerful"],
-        }
-        
-        # Camera movements (if supported)
-        camera_movements = [
-            "slow pan", "gentle dolly", "smooth tracking shot",
-            "subtle zoom", "steady crane movement", "floating camera",
-        ]
-        
-        motion_word = random.choice(motion_descriptors.get(motion_level, motion_descriptors["moderate"]))
-        
-        enhanced = prompt
-        
-        if config.camera_motion:
-            camera = random.choice(camera_movements)
-            enhanced = f"{enhanced}, {camera}"
-        
-        if config.temporal_descriptors:
-            enhanced = f"{motion_word} motion, {enhanced}"
-        
-        return enhanced
 
+# Family-fallback table for HF paths that don't substring-match a style key.
+_FAMILY_FALLBACKS: Tuple[Tuple[str, str], ...] = (
+    ("flux", "flux"),
+    ("sdxl", "sdxl"),
+    ("xl", "sdxl"),
+    ("cogvideo", "cogvideo"),
+    ("hunyuan", "hunyuan"),
+    ("wan", "wan"),
+    ("mochi", "mochi"),
+    ("hidream", "hidream"),
+    ("animatediff", "animatediff"),
+    ("inpaint", "inpainting"),
+)
 
-# =============================================================================
-# CONVENIENCE FUNCTIONS
-# =============================================================================
 
 def get_model_config(model_name: str) -> ModelPromptConfig:
-    """Get configuration for a model by name."""
-    optimizer = ModelPromptOptimizer()
-    return optimizer.get_model_config(model_name)
+    """Resolve a `ModelPromptConfig` for an arbitrary model name.
+
+    Lookup is fuzzy: exact match against ``MODEL_STYLES`` keys first,
+    then substring matches, then a few known family fallbacks. This lets
+    HF paths like ``tencent/HunyuanVideo`` map cleanly onto the short
+    keys used in the styles table.
+    """
+    model_lower = model_name.lower()
+
+    if model_lower in MODEL_STYLES:
+        return MODEL_STYLES[model_lower]
+
+    for key, config in MODEL_STYLES.items():
+        if key in model_lower or model_lower in key:
+            return config
+
+    for needle, key in _FAMILY_FALLBACKS:
+        if needle in model_lower:
+            return MODEL_STYLES.get(key, DEFAULT_CONFIG)
+
+    return DEFAULT_CONFIG
 
 
-def optimize_prompt_for_model(
+# =============================================================================
+# RUNTIME ADAPTATION
+# =============================================================================
+
+
+@dataclass
+class AdaptedPrompt:
+    """Result of per-local-model adaptation."""
+
+    prompt: str
+    negative_prompt: Optional[str] = None
+
+
+def _scene_kind_for_negatives(scene: SceneDescription) -> str:
+    """Map our richer scene_kind onto the categories MODIFIERS uses."""
+    kind = scene.scene_kind
+    if kind in {"portrait", "group"}:
+        return "portrait"
+    if kind in {"landscape", "nature", "urban"}:
+        return "landscape"
+    return "general"
+
+
+def _maybe_quality_suffix(config: ModelPromptConfig, rng: random.Random) -> str:
+    if not config.quality_tags:
+        return ""
+    pool = MODIFIERS.get("quality_tags", [])
+    if not pool:
+        return ""
+    n = min(2, len(pool))
+    return ", ".join(rng.sample(pool, n))
+
+
+def _build_negative(
+    config: ModelPromptConfig,
+    *,
+    is_video: bool,
+    scene_category: str,
+    rng: random.Random,
+) -> Optional[str]:
+    if not config.negative_prompt:
+        return None
+
+    parts: List[str] = []
+    if config.negative_base:
+        parts.append(config.negative_base)
+
+    if is_video:
+        pool = MODIFIERS.get("negative_video", [])
+        n = min(4, len(pool))
+    elif scene_category == "portrait":
+        pool = MODIFIERS.get("negative_portrait", [])
+        n = min(4, len(pool))
+    elif scene_category == "landscape":
+        pool = MODIFIERS.get("negative_landscape", [])
+        n = min(3, len(pool))
+    else:
+        pool = []
+        n = 0
+
+    if pool:
+        parts.extend(rng.sample(pool, n))
+
+    return ", ".join(p for p in parts if p) or None
+
+
+def adapt_for_local_model(
     prompt: str,
     model_name: str,
-    add_modifiers: bool = True,
-) -> Dict[str, Any]:
-    """Optimize a prompt for a specific model."""
-    optimizer = ModelPromptOptimizer()
-    return optimizer.optimize_prompt(prompt, model_name, add_modifiers)
+    *,
+    is_video: bool,
+    scene: Optional[SceneDescription] = None,
+    rng: Optional[random.Random] = None,
+) -> AdaptedPrompt:
+    """Apply per-model formatting + negatives for a local diffusers pipeline.
 
+    The canonical (miner-bound) prompt is passed through unchanged where
+    possible; this layer only adds prefixes/suffixes/quality tags and
+    produces an accompanying negative prompt where the model wants one.
+    Tokenizer-aware truncation happens later in
+    ``truncate_prompt_if_too_long``.
 
-def is_video_model(model_name: str) -> bool:
-    """Check if a model is configured for video generation."""
+    Returns an `AdaptedPrompt` with `.prompt` and optional `.negative_prompt`.
+    """
+    rng = rng or random.Random()
     config = get_model_config(model_name)
-    return config.motion_emphasis or config.camera_motion
 
+    out = prompt.strip()
+
+    if config.prefix:
+        out = f"{config.prefix}, {out}"
+
+    suffix_pieces: List[str] = []
+    quality = _maybe_quality_suffix(config, rng)
+    if quality:
+        suffix_pieces.append(quality)
+    if config.suffix:
+        suffix_pieces.append(config.suffix)
+    if suffix_pieces:
+        out = f"{out} {', '.join(suffix_pieces)}"
+
+    scene_category = (
+        _scene_kind_for_negatives(scene) if scene is not None else "general"
+    )
+    negative = _build_negative(
+        config, is_video=is_video, scene_category=scene_category, rng=rng
+    )
+
+    return AdaptedPrompt(prompt=out, negative_prompt=negative)

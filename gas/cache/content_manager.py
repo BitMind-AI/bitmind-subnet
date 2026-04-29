@@ -378,28 +378,6 @@ class ContentManager:
 			min_prompts_threshold=self.min_prompts_threshold,
 		)
 
-	def sample_search_queries(
-        self, 
-        k: int = 1, 
-        remove: bool = False, 
-        strategy: str = "random"
-	) -> List[PromptEntry]:
-		"""
-		Sample search queries from the database.
-		
-		Args:
-			k: Number of queries to sample
-			remove: If True, deletes sampled queries (only if min_prompts_threshold remain)
-			strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
-		"""
-		return self.content_db.sample_prompt_entries(
-			k=k, 
-			remove=remove, 
-			strategy=strategy, 
-			content_type="search_query",
-			min_prompts_threshold=self.min_prompts_threshold,
-		)
-
 	def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
 		return self.content_db.get_prompt_by_id(prompt_id)
 
@@ -490,17 +468,28 @@ class ContentManager:
 		k: int = 1,
 		remove: bool = True,
 		strategy: str = "random",
+		modality: Optional[str] = None,
 		**kwargs
 	) -> List[Dict[str, Any]]:
 		"""
 		Sample prompts and load their associated source media content (first item only).
 		Returns a list of { 'prompt': PromptEntry, 'media': media_item }.
+
+		Args:
+			k: Number of prompts to sample.
+			remove: If True, deletes sampled prompts (subject to min threshold).
+			strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest').
+			modality: Optional modality filter ('image' or 'video'). When set,
+				only prompts written with the matching intended modality are
+				returned, so e.g. video models do not get fed prompts that
+				were composed for image generation.
 		"""
 		prompt_entries = self.content_db.sample_prompt_entries(
 			k=k, 
 			remove=remove, 
 			strategy=strategy, 
 			content_type="prompt",
+			modality=modality,
 			min_prompts_threshold=self.min_prompts_threshold,
 		)
 		results: List[Dict[str, Any]] = []

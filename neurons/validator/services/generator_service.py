@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from gas.config import add_args, add_generation_service_args
-from gas.generation.tps import nano_banana
+from gas.generation.media.tps import nano_banana
 from gas.generation import (
     GenerationPipeline,
     initialize_model_registry,
@@ -276,7 +276,7 @@ class GeneratorService:
                 bt.logging.info(f"[GENERATOR-SERVICE] Skipping prompt generation; waiting for base media ({count}/1)")
                 return
             start = time.time()
-            self._generate_text("prompt", args.get("batch_size", 1))
+            self._generate_prompts(args.get("batch_size", 1))
             bt.logging.info(f"[GENERATOR-SERVICE] Generated prompts in {time.time()-start:.2f} seconds")
         elif kind == "gen_tps":
             self._generate_media(use_local=False, k=args.get("k", 1))
@@ -455,18 +455,14 @@ class GeneratorService:
                 continue
         return {"count": 0, "items": []}
 
-    def _generate_text(
-        self, content_type: str = "search_query", batch_size: int = 10
-    ) -> list:
-        """
-        Generate a batch of content (search queries or prompts) and save to database.
+    def _generate_prompts(self, batch_size: int = 10) -> int:
+        """Generate a batch of (image, video) prompt pairs from cached images.
 
-        Args:
-            content_type: Either "search_query" or "prompt"
-            batch_size: Number of items to generate
-
-        Returns:
-            List of generated content items
+        Each iteration samples one source image, runs a single VLM forward
+        pass to produce a structured scene, and composes one prompt per
+        modality from the same scene. Both prompts are written to the
+        database with their intended modality so consumers can route them
+        appropriately.
         """
         generated = 0
         for _ in range(batch_size):
@@ -474,67 +470,80 @@ class GeneratorService:
                 break
 
             try:
-                if content_type == "search_query":
-                    search_query = self.prompt_generator.generate_search_query()
+                cache_result = self._sample_images(count=1)
+                if not cache_result or not cache_result["count"]:
+                    bt.logging.warning("No images available for prompt generation")
+                    continue
+
+                item = cache_result["items"][0]
+                prompts_by_modality = self.prompt_generator.generate_prompts_from_image(
+                    Image.fromarray(item["image"])
+                )
+                for modality, prompt in prompts_by_modality.items():
                     self.content_manager.write_prompt(
-                        content=search_query,
-                        content_type=content_type,
-                        source_media_id=None,
+                        content=prompt,
+                        content_type="prompt",
+                        source_media_id=item["id"],
+                        modality=modality.value,
                     )
                     generated += 1
 
-                elif content_type == "prompt":
-                    cache_result = self._sample_images(count=1)
-
-                    if not cache_result or not cache_result["count"]:
-                        bt.logging.warning("No images available for prompt generation")
-                        continue
-
-                    item = cache_result["items"][0]
-                    for modality in Modality:
-                        prompt = self.prompt_generator.generate_prompt_from_image(
-                            Image.fromarray(item["image"]),
-                            intended_modality=modality
-                        )
-
-                        self.content_manager.write_prompt(
-                            content=prompt,
-                            content_type=content_type,
-                            source_media_id=item["id"],
-                            modality=modality.value,  # Store the intended modality
-                        )
-                        generated += 1
-
-                else:
-                    raise ValueError(f"Unknown content_type: {content_type}")
-
             except Exception as e:
-                bt.logging.error(f"[GENERATOR-SERVICE] Error generating {content_type}: {e}")
+                bt.logging.error(f"[GENERATOR-SERVICE] Error generating prompt: {e}")
                 continue
 
-            bt.logging.info(f"[GENERATOR-SERVICE] Added {generated} {content_type}s to database")
-                
+            bt.logging.info(f"[GENERATOR-SERVICE] Added {generated} prompts to database")
+
         self.prompt_generator.clear_gpu()
         return generated
 
+    def _models_for_modality(self, modality: Modality) -> list:
+        """Filter the active model list down to those producing `modality`.
+
+        i2i is treated as image (semisynthetic image edit), i2v as video.
+        """
+        if self.model_registry is None:
+            return list(self.model_names)
+        return [
+            name
+            for name in self.model_names
+            if self.model_registry.get_modality(name) == modality
+        ]
+
     def _generate_media(self, use_local=True, k=1):
         start = time.time()
-        entries = self.content_manager.sample_prompts_with_source_media(
-            k=k,
-            remove=False,
-            strategy="least_used",
-        )
+        # Route by modality: image prompts (composed for image SoTA / image
+        # diffusers) only go to image-producing models, video prompts only to
+        # video-producing models. The DB-stored `modality` column makes this
+        # filter cheap.
+        any_processed = False
+        for modality in (Modality.IMAGE, Modality.VIDEO):
+            entries = self.content_manager.sample_prompts_with_source_media(
+                k=k,
+                remove=False,
+                strategy="least_used",
+                modality=modality.value,
+            )
+            if not entries:
+                continue
 
-        if entries:
+            matching_models = self._models_for_modality(modality)
+            if not matching_models:
+                bt.logging.debug(
+                    f"[GENERATOR-SERVICE] No active models for modality={modality.value}; skipping"
+                )
+                continue
+
             for entry in entries:
                 prompt = entry["prompt"]
-                original_media = entries[0]["media"]
-                bt.logging.debug(f"[GENERATOR-SERVICE] Generating media")
+                original_media = entry["media"]
+                bt.logging.debug(
+                    f"[GENERATOR-SERVICE] Generating media (modality={modality.value})"
+                )
                 bt.logging.debug(f"- Prompt: {prompt}")
-                bt.logging.debug(f"- Models: {self.model_names}")
+                bt.logging.debug(f"- Models: {matching_models}")
 
                 if use_local:
-                    # Send prompt to all local models
                     try:
                         torch.cuda.reset_peak_memory_stats()
                     except Exception:
@@ -542,14 +551,13 @@ class GeneratorService:
 
                     for gen_output in self.generation_pipeline.generate_media(
                         prompt=prompt.content,
-                        model_names=self.model_names,
+                        model_names=matching_models,
                         image_sample=original_media,
                     ):
                         if self._stop_requested.is_set():
                             break
 
                         if gen_output:
-                            # profiling
                             peak_gb = 0.0
                             try:
                                 peak_bytes = torch.cuda.max_memory_allocated()
@@ -563,7 +571,6 @@ class GeneratorService:
 
                             torch.cuda.reset_peak_memory_stats()
 
-                            # save gen outputs
                             save_path = self._write_media(gen_output, prompt.id)
                             if save_path:
                                 bt.logging.info(
@@ -572,7 +579,10 @@ class GeneratorService:
 
                         self._run_verification()
                 else:
-                    # send prompt to third party services
+                    # Third-party services currently only produce images;
+                    # only dispatch image-modality prompts to them.
+                    if modality != Modality.IMAGE:
+                        continue
                     for service_name, generator_fn in self.tp_generators.items():
                         bt.logging.info(
                             f"[GENERATOR-SERVICE] Generating with third party service: {service_name}'"
@@ -591,10 +601,12 @@ class GeneratorService:
                                     f"[GENERATOR-SERVICE] Generated and saved media file: {save_path} from prompt '{prompt.id}'"
                                 )
 
+                any_processed = True
                 bt.logging.info(
                     f"[GENERATOR-SERVICE] Completed media generation for prompt '{prompt.id}' in {time.time()-start:.2f} seconds"
                 )
-        else:
+
+        if not any_processed:
             bt.logging.warning(
                 "[GENERATOR-SERVICE] No prompts available for media generation"
             )

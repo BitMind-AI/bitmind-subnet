@@ -34,7 +34,7 @@ class PromptEntry:
 
     id: str
     content: str
-    content_type: str  # "prompt" or "search_query"
+    content_type: str  # "prompt"
     created_at: float
     used_count: int = 0
     last_used: Optional[float] = None

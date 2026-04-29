@@ -31,7 +31,7 @@ dependencies = [
     "black==25.1.0",
     "pre-commit==4.2.0",
     "diffusers==0.36.0",
-    "transformers==4.55.0",
+    "transformers>=4.57.0",  # >=4.57 required for Qwen3-VL support
     "qwen-vl-utils>=0.0.14",
     "scikit-learn==1.7.1",
     "av==14.2.0",

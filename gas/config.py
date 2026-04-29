@@ -450,7 +450,7 @@ def add_generation_service_args(parser):
         type=str,
         nargs="+",
         help="List of generation tasks to run",
-        default=["search_query", "prompt", "t2i", "i2i", "t2v", "i2v"],
+        default=["prompt", "t2i", "i2i", "t2v", "i2v"],
     )
 
     parser.add_argument(
@@ -471,14 +471,7 @@ def add_generation_service_args(parser):
         "--prompt-batch-size",
         type=int,
         help="Number of prompts to generate per cycle",
-        default=20,
-    )
-
-    parser.add_argument(
-        "--query-batch-size",
-        type=int,
-        help="Number of search queries to generate per cycle",
-        default=10,
+        default=50,
     )
 
     parser.add_argument(

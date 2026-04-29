@@ -19,7 +19,6 @@ from gas.cache import ContentManager
 from gas.config import add_args, add_data_service_args
 from gas.datasets import load_all_datasets
 from gas.datasets.download import download_and_extract
-from gas.scraping import GoogleScraper
 from gas.types import MediaType, Modality, SourceType
 from gas.utils import on_block_interval
 from gas.utils.metagraph import SubstrateConnectionManager
@@ -31,8 +30,9 @@ _VERIFICATION_STATS_LOOKBACK_HOURS = 4.0
 
 class DataService:
     """
-    Simplified data service that handles both scraping and dataset downloads directly.
-    Eliminates unnecessary OOP abstractions and manages threading internally.
+    Data service that drives dataset downloads and uploads on a substrate
+    block schedule. Threading is managed internally; no scraping path is
+    currently active.
     """
 
     def __init__(self, config):
@@ -96,19 +96,8 @@ class DataService:
         
         bt.logging.info(f"[DATA-SERVICE] Validator UID: {self.validator_uid}, Hotkey: {self.validator_wallet.hotkey.ss58_address[:16] if self.validator_wallet else 'None'}...")
 
-        # scraper initialization
-        self.scrapers = [
-            GoogleScraper(
-                headless=True,
-                max_year=2017,
-                min_width=128,
-                min_height=128,
-            )
-        ]
-
         # Dataset download vars
         self.all_datasets = load_all_datasets()
-        self.scraper_thread: Optional[Thread] = None
         self.downloader_thread: Optional[Thread] = None
         self.uploader_thread: Optional[Thread] = None
         self.uploader_thread_start_time: Optional[float] = None
@@ -130,7 +119,6 @@ class DataService:
 
         self.block_callbacks = [
             self.log_on_block,
-            #self.start_scraper_cycle,
             self.start_dataset_download,
             self.start_upload_cycle,
             self.start_cleanup_cycle,
@@ -154,7 +142,6 @@ class DataService:
         bt.logging.success("[DATA-SERVICE] Data service started successfully")
 
         await self.start_dataset_download(0)
-        #await self.start_scraper_cycle(0)
 
         # Start substrate subscription
         self.substrate_task = self.substrate_manager.start_subscription_task(self.run_callbacks)
@@ -197,9 +184,6 @@ class DataService:
         bt.logging.info("✅ Data service shutdown complete")
         self.stop_event.set()
 
-        if self.scraper_thread and self.scraper_thread.is_alive():
-            self.scraper_thread.join(timeout=10)
-
         if self.downloader_thread and self.downloader_thread.is_alive():
             self.downloader_thread.join(timeout=10)
 
@@ -225,110 +209,6 @@ class DataService:
                     f"Failed running callback {callback.__name__}: {str(e)}"
                 )
                 bt.logging.error(traceback.format_exc())
-
-    @on_block_interval("scraper_interval")
-    async def start_scraper_cycle(self, block):
-        """Start a scraper cycle at the specified block interval."""
-        try:
-            bt.logging.info(f"[DATA-SERVICE] Starting scraper cycle at block {block}")
-
-            # Launch scraper worker which will sample queries internally
-            if not self.scraper_thread or not self.scraper_thread.is_alive():
-                self.scraper_thread = Thread(
-                    target=self._scraper_worker,
-                    daemon=True,
-                )
-                self.scraper_thread.start()
-                bt.logging.info("[DATA-SERVICE] Scraper thread started")
-
-        except Exception as e:
-            bt.logging.error(f"[DATA-SERVICE] Error starting scraper cycle: {e}")
-            bt.logging.error(traceback.format_exc())
-
-    def _scraper_worker(self):
-        """Worker thread that handles scraping operations."""
-        try:
-            # Determine which scrapers need data by checking counts against thresholds
-            eligible_scrapers = []
-            for s in self.scrapers:
-                name = s.__class__.__name__
-                if self.content_manager.needs_more_data(SourceType.SCRAPER, name):
-                    eligible_scrapers.append(name)
-
-            if not eligible_scrapers:
-                bt.logging.info("[DATA-SERVICE] No scraper sources currently need data")
-                return
-
-            bt.logging.info(f"[DATA-SERVICE] Scraper sources needing data: {eligible_scrapers}")
-
-            total_saved = 0
-            for scraper in self.scrapers:
-                scraper_name = scraper.__class__.__name__
-
-                # Check if this scraper needs more data
-                if scraper_name not in eligible_scrapers:
-                    continue
-                if not self.content_manager.needs_more_data(SourceType.SCRAPER, scraper_name):
-                    continue
-
-                bt.logging.debug(f"[DATA-SERVICE] Processing {scraper_name}")
-
-                try:
-                    search_queries = self.content_manager.sample_search_queries(
-                        k=self.config.scraper_batch_size,
-                        remove=False,
-                        strategy="random",
-                    )
-
-                    if not search_queries:
-                        bt.logging.warning(f"[DATA-SERVICE] No search queries available for {scraper_name}")
-                        continue
-
-                    bt.logging.debug(f"[DATA-SERVICE] Scraping for {len(search_queries)} queries")
-
-                    for query_entry in search_queries:
-                        if self.stop_event.is_set():
-                            break
-
-                        # Check if scraper still needs data
-                        if not self.content_manager.needs_more_data(SourceType.SCRAPER, scraper_name):
-                            break
-
-                        # Scrape images for this query
-                        for query_id, image_data in scraper.download_images(
-                            queries=[query_entry.content],
-                            query_ids=[query_entry.id],
-                            source_image_paths=None,
-                            limit=10,
-                        ):
-                            if self.stop_event.is_set():
-                                break
-
-                            # Check again if scraper still needs data
-                            if not self.content_manager.needs_more_data(SourceType.SCRAPER, scraper_name):
-                                break
-
-                            # Add metadata
-                            image_data['query_id'] = query_id
-                            image_data['scraper_name'] = scraper_name
-                            image_data['modality'] = str(scraper.modality.value).lower()
-                            image_data['media_type'] = str(scraper.media_type.value).lower()
-
-                            saved = self._write_media('scraper', image_data, scraper_name=scraper_name)
-                            if saved:
-                                total_saved += 1
-
-                    bt.logging.debug(f"[DATA-SERVICE] Completed {scraper_name}")
-
-                except Exception as e:
-                    bt.logging.error(f"[DATA-SERVICE] Error in {scraper_name}: {e}")
-                    bt.logging.error(traceback.format_exc())
-
-            bt.logging.success(f"[DATA-SERVICE] Scraper worker completed. Saved {total_saved} images.")
-
-        except Exception as e:
-            bt.logging.error(f"[DATA-SERVICE] Error in scraper worker: {e}")
-            bt.logging.error(traceback.format_exc())
 
     @on_block_interval("dataset_interval")
     async def start_dataset_download(self, block):
@@ -410,19 +290,19 @@ class DataService:
         """
         Write media using the appropriate ContentManager method based on source type.
 
+        Currently the only live source type is 'dataset'. The legacy 'scraper'
+        path was retired; if it is reintroduced, add a new branch here.
+
         Args:
-            source_type: 'scraper' or 'dataset'
-            data: For scraped media, this is image_data dict. For dataset media,
-                this is (media_bytes, metadata) tuple
-            **kwargs: Additional arguments like scraper_name for scraped media
+            source_type: 'dataset'
+            data: For dataset media, this is (media_bytes, metadata) tuple
+            **kwargs: Currently unused; reserved for future source types.
 
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            if source_type == "scraper":
-                return self._write_scraped_media(data, kwargs.get("scraper_name"))
-            elif source_type == "dataset":
+            if source_type == "dataset":
                 media_content, metadata = data
                 return self._write_dataset_media(media_content, metadata)
             else:
@@ -431,34 +311,6 @@ class DataService:
 
         except Exception as e:
             bt.logging.error(f"[DATA-SERVICE] Error writing {source_type} media: {e}")
-            return False
-
-    def _write_scraped_media(self, image_data: dict, scraper_name: str) -> bool:
-        """Write scraped media using ContentManager."""
-        try:
-            save_path = self.content_manager.write_scraped_media(
-                modality=Modality(image_data["modality"].lower()),
-                media_type=MediaType(image_data["media_type"].lower()),
-                prompt_id=image_data["query_id"],
-                media_content=image_data["image_content"],
-                download_url=image_data["url"],
-                scraper_name=scraper_name,
-                resolution=(image_data["width"], image_data["height"]),
-            )
-
-            if save_path:
-                bt.logging.trace(f"[DATA-SERVICE] Saved scraped media: {save_path}")
-                return True
-            else:
-                bt.logging.warning(
-                    f"[DATA-SERVICE] Failed to save scraped media: {image_data['url']}"
-                )
-                return False
-
-        except Exception as e:
-            bt.logging.error(
-                f"[DATA-SERVICE] Error writing scraped media {image_data.get('url', 'unknown')}: {e}"
-            )
             return False
 
     def _write_dataset_media(self, media_content, metadata: dict) -> bool:
@@ -618,28 +470,19 @@ class DataService:
     def log_status(self):
         """Log current service status."""
         try:
-            scraper_status = (
-                "Running"
-                if (self.scraper_thread and self.scraper_thread.is_alive())
-                else "Stopped"
-            )
             downloader_status = (
                 "Running"
                 if (self.downloader_thread and self.downloader_thread.is_alive())
                 else "Stopped"
             )
 
-            bt.logging.info(
-                f"[DATA-SERVICE] Status - Scraper: {scraper_status} | Dataset: {downloader_status}"
-            )
+            bt.logging.info(f"[DATA-SERVICE] Status - Dataset: {downloader_status}")
         except Exception as e:
             bt.logging.warning(f"[DATA-SERVICE] Error getting status: {e}")
 
 
 async def main():
-    parser = argparse.ArgumentParser(
-        description="Combined data service (scraper + dataset)"
-    )
+    parser = argparse.ArgumentParser(description="Validator data service")
 
     add_args(parser)
     add_data_service_args(parser)
