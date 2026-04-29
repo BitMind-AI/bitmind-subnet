@@ -1,6 +1,6 @@
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import bittensor as bt
 import numpy as np
@@ -35,7 +35,7 @@ class ContentManager:
 
 		Args:
 			base_dir: Base directory for cache storage (defaults to ~/.cache/sn34)
-			max_per_source: Maximum items per source (dataset/scraper/model)
+			max_per_source: Maximum items per source (dataset/model)
 			enable_source_limits: Whether to enable source limits
 			prune_strategy: Strategy for pruning ('oldest', 'least_used', 'random')
 			remove_on_sample: Whether to remove items when sampled
@@ -58,18 +58,22 @@ class ContentManager:
 		self.min_source_threshold = int(max_per_source * float(min_source_threshold))
 		self.min_prompts_threshold = min_prompts_threshold
 
-	def write_prompt(self, content: str, content_type: str = "prompt", source_media_id: Optional[str] = None, modality: Optional[str] = None) -> str:
+	def write_prompt(
+		self,
+		content: str,
+		source_media_id: Optional[str] = None,
+		modality: Optional[str] = None,
+	) -> str:
 		try:
 			prompt_id = self.content_db.add_prompt_entry(
 				content=content,
-				content_type=content_type,
 				source_media_id=source_media_id,
-				modality=modality
+				modality=modality,
 			)
-			bt.logging.debug(f"Added {content_type} (modality={modality}) to database with ID: {prompt_id}")
+			bt.logging.debug(f"Added prompt (modality={modality}) to database with ID: {prompt_id}")
 			return prompt_id
 		except Exception as e:
-			bt.logging.error(f"Error writing {content_type} to database: {e}")
+			bt.logging.error(f"Error writing prompt to database: {e}")
 			raise
 
 	def write_generated_media(
@@ -216,75 +220,6 @@ class ContentManager:
 			bt.logging.error(f"Error writing miner media: {e}")
 			return None
 
-	def write_scraped_media(
-		self,
-		modality: Modality,
-		media_type: MediaType,
-		prompt_id: str,
-		media_content: Any,
-		download_url: str,
-		scraper_name: str,
-		mask_content: Optional[np.ndarray] = None,
-		resolution: Optional[tuple[int, int]] = None,
-	) -> Optional[str]:
-		"""
-		Write scraped media (from web sources) to storage.
-
-		Args:
-			modality: Modality.IMAGE or Modality.VIDEO
-			media_type: MediaType.REAL or MediaType.SEMISYNTHETIC
-			prompt_id: ID of the associated search query
-			media_content: The media content (PIL Image, video frames, etc.)
-			download_url: URL where the media was scraped from
-			scraper_name: Name of the scraper (e.g., 'google', 'bing')
-			mask_content: Optional mask for images
-			resolution: Optional (width, height) tuple
-
-		Returns:
-			Path to the saved media file, or None if failed
-		"""
-		media_data = Media(
-			modality=modality,
-			media_type=media_type,
-			prompt_id=prompt_id,
-			media_content=media_content,
-			format=get_format_from_content(media_content, modality),
-			model_name=None,  # Not applicable for scraped media
-			mask_content=mask_content,
-		)
-
-		save_path, mask_path = self.media_storage.write_media(media_data)
-
-		if save_path is None:
-			bt.logging.error("Failed to write scraped media to filesystem")
-			return None
-
-		# Use provided resolution if available, otherwise extract from file
-		if resolution is None:
-			resolution, file_size = extract_media_info(save_path, media_data.modality)
-		else:
-			file_size = extract_media_info(save_path, media_data.modality)[1]
-
-		media_id = self.content_db.add_media_entry(
-			prompt_id=media_data.prompt_id,
-			file_path=save_path,
-			modality=media_data.modality,
-			media_type=media_data.media_type,
-			source_type=SourceType.SCRAPER,
-			download_url=download_url,
-			scraper_name=scraper_name,
-			mask_path=mask_path,
-			timestamp=int(time.time()),
-			resolution=resolution,
-			file_size=file_size,
-			format=media_data.format,
-		)
-
-		bt.logging.info(
-			f"Saved scraped media to {save_path} with database ID: {media_id}"
-		)
-		return save_path
-
 	def write_dataset_media(
 		self,
 		modality: Modality,
@@ -293,7 +228,6 @@ class ContentManager:
 		dataset_name: str,
 		dataset_source_file: str,
 		dataset_index: str,
-		mask_content: Optional[np.ndarray] = None,
 		resolution: Optional[tuple[int, int]] = None,
 	) -> Optional[str]:
 		"""
@@ -306,7 +240,6 @@ class ContentManager:
 			dataset_name: Name/path of the dataset (e.g., 'laion/laion2B-en')
 			dataset_source_file: Source file within dataset (e.g., 'data_001.parquet')
 			dataset_index: Index within the dataset file
-			mask_content: Optional mask for images
 			resolution: Optional (width, height) tuple
 
 		Returns:
@@ -315,11 +248,11 @@ class ContentManager:
 		media_data = Media(
 			modality=modality,
 			media_type=media_type,
-			prompt_id=None,  # Dataset media is not tied to prompts
+			prompt_id=None,
 			media_content=media_content,
 			format=get_format_from_content(media_content, modality),
-			model_name=None,  # Not applicable for dataset media
-			mask_content=mask_content,
+			model_name=None,
+			mask_content=None,
 		)
 
 		save_path, mask_path = self.media_storage.write_media(media_data)
@@ -354,15 +287,15 @@ class ContentManager:
 		return save_path
 
 	def sample_prompts(
-        self, k: 
-        int = 1, 
-        remove: bool = False, 
-        strategy: str = "random",
-        modality: Optional[str] = None
+		self,
+		k: int = 1,
+		remove: bool = False,
+		strategy: str = "random",
+		modality: Optional[str] = None,
 	) -> List[PromptEntry]:
 		"""
 		Sample prompts from the database.
-		
+
 		Args:
 			k: Number of prompts to sample
 			remove: If True, deletes sampled prompts (only if min_prompts_threshold remain)
@@ -370,32 +303,15 @@ class ContentManager:
 			modality: Optional modality filter ('image', 'video', 'audio')
 		"""
 		return self.content_db.sample_prompt_entries(
-			k=k, 
-			remove=remove, 
-			strategy=strategy, 
-			content_type="prompt", 
+			k=k,
+			remove=remove,
+			strategy=strategy,
 			modality=modality,
 			min_prompts_threshold=self.min_prompts_threshold,
 		)
 
 	def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
 		return self.content_db.get_prompt_by_id(prompt_id)
-
-	def sample_media(
-		self,
-		k: int = 1,
-		modality: Modality = Modality.IMAGE,
-		media_type: MediaType = MediaType.SYNTHETIC,
-		remove: bool = False,
-		strategy: str = "random"
-	) -> List[MediaEntry]:
-		return self.content_db.sample_media_entries(
-			k=k,
-			modality=modality,
-			media_type=media_type,
-			strategy=strategy,
-			remove=remove
-		)
 
 	def sample_media_with_content(
 		self,
@@ -405,7 +321,6 @@ class ContentManager:
 		remove_from_cache: bool = None,
 		**kwargs,
 	) -> Optional[Dict[str, Any]]:
-        
 		should_remove = remove_from_cache if remove_from_cache is not None else self.remove_on_sample
 		media_entries = self.content_db.sample_media_entries(
 			k=count,
@@ -415,7 +330,7 @@ class ContentManager:
 			remove=False,
 		)
 		if not media_entries:
-			print(f"No media available in database for {modality}/{media_type}")
+			bt.logging.debug(f"No media available in database for {modality}/{media_type}")
 			return {'count': 0, 'items': []}
 
 		# Split by source_type so we only remove dataset/scraper on sample
@@ -485,10 +400,9 @@ class ContentManager:
 				were composed for image generation.
 		"""
 		prompt_entries = self.content_db.sample_prompt_entries(
-			k=k, 
-			remove=remove, 
-			strategy=strategy, 
-			content_type="prompt",
+			k=k,
+			remove=remove,
+			strategy=strategy,
 			modality=modality,
 			min_prompts_threshold=self.min_prompts_threshold,
 		)
@@ -510,19 +424,6 @@ class ContentManager:
 					"media": media_content["items"][0]
 				})
 		return results
-
-	def _check_and_prune_source(self, source_type: SourceType, source_name: str, max_count: int) -> int:
-		if not self.enable_source_limits:
-			return 0
-		current_count = self.content_db.get_source_count(source_type, source_name)
-		if current_count >= max_count:
-			pruned = self.content_db.prune_source_media(
-				source_type, source_name, max_count, self.prune_strategy
-			)
-			if pruned > 0:
-				bt.logging.info(f"Pruned {pruned} items from {source_type.value} '{source_name}' to enforce cap {max_count}")
-			return pruned
-		return 0
 
 	def enforce_source_caps(self) -> Dict[str, int]:
 		results: Dict[str, int] = {}
@@ -578,9 +479,6 @@ class ContentManager:
 
 		return deleted_count
 
-	def get_media_entry_by_file_path(self, file_path: str) -> Optional[MediaEntry]:
-		return self.content_db.get_media_entry_by_file_path(file_path)
-
 	def delete_media(self, file_path: str = None, media_id: str = None) -> bool:
 		if not file_path and not media_id:
 			return False
@@ -604,9 +502,6 @@ class ContentManager:
 			bt.logging.error(f"Error deleting media: {e}")
 			return False
 
-	def delete_media_by_file_path(self, file_path: str) -> bool:
-		return self.delete_media(file_path=file_path)
-
 	def get_miner_media(self, verification_status: Optional[str] = None) -> List[MediaEntry]:
 		"""
 		Get miner media by verification status.
@@ -625,8 +520,7 @@ class ContentManager:
 
 	def get_pending_verification_count(self) -> int:
 		"""Get count of media entries pending verification."""
-		pending_media = self.get_miner_media(verification_status="pending")
-		return len(pending_media)
+		return self.content_db.count_miner_media(verification_status="pending")
 
 	def mark_miner_media_verified(self, media_id: str) -> bool:
 		return self.content_db.mark_miner_media_verified(media_id)
@@ -760,117 +654,6 @@ class ContentManager:
 		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
 		return verification_stats
 
-	def _build_verification_stats_from_verified_media(
-		self, verified_media: List[MediaEntry]
-	) -> Dict[str, Dict[str, Any]]:
-		"""Build verification stats dict from a list of verified media entries (failed from all-time)."""
-		miner_stats = {}
-		for media in verified_media:
-			if not media.hotkey or not media.uid:
-				continue
-			hotkey = media.hotkey
-			if hotkey not in miner_stats:
-				miner_stats[hotkey] = {
-					"uid": media.uid,
-					"verified_media_ids": [],
-					"total_verified": 0,
-					"total_submissions": 0,
-					"total_failed": 0,
-					"last_timestamp": media.created_at
-				}
-			miner_stats[hotkey]["verified_media_ids"].append(media.id)
-			miner_stats[hotkey]["total_verified"] += 1
-			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
-				miner_stats[hotkey]["last_timestamp"] = media.created_at
-
-		for hotkey, stats in miner_stats.items():
-			uid = stats["uid"]
-			all_miner_media = self.get_miner_media(verification_status=None)
-			miner_media = [m for m in all_miner_media if m.hotkey == hotkey and m.uid == uid]
-			stats["total_submissions"] = len(miner_media)
-			stats["total_failed"] = len([m for m in miner_media if m.failed_verification])
-
-		verification_stats = {}
-		for hotkey, stats in miner_stats.items():
-			verified = stats["total_verified"]
-			failed = stats["total_failed"]
-			total_evaluated = verified + failed
-			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
-			verification_stats[hotkey] = {
-				"uid": stats["uid"],
-				"total_verified": verified,
-				"total_submissions": stats["total_submissions"],
-				"total_failed": failed,
-				"total_evaluated": total_evaluated,
-				"pass_rate": pass_rate,
-				"media_ids": stats["verified_media_ids"],
-				"last_timestamp": stats["last_timestamp"]
-			}
-		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
-		return verification_stats
-
-	def get_unrewarded_verification_stats(self, limit: int = None, include_all: bool = False, lookback_hours: float = None) -> Dict[str, Dict[str, Any]]:
-		"""
-		Get verification statistics for miner media (pass rates, etc.).
-		Returns raw statistics without computing rewards - that's done in rewards.py.
-
-		Args:
-			limit: Maximum number of entries to consider per miner
-			include_all: If False (default), only return stats for unrewarded media.
-						If True, return stats for ALL verified media (rewarded + unrewarded)
-			lookback_hours: If provided, use time-based lookback instead of rewarded flag.
-						   Returns all verified media from the last N hours regardless of
-						   rewarded status. This ensures miners with recent verified submissions
-						   are always eligible for rewards.
-
-		Returns:
-			Dict mapping miner hotkey to verification stats:
-			{
-				"hotkey": {
-					"uid": int,
-					"total_verified": int,        # Count of verified media
-					"total_submissions": int,     # Count of all submissions (verified + failed + pending)
-					"total_failed": int,         # Count of failed verification media
-					"total_evaluated": int,      # Count of evaluated media (verified + failed)
-					"pass_rate": float,          # verified / (verified + failed)
-					"media_ids": List[str],      # IDs of verified media to mark as rewarded
-					"last_timestamp": float      # Creation timestamp of most recent verified media sample
-				}
-			}
-		"""
-		try:
-			if lookback_hours is not None:
-				verified_media = self.get_recent_verified_miner_media(
-					lookback_hours=lookback_hours, limit=limit or 1000
-				)
-				unrewarded_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
-				if len(unrewarded_media) == 0 and len(verified_media) > 0:
-					bt.logging.warning(
-						f"Time-based lookback found {len(verified_media)} verified media, "
-						f"but rewarded-flag approach found 0. This indicates a timing edge case."
-					)
-				elif len(unrewarded_media) != len(verified_media):
-					bt.logging.debug(
-						f"Time-based: {len(verified_media)} media, rewarded-flag: {len(unrewarded_media)} media"
-					)
-			elif include_all:
-				verified_media = self.get_miner_media(verification_status="verified")
-				if limit and len(verified_media) > limit:
-					verified_media = verified_media[:limit]
-			else:
-				verified_media = self.get_unrewarded_verified_miner_media(limit=limit or 1000)
-			
-			if not verified_media:
-				bt.logging.debug("No verified miner media found")
-				return {}
-			return self._build_verification_stats_from_verified_media(verified_media)
-
-		except Exception as e:
-			bt.logging.error(f"Error getting unrewarded verification stats: {e}")
-			import traceback
-			bt.logging.error(traceback.format_exc())
-			return {}
-
 	def upload_batch_to_huggingface(
 		self, 
 		hf_token: str, 
@@ -991,25 +774,11 @@ class ContentManager:
 		"""
 		return self.content_db.get_dataset_media_counts()
 
-	def get_sources_needing_data(self) -> Dict[str, List[str]]:
-		"""
-		Returns:
-			Dictionary with source types as keys and lists of source names that need data
-		"""
-		source_stats = self.content_db.get_source_counts()
-		sources_needing_data: Dict[str, List[str]] = {}
-		for source_type, sources in source_stats.items():
-			sources_needing_data[source_type] = []
-			for source_name, count in sources.items():
-				if count < self.min_source_threshold:
-					sources_needing_data[source_type].append(source_name)
-		return sources_needing_data
-
 	def get_source_count(self, source_type: SourceType, source_name: str) -> int:
 		"""
 		Args:
-			source_type: SourceType.DATASET, SourceType.SCRAPER, or SourceType.GENERATED
-			source_name: Name of the dataset, scraper, or model
+			source_type: SourceType.DATASET or SourceType.GENERATED
+			source_name: Name of the dataset or model
 
 		Returns:
 			Count of media items for this source
@@ -1019,7 +788,7 @@ class ContentManager:
 	def needs_more_data(self, source_type: SourceType, source_name: str) -> bool:
 		"""
 		Args:
-			source_type: SourceType.DATASET, SourceType.SCRAPER, or SourceType.GENERATED
+			source_type: SourceType.DATASET or SourceType.GENERATED
 			source_name: Name of the source
 
 		Returns:
@@ -1048,35 +817,6 @@ class ContentManager:
 		"""
 		from gas.verification.duplicate_detection import check_duplicate_in_db
 		return check_duplicate_in_db(self.content_db, perceptual_hash, threshold, limit, prompt_id=prompt_id)
-
-	def compute_and_check_duplicate(
-		self,
-		media_content: bytes,
-		modality: str,
-		threshold: int = 8,
-	) -> tuple:
-		"""
-		Compute perceptual hash for media and check for duplicates.
-
-		Args:
-			media_content: Raw media bytes
-			modality: "image" or "video"
-			threshold: Hamming distance threshold for duplicates
-
-		Returns:
-			Tuple of (perceptual_hash, is_duplicate, duplicate_info)
-			where duplicate_info is (media_id, distance) if duplicate found, else None
-		"""
-		from gas.verification.duplicate_detection import compute_media_hash
-
-		perceptual_hash = compute_media_hash(media_content, modality=modality)
-		if not perceptual_hash:
-			return None, False, None
-
-		duplicate_info = self.check_duplicate(perceptual_hash, threshold)
-		is_duplicate = duplicate_info is not None
-
-		return perceptual_hash, is_duplicate, duplicate_info
 
 	def cleanup_uploaded_media(
 		self,

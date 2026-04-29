@@ -93,7 +93,7 @@ def get_generator_base_rewards(verification_stats):
 
     Args:
         verification_stats: Dict mapping hotkey to verification stats from
-                            ContentManager.get_unrewarded_verification_stats()
+                            ContentManager.get_verification_stats_last_n_hours()
             Expected format:
             {
                 "hotkey": {

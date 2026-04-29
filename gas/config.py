@@ -496,16 +496,9 @@ def add_data_service_args(parser):
     """Add data service specific arguments to the parser."""
 
     parser.add_argument(
-        "--scraper-interval",
-        type=int,
-        help="Scraper interval in blocks (default: 300 = 1 hour)",
-        default=300,
-    )
-
-    parser.add_argument(
         "--upload-check-interval",
         type=int,
-        help="Upload interval  in blocks (default: 300 = 1 hour)",
+        help="Upload interval in blocks (default: 300 = 1 hour)",
         default=300,
     )
 
@@ -517,17 +510,17 @@ def add_data_service_args(parser):
     )
 
     parser.add_argument(
-        "--exclude-tags",
+        "--hf-image-repo",
         type=str,
-        help="Comma-separated list of tags to exclude from downloads",
-        default="",
+        help="HuggingFace dataset repo for uploaded images",
+        default="gasstation/gs-images-v3",
     )
 
     parser.add_argument(
-        "--scraper-batch-size",
-        type=int,
-        help="Batch size for scraper operations",
-        default=10,
+        "--hf-video-repo",
+        type=str,
+        help="HuggingFace dataset repo for uploaded videos",
+        default="gasstation/gs-videos-v3",
     )
 
     parser.add_argument(

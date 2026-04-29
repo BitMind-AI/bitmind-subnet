@@ -64,7 +64,6 @@ const config = {
   heartbeat: process.env.HEARTBEAT || 'false',
   
   // Service intervals
-  scraperInterval: process.env.SCRAPER_INTERVAL || '300',
   datasetInterval: process.env.DATASET_INTERVAL || '1800',
   
   // API configuration
@@ -184,7 +183,6 @@ if (config.startData) {
       '--netuid', netuid.toString(),
       '--subtensor.chain_endpoint', config.chainEndpoint,
       '--cache.base-dir', config.cacheDir,
-      '--scraper-interval', config.scraperInterval,
       '--dataset-interval', config.datasetInterval,
       logParam,
     ].join(' '),

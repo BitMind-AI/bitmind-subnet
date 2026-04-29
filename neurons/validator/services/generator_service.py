@@ -74,12 +74,6 @@ class GeneratorService:
                 "[GENERATOR-SERVICE] No HuggingFace token found in environment"
             )
 
-        self.hf_org = "gasstation"
-        self.hf_dataset_repos = {
-            "image": f"{self.hf_org}/gs-image-v2",
-            "video": f"{self.hf_org}/gs-video-v2",
-        }
-
         self.tp_generators = {"nano_banana": nano_banana.generate_image}
 
         self._first_run_profiled = False
@@ -482,7 +476,6 @@ class GeneratorService:
                 for modality, prompt in prompts_by_modality.items():
                     self.content_manager.write_prompt(
                         content=prompt,
-                        content_type="prompt",
                         source_media_id=item["id"],
                         modality=modality.value,
                     )
