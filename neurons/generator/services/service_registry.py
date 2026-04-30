@@ -6,12 +6,14 @@ from .base_service import BaseGenerationService
 from .openai_service import OpenAIService
 from .openrouter_service import OpenRouterService
 from .stabilityai_service import StabilityAIService
+from .runway_service import RunwayService
 
 
 SERVICE_MAP = {
     "openai": OpenAIService,
     "openrouter": OpenRouterService,
     "stabilityai": StabilityAIService,
+    "runway": RunwayService,
     #"local": LocalService,
 }
 
@@ -22,12 +24,13 @@ class ServiceRegistry:
 
     Set per-modality service via env vars:
       IMAGE_SERVICE=openai|openrouter|stabilityai|none
-      VIDEO_SERVICE=openai|openrouter|stabilityai|none
+      VIDEO_SERVICE=openai|openrouter|stabilityai|runway|none
 
     Services:
-      - openai: DALL-E 3 (requires OPENAI_API_KEY) - produces C2PA-signed content
+      - openai: DALL-E 3 / Sora video (requires OPENAI_API_KEY) - produces C2PA-signed content
       - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY) - produces C2PA-signed content
-      - stabilityai: Stability AI (requires STABILITY_API_KEY) - produces C2PA-signed content
+      - stabilityai: Stability AI images (requires STABILITY_API_KEY) - produces C2PA-signed content
+      - runway: Runway text-to-video (requires RUNWAYML_API_SECRET)
       - none: Disable this modality (requests will be rejected)
 
     If not set, falls back to loading all available services.
@@ -138,7 +141,7 @@ class ServiceRegistry:
         """Get API key requirements from all services."""
         all_requirements = {
             "IMAGE_SERVICE": "Service for images: openai, openrouter, stabilityai, or none",
-            "VIDEO_SERVICE": "Service for videos: openai, openrouter, stabilityai, or none",
+            "VIDEO_SERVICE": "Service for videos: openai, openrouter, stabilityai, runway, or none",
         }
 
         for name, service_class in SERVICE_MAP.items():
