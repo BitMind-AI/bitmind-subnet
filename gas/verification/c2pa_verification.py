@@ -416,6 +416,8 @@ def _check_validation_status(manifest_data: Dict[str, Any]) -> List[str]:
         critical_codes = [
             "assertion.hashedURI.mismatch",
             "assertion.dataHash.mismatch",
+            # ISO BMFF (MP4/MOV): video tampering after signing surfaces here 
+            "assertion.bmffHash.mismatch",
             "claim.signature.mismatch",
             "signingCredential.invalid",
             "signingCredential.expired",
@@ -428,6 +430,8 @@ def _check_validation_status(manifest_data: Dict[str, Any]) -> List[str]:
             code = status.get("code", "")
             explanation = status.get("explanation", "")
             if any(critical in code for critical in critical_codes):
+                errors.append(f"{code}: {explanation}")
+            elif "mismatch" in code.lower():
                 errors.append(f"{code}: {explanation}")
             elif code and "error" in code.lower():
                 errors.append(f"{code}: {explanation}")
