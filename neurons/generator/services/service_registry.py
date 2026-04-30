@@ -30,7 +30,7 @@ class ServiceRegistry:
       - openai: DALL-E 3 / Sora video (requires OPENAI_API_KEY) - produces C2PA-signed content
       - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY) - produces C2PA-signed content
       - stabilityai: Stability AI images (requires STABILITY_API_KEY) - produces C2PA-signed content
-      - runway: Runway text-to-video (requires RUNWAYML_API_SECRET)
+      - runway: Runway text-to-video (requires RUNWAYML_API_KEY or RUNWAYML_API_SECRET)
       - none: Disable this modality (requests will be rejected)
 
     If not set, falls back to loading all available services.

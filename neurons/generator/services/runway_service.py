@@ -1,7 +1,11 @@
 """
 Runway ML text-to-video via the official runwayml Python SDK.
 
-Uses RUNWAYML_API_SECRET (see https://docs.dev.runwayml.com/api/).
+Credential env vars (first match wins):
+  RUNWAYML_API_KEY — preferred; same naming pattern as OPENAI_API_KEY / STABILITY_API_KEY.
+  RUNWAYML_API_SECRET — Runway's default SDK/env name (see Runway API docs).
+
+We pass ``api_key`` explicitly to ``RunwayML``, so either variable works.
 """
 
 from __future__ import annotations
@@ -29,6 +33,20 @@ TEXT_TO_VIDEO_MODELS: frozenset[str] = frozenset(
 VEO31_RATIOS = frozenset({"1280:720", "720:1280", "1080:1920", "1920:1080"})
 GEN45_RATIOS = frozenset({"1280:720", "720:1280"})
 VEO_DURATIONS = (4, 6, 8)
+
+
+def resolve_runway_api_key() -> str | None:
+    """
+    Read Runway API key from the environment.
+
+    Prefer ``RUNWAYML_API_KEY`` (subnet convention); fall back to ``RUNWAYML_API_SECRET``
+    (official runwayml package default) so copies from Runway docs still work.
+    """
+    key = os.getenv("RUNWAYML_API_KEY") or os.getenv("RUNWAYML_API_SECRET")
+    if key is None:
+        return None
+    stripped = key.strip()
+    return stripped or None
 
 
 def canonical_text_to_video_model(model: Any) -> str:
@@ -70,16 +88,16 @@ class RunwayService(BaseGenerationService):
 
     def __init__(self, config: Any = None):
         super().__init__(config)
-        self.api_key = os.getenv("RUNWAYML_API_SECRET")
+        self.api_key = resolve_runway_api_key()
         self._client = None
         self.download_timeout = 600
 
-        if self.api_key and self.api_key.strip():
+        if self.api_key:
             try:
                 from runwayml import RunwayML
 
-                self._client = RunwayML()
-                bt.logging.info("RunwayService initialized (RUNWAYML_API_SECRET set)")
+                self._client = RunwayML(api_key=self.api_key)
+                bt.logging.info("RunwayService initialized (RUNWAYML_API_KEY or RUNWAYML_API_SECRET)")
             except ImportError:
                 bt.logging.warning(
                     "runwayml package not installed. Install with: pip install runwayml"
@@ -87,7 +105,9 @@ class RunwayService(BaseGenerationService):
             except Exception as e:
                 bt.logging.error(f"Failed to initialize RunwayML client: {e}")
         else:
-            bt.logging.warning("RUNWAYML_API_SECRET not set; RunwayService unavailable")
+            bt.logging.warning(
+                "Runway API key not set; set RUNWAYML_API_KEY or RUNWAYML_API_SECRET"
+            )
 
     def is_available(self) -> bool:
         return (
@@ -112,7 +132,8 @@ class RunwayService(BaseGenerationService):
 
     def get_api_key_requirements(self) -> Dict[str, str]:
         return {
-            "RUNWAYML_API_SECRET": "Runway API key for text-to-video (RUNWAY Gen / Veo, etc.)"
+            "RUNWAYML_API_KEY": "Runway API key for text-to-video (preferred; matches other *_API_KEY vars)",
+            "RUNWAYML_API_SECRET": "Same credential as RUNWAYML_API_KEY; official runwayml SDK env name",
         }
 
     def process(self, task: GenerationTask) -> Dict[str, Any]:
