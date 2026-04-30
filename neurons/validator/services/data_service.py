@@ -95,6 +95,11 @@ class DataService:
         self.is_running = False
         self.step = 0
 
+        # Required by the @on_block_interval decorator. DataService's init is
+        # fully synchronous, so callbacks are safe to run as soon as the
+        # substrate subscription starts.
+        self.initialization_complete = True
+
         self.substrate_manager = SubstrateConnectionManager(
             url=self.config.subtensor.chain_endpoint,
             ss58_format=SS58_FORMAT,
@@ -293,6 +298,9 @@ class DataService:
                 )
                 return False
 
+            # `metadata["modality"]` may be a `Modality` enum (which subclasses
+            # `str`, so `.lower()` returns the value) or a plain string.
+            # `Modality(...)` is idempotent for the enum case.
             dataset_source_file = metadata.get("source_parquet") or metadata.get(
                 "source_zip", "unknown"
             )
@@ -302,7 +310,7 @@ class DataService:
             dataset_name = metadata.get("dataset_path", "unknown")
 
             save_path = self.content_manager.write_dataset_media(
-                modality=Modality(str(modality_raw).lower()),
+                modality=Modality(modality_raw.lower()),
                 media_type=MediaType(media_type_raw),
                 media_content=media_content,
                 dataset_name=dataset_name,

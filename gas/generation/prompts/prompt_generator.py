@@ -38,8 +38,9 @@ from __future__ import annotations
 import gc
 import json
 import re
+from collections import deque
 from dataclasses import asdict
-from typing import Dict, Optional
+from typing import Deque, Dict, Optional
 
 import bittensor as bt
 import torch
@@ -91,12 +92,14 @@ _VIDEO_SYSTEM = (
     "- Ground subject motion in what plausibly moves: prefer the scene's "
     "`dynamic_candidates` and `observed_motion_cues`. Do not invent "
     "subjects or actions that aren't implied by the scene.\n"
-    "- Use specific cinematographic language: e.g. 'slow dolly-in on a "
-    "35mm lens', 'handheld at eye level tracking left', 'static wide "
-    "with shallow depth of field', 'aerial pull-back at golden hour'.\n"
-    "- Use specific, vivid motion verbs: 'drifts', 'scatters', 'billows', "
-    "'ripples', 'unfurls', 'spirals'. Avoid weak verbs like 'moves', "
-    "'is', 'happens'.\n"
+    "- Use specific cinematographic language. Choose shot framing, "
+    "camera movement, focal length, and depth-of-field that genuinely "
+    "fit THIS scene. Range widely across the full vocabulary of "
+    "cinematography from call to call; do not anchor on a small "
+    "rotation of moves or lenses.\n"
+    "- Use specific, vivid motion verbs (e.g. 'drifts', 'scatters', "
+    "'billows', 'ripples', 'unfurls', 'spirals'); avoid weak verbs "
+    "like 'moves', 'is', 'happens'. Vary your verb choices.\n"
     "- Avoid clichés and marketing words: 'breathtaking', 'stunning', "
     "'masterpiece', 'cinematic masterpiece', 'epic'. Avoid hedging: "
     "'perhaps', 'might', 'seems'.\n"
@@ -117,7 +120,9 @@ _IMAGE_SYSTEM = (
     "REQUIREMENTS\n"
     "- 60-120 words, one paragraph, no line breaks.\n"
     "- Lead with subject + action + setting, then layer in: lighting "
-    "quality, color palette, mood, composition, style/medium.\n"
+    "quality, color palette, mood, composition, style/medium. Vary the "
+    "structure and vocabulary you use across calls; do not anchor on a "
+    "small rotation of compositional or lighting tropes.\n"
     "- Use specific visual nouns: 'storm clouds gathering above the "
     "ridge', not 'moody sky'; 'rim light from a north-facing window', "
     "not 'soft light'.\n"
@@ -141,6 +146,17 @@ class PromptGenerator:
     batch via `clear_gpu()`.
     """
 
+    # Sliding window cap for the per-modality prior-prompt history that
+    # is re-injected into each user message for diversity pressure.
+    # Capped because input context drives both per-call latency (linear
+    # prefill cost) and peak VRAM: ~70GB resident across VLM + 30B-A3B
+    # LLM on an 80GB card leaves only ~10GB for activations + KV cache,
+    # and an unbounded history OOMs at high batch indices. 12 is well
+    # above the 4-example anchor that originally biased the system
+    # prompt, so the marginal diversity benefit of going higher is
+    # small while the VRAM cost is linear.
+    _PRIOR_WINDOW = 12
+
     def __init__(
         self,
         vlm_name: str = IMAGE_ANNOTATION_MODEL,
@@ -160,6 +176,9 @@ class PromptGenerator:
         self.vlm_processor = None
         self.vlm = None
         self.llm = None
+
+        self._prior_image_prompts: Deque[str] = deque(maxlen=self._PRIOR_WINDOW)
+        self._prior_video_prompts: Deque[str] = deque(maxlen=self._PRIOR_WINDOW)
 
     # ------------------------------------------------------------------
     # Model loading
@@ -239,6 +258,9 @@ class PromptGenerator:
             self.load_vlm()
         if self.llm is None:
             self.load_llm()
+        # Fresh batch -> fresh diversity baseline.
+        self._prior_image_prompts.clear()
+        self._prior_video_prompts.clear()
 
     def clear_gpu(self) -> None:
         """Drop both models and reclaim VRAM."""
@@ -250,6 +272,8 @@ class PromptGenerator:
         if self.llm is not None:
             del self.llm
             self.llm = None
+        self._prior_image_prompts.clear()
+        self._prior_video_prompts.clear()
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -281,10 +305,37 @@ class PromptGenerator:
         image_prompt = self._compose(scene, kind="image")
         video_prompt = self._compose(scene, kind="video")
 
-        bt.logging.trace(
-            f"Composed prompts: subject='{scene.subject}' kind={scene.scene_kind}"
-        )
+        self._log_generated_prompts(scene, image_prompt, video_prompt)
         return {Modality.IMAGE: image_prompt, Modality.VIDEO: video_prompt}
+
+    @staticmethod
+    def _log_generated_prompts(
+        scene: SceneDescription, image_prompt: str, video_prompt: str
+    ) -> None:
+        """Emit a single human-scannable log block per source image.
+
+        Logs at INFO so prompts surface in default pm2 output for QC.
+        Format is intentionally compact (one labelled block, full prompts
+        verbatim) so you can grep by `[PROMPT-GEN]` and read each
+        generation top-to-bottom.
+        """
+        caption = (scene.caption or "").strip().replace("\n", " ")
+        if len(caption) > 280:
+            caption = caption[:277] + "..."
+
+        bt.logging.info(
+            "\n"
+            "[PROMPT-GEN] ─────────────────────────────────────────────────\n"
+            f"  scene_kind : {scene.scene_kind}\n"
+            f"  subject    : {scene.subject}\n"
+            f"  setting    : {scene.setting}\n"
+            f"  caption    : {caption}\n"
+            f"  IMAGE ({len(image_prompt)} chars):\n"
+            f"    {image_prompt}\n"
+            f"  VIDEO ({len(video_prompt)} chars):\n"
+            f"    {video_prompt}\n"
+            "[PROMPT-GEN] ─────────────────────────────────────────────────"
+        )
 
     # ------------------------------------------------------------------
     # LLM composition
@@ -300,15 +351,19 @@ class PromptGenerator:
         if kind == "video":
             system = _VIDEO_SYSTEM
             max_new_tokens = 400
-            temperature = 0.85
+            temperature = 1.0
+            prior = self._prior_video_prompts
+            length_spec = "100-180 words"
         elif kind == "image":
             system = _IMAGE_SYSTEM
             max_new_tokens = 260
-            temperature = 0.8
+            temperature = 0.95
+            prior = self._prior_image_prompts
+            length_spec = "60-120 words"
         else:
             raise ValueError(f"Unknown kind: {kind}")
 
-        user = self._build_user_message(scene)
+        user = self._build_user_message(scene, prior, length_spec)
 
         messages = [
             {"role": "system", "content": system},
@@ -320,30 +375,72 @@ class PromptGenerator:
             max_new_tokens=max_new_tokens,
             do_sample=True,
             temperature=temperature,
-            top_p=0.92,
+            top_p=0.95,
             repetition_penalty=1.05,
             return_full_text=False,
             pad_token_id=self.llm.tokenizer.eos_token_id,
         )
-        text = out[0]["generated_text"]
-        return self._clean_output(text)
+        text = self._clean_output(out[0]["generated_text"])
+        prior.append(text)
+        return text
 
     @staticmethod
-    def _build_user_message(scene: SceneDescription) -> str:
-        """Compact prompt: the JSON facts + the dense caption."""
+    def _build_user_message(
+        scene: SceneDescription,
+        prior_prompts: Deque[str],
+        length_spec: str,
+    ) -> str:
+        """Build the user turn: scene facts + dense caption + prior-prompt feedback.
+
+        `prior_prompts` is the recent per-modality composition history
+        for the current batch (sliding window, capped at `_PRIOR_WINDOW`
+        most recent, verbatim). Re-injecting it lets the LLM actively
+        diversify against its own past output along every dimension
+        (shot type, camera move, lens, lighting, palette, opener,
+        vocabulary, sentence structure) without us hardcoding any
+        option lists.
+
+        `length_spec` restates the system-prompt word range here in the
+        user turn because LLMs weight closer-to-output instructions more
+        heavily, and the verbose prior-prompt history was inflating
+        outputs above the system-prompt cap.
+        """
         scene_dict = asdict(scene)
         # Drop the dense caption from the JSON since we surface it
         # explicitly below; keeps the JSON focused on structured facts.
         caption = scene_dict.pop("caption", "")
-
         scene_json = json.dumps(scene_dict, indent=2, ensure_ascii=False)
-        return (
-            "Reference image, structured scene facts (from VLM):\n"
-            f"{scene_json}\n\n"
-            "Dense caption of the same image (from VLM):\n"
-            f"{caption}\n\n"
-            "Compose the prompt now. Output the paragraph only."
-        )
+
+        parts = [
+            "Reference image, structured scene facts (from VLM):",
+            scene_json,
+            "",
+            "Dense caption of the same image (from VLM):",
+            caption,
+        ]
+
+        if prior_prompts:
+            history = "\n\n".join(
+                f"[{i}] {p}" for i, p in enumerate(prior_prompts, start=1)
+            )
+            parts += [
+                "",
+                "Your earlier compositions in this batch are below. Make THIS "
+                "composition demonstrably different from them across shot "
+                "framing, camera movement, focal length, lighting, color "
+                "palette, mood, opening sentence structure, and vocabulary. "
+                "Do not echo their phrasings. Diverse output across the "
+                "batch is required.",
+                "",
+                history,
+            ]
+
+        parts += [
+            "",
+            f"Strict length: {length_spec}. Do not exceed.",
+            "Compose the prompt now. Output the paragraph only.",
+        ]
+        return "\n".join(parts)
 
     @staticmethod
     def _clean_output(text: str) -> str:

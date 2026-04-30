@@ -76,7 +76,12 @@ DATA_CMD+=" --dataset-interval ${DATASET_INTERVAL}"
 DATA_CMD+=" ${LOG_PARAM}"
 
 # ── Shared env ──────────────────────────────────────────────────────────────
-export HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN:-${HF_TOKEN:-}}"
+export HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN:-}"
+# expandable_segments collapses fragmented allocator segments so
+# reserved-but-unallocated VRAM (often several GiB at equilibrium)
+# becomes reusable. Critical at the ~70GB VLM+LLM working set on an
+# 80GB card where headroom for activations is tight.
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 mkdir -p /root/.cache/sn34/tmp /root/.cache/huggingface
 
 # ── Run one service ────────────────────────────────────────────────────────

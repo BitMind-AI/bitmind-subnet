@@ -121,7 +121,7 @@ class GenerationPipeline:
 
             model_id = pipeline_args.pop("model_id", model_name)
             
-            hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN") or os.environ.get("HF_TOKEN")
+            hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
 
             if isinstance(pipeline_cls, dict):
                 # Multi-stage pipeline
