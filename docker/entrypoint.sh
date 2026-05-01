@@ -13,7 +13,6 @@ set -euo pipefail
 : "${DEVICE:=cuda}"
 : "${LOGLEVEL:=info}"
 : "${BENCHMARK_API_URL:=https://gas.bitmind.ai}"
-: "${SCRAPER_INTERVAL:=300}"
 : "${DATASET_INTERVAL:=1800}"
 : "${HEARTBEAT:=false}"
 : "${WANDB_API_KEY:=}"
@@ -73,12 +72,16 @@ DATA_CMD+=" --wallet.hotkey ${WALLET_HOTKEY}"
 DATA_CMD+=" --netuid ${NETUID}"
 DATA_CMD+=" --subtensor.chain_endpoint ${CHAIN_ENDPOINT}"
 DATA_CMD+=" --cache.base-dir /root/.cache/sn34"
-DATA_CMD+=" --scraper-interval ${SCRAPER_INTERVAL}"
 DATA_CMD+=" --dataset-interval ${DATASET_INTERVAL}"
 DATA_CMD+=" ${LOG_PARAM}"
 
 # ── Shared env ──────────────────────────────────────────────────────────────
-export HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN:-${HF_TOKEN:-}}"
+export HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN:-}"
+# expandable_segments collapses fragmented allocator segments so
+# reserved-but-unallocated VRAM (often several GiB at equilibrium)
+# becomes reusable. Critical at the ~70GB VLM+LLM working set on an
+# 80GB card where headroom for activations is tight.
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 mkdir -p /root/.cache/sn34/tmp /root/.cache/huggingface
 
 # ── Run one service ────────────────────────────────────────────────────────

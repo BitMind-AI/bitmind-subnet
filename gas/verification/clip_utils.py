@@ -14,8 +14,6 @@ _clip_model_cache = {}
 
 CLIP_MODELS = [
     "ViT-B/32",
-    "RN50", 
-    "RN101",
 ]
 
 

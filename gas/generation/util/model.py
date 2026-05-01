@@ -268,15 +268,24 @@ def create_pipeline_generator(model_config: Dict[str, Any], model: Any) -> calla
                 if stage.get("args"):
                     stage_args.update(stage["args"])
 
-                # Handle prompt embeddings
+                # Handle prompt embeddings. When we hand the pipeline
+                # `(negative_)prompt_embeds`, we MUST also strip the
+                # corresponding string `(negative_)prompt` arg from
+                # `stage_args`, otherwise diffusers' `check_inputs`
+                # rejects the call ("cannot forward both X and X_embeds").
                 if stage.get("use_prompt_embeds") and prompt_embeds is not None:
                     stage_args["prompt_embeds"] = prompt_embeds
                     stage_args["negative_prompt_embeds"] = negative_embeds
                     stage_args.pop("prompt", None)
+                    stage_args.pop("negative_prompt", None)
                 elif stage.get("save_prompt_embeds"):
-                    # Get embeddings directly from encode_prompt
+                    # Encode here so we can persist the embeds for later
+                    # stages. Forward the caller's `negative_prompt` (if
+                    # any) so the negative embed reflects the configured
+                    # negative, not the empty default.
                     prompt_embeds, negative_embeds = model[stage["name"]].encode_prompt(
                         prompt=prompt,
+                        negative_prompt=stage_args.get("negative_prompt"),
                         device=model[stage["name"]].device,
                         num_images_per_prompt=stage_args.get(
                             "num_images_per_prompt", 1
@@ -285,6 +294,7 @@ def create_pipeline_generator(model_config: Dict[str, Any], model: Any) -> calla
                     stage_args["prompt_embeds"] = prompt_embeds
                     stage_args["negative_prompt_embeds"] = negative_embeds
                     stage_args.pop("prompt", None)
+                    stage_args.pop("negative_prompt", None)
                 else:
                     stage_args["prompt"] = prompt
 

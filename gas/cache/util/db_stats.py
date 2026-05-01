@@ -565,28 +565,15 @@ def print_colored_table(db_path: Path, base_dir: Path, detailed: bool = False):
         total_prompts = stats["total_prompts"]
         database_size_mb = stats["database_size_mb"]
 
-        # Calculate search queries count
-        try:
-            import sqlite3
-
-            with sqlite3.connect(db.db_path) as conn:
-                cursor = conn.execute(
-                    "SELECT COUNT(*) FROM prompts WHERE content_type = 'search_query'"
-                )
-                total_queries = cursor.fetchone()[0]
-        except Exception:
-            total_queries = 0
-
         # Get disk space usage
         disk_usage = get_disk_usage_breakdown(base_dir)
         disk_size = disk_usage.get("total_size_formatted", "Unknown")
 
         print(f"{Colors.CYAN}1. Total Prompts:{Colors.END} {total_prompts:,}")
-        print(f"{Colors.CYAN}2. Total Search Queries:{Colors.END} {total_queries:,}")
         print(
-            f"{Colors.CYAN}3. Database File Size:{Colors.END} {database_size_mb:.2f} MB"
+            f"{Colors.CYAN}2. Database File Size:{Colors.END} {database_size_mb:.2f} MB"
         )
-        print(f"{Colors.CYAN}4. Disk Space Usage:{Colors.END} {disk_size}")
+        print(f"{Colors.CYAN}3. Disk Space Usage:{Colors.END} {disk_size}")
 
         # Additional useful stats
         print(f"\n{Colors.YELLOW}📊 Additional Statistics{Colors.END}")
