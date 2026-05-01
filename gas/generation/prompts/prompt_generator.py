@@ -40,7 +40,7 @@ import json
 import re
 from collections import deque
 from dataclasses import asdict
-from typing import Deque, Dict, Optional
+from typing import Deque, Dict, List, Optional
 
 import bittensor as bt
 import torch
@@ -271,13 +271,20 @@ class PromptGenerator:
         self._prior_image_prompts.clear()
         self._prior_video_prompts.clear()
 
-    def clear_gpu(self) -> None:
-        """Drop both models and reclaim VRAM."""
-        bt.logging.debug("Clearing GPU memory after prompt generation")
+    def unload_vlm(self) -> None:
+        """Drop VLM and reclaim its VRAM."""
+        bt.logging.debug("Unloading VLM from GPU")
         if self.vlm is not None:
             del self.vlm
             self.vlm = None
             self.vlm_processor = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def unload_llm(self) -> None:
+        """Drop LLM and reclaim its VRAM."""
+        bt.logging.debug("Unloading LLM from GPU")
         if self.llm is not None:
             del self.llm
             self.llm = None
@@ -287,8 +294,74 @@ class PromptGenerator:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    def clear_gpu(self) -> None:
+        """Drop both models and reclaim VRAM (convenience)."""
+        self.unload_vlm()
+        self.unload_llm()
+
     # ------------------------------------------------------------------
-    # Core API
+    # Two-phase batch (VLM then LLM, never both on GPU simultaneously)
+    # ------------------------------------------------------------------
+
+    def generate_scenes_batch(
+        self, images: list[Image.Image]
+    ) -> list[SceneDescription]:
+        """VLM-only: process a batch of images, returning cached scenes.
+
+        Loads VLM if needed. Does NOT load or touch the LLM.
+        Caller should call :meth:`unload_vlm` after this to free ~9 GB.
+        """
+        if not images:
+            return []
+        if self.vlm is None:
+            self.load_vlm()
+
+        scenes: list[SceneDescription] = []
+        for i, image in enumerate(images):
+            try:
+                scene = extract_scene_with_vlm(image, self.vlm, self.vlm_processor)
+                scenes.append(scene)
+            except Exception as e:
+                bt.logging.warning(f"VLM failed on image {i}: {e}")
+                scenes.append(None)  # type: ignore[arg-type]
+        return scenes
+
+    def compose_prompts_from_scenes(
+        self, scenes: list[SceneDescription]
+    ) -> list[dict[Modality, str]]:
+        """LLM-only: compose (image, video) prompts from cached scenes.
+
+        Loads LLM if needed. Does NOT load or touch the VLM.
+        Caller should call :meth:`unload_llm` after this to free ~60 GB.
+
+        Returns one dict per input scene, mapping Modality -> prompt.
+        Positions with ``None`` scenes produce empty dicts.
+        """
+        if not scenes:
+            return []
+        if self.llm is None:
+            self.load_llm()
+
+        self._prior_image_prompts.clear()
+        self._prior_video_prompts.clear()
+
+        results: list[dict[Modality, str]] = []
+        for scene in scenes:
+            if scene is None:
+                results.append({})
+                continue
+            try:
+                image_prompt = self._compose(scene, kind="image")
+                video_prompt = self._compose(scene, kind="video")
+                self._log_generated_prompts(scene, image_prompt, video_prompt)
+                results.append({Modality.IMAGE: image_prompt, Modality.VIDEO: video_prompt})
+            except Exception as e:
+                bt.logging.warning(f"LLM composition failed for scene: {e}")
+                results.append({})
+        return results
+
+    # ------------------------------------------------------------------
+    # Core API (legacy — still used externally; delegates to batch)
     # ------------------------------------------------------------------
 
     def generate_scene_from_image(self, image: Image.Image) -> SceneDescription:
