@@ -516,14 +516,14 @@ def add_data_service_args(parser):
         "--hf-image-repo",
         type=str,
         help="HuggingFace dataset repo for uploaded images",
-        default="gasstation/gs-images-v3",
+        default="gasstation/gs-images-v4",
     )
 
     parser.add_argument(
         "--hf-video-repo",
         type=str,
         help="HuggingFace dataset repo for uploaded videos",
-        default="gasstation/gs-videos-v3",
+        default="gasstation/gs-videos-v4",
     )
 
     parser.add_argument(
