@@ -16,8 +16,8 @@ NC='\033[0m' # No Color
 SKIP_SYSTEM_DEPS=false
 PY_DEPS_ONLY=false
 SYS_DEPS_ONLY=false
-CLEAR_VENV=false
-NUKE_CACHE=false
+CLEAR_VENV=true
+NUKE_CACHE=true
 
 # Load cache dir from .env.validator if it exists, otherwise use default
 if [ -f ".env.validator" ]; then
