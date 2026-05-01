@@ -16,7 +16,8 @@ NC='\033[0m' # No Color
 SKIP_SYSTEM_DEPS=false
 PY_DEPS_ONLY=false
 SYS_DEPS_ONLY=false
-CLEAR_VENV=false
+CLEAR_VENV=true
+NUKE_CACHE=true
 
 # Load cache dir from .env.validator if it exists, otherwise use default
 if [ -f ".env.validator" ]; then
@@ -45,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             CLEAR_VENV=true
             shift
             ;;
+        --nuke-cache)
+            NUKE_CACHE=true
+            shift
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -53,6 +58,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --py-deps-only      Install only Python dependencies (implies --no-system-deps)"
             echo "  --sys-deps-only     Install only system dependencies"
             echo "  --clear-venv        Delete existing .venv directory (default is to preserve)"
+            echo "  --nuke-cache        Unconditionally rm -rf the cache directory (~/.cache/sn34)"
             echo "  -h, --help         Show this help message"
             echo ""
             echo "Examples:"
@@ -61,6 +67,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --py-deps-only  Install only Python dependencies"
             echo "  $0 --sys-deps-only Install only system dependencies"
             echo "  $0 --clear-venv    Install and delete existing virtual environment"
+            echo "  $0 --nuke-cache    Install and unconditionally delete cache directory"
             exit 0
             ;;
         *)
@@ -327,18 +334,50 @@ fi
 
 # Skip Python dependencies if only installing system dependencies
 if [ "$SYS_DEPS_ONLY" = false ]; then
-    log_info "Checking if we need to clear v3.x cache"
-    if [ -d "$CACHE_DIR" ]; then
-        # Check if any .db files exist in the cache directory
-        if ! find "$CACHE_DIR" -name "*.db" -type f | grep -q .; then
-            log_info "No .db files found in cache directory. Removing old $CACHE_DIR..."
+    if [ "$NUKE_CACHE" = true ]; then
+        if [ -d "$CACHE_DIR" ]; then
+            log_info "Nuking cache directory: $CACHE_DIR..."
             rm -rf "$CACHE_DIR"
-            log_success "Cache directory cleaned ✓"
+            log_success "Cache directory nuked ✓"
         else
-            log_success "Cache directory contains .db files, keeping intact ✓"
+            log_info "Cache directory $CACHE_DIR does not exist, nothing to nuke"
+        fi
+
+        # Resolve BT_LOGGING_LOGGING_DIR from .env.validator, defaulting to ~/.bittensor
+        BT_LOGGING_DIR_FROM_ENV=""
+        if [ -f ".env.validator" ]; then
+            BT_LOGGING_DIR_FROM_ENV=$(grep -E "^BT_LOGGING_LOGGING_DIR=" .env.validator 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        fi
+        BT_LOGGING_DIR="${BT_LOGGING_DIR_FROM_ENV:-$HOME/.bittensor}"
+        BT_LOGGING_DIR="${BT_LOGGING_DIR/#\~/$HOME}"
+
+        log_info "Nuking challenge task state files..."
+        nuked_tasks=0
+        if [ -d "$BT_LOGGING_DIR" ]; then
+            while IFS= read -r -d '' f; do
+                rm -f "$f"
+                nuked_tasks=$((nuked_tasks + 1))
+            done < <(find "$BT_LOGGING_DIR" -name "challenge_tasks.pkl" -print0 2>/dev/null || true)
+        fi
+        if [ "$nuked_tasks" -gt 0 ]; then
+            log_success "Challenge task state(s) nuked ✓ ($nuked_tasks file(s))"
+        else
+            log_info "No challenge task state files found"
         fi
     else
-        log_info "Cache directory $CACHE_DIR does not exist, skipping cleanup"
+        log_info "Checking if we need to clear v3.x cache"
+        if [ -d "$CACHE_DIR" ]; then
+            # Check if any .db files exist in the cache directory
+            if ! find "$CACHE_DIR" -name "*.db" -type f | grep -q .; then
+                log_info "No .db files found in cache directory. Removing old $CACHE_DIR..."
+                rm -rf "$CACHE_DIR"
+                log_success "Cache directory cleaned ✓"
+            else
+                log_success "Cache directory contains .db files, keeping intact ✓"
+            fi
+        else
+            log_info "Cache directory $CACHE_DIR does not exist, skipping cleanup"
+        fi
     fi
 
     # Remove existing virtual environment if requested (default is to preserve)

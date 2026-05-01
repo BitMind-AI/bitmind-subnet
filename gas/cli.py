@@ -1092,7 +1092,8 @@ def status():
 
 @cli.command(name="install-py-deps")
 @click.option("--clear-venv", is_flag=True, help="Delete existing .venv directory (default is to preserve)")
-def install_py_deps(clear_venv):
+@click.option("--nuke-cache", is_flag=True, help="Unconditionally rm -rf the cache directory (~/.cache/sn34)")
+def install_py_deps(clear_venv, nuke_cache):
     """Install Python dependencies via uv"""
     click.echo("Installing Python dependencies...")
 
@@ -1107,6 +1108,8 @@ def install_py_deps(clear_venv):
     cmd_args = [str(install_script), "--py-deps-only"]
     if clear_venv:
         cmd_args.append("--clear-venv")
+    if nuke_cache:
+        cmd_args.append("--nuke-cache")
 
     # Run install.sh with appropriate flags
     try:
@@ -1123,7 +1126,8 @@ def install_py_deps(clear_venv):
 
 @cli.command(name="install-sys-deps")
 @click.option("--clear-venv", is_flag=True, help="Delete existing .venv directory (default is to preserve)")
-def install_sys_deps(clear_venv):
+@click.option("--nuke-cache", is_flag=True, help="Unconditionally rm -rf the cache directory (~/.cache/sn34)")
+def install_sys_deps(clear_venv, nuke_cache):
     """Install system dependencies"""
     click.echo("Installing system dependencies...")
 
@@ -1138,6 +1142,8 @@ def install_sys_deps(clear_venv):
     cmd_args = [str(install_script), "--sys-deps-only"]
     if clear_venv:
         cmd_args.append("--clear-venv")
+    if nuke_cache:
+        cmd_args.append("--nuke-cache")
 
     # Run install.sh with appropriate flags
     try:
@@ -1154,7 +1160,8 @@ def install_sys_deps(clear_venv):
 
 @cli.command()
 @click.option("--clear-venv", is_flag=True, help="Delete existing .venv directory (default is to preserve)")
-def install(clear_venv):
+@click.option("--nuke-cache", is_flag=True, help="Unconditionally rm -rf the cache directory (~/.cache/sn34)")
+def install(clear_venv, nuke_cache):
     """Run full installation (system + Python dependencies)"""
     click.echo("Running full installation...")
 
@@ -1169,6 +1176,8 @@ def install(clear_venv):
     cmd_args = [str(install_script)]
     if clear_venv:
         cmd_args.append("--clear-venv")
+    if nuke_cache:
+        cmd_args.append("--nuke-cache")
 
     # Run install.sh with appropriate flags
     try:
