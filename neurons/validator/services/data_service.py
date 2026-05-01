@@ -350,19 +350,19 @@ class DataService:
 
             try:
                 total = self.content_manager.content_db.count_unuploaded_media(modality="image")
-                if total < self.config.upload_threshold:
+                if total < self.config.upload_image_threshold:
                     bt.logging.debug(
                         f"[DATA-SERVICE] Upload threshold not met: "
-                        f"{total} < {self.config.upload_threshold}"
+                        f"{total} < {self.config.upload_image_threshold}"
                     )
                     return
 
                 batches = min(
                     self.config.upload_max_batches,
-                    total // self.config.upload_threshold,
+                    total // self.config.upload_image_threshold,
                 )
                 bt.logging.info(
-                    f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_threshold}. "
+                    f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_image_threshold}. "
                     f"Will upload {batches} batch(es)"
                 )
             except Exception as e:
