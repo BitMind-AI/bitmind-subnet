@@ -162,7 +162,10 @@ def add_miner_args(parser):
         "--miner.task-timeout",
         type=float,
         default=300.0,
-        help="Maximum time (seconds) to spend on a single task",
+        help=(
+            "Legacy CLI default; generation duration is bounded by each service "
+            "(e.g. Runway poll timeout). Queue wait does not count against this."
+        ),
     )
 
     parser.add_argument(
@@ -559,10 +562,17 @@ def add_data_service_args(parser):
     )
 
     parser.add_argument(
-        "--upload-threshold",
+        "--upload-image-threshold",
         type=int,
-        help="Minimum number of unuploaded media files to trigger an upload cycle",
+        help="Minimum number of unuploaded image files to trigger an image upload cycle",
         default=1000,
+    )
+
+    parser.add_argument(
+        "--upload-video-threshold",
+        type=int,
+        help="Minimum number of unuploaded video files to trigger a video upload cycle",
+        default=10,
     )
 
     parser.add_argument(

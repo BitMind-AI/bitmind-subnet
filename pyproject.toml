@@ -27,6 +27,7 @@ dependencies = [
     "httpx==0.28.1",
     "pyarrow==19.0.1",
     "ffmpeg-python==0.2.0",
+    "imageio-ffmpeg==0.6.0",
     "bitsandbytes==0.45.4",
     "black==25.1.0",
     "pre-commit==4.2.0",
@@ -61,6 +62,7 @@ dependencies = [
     "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@main",
     "imagehash>=4.3.1",
     "c2pa-python>=0.29.0",
+    "runwayml>=4.13.0",
 ]
 
 [project.scripts]

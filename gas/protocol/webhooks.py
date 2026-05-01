@@ -479,9 +479,18 @@ def _attempt_webhook_send(
 
     try:
         if not is_success:
-            content_type = "application/octet-stream"
+            # Validators expect a non-empty signed body; empty POST caused HTTP 400.
+            payload_obj = {
+                "task_id": task.task_id,
+                "task_status": "failed",
+                "error_message": task.error_message or "Unknown error",
+                "modality": task.modality,
+            }
+            binary_data = json.dumps(payload_obj).encode("utf-8")
+            content_type = "application/json"
             headers = {
                 "Content-Type": content_type,
+                "Content-Length": str(len(binary_data)),
                 "task-id": task.task_id,
                 "task-status": "failed",
                 "error-message": task.error_message or "Unknown error",

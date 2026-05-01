@@ -23,6 +23,7 @@ from gas.utils import print_info
 from gas.verification import detect_media_format
 from neurons.base import BaseNeuron
 from neurons.generator.task_manager import TaskManager, GenerationTask, TaskStatus
+from neurons.generator.task_checkpoint_store import TaskCheckpointStore, resolve_state_dir
 from gas.protocol.webhooks import send_success_webhook, send_failure_webhook
 from neurons.generator.services.service_registry import ServiceRegistry
 
@@ -53,6 +54,9 @@ class GenerativeMiner(BaseNeuron):
         output_dir = getattr(self.config.miner, "output_dir", "generated_content")
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
+
+        self.checkpoint_store = TaskCheckpointStore(resolve_state_dir(self.output_dir))
+        self._restore_checkpointed_tasks()
 
         self._start_background_workers()
 
@@ -99,8 +103,10 @@ class GenerativeMiner(BaseNeuron):
                 except Exception as e:
                     bt.logging.error(f"Error processing task {task.task_id}: {e}")
                     self.task_manager.mark_task_failed(task.task_id, str(e))
+                    self.checkpoint_store.delete(task.task_id)
+                    failed_task = self.task_manager.get_task(task.task_id) or task
                     send_failure_webhook(
-                        task,
+                        failed_task,
                         self.wallet.hotkey,
                         self.external_ip,
                         self.config.axon.port,
@@ -113,17 +119,74 @@ class GenerativeMiner(BaseNeuron):
                 bt.logging.error(f"Error in task processing loop: {e}")
                 time.sleep(5)
 
+    def _persist_task_snapshot(self, task_id: str) -> None:
+        t = self.task_manager.get_task(task_id)
+        if t:
+            self.checkpoint_store.save(t)
+
+    def _checkpoint_callback(self, task_id: str):
+        def cb(data):
+            self.task_manager.set_checkpoint(task_id, data)
+            self._persist_task_snapshot(task_id)
+
+        return cb
+
+    def _restore_checkpointed_tasks(self) -> None:
+        """Reload queued / interrupted tasks from disk so restarts can resume long jobs."""
+        restored_processing: list = []
+        for task in self.checkpoint_store.load_all():
+            if task.status == TaskStatus.COMPLETED:
+                self.checkpoint_store.delete(task.task_id)
+                continue
+            if task.status == TaskStatus.FAILED:
+                self.checkpoint_store.delete(task.task_id)
+                continue
+            if task.status == TaskStatus.PENDING:
+                self.task_manager.restore_task(task)
+                bt.logging.info(f"Restored pending task {task.task_id} from disk")
+                continue
+            if task.status == TaskStatus.PROCESSING:
+                if task.checkpoint:
+                    self.task_manager.restore_task(task)
+                    restored_processing.append(task)
+                    bt.logging.info(
+                        f"Restored processing task {task.task_id} "
+                        f"(checkpoint kind={task.checkpoint.get('kind')})"
+                    )
+                else:
+                    bt.logging.warning(
+                        f"Dropping processing task {task.task_id} without checkpoint; "
+                        "cannot resume external job"
+                    )
+                    self.checkpoint_store.delete(task.task_id)
+
+        for task in restored_processing:
+            threading.Thread(
+                target=lambda t=task: asyncio.run(self._process_task(t)),
+                daemon=True,
+            ).start()
+
     async def _process_task(self, task):
         """Process a single task using the appropriate service."""
         bt.logging.info(f"🎯 Processing task {task.task_id}: modality={task.modality}")
 
-        # Check task timeout
-        task_timeout = getattr(self.config.miner, "task_timeout", 300)
-        task_age = time.time() - task.created_at
-        if task_age > task_timeout:
-            raise TimeoutError(f"Task exceeded timeout ({task_timeout}s)")
+        # Do not reject tasks based on (now - created_at): queue wait behind long jobs
+        # would incorrectly trip MINER_TASK_TIMEOUT. Stale tasks are removed by
+        # max_task_age_hours / cleanup_old_tasks instead.
 
-        self.task_manager.mark_task_processing(task.task_id)
+        resume = (
+            task.status == TaskStatus.PROCESSING and task.checkpoint is not None
+        )
+        if resume:
+            bt.logging.info(
+                f"Resuming interrupted task {task.task_id} from external checkpoint"
+            )
+            task = self.task_manager.get_task(task.task_id) or task
+        else:
+            if task.status == TaskStatus.PENDING:
+                self.task_manager.mark_task_processing(task.task_id)
+                task = self.task_manager.get_task(task.task_id) or task
+                self._persist_task_snapshot(task.task_id)
 
         try:
             # Get the appropriate service for this task
@@ -148,6 +211,7 @@ class GenerativeMiner(BaseNeuron):
             self.task_manager.mark_task_completed(
                 task.task_id, result_data, result.get("url")
             )
+            self.checkpoint_store.delete(task.task_id)
             send_success_webhook(
                 task,
                 result,
@@ -164,8 +228,10 @@ class GenerativeMiner(BaseNeuron):
 
         except Exception as e:
             self.task_manager.mark_task_failed(task.task_id, str(e))
+            self.checkpoint_store.delete(task.task_id)
+            failed_task = self.task_manager.get_task(task.task_id) or task
             send_failure_webhook(
-                task,
+                failed_task,
                 self.wallet.hotkey,
                 self.external_ip,
                 self.config.axon.port,
@@ -179,10 +245,12 @@ class GenerativeMiner(BaseNeuron):
         """Call service.process(), handling both sync and async services."""
         try:
             bt.logging.debug(f"🔧 Calling service: {service.__class__.__name__}")
+            cb = self._checkpoint_callback(task.task_id)
             if inspect.iscoroutinefunction(service.process):
+                # Async image services complete in one round-trip; no external checkpoint.
                 result = await service.process(task)
             else:
-                result = service.process(task)
+                result = service.process_with_checkpoint(task, cb)
 
             # Validate service result
             if result is None:
@@ -266,9 +334,11 @@ class GenerativeMiner(BaseNeuron):
         cleanup_interval = getattr(self.config.miner, "cleanup_interval", 3600)
         while True:
             try:
-                removed = self.task_manager.cleanup_old_tasks()
-                if removed > 0:
-                    bt.logging.info(f"🧹 Cleaned up {removed} old tasks")
+                removed_ids = self.task_manager.cleanup_old_tasks()
+                for tid in removed_ids:
+                    self.checkpoint_store.delete(tid)
+                if removed_ids:
+                    bt.logging.info(f"🧹 Cleaned up {len(removed_ids)} old tasks")
                 time.sleep(cleanup_interval)
             except Exception as e:
                 bt.logging.error(f"Error in cleanup loop: {e}")
@@ -284,8 +354,12 @@ class GenerativeMiner(BaseNeuron):
             return
 
         ext = self._detect_extension(data, task.modality)
-        media_path = self.output_dir / f"{task.task_id}.{ext}"
-        meta_path = self.output_dir / f"{task.task_id}.json"
+        modality_dir = task.modality if task.modality in ("image", "video") else "other"
+        save_dir = self.output_dir / modality_dir
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        media_path = save_dir / f"{task.task_id}.{ext}"
+        meta_path = save_dir / f"{task.task_id}.json"
 
         try:
             media_path.write_bytes(data)
@@ -366,6 +440,8 @@ class GenerativeMiner(BaseNeuron):
             bt.logging.info(f"✅ Created {modality} task {task_id}: {prompt[:50]}...")
 
             created_task = self.task_manager.get_task(task_id)
+            if created_task:
+                self.checkpoint_store.save(created_task)
 
             return self._success_response(
                 {
