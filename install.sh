@@ -342,6 +342,28 @@ if [ "$SYS_DEPS_ONLY" = false ]; then
         else
             log_info "Cache directory $CACHE_DIR does not exist, nothing to nuke"
         fi
+
+        # Resolve BT_LOGGING_LOGGING_DIR from .env.validator, defaulting to ~/.bittensor
+        BT_LOGGING_DIR_FROM_ENV=""
+        if [ -f ".env.validator" ]; then
+            BT_LOGGING_DIR_FROM_ENV=$(grep -E "^BT_LOGGING_LOGGING_DIR=" .env.validator 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        fi
+        BT_LOGGING_DIR="${BT_LOGGING_DIR_FROM_ENV:-$HOME/.bittensor}"
+        BT_LOGGING_DIR="${BT_LOGGING_DIR/#\~/$HOME}"
+
+        log_info "Nuking challenge task state files..."
+        nuked_tasks=0
+        if [ -d "$BT_LOGGING_DIR" ]; then
+            while IFS= read -r -d '' f; do
+                rm -f "$f"
+                nuked_tasks=$((nuked_tasks + 1))
+            done < <(find "$BT_LOGGING_DIR" -name "challenge_tasks.pkl" -print0 2>/dev/null || true)
+        fi
+        if [ "$nuked_tasks" -gt 0 ]; then
+            log_success "Challenge task state(s) nuked ✓ ($nuked_tasks file(s))"
+        else
+            log_info "No challenge task state files found"
+        fi
     else
         log_info "Checking if we need to clear v3.x cache"
         if [ -d "$CACHE_DIR" ]; then
