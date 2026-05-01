@@ -228,6 +228,18 @@ class PromptGenerator:
                 device_map="auto",
             )
 
+        # Clamp image processor to prevent absurd single-image allocations
+        # (observed: 124 GiB tensor request on an 80 GiB card when the
+        # processor is configured with unbounded max_pixels / longest_edge).
+        if self.vlm_processor is not None and hasattr(
+            self.vlm_processor, "image_processor"
+        ):
+            ip = self.vlm_processor.image_processor
+            if hasattr(ip, "max_pixels") and ip.max_pixels is None:
+                ip.max_pixels = 1280 * 28 * 28  # ≈ 1M pixels, safe for 80GB
+            if hasattr(ip, "min_pixels"):
+                ip.min_pixels = 256 * 28 * 28  # ≈ 200K pixels
+
         bt.logging.info(f"Loaded VLM {self.vlm_name}")
 
     def load_llm(self) -> None:
@@ -324,6 +336,10 @@ class PromptGenerator:
             except Exception as e:
                 bt.logging.warning(f"VLM failed on image {i}: {e}")
                 scenes.append(None)  # type: ignore[arg-type]
+                # CUDA OOM can leave the GPU in a bad state; flush so
+                # subsequent VLM calls don't cascade-fail.
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
         return scenes
 
     def compose_prompts_from_scenes(
