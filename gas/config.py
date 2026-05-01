@@ -562,10 +562,17 @@ def add_data_service_args(parser):
     )
 
     parser.add_argument(
-        "--upload-threshold",
+        "--upload-image-threshold",
         type=int,
-        help="Minimum number of unuploaded media files to trigger an upload cycle",
+        help="Minimum number of unuploaded image files to trigger an image upload cycle",
         default=1000,
+    )
+
+    parser.add_argument(
+        "--upload-video-threshold",
+        type=int,
+        help="Minimum number of unuploaded video files to trigger a video upload cycle",
+        default=10,
     )
 
     parser.add_argument(

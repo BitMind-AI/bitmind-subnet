@@ -663,9 +663,13 @@ class ContentManager:
 		videos_per_archive: int,
 		validator_hotkey: str = None,
 		validator_uid: int = None,
-		num_batches: int = 1
+		num_batches: int = 1,
+		modalities: Optional[List[str]] = None,
 	) -> int:
 		"""Upload unuploaded media from database to HuggingFace, separated by source (miner vs validator) and modality.
+
+		Args:
+			modalities: Restrict upload to these modalities (e.g. ['image']). Defaults to both.
 
 		Returns:
 			Total number of media entries successfully uploaded and marked in DB (0 on failure / nothing to upload).
@@ -674,7 +678,10 @@ class ContentManager:
 			if num_batches is None or num_batches < 1:
 				bt.logging.warning(f"Invalid num_batches value: {num_batches}, using default of 1")
 				num_batches = 1
-			
+
+			if modalities is None:
+				modalities = ["image", "video"]
+
 			total_uploaded_all_batches = 0
 
 			for batch_num in range(num_batches):
@@ -684,7 +691,7 @@ class ContentManager:
 				media_by_modality = {}
 				total_found = 0
 
-				for modality in ["image", "video"]:
+				for modality in modalities:
 					# First, get verified miner media up to batch size
 					verified_miner_media = self.content_db.get_unuploaded_media(
 						limit=upload_batch_size, 
@@ -716,15 +723,16 @@ class ContentManager:
 					bt.logging.info(f"No more unuploaded media found after {batch_num} batches")
 					break
 
+				image_count = len(media_by_modality.get('image', []))
+				video_count = len(media_by_modality.get('video', []))
 				bt.logging.info(
 					f"Batch {batch_num + 1}: Found {total_found} unuploaded media files to upload "
-					f"({len(media_by_modality['image'])} images, {len(media_by_modality['video'])} videos)"
+					f"({image_count} images, {video_count} videos)"
 				)
 
 				all_successfully_processed_ids = []
 
-				# Upload images (mixed miner + validator)
-				if media_by_modality['image']:
+				if media_by_modality.get('image'):
 					uploaded_ids = upload_images_to_hf(
 						media_entries=media_by_modality['image'],
 						hf_token=hf_token,
@@ -735,8 +743,7 @@ class ContentManager:
 					)
 					all_successfully_processed_ids.extend(uploaded_ids)
 
-				# Upload videos (mixed miner + validator)
-				if media_by_modality['video']:
+				if media_by_modality.get('video'):
 					uploaded_ids = upload_videos_to_hf(
 						media_entries=media_by_modality['video'],
 						hf_token=hf_token,
