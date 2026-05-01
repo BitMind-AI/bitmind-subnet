@@ -22,7 +22,7 @@ from diffusers import (
     TextToVideoSDPipeline,
 )
 
-from gas.generation.model_registry import ModelRegistry
+from gas.generation.media.model_registry import ModelRegistry
 from gas.generation.util.model import (
     load_hunyuanvideo_transformer,
     load_annimatediff_motion_adapter,

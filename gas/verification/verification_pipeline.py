@@ -1,4 +1,7 @@
-from typing import List, Dict, Any, Optional
+from collections import defaultdict
+from statistics import mean, median
+from typing import List, Dict, Any, Optional, Tuple
+
 import bittensor as bt
 
 from gas.cache.content_manager import ContentManager
@@ -220,11 +223,24 @@ def verify_media(
 
             verification_results.append(result)
 
-            # Log individual results
-            bt.logging.debug(
-                f"Media {media_entry.id}: score={consensus_score:.3f}, "
-                f"passed={'✅' if passed else '❌'}, "
-                f"models={consensus_result['num_models']}/3"
+            # Per-entry structured log: makes it possible to tail verifier output
+            # and see exactly which (miner, generator-model, modality) is producing
+            # which scores.
+            individual_scores = consensus_result.get("individual_scores", {}) or {}
+            per_model_str = " ".join(
+                f"{m}={s:.3f}" for m, s in sorted(individual_scores.items())
+            )
+            bt.logging.info(
+                f"[VERIFY] modality={media_entry.modality.value if hasattr(media_entry.modality, 'value') else media_entry.modality} "
+                f"miner_uid={media_entry.uid} "
+                f"hotkey={(media_entry.hotkey or '')[:8]} "
+                f"gen_model={media_entry.model_name} "
+                f"c2pa_issuer={media_entry.c2pa_issuer} "
+                f"score={consensus_score:.3f} "
+                f"threshold={threshold:.3f} "
+                f"passed={'PASS' if passed else 'FAIL'} "
+                f"per_model=[{per_model_str}] "
+                f"media_id={media_entry.id}"
             )
 
         # Delete corrupted/invalid videos
@@ -242,18 +258,7 @@ def verify_media(
                 except Exception as e:
                     bt.logging.error(f"Error deleting corrupted video {media_entry.file_path}: {e}")
 
-        # Summary logging
-        successful_count = len(verification_results)
-        passed_count = sum(1 for r in verification_results if r.passed)
-        # Only compute average from results that have valid scores
-        valid_scores = [r.verification_score["score"] for r in verification_results if r.verification_score]
-        avg_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
-
-        bt.logging.info(
-            f"✅ Verification complete: {successful_count}/{len(media_entries)} processed, "
-            f"{passed_count} passed (pass rate: {passed_count/successful_count:.1%}, "
-            f"avg score: {avg_score:.3f})"
-        )
+        _log_breakdowns(verification_results, threshold)
 
         return verification_results
 
@@ -263,6 +268,74 @@ def verify_media(
             VerificationResult(media_entry=entry, passed=False)
             for entry in media_entries
         ]
+
+
+def _bucket_stats(results: List[VerificationResult], threshold: float) -> Dict[str, Any]:
+    """Aggregate count / pass-rate / score-stats for a slice of results."""
+    scored = [r for r in results if r.verification_score]
+    scores = [r.verification_score["score"] for r in scored]
+    n = len(results)
+    n_scored = len(scored)
+    n_passed = sum(1 for r in scored if r.passed)
+    return {
+        "n": n,
+        "n_scored": n_scored,
+        "n_passed": n_passed,
+        "pass_rate": (n_passed / n_scored) if n_scored else 0.0,
+        "mean": mean(scores) if scores else 0.0,
+        "median": median(scores) if scores else 0.0,
+        "min": min(scores) if scores else 0.0,
+        "max": max(scores) if scores else 0.0,
+    }
+
+
+def _log_breakdowns(results: List[VerificationResult], threshold: float) -> None:
+    """Log per-modality / per-generator-model / per-miner score breakdowns."""
+    if not results:
+        return
+
+    overall = _bucket_stats(results, threshold)
+    bt.logging.info(
+        f"[VERIFY-SUMMARY] total={overall['n']} scored={overall['n_scored']} "
+        f"passed={overall['n_passed']} pass_rate={overall['pass_rate']:.1%} "
+        f"score(mean/med/min/max)="
+        f"{overall['mean']:.3f}/{overall['median']:.3f}/"
+        f"{overall['min']:.3f}/{overall['max']:.3f} "
+        f"threshold={threshold:.3f}"
+    )
+
+    def _log_group(label: str, groups: Dict[Any, List[VerificationResult]]) -> None:
+        # Sort by sample count descending so the most active buckets surface first.
+        ordered = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        for key, rs in ordered:
+            s = _bucket_stats(rs, threshold)
+            if s["n_scored"] == 0:
+                bt.logging.info(
+                    f"[VERIFY-{label}] key={key!r} n={s['n']} (no scored samples)"
+                )
+                continue
+            bt.logging.info(
+                f"[VERIFY-{label}] key={key!r} n={s['n']} scored={s['n_scored']} "
+                f"passed={s['n_passed']} pass_rate={s['pass_rate']:.1%} "
+                f"score(mean/med/min/max)="
+                f"{s['mean']:.3f}/{s['median']:.3f}/"
+                f"{s['min']:.3f}/{s['max']:.3f}"
+            )
+
+    by_modality: Dict[str, List[VerificationResult]] = defaultdict(list)
+    by_gen_model: Dict[str, List[VerificationResult]] = defaultdict(list)
+    by_miner: Dict[Tuple[Any, str], List[VerificationResult]] = defaultdict(list)
+
+    for r in results:
+        m = r.media_entry
+        modality = m.modality.value if hasattr(m.modality, "value") else (m.modality or "unknown")
+        by_modality[modality].append(r)
+        by_gen_model[m.model_name or "(none)"].append(r)
+        by_miner[(m.uid, (m.hotkey or "")[:8])].append(r)
+
+    _log_group("BY-MODALITY", by_modality)
+    _log_group("BY-GEN-MODEL", by_gen_model)
+    _log_group("BY-MINER", by_miner)
 
 
 def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any]:

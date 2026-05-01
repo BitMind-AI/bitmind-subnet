@@ -90,7 +90,7 @@ class ContentDB:
                 CREATE TABLE IF NOT EXISTS prompts (
                     id TEXT PRIMARY KEY,
                     content TEXT NOT NULL,
-                    content_type TEXT NOT NULL CHECK (content_type IN ('prompt', 'search_query')),
+                    content_type TEXT NOT NULL CHECK (content_type = 'prompt'),
                     modality TEXT CHECK (modality IN ('image', 'video', 'audio')),
                     created_at REAL NOT NULL,
                     used_count INTEGER DEFAULT 0,
@@ -664,6 +664,36 @@ class ContentDB:
 
             return entries
 
+    def count_miner_media(self, verification_status: Optional[str] = None) -> int:
+        """
+        Count miner media by verification status without materializing rows.
+
+        Args:
+            verification_status: Same semantics as :meth:`get_miner_media`.
+                'pending' / 'verified' / 'failed' / None.
+
+        Returns:
+            Row count matching the filter.
+        """
+        if verification_status == "pending":
+            where_clause = "verified = 0 AND failed_verification = 0"
+        elif verification_status == "verified":
+            where_clause = "verified = 1 AND failed_verification = 0"
+        elif verification_status == "failed":
+            where_clause = "verified = 0 AND failed_verification = 1"
+        elif verification_status is None:
+            where_clause = "1=1"
+        else:
+            raise ValueError(
+                f"Invalid verification_status: {verification_status}. "
+                "Must be 'pending', 'verified', 'failed', or None"
+            )
+        with self._get_db_connection() as conn:
+            cursor = conn.execute(
+                f"SELECT COUNT(*) FROM media WHERE source_type = 'miner' AND {where_clause}"
+            )
+            return int(cursor.fetchone()[0])
+
     def mark_miner_media_verified(self, media_id: str) -> bool:
         try:
             with self._get_db_connection() as conn:
@@ -826,30 +856,6 @@ class ContentDB:
                 conn.commit()
 
             return len(prompt_ids_to_remove)
-
-    def get_media_entry_by_file_path(self, file_path: str) -> Optional[MediaEntry]:
-        """
-        Get a media entry by its file path.
-
-        Args:
-            file_path: Path to the media file
-
-        Returns:
-            MediaEntry object or None if not found
-        """
-        with self._get_db_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                """
-                SELECT * FROM media WHERE file_path = ?
-            """,
-                (file_path,),
-            )
-
-            row = cursor.fetchone()
-            if row:
-                return self._row_to_media_entry(row)
-            return None
 
     def delete_media_entry_by_file_path(self, file_path: str) -> bool:
         """
@@ -1091,6 +1097,38 @@ class ContentDB:
 
             bt.logging.error(f"Full traceback: {traceback.format_exc()}")
             return []
+
+    def count_unuploaded_media(
+        self, modality: Optional[str] = None, source_type: Optional[str] = None
+    ) -> int:
+        """
+        Count unuploaded media without materializing rows. Mirrors the
+        filtering rules used by :meth:`get_unuploaded_media`.
+        """
+        try:
+            base_where = "(uploaded = 0 OR uploaded IS NULL)"
+            if source_type == 'miner':
+                source_filter = "(source_type = 'miner' AND verified = 1)"
+            elif source_type == 'generated':
+                source_filter = "source_type = 'generated'"
+            elif source_type in ('scraper', 'dataset'):
+                source_filter = f"source_type = '{source_type}'"
+            else:
+                source_filter = (
+                    "(source_type IN ('scraper', 'dataset', 'generated') "
+                    "OR (source_type = 'miner' AND verified = 1))"
+                )
+            query = f"SELECT COUNT(*) FROM media WHERE {base_where} AND {source_filter}"
+            params: tuple = ()
+            if modality:
+                query += " AND modality = ?"
+                params = (modality,)
+            with self._get_db_connection() as conn:
+                cursor = conn.execute(query, params)
+                return int(cursor.fetchone()[0])
+        except Exception as e:
+            bt.logging.error(f"Error counting unuploaded media: {e}")
+            return 0
 
     def mark_media_uploaded(self, media_ids: List[str]) -> bool:
         """
@@ -1346,7 +1384,8 @@ class ContentDB:
         
         Args:
             k: Number of prompts to sample
-            content_type: Type of content ('prompt' or 'search_query')
+            content_type: Always 'prompt'. Kept as a parameter for forward
+                compatibility if additional content types are reintroduced.
             strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
             remove: If True, deletes sampled prompts (only if enough prompts remain)
             modality: Optional modality filter ('image', 'video', 'audio')

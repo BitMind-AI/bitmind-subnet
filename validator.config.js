@@ -34,11 +34,6 @@ function getHeartbeatParam(heartbeat) {
 // Load environment variables
 require('dotenv').config({ path: path.resolve(__dirname, '.env.validator') });
 
-// Check if old HUGGING_FACE_TOKEN is set and use it to set HUGGINGFACE_HUB_TOKEN
-if (process.env.HUGGING_FACE_TOKEN && !process.env.HUGGINGFACE_HUB_TOKEN) {
-  process.env.HUGGINGFACE_HUB_TOKEN = process.env.HUGGING_FACE_TOKEN;
-}
-
 // Get configuration from environment with defaults
 const config = {
   // Wallet
@@ -64,7 +59,6 @@ const config = {
   heartbeat: process.env.HEARTBEAT || 'false',
   
   // Service intervals
-  scraperInterval: process.env.SCRAPER_INTERVAL || '300',
   datasetInterval: process.env.DATASET_INTERVAL || '1800',
   
   // API configuration
@@ -107,9 +101,19 @@ const HF_ENV = {
   TOKENIZERS_PARALLELISM: 'false',
   HF_HUB_VERBOSITY: 'error',
   ACCELERATE_LOG_LEVEL: 'error',
-  HUGGINGFACE_HUB_TOKEN: process.env.HUGGINGFACE_HUB_TOKEN || process.env.HF_TOKEN,
+  HUGGINGFACE_HUB_TOKEN: process.env.HUGGINGFACE_HUB_TOKEN,
   HF_HOME: HF_HOME_RESOLVED,
   HF_HUB_DISABLE_TELEMETRY: '1',
+};
+
+// Torch env. expandable_segments collapses fragmented allocator
+// segments so reserved-but-unallocated VRAM (often several GiB at
+// equilibrium) becomes reusable. Critical at the ~70GB VLM+LLM working
+// set on an 80GB card where headroom for activations is tight; without
+// this we OOM on long-context prompt-gen calls.
+const TORCH_ENV = {
+  PYTORCH_CUDA_ALLOC_CONF: process.env.PYTORCH_CUDA_ALLOC_CONF
+    || 'expandable_segments:True',
 };
 
 // Validator service
@@ -143,6 +147,7 @@ if (config.startValidator) {
     env: {
       WANDB_API_KEY: process.env.WANDB_API_KEY,
       ...HF_ENV,
+      ...TORCH_ENV,
     },
     watch: false,
     instances: 1,
@@ -165,6 +170,7 @@ if (config.startGenerator) {
     ].join(' '),
     env: {
       ...HF_ENV,
+      ...TORCH_ENV,
     },
     watch: false,
     instances: 1,
@@ -184,7 +190,6 @@ if (config.startData) {
       '--netuid', netuid.toString(),
       '--subtensor.chain_endpoint', config.chainEndpoint,
       '--cache.base-dir', config.cacheDir,
-      '--scraper-interval', config.scraperInterval,
       '--dataset-interval', config.datasetInterval,
       logParam,
     ].join(' '),

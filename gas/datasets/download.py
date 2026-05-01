@@ -44,8 +44,12 @@ def download_and_extract(
     locally while ensuring diverse media availability.
 
     Args:
-        datasets: List of DatasetConfig objects
-        exclude_tags: Tags to exclude from download
+        dataset: DatasetConfig describing the source.
+        images_per_parquet: Max images to extract per parquet file.
+        videos_per_zip: Max videos to extract per zip file.
+        parquet_per_dataset: Max parquet files to download per dataset.
+        zips_per_dataset: Max zip files to download per dataset.
+        temp_dir: Optional override for the temp directory.
 
     Yields:
         Tuples of (media_bytes, metadata_dict)
