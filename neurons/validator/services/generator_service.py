@@ -452,42 +452,64 @@ class GeneratorService:
     def _generate_prompts(self, batch_size: int = 10) -> int:
         """Generate a batch of (image, video) prompt pairs from cached images.
 
-        Each iteration samples one source image, runs a single VLM forward
-        pass to produce a structured scene, and composes one prompt per
-        modality from the same scene. Both prompts are written to the
-        database with their intended modality so consumers can route them
-        appropriately.
+        Two-phase: first VLM extracts structured scenes from all images
+        (VLM only on GPU), then VLM is unloaded and LLM composes prompts
+        (LLM only on GPU). Never loads both models simultaneously, keeping
+        peak VRAM at ~60 GB instead of ~69 GB.
         """
         generated = 0
+
+        # ------------------------------------------------------------------
+        # Phase 1: Collect images for the batch
+        # ------------------------------------------------------------------
+        images: list = []
+        items: list = []
         for _ in range(batch_size):
             if self._stop_requested.is_set():
                 break
-
             try:
                 cache_result = self._sample_images(count=1)
                 if not cache_result or not cache_result["count"]:
                     bt.logging.warning("No images available for prompt generation")
                     continue
-
                 item = cache_result["items"][0]
-                prompts_by_modality = self.prompt_generator.generate_prompts_from_image(
-                    Image.fromarray(item["image"])
-                )
-                for modality, prompt in prompts_by_modality.items():
-                    self.content_manager.write_prompt(
-                        content=prompt,
-                        source_media_id=item["id"],
-                        modality=modality.value,
-                    )
-                    generated += 1
-
+                images.append(Image.fromarray(item["image"]))
+                items.append(item)
             except Exception as e:
-                bt.logging.error(f"[GENERATOR-SERVICE] Error generating prompt: {e}")
+                bt.logging.error(f"[GENERATOR-SERVICE] Error sampling image: {e}")
                 continue
 
-            bt.logging.info(f"[GENERATOR-SERVICE] Added {generated} prompts to database")
+        if not images:
+            return 0
 
-        self.prompt_generator.clear_gpu()
+        # ------------------------------------------------------------------
+        # Phase 2: VLM stage — extract structured scenes (VLM only on GPU)
+        # ------------------------------------------------------------------
+        scenes = self.prompt_generator.generate_scenes_batch(images)
+        self.prompt_generator.unload_vlm()
+
+        if self._stop_requested.is_set():
+            return 0
+
+        # ------------------------------------------------------------------
+        # Phase 3: LLM stage — compose prompts from cached scenes (LLM only)
+        # ------------------------------------------------------------------
+        prompts_list = self.prompt_generator.compose_prompts_from_scenes(scenes)
+        self.prompt_generator.unload_llm()
+
+        # ------------------------------------------------------------------
+        # Phase 4: Write results to database
+        # ------------------------------------------------------------------
+        for item, prompts in zip(items, prompts_list):
+            for modality, prompt in prompts.items():
+                self.content_manager.write_prompt(
+                    content=prompt,
+                    source_media_id=item["id"],
+                    modality=modality.value,
+                )
+                generated += 1
+
+        bt.logging.info(f"[GENERATOR-SERVICE] Added {generated} prompts to database")
         return generated
 
     def _models_for_modality(self, modality: Modality) -> list:
@@ -687,6 +709,8 @@ class GeneratorService:
         try:
             if self.generation_pipeline:
                 self.generation_pipeline.shutdown()
+            if self.prompt_generator:
+                self.prompt_generator.clear_gpu()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()
