@@ -85,7 +85,7 @@ class DataService:
                 f"{self.validator_wallet.hotkey.ss58_address[:16]}..."
             )
 
-        self.all_datasets = load_all_datasets()
+        self.all_datasets = [d for d in load_all_datasets() if d.modality == Modality.IMAGE]
         self.downloader_thread: Optional[Thread] = None
         self.uploader_thread: Optional[Thread] = None
         self.uploader_thread_start_time: Optional[float] = None
@@ -263,9 +263,7 @@ class DataService:
                 for media_bytes, metadata in download_and_extract(
                     dataset,
                     images_per_parquet=self.config.dataset_images_per_parquet,
-                    videos_per_zip=self.config.dataset_videos_per_zip,
                     parquet_per_dataset=self.config.dataset_parquet_per_dataset,
-                    zips_per_dataset=self.config.dataset_zips_per_dataset,
                     temp_dir=str(Path(self.config.cache.base_dir) / "tmp"),
                 ):
                     if self.stop_event.is_set():
@@ -351,10 +349,7 @@ class DataService:
                 self.uploader_thread = None
 
             try:
-                total = (
-                    self.content_manager.content_db.count_unuploaded_media(modality="image")
-                    + self.content_manager.content_db.count_unuploaded_media(modality="video")
-                )
+                total = self.content_manager.content_db.count_unuploaded_media(modality="image")
                 if total < self.config.upload_threshold:
                     bt.logging.debug(
                         f"[DATA-SERVICE] Upload threshold not met: "
