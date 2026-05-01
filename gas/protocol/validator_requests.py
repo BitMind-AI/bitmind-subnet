@@ -248,8 +248,8 @@ async def get_benchmark_results(
     one_week_ago = datetime.now() - timedelta(weeks=1)
     after_timestamp = one_week_ago.isoformat()
     generator_url = f"{base_url}/api/v1/validator/generator-results?validator_address={hotkey.ss58_address}&after={after_timestamp}"
-    # API can take 60s+ (DuckDB init + parquet query); avoid client timeout before server responds
-    timeout = aiohttp.ClientTimeout(total=90)
+    # Cold generator-results can approach function timeout; stay below server limit with margin
+    timeout = aiohttp.ClientTimeout(total=270)
 
     for attempt in range(max_retries):
         try:

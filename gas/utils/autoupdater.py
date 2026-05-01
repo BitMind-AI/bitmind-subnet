@@ -71,7 +71,7 @@ def restart_pm2_services(base_path):
     return success
 
 
-def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv: bool = True) -> bool:
+def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv: bool = True, nuke_cache: bool = False) -> bool:
     """
     Run gascli installation commands.
     
@@ -79,6 +79,7 @@ def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv
         base_path: Path to the project root
         install_type: Type of installation ("py-deps", "sys-deps", or "full")
         clear_venv: Whether to clear existing .venv directory (default False for safe operation)
+        nuke_cache: Whether to unconditionally rm -rf the cache directory (default False)
     
     Returns:
         bool: True if installation succeeded, False otherwise
@@ -97,6 +98,10 @@ def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv
     # Add clear-venv flag if requested (default is to preserve)
     if clear_venv:
         cmd_args.append("--clear-venv")
+    
+    # Add nuke-cache flag if requested
+    if nuke_cache:
+        cmd_args.append("--nuke-cache")
     
     # Find gascli executable
     venv_gascli = os.path.join(base_path, ".venv", "bin", "gascli")
@@ -131,7 +136,7 @@ def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv
         return False
 
 
-def autoupdate(branch: str = "main", force=False, install_deps: bool = False, install_type: str = "py-deps", clear_venv: bool = True):
+def autoupdate(branch: str = "main", force=False, install_deps: bool = False, install_type: str = "py-deps", clear_venv: bool = True, nuke_cache: bool = False):
     """
     Automatically updates the codebase to the latest version available on the specified branch.
 
@@ -145,6 +150,7 @@ def autoupdate(branch: str = "main", force=False, install_deps: bool = False, in
     - install_deps (bool): Whether to run dependency installation after update. Defaults to False.
     - install_type (str): Type of installation to run ("py-deps", "sys-deps", or "full"). Defaults to "py-deps".
     - clear_venv (bool): Whether to clear existing .venv directory during installation. Defaults to True.
+    - nuke_cache (bool): Whether to unconditionally rm -rf the cache directory during installation. Defaults to False.
 
     Note:
     - The function assumes that the local codebase is a git repository and has the same structure as the remote repository.
@@ -152,6 +158,7 @@ def autoupdate(branch: str = "main", force=False, install_deps: bool = False, in
     - The function will restart the application using PM2 services defined in validator.config.js.
     - If install_deps is True, it will run gascli installation commands after update but before restart.
     - When install_deps is True, the existing .venv is cleared by default during installation to ensure a clean environment.
+    - When nuke_cache is True, the cache directory (~/.cache/sn34) is unconditionally removed.
     - If the update fails, manual intervention is required to resolve the issue and restart the application.
     """
     bt.logging.info("Checking for updates...")
@@ -190,7 +197,7 @@ def autoupdate(branch: str = "main", force=False, install_deps: bool = False, in
 
                     # Install dependencies if requested
                     if install_deps:
-                        dependency_install_success = run_gascli_install(base_path, install_type, clear_venv)
+                        dependency_install_success = run_gascli_install(base_path, install_type, clear_venv, nuke_cache)
                         if not dependency_install_success:
                             bt.logging.warning("Dependency installation failed, but continuing with restart...")
 
