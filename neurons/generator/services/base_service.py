@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any, Callable, Dict, Optional
+
 import bittensor as bt
 
 from ..task_manager import GenerationTask
+
+# Optional external job id persisted across miner restarts (see task_checkpoint_store).
+CheckpointFn = Optional[Callable[[Optional[Dict[str, Any]]], None]]
 
 
 class BaseGenerationService(ABC):
@@ -46,6 +50,18 @@ class BaseGenerationService(ABC):
             Exception: If processing fails
         """
         pass
+
+    def process_with_checkpoint(
+        self, task: GenerationTask, on_checkpoint: CheckpointFn = None
+    ) -> Dict[str, Any]:
+        """
+        Like ``process``, but long-running backends may call ``on_checkpoint(payload)``
+        after submitting an external job (payload contains provider ids). Call
+        ``on_checkpoint(None)`` when the job is finished or no longer resumable.
+
+        Default: ignores checkpoints and calls ``process``.
+        """
+        return self.process(task)
     
     def get_info(self) -> Dict[str, Any]:
         """Get information about this service."""

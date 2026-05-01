@@ -1,12 +1,14 @@
 import os
 import time
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 import bittensor as bt
 import requests
 
-from .base_service import BaseGenerationService
+from .base_service import BaseGenerationService, CheckpointFn
 from ..task_manager import GenerationTask
+
+CHECKPOINT_KIND_OPENAI_SORA = "openai_sora"
 
 
 class OpenAIService(BaseGenerationService):
@@ -15,7 +17,8 @@ class OpenAIService(BaseGenerationService):
 
     - Images via DALL-E 3 (with C2PA content credentials preserved by
       downloading the image bytes).
-    - Video via Sora 2 (sora-2 / sora-2-pro), returning MP4 bytes.
+    - Video via Sora 2 (sora-2 / sora-2-pro), returning MP4 bytes. OpenAI deprecates
+      the Videos API and these models; scheduled shutdown 2026-09-24 per OpenAI docs.
     """
 
     def __init__(self, config: Any = None):
@@ -61,12 +64,17 @@ class OpenAIService(BaseGenerationService):
 
     def process(self, task: GenerationTask) -> Dict[str, Any]:
         """Dispatch task by modality."""
+        return self.process_with_checkpoint(task, None)
+
+    def process_with_checkpoint(
+        self, task: GenerationTask, on_checkpoint: CheckpointFn = None
+    ) -> Dict[str, Any]:
+        oc = on_checkpoint or (lambda _: None)
         if task.modality == "image":
             return self._generate_image(task)
-        elif task.modality == "video":
-            return self._generate_video(task)
-        else:
-            raise ValueError(f"Unsupported modality: {task.modality}")
+        if task.modality == "video":
+            return self._generate_video(task, oc)
+        raise ValueError(f"Unsupported modality: {task.modality}")
 
 
     def _generate_image(self, task: GenerationTask) -> Dict[str, Any]:
@@ -122,7 +130,73 @@ class OpenAIService(BaseGenerationService):
         else:
             return "1024x1792"
 
-    def _generate_video(self, task: GenerationTask) -> Dict[str, Any]:
+    def _resume_sora_checkpoint(
+        self,
+        task: GenerationTask,
+        cp: Dict[str, Any],
+        oc,
+    ) -> Dict[str, Any]:
+        """Continue polling a Sora job after miner restart."""
+        if self.client is None:
+            raise RuntimeError("OpenAI client not initialized")
+
+        params: Dict[str, Any] = task.parameters or {}
+        video_id = cp["video_id"]
+        model = cp.get("model", params.get("model", "sora-2"))
+        size = cp.get("size", params.get("size", "720x1280"))
+        seconds = cp.get("seconds", str(params.get("seconds", params.get("duration", 4))))
+        attempt_num = int(cp.get("attempt", 1))
+        poll_interval = float(params.get("poll_interval", 5.0))
+        timeout = float(params.get("timeout", 600.0))
+
+        bt.logging.info(f"Resuming Sora video_id={video_id} (miner restart recovery)")
+        job = self.client.videos.retrieve(video_id)
+        status = getattr(job, "status", None)
+        start_time = time.monotonic()
+
+        while status not in ("completed", "failed", "cancelled"):
+            elapsed = time.monotonic() - start_time
+            if elapsed > timeout:
+                oc(None)
+                raise TimeoutError(
+                    f"Sora video generation timed out after {timeout} seconds "
+                    f"(status={status}, id={video_id}, resumed)"
+                )
+            bt.logging.info(
+                f"Sora job {video_id}: status={status}, elapsed={elapsed:.1f}s (resumed)"
+            )
+            time.sleep(poll_interval)
+            job = self.client.videos.retrieve(video_id)
+            status = getattr(job, "status", None)
+
+        oc(None)
+        if status == "completed":
+            stream = self.client.videos.download_content(video_id=video_id)
+            video_bytes = stream.read()
+            bt.logging.success(f"Downloaded {len(video_bytes)} bytes for Sora video id={video_id}")
+            return {
+                "data": video_bytes,
+                "metadata": {
+                    "model": model,
+                    "size": size,
+                    "seconds": seconds,
+                    "provider": "openai",
+                    "mime_type": "video/mp4",
+                    "video_id": video_id,
+                    "status": status,
+                    "progress": getattr(job, "progress", None),
+                    "created_at": getattr(job, "created_at", None),
+                    "completed_at": getattr(job, "completed_at", None),
+                    "attempt": attempt_num,
+                    "resumed": True,
+                },
+            }
+
+        error_obj = getattr(job, "error", None)
+        error_msg = getattr(error_obj, "message", None) or str(error_obj)
+        raise RuntimeError(f"Sora video failed after resume: status={status}, msg={error_msg}")
+
+    def _generate_video(self, task: GenerationTask, on_checkpoint: CheckpointFn) -> Dict[str, Any]:
         """
         Generate a video using Sora 2 and return the raw MP4 bytes.
 
@@ -133,6 +207,11 @@ class OpenAIService(BaseGenerationService):
         """
         if self.client is None:
             raise RuntimeError("OpenAI client not initialized")
+
+        oc = on_checkpoint or (lambda _: None)
+        cp = task.checkpoint
+        if cp and cp.get("kind") == CHECKPOINT_KIND_OPENAI_SORA:
+            return self._resume_sora_checkpoint(task, cp, oc)
 
         params: Dict[str, Any] = task.parameters or {}
 
@@ -182,12 +261,24 @@ class OpenAIService(BaseGenerationService):
                     f"attempt={attempt_num}"
                 )
 
+                oc(
+                    {
+                        "kind": CHECKPOINT_KIND_OPENAI_SORA,
+                        "video_id": video_id,
+                        "model": model,
+                        "size": size,
+                        "seconds": seconds,
+                        "attempt": attempt_num,
+                    }
+                )
+
                 # 2) Poll until completion or timeout for THIS job
                 start_time = time.monotonic()
 
                 while status not in ("completed", "failed", "cancelled"):
                     elapsed = time.monotonic() - start_time
                     if elapsed > timeout:
+                        oc(None)
                         raise TimeoutError(
                             f"Sora video generation timed out after {timeout} seconds "
                             f"(status={status}, id={video_id}, attempt={attempt_num})"
@@ -218,6 +309,7 @@ class OpenAIService(BaseGenerationService):
                         f"Sora video id={video_id}"
                     )
 
+                    oc(None)
                     return {
                         "data": video_bytes,
                         "metadata": {
@@ -248,6 +340,8 @@ class OpenAIService(BaseGenerationService):
                     f"attempt={attempt_num}"
                 )
 
+                oc(None)
+
                 # Decide if we should retry a NEW job
                 if self._is_retryable_sora_error(error_code, status):
                     last_error = RuntimeError(
@@ -276,6 +370,7 @@ class OpenAIService(BaseGenerationService):
                     )
 
             except Exception as e:
+                oc(None)
                 # Catch any exception in this attempt and decide whether to retry
                 last_error = e
                 # Try to extract an error_code if this is an OpenAI error-like obj

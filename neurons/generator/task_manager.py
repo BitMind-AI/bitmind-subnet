@@ -1,7 +1,7 @@
 import time
 import uuid
 import threading
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
 
@@ -24,6 +24,9 @@ class GenerationTask:
     webhook_url: str
     signed_by: str
     created_at: float
+
+    # External async job state for restart recovery (Runway task id, Sora video id, …)
+    checkpoint: Optional[Dict[str, Any]] = None
     
     # Optional fields
     input_data: Optional[bytes] = None
@@ -90,6 +93,18 @@ class TaskManager:
             self.tasks[task_id] = task
         
         return task_id
+
+    def restore_task(self, task: GenerationTask) -> None:
+        """Replace or insert a task (used when loading checkpoints after restart)."""
+        with self._lock:
+            self.tasks[task.task_id] = task
+
+    def set_checkpoint(self, task_id: str, checkpoint: Optional[Dict[str, Any]]) -> bool:
+        with self._lock:
+            if task_id not in self.tasks:
+                return False
+            self.tasks[task_id].checkpoint = checkpoint
+            return True
     
     def get_task(self, task_id: str) -> Optional[GenerationTask]:
         """Get a task by ID."""
@@ -142,8 +157,8 @@ class TaskManager:
                 return True
             return False
     
-    def cleanup_old_tasks(self) -> int:
-        """Remove tasks older than max_task_age_hours. Returns number of tasks removed."""
+    def cleanup_old_tasks(self) -> List[str]:
+        """Remove tasks older than max_task_age_hours. Returns removed task ids."""
         cutoff_time = time.time() - (self.max_task_age_hours * 3600)
         
         with self._lock:
@@ -155,7 +170,7 @@ class TaskManager:
             for task_id in old_task_ids:
                 del self.tasks[task_id]
         
-        return len(old_task_ids)
+        return old_task_ids
     
     def get_task_stats(self) -> Dict[str, int]:
         """Get statistics about current tasks."""

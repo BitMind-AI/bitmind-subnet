@@ -17,8 +17,10 @@ from typing import Any, Dict, List, cast
 import bittensor as bt
 import requests
 
-from .base_service import BaseGenerationService
+from .base_service import BaseGenerationService, CheckpointFn
 from ..task_manager import GenerationTask
+
+CHECKPOINT_KIND_RUNWAY = "runway"
 
 # Default matches Runway docs / common preset (veo3.1)
 DEFAULT_MODEL = "veo3.1"
@@ -141,28 +143,72 @@ class RunwayService(BaseGenerationService):
             raise ValueError(
                 f"RunwayService supports video only, got modality={task.modality}"
             )
-        return self._text_to_video(task)
+        return self._text_to_video(task, None)
 
-    def _text_to_video(self, task: GenerationTask) -> Dict[str, Any]:
-        from runwayml.lib.polling import TaskFailedError, TaskTimeoutError
+    def process_with_checkpoint(
+        self, task: GenerationTask, on_checkpoint: CheckpointFn = None
+    ) -> Dict[str, Any]:
+        if task.modality != "video":
+            raise ValueError(
+                f"RunwayService supports video only, got modality={task.modality}"
+            )
+        return self._text_to_video(task, on_checkpoint)
+
+    def _text_to_video(
+        self, task: GenerationTask, on_checkpoint: CheckpointFn
+    ) -> Dict[str, Any]:
+        from runwayml.lib.polling import (
+            NewTaskCreatedResponse,
+            TaskFailedError,
+            TaskTimeoutError,
+            inject_sync_wait_method,
+        )
 
         if self._client is None:
             raise RuntimeError("RunwayML client not initialized")
 
+        oc = on_checkpoint or (lambda _: None)
         params = task.parameters or {}
-        poll_timeout = float(params.get("runway_poll_timeout", params.get("timeout", 900.0)))
+        # Runway / Veo often exceeds 15m when the API is busy; override via parameters.timeout.
+        poll_timeout = float(params.get("runway_poll_timeout", params.get("timeout", 2400.0)))
         if poll_timeout <= 0:
             poll_timeout = None  # SDK: wait indefinitely
 
         model = canonical_text_to_video_model(params.get("model"))
-        bt.logging.info(f"Runway text-to-video: model={model}")
+        resume = (
+            task.checkpoint is not None
+            and task.checkpoint.get("kind") == CHECKPOINT_KIND_RUNWAY
+            and task.checkpoint.get("runway_task_id")
+        )
+        if resume:
+            bt.logging.info(
+                f"Resuming Runway task_id={task.checkpoint.get('runway_task_id')} (miner restart recovery)"
+            )
+        else:
+            bt.logging.info(f"Runway text-to-video: model={model}")
 
         create_kwargs = self._build_create_kwargs(task.prompt, params, model)
         start = time.time()
 
         try:
-            created = self._client.text_to_video.create(**create_kwargs)
-            task_result = created.wait_for_task_output(timeout=poll_timeout)
+            if resume:
+                rid = str(task.checkpoint["runway_task_id"])
+                wrapper = NewTaskCreatedResponse(id=rid)
+                inject_sync_wait_method(self._client, wrapper)
+                task_result = wrapper.wait_for_task_output(timeout=poll_timeout)
+                oc(None)
+            else:
+                created = self._client.text_to_video.create(**create_kwargs)
+                oc(
+                    {
+                        "kind": CHECKPOINT_KIND_RUNWAY,
+                        "runway_task_id": created.id,
+                    }
+                )
+                try:
+                    task_result = created.wait_for_task_output(timeout=poll_timeout)
+                finally:
+                    oc(None)
         except TaskFailedError as e:
             detail = getattr(e.task_details, "failure", str(e))
             code = getattr(e.task_details, "failure_code", None)

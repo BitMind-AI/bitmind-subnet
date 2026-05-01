@@ -162,7 +162,10 @@ def add_miner_args(parser):
         "--miner.task-timeout",
         type=float,
         default=300.0,
-        help="Maximum time (seconds) to spend on a single task",
+        help=(
+            "Legacy CLI default; generation duration is bounded by each service "
+            "(e.g. Runway poll timeout). Queue wait does not count against this."
+        ),
     )
 
     parser.add_argument(

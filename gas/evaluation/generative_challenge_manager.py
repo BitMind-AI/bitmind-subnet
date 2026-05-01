@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import os
 import pickle
 import random
@@ -176,6 +177,53 @@ class GenerativeChallengeManager:
             if uid == "unknown" and signed_by:
                 return f"UID {uid} (signed-by: {signed_by})"
             return f"UID {uid}"
+
+        # Miner-reported failure after task_id was issued (async gen failed). Must run before
+        # the media-only content-type gate; otherwise application/json is rejected with 400.
+        task_status_hdr = (request.headers.get("task-status") or "").lower()
+        if task_status_hdr == "failed":
+            if not task_id:
+                bt.logging.error(
+                    f"Failure callback missing task-id from {format_uid_info()} (IP: {client_ip})"
+                )
+                return Response(status_code=400, content="Missing task-id header")
+            base_ct = content_type.split(";")[0].strip()
+            if base_ct not in ("application/json", "application/octet-stream"):
+                bt.logging.error(
+                    f"Failure callback invalid content-type {content_type!r} from {format_uid_info()} "
+                    f"(IP: {client_ip}); use application/json or application/octet-stream"
+                )
+                return Response(
+                    status_code=400,
+                    content="Failure callbacks require application/json or application/octet-stream",
+                )
+            binary_data = await request.body()
+            if not binary_data:
+                bt.logging.error(
+                    f"Failure callback empty body for task {task_id} from {format_uid_info()} (IP: {client_ip})"
+                )
+                return Response(status_code=400, content="Empty binary payload")
+            err_msg = request.headers.get("error-message") or "Unknown error"
+            try:
+                payload = json.loads(binary_data.decode("utf-8"))
+                err_msg = payload.get("error_message") or err_msg
+            except json.JSONDecodeError:
+                bt.logging.warning(
+                    f"Failure callback for task {task_id}: body is not JSON; using header error-message"
+                )
+            with self.challenge_lock:
+                if task_id not in self.challenge_tasks:
+                    bt.logging.debug(
+                        f"Failure callback for unknown/stale task_id={task_id} (IP: {client_ip})"
+                    )
+                    return Response(status_code=200, content="Task not found in current session")
+                generator_uid = self.challenge_tasks[task_id].get("uid")
+                del self.challenge_tasks[task_id]
+            bt.logging.warning(
+                f"Generative task failed (miner-reported): task_id={task_id} uid={generator_uid} "
+                f"error={err_msg!r} (IP: {client_ip})"
+            )
+            return Response(status_code=200, content="Failure recorded")
 
         if not (
             content_type.startswith("image/") or
