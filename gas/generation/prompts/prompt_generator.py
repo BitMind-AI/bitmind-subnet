@@ -298,24 +298,37 @@ class PromptGenerator:
         return extract_scene_with_vlm(image, self.vlm, self.vlm_processor)
 
     def generate_prompts_from_image(
-        self, image: Image.Image
+        self, image: Image.Image, modalities: set = None
     ) -> Dict[Modality, str]:
         """Produce one canonical prompt per modality from one image.
 
         Two-stage: VLM grounds perception, LLM composes prose. The VLM
-        runs once per image; the LLM runs twice (image + video). Total
-        per-image latency is ~6s on an 80GB card with both warm.
+        runs once per image; the LLM runs once per requested modality.
+        Total per-image latency is ~6s on an 80GB card with both modalities.
+
+        Args:
+            image: Source image to analyze.
+            modalities: Set of Modality values to generate prompts for.
+                        Defaults to {Modality.IMAGE, Modality.VIDEO}.
         """
+        if modalities is None:
+            modalities = {Modality.IMAGE, Modality.VIDEO}
+
         scene = self.generate_scene_from_image(image)
 
         if self.llm is None:
             self.load_llm()
 
-        image_prompt = self._compose(scene, kind="image")
-        video_prompt = self._compose(scene, kind="video")
+        result = {}
+        if Modality.IMAGE in modalities:
+            result[Modality.IMAGE] = self._compose(scene, kind="image")
+        if Modality.VIDEO in modalities:
+            result[Modality.VIDEO] = self._compose(scene, kind="video")
 
+        image_prompt = result.get(Modality.IMAGE, "")
+        video_prompt = result.get(Modality.VIDEO, "")
         self._log_generated_prompts(scene, image_prompt, video_prompt)
-        return {Modality.IMAGE: image_prompt, Modality.VIDEO: video_prompt}
+        return result
 
     @staticmethod
     def _log_generated_prompts(

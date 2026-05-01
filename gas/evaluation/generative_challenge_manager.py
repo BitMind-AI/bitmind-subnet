@@ -88,7 +88,17 @@ class GenerativeChallengeManager:
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
         # First select a random modality, then sample a prompt matching that modality
-        modality = random.choice([Modality.IMAGE, Modality.VIDEO])
+        raw = getattr(self.config, 'prompt_modalities', 'video')
+        available = []
+        for item in raw.split(','):
+            item = item.strip().lower()
+            if item == 'image':
+                available.append(Modality.IMAGE)
+            elif item == 'video':
+                available.append(Modality.VIDEO)
+        if not available:
+            available = [Modality.VIDEO]
+        modality = random.choice(available)
 
         retries = 3
         prompt_entry = None

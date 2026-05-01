@@ -478,6 +478,13 @@ def add_generation_service_args(parser):
     )
 
     parser.add_argument(
+        "--prompt-modalities",
+        type=str,
+        help="Comma-separated modalities to generate prompts for (image,video). Default: video only",
+        default="video",
+    )
+
+    parser.add_argument(
         "--local-batch-size",
         type=int,
         help="Number of local generations to run per cycle",
