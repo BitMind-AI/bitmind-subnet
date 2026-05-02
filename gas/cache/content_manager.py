@@ -529,6 +529,25 @@ class ContentManager:
 		"""Mark miner media as failed verification."""
 		return self.content_db.mark_miner_media_failed_verification(media_id)
 
+	def store_clip_embedding(self, media_id: str, embedding_blob: bytes) -> bool:
+		"""Store a CLIP embedding for a media entry (deep-feature duplicate detection)."""
+		return self.content_db.update_media_embedding(media_id, embedding_blob)
+
+	def get_embeddings_for_duplicate_check(
+		self, exclude_ids: Optional[List[str]] = None, limit: int = 5000
+	) -> List[tuple]:
+		"""
+		Retrieve stored CLIP embeddings for duplicate detection.
+
+		Args:
+			exclude_ids: Media IDs to exclude (current batch entries)
+			limit: Maximum number of embeddings to return
+
+		Returns:
+			List of (media_id, clip_embedding_blob) tuples
+		"""
+		return self.content_db.get_stored_embeddings(exclude_ids=exclude_ids, limit=limit)
+
 	def get_unuploaded_media(
 		self, 
 		limit: int = 100, 

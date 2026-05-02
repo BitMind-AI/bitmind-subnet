@@ -430,6 +430,27 @@ def add_validator_args(parser):
         default=24,
     )
 
+    parser.add_argument(
+        "--verification.temporal-phash-jump-threshold",
+        type=int,
+        help="Hamming distance threshold for detecting frame jumps in tampered videos (default: 30)",
+        default=30,
+    )
+
+    parser.add_argument(
+        "--verification.temporal-tamper-ratio",
+        type=float,
+        help="Fraction of frames that must be jumps to flag as tampered (default: 0.10)",
+        default=0.10,
+    )
+
+    parser.add_argument(
+        "--verification.embedding-dup-threshold",
+        type=float,
+        help="Cosine similarity threshold for CLIP embedding duplicate detection (default: 0.96)",
+        default=0.96,
+    )
+
 
 def add_generation_service_args(parser):
     """Add generation service specific arguments to the parser."""
@@ -474,7 +495,7 @@ def add_generation_service_args(parser):
         "--prompt-batch-size",
         type=int,
         help="Number of prompts to generate per cycle",
-        default=50,
+        default=100,
     )
 
     parser.add_argument(

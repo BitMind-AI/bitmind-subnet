@@ -333,6 +333,15 @@ class ContentDB:
                 "CREATE INDEX IF NOT EXISTS idx_prompts_modality ON prompts (modality)"
             )
 
+            # Add clip_embedding column for deep-feature duplicate detection (migration)
+            try:
+                conn.execute("ALTER TABLE media ADD COLUMN clip_embedding BLOB")
+                bt.logging.info("Added 'clip_embedding' column to media table")
+                conn.commit()
+            except Exception as e:
+                if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
+                    bt.logging.error(f"Unexpected error adding 'clip_embedding' column: {e}")
+
             # Temporary data hygiene: prune prompts whose source_media_id no longer exists in media table
             # Note: This only checks DB-level association, not filesystem existence.
             try:
@@ -723,6 +732,60 @@ class ContentDB:
         except Exception as e:
             bt.logging.error(f"Error marking miner media as failed verification: {e}")
             return False
+
+    def update_media_embedding(self, media_id: str, embedding_blob: bytes) -> bool:
+        """Store a CLIP embedding for a media entry."""
+        try:
+            with self._get_db_connection() as conn:
+                conn.execute(
+                    "UPDATE media SET clip_embedding = ? WHERE id = ?",
+                    (embedding_blob, media_id),
+                )
+                conn.commit()
+                return True
+        except Exception as e:
+            bt.logging.error(f"Error updating media embedding: {e}")
+            return False
+
+    def get_stored_embeddings(
+        self, exclude_ids: Optional[List[str]] = None, limit: int = 5000
+    ) -> List[tuple]:
+        """
+        Get stored CLIP embeddings for duplicate detection.
+
+        Args:
+            exclude_ids: Media IDs to exclude (e.g., current batch entries)
+            limit: Maximum number of embeddings to return
+
+        Returns:
+            List of (media_id, clip_embedding) tuples
+        """
+        try:
+            with self._get_db_connection() as conn:
+                if exclude_ids:
+                    placeholders = ",".join("?" * len(exclude_ids))
+                    cursor = conn.execute(
+                        f"""SELECT id, clip_embedding FROM media
+                            WHERE clip_embedding IS NOT NULL
+                              AND source_type = 'miner'
+                              AND id NOT IN ({placeholders})
+                            ORDER BY created_at DESC
+                            LIMIT ?""",
+                        (*exclude_ids, limit),
+                    )
+                else:
+                    cursor = conn.execute(
+                        """SELECT id, clip_embedding FROM media
+                            WHERE clip_embedding IS NOT NULL
+                              AND source_type = 'miner'
+                            ORDER BY created_at DESC
+                            LIMIT ?""",
+                        (limit,),
+                    )
+                return cursor.fetchall()
+        except Exception as e:
+            bt.logging.error(f"Error getting stored embeddings: {e}")
+            return []
 
     def get_media_entries(
         self, prompt_id: Optional[str] = None, media_id: Optional[str] = None
@@ -1432,6 +1495,18 @@ class ContentDB:
                         source_media_id=row["source_media_id"],
                         modality=row["modality"] if "modality" in row.keys() else None,
                     )
+                )
+
+            # Increment used_count and update last_used for sampled prompts
+            if entries:
+                import time
+                now = time.time()
+                ids = [e.id for e in entries]
+                placeholders = ",".join("?" * len(ids))
+                conn.execute(
+                    f"""UPDATE prompts SET used_count = used_count + 1,
+                        last_used = ? WHERE id IN ({placeholders})""",
+                    [now] + ids,
                 )
 
             # If remove=True, delete sampled prompts (only if enough remain after deletion)
