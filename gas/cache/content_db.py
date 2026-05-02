@@ -787,20 +787,6 @@ class ContentDB:
             bt.logging.error(f"Error getting stored embeddings: {e}")
             return []
 
-    def delete_media_embedding(self, media_id: str) -> bool:
-        """Remove the CLIP embedding for a media entry (cleanup)."""
-        try:
-            with self._get_db_connection() as conn:
-                conn.execute(
-                    "UPDATE media SET clip_embedding = NULL WHERE id = ?",
-                    (media_id,),
-                )
-                conn.commit()
-                return True
-        except Exception as e:
-            bt.logging.error(f"Error deleting media embedding: {e}")
-            return False
-
     def get_media_entries(
         self, prompt_id: Optional[str] = None, media_id: Optional[str] = None
     ) -> List[MediaEntry]:
