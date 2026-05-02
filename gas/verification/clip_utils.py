@@ -190,11 +190,22 @@ def process_video_temporal(
         return None
 
 
+def serialize_features(features) -> bytes:
+    if isinstance(features, torch.Tensor):
+        features = features.detach().cpu().numpy()
+    return features.astype(np.float32).tobytes()
+
+
+def deserialize_features(blob: bytes) -> np.ndarray:
+    return np.frombuffer(blob, dtype=np.float32)
+
+
 def calculate_clip_alignment(
     media_paths: List[str],
     prompts: List[str],
     model_name: str = "ViT-B/32",
     batch_size: int = 32,
+    return_features: bool = False,
 ) -> Optional[List[float]]:
     """
     Calculate CLIP embedding cosine similarities for a batch of multiple media-prompt pairs
@@ -354,6 +365,8 @@ def calculate_clip_alignment(
         bt.logging.info(
             f"CLIP model {model_name} processing complete: {len(final_scores)} scores computed"
         )
+        if return_features:
+            return final_scores, media_features
         return final_scores
 
     except Exception as e:
@@ -362,7 +375,8 @@ def calculate_clip_alignment(
 
 
 def calculate_clip_alignment_consensus(
-    media_paths: List[str], prompts: List[str], batch_size: int = 32
+    media_paths: List[str], prompts: List[str], batch_size: int = 32,
+    return_features: bool = False,
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Calculate CLIP alignment using multiple models for consensus scoring.
@@ -390,16 +404,29 @@ def calculate_clip_alignment_consensus(
         )
 
         all_model_scores = {}
+        all_model_features = {}
         failed_models = []
 
         for model_name in CLIP_MODELS:
             try:
                 bt.logging.info(f"Running verification with model {model_name}")
-                scores = calculate_clip_alignment(
-                    media_paths, prompts, model_name, batch_size
+                result = calculate_clip_alignment(
+                    media_paths, prompts, model_name, batch_size,
+                    return_features=return_features,
                 )
+                if return_features and result is not None:
+                    scores, features = result
+                elif result is not None:
+                    scores = result
+                    features = None
+                else:
+                    scores = None
+                    features = None
+
                 if scores is not None and len(scores) == len(media_paths):
                     all_model_scores[model_name] = scores
+                    if return_features and features is not None:
+                        all_model_features[model_name] = features
                     bt.logging.info(f"Model {model_name} complete: got {len(scores)} scores")
                 else:
                     failed_models.append(model_name)
@@ -467,10 +494,62 @@ def calculate_clip_alignment_consensus(
         if failed_models:
             bt.logging.warning(f"Failed models: {failed_models}")
 
+        if return_features and all_model_features:
+            primary_model = next(iter(all_model_features))
+            features_tensor = all_model_features[primary_model].cpu().numpy()
+            return consensus_results, features_tensor
+
         return consensus_results
 
     except Exception as e:
         bt.logging.error(f"Error in consensus CLIP alignment calculation: {e}")
         return None
+
+
+DEFAULT_EMBEDDING_SIMILARITY_THRESHOLD = 0.96
+
+
+def find_near_duplicate_by_embedding(
+    query_features: np.ndarray,
+    stored_embeddings: List[Tuple[str, bytes]],
+    threshold: float = DEFAULT_EMBEDDING_SIMILARITY_THRESHOLD,
+) -> Optional[Tuple[str, float]]:
+    """
+    Find near-duplicate media by comparing CLIP embeddings via cosine similarity.
+
+    Args:
+        query_features: 1-D float32 numpy array (embedding of new media)
+        stored_embeddings: List of (media_id, embedding_blob) from the database
+        threshold: Cosine similarity above which media are considered near-duplicates
+
+    Returns:
+        Tuple of (media_id, similarity) for the closest match, or None
+    """
+    if not stored_embeddings:
+        return None
+
+    query = query_features.astype(np.float32)
+    query_norm = query / (np.linalg.norm(query) + 1e-8)
+
+    best_id = None
+    best_sim = -1.0
+
+    for media_id, blob in stored_embeddings:
+        try:
+            stored = deserialize_features(blob)
+            if stored.shape != query.shape:
+                continue
+            stored_norm = stored / (np.linalg.norm(stored) + 1e-8)
+            sim = float(np.dot(query_norm, stored_norm))
+            if sim > best_sim:
+                best_sim = sim
+                best_id = media_id
+        except Exception:
+            continue
+
+    if best_id is not None and best_sim > threshold:
+        return best_id, best_sim
+
+    return None
 
 

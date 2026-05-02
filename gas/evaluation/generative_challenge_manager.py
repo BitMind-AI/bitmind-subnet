@@ -27,7 +27,13 @@ from gas.protocol.epistula import generate_header, get_verifier
 from gas.protocol.validator_requests import query_generative_miner
 from gas.types import MediaType, MinerType, Modality
 from gas.verification.c2pa_verification import verify_c2pa
-from gas.verification.duplicate_detection import compute_media_hash, DEFAULT_HAMMING_THRESHOLD
+from gas.verification.duplicate_detection import (
+    compute_media_hash,
+    detect_temporal_tampering,
+    DEFAULT_HAMMING_THRESHOLD,
+    DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
+    DEFAULT_TEMPORAL_TAMPER_RATIO,
+)
 
 
 class GenerativeChallengeManager:
@@ -87,33 +93,32 @@ class GenerativeChallengeManager:
 
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
-        # First select a random modality, then sample a prompt matching that modality
+        # Sample one unique prompt per miner to prevent Sybil replay attacks
         modality = random.choice([Modality.IMAGE, Modality.VIDEO])
+        n_needed = len(miner_uids)
 
-        retries = 3
-        prompt_entry = None
-        for _ in range(retries):
-            # Try to get a prompt for the selected modality
-            prompts = self.content_manager.sample_prompts(k=1, modality=modality.value, remove=False)
-            if len(prompts) > 0:
-                prompt_entry = prompts[0]
-                break
-            # Fallback: try without modality filter (for backwards compatibility with old prompts)
-            prompts = self.content_manager.sample_prompts(k=1, remove=False)
-            if len(prompts) > 0:
-                prompt_entry = prompts[0]
-                bt.logging.debug(f"Using legacy prompt without modality for {modality.value} challenge")
-                break
+        prompt_entries = self.content_manager.sample_prompts(
+            k=n_needed, modality=modality.value, remove=False
+        )
+        if len(prompt_entries) < n_needed:
+            bt.logging.info(
+                f"Only {len(prompt_entries)}/{n_needed} prompts available for {modality.value}. "
+                "Using what's available."
+            )
 
-        if not prompt_entry:
+        if not prompt_entries:
             bt.logging.info(
                 "Waiting for prompt cache to be populated. Skipping generative challenge."
             )
             return
 
-        await asyncio.gather(
-            *[self.send_generative_request(uid, prompt_entry, modality) for uid in miner_uids]
-        )
+        # Assign one unique prompt per miner, cycling if fewer prompts than miners
+        tasks = []
+        for i, uid in enumerate(miner_uids):
+            prompt_entry = prompt_entries[i % len(prompt_entries)]
+            tasks.append(self.send_generative_request(uid, prompt_entry, modality))
+
+        await asyncio.gather(*tasks)
 
     async def send_generative_request(self, uid: int, prompt_entry, modality: Modality):
         """Scoring is handled by the callback in GeneratorEvaluator"""
@@ -340,6 +345,28 @@ class GenerativeChallengeManager:
                     return None, "Corrupted or unreadable media"
             except Exception as e:
                 bt.logging.debug(f"Corruption check error (allowing): {e}")
+
+            # Step 1b: Check for temporal tampering in videos (frame shuffling/splicing/speed-up)
+            if modality_str == "video":
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                        tmp.write(binary_data)
+                        tmp_path = tmp.name
+                    is_tampered, ratio, jumps, total = detect_temporal_tampering(
+                        tmp_path,
+                        jump_threshold=DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
+                        tamper_ratio=DEFAULT_TEMPORAL_TAMPER_RATIO,
+                    )
+                    os.unlink(tmp_path)
+                    if is_tampered:
+                        bt.logging.warning(
+                            f"REJECTED temporally tampered video from UID {generator_uid} "
+                            f"task {task_id}: {jumps}/{total} frame jumps "
+                            f"(ratio={ratio:.2%})"
+                        )
+                        return None, "Temporally tampered video detected"
+                except Exception as e:
+                    bt.logging.debug(f"Temporal tampering check skipped: {e}")
 
             # Step 2: Compute perceptual hash and check for duplicates within same prompt
             perceptual_hash = None

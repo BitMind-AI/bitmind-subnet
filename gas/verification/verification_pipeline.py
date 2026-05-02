@@ -3,10 +3,16 @@ from statistics import mean, median
 from typing import List, Dict, Any, Optional, Tuple
 
 import bittensor as bt
+import torch
 
 from gas.cache.content_manager import ContentManager
 from gas.cache.types import MediaEntry, VerificationResult
-from .clip_utils import calculate_clip_alignment_consensus, preload_clip_models
+from .clip_utils import (
+    calculate_clip_alignment_consensus,
+    preload_clip_models,
+    find_near_duplicate_by_embedding,
+    serialize_features,
+)
 
 
 def run_verification(
@@ -156,21 +162,25 @@ def verify_media(
         all_results = []
         
         # Process images with large batch size (128)
+        image_features = None
         if image_entries:
             bt.logging.info(f"Processing {len(image_entries)} images (batch_size=128)")
-            image_consensus = calculate_clip_alignment_consensus(
-                image_paths, image_prompts, batch_size=128
+            result = calculate_clip_alignment_consensus(
+                image_paths, image_prompts, batch_size=128, return_features=True
             )
-            if image_consensus:
+            if result is not None:
+                image_consensus, image_features = result
                 all_results.extend(zip(image_entries, image_prompts, image_consensus))
         
         # Process videos with small batch size (32)
+        video_features = None
         if video_entries:
             bt.logging.info(f"Processing {len(video_entries)} videos (batch_size=32)")
-            video_consensus = calculate_clip_alignment_consensus(
-                video_paths, video_prompts, batch_size=32
+            result = calculate_clip_alignment_consensus(
+                video_paths, video_prompts, batch_size=32, return_features=True
             )
-            if video_consensus:
+            if result is not None:
+                video_consensus, video_features = result
                 all_results.extend(zip(video_entries, video_prompts, video_consensus))
         
         if not all_results:
@@ -257,6 +267,49 @@ def verify_media(
                         bt.logging.error(f"Failed to delete corrupted video: {media_entry.file_path}")
                 except Exception as e:
                     bt.logging.error(f"Error deleting corrupted video {media_entry.file_path}: {e}")
+
+        # Embedding-based duplicate detection
+        # Build feature index from CLIP features (same order as entries)
+        entry_to_features = {}
+        if image_features is not None and len(image_entries) == len(image_features):
+            for i, entry in enumerate(image_entries):
+                entry_to_features[entry.id] = image_features[i]
+        if video_features is not None and len(video_entries) == len(video_features):
+            for i, entry in enumerate(video_entries):
+                entry_to_features[entry.id] = video_features[i]
+
+        if entry_to_features:
+            current_batch_ids = list(entry_to_features.keys())
+            stored_embeddings = content_manager.get_embeddings_for_duplicate_check(
+                exclude_ids=current_batch_ids, limit=5000,
+            )
+
+            for result in verification_results:
+                if not result.passed:
+                    continue
+                entry = result.media_entry
+                features = entry_to_features.get(entry.id)
+                if features is None:
+                    continue
+
+                near_dup = find_near_duplicate_by_embedding(features, stored_embeddings)
+                if near_dup is not None:
+                    dup_id, sim = near_dup
+                    bt.logging.warning(
+                        f"REJECTED near-duplicate by embedding: media_id={entry.id} "
+                        f"matches {dup_id} with cosine_sim={sim:.4f}"
+                    )
+                    result.passed = False
+                    if result.verification_score:
+                        result.verification_score["embedding_duplicate"] = True
+                        result.verification_score["embedding_duplicate_of"] = dup_id
+
+                # Store embedding for future duplicate checks
+                try:
+                    embedding_blob = serialize_features(features)
+                    content_manager.store_clip_embedding(entry.id, embedding_blob)
+                except Exception as e:
+                    bt.logging.debug(f"Failed to store CLIP embedding for {entry.id}: {e}")
 
         _log_breakdowns(verification_results, threshold)
 
