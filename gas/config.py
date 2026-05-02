@@ -495,7 +495,7 @@ def add_generation_service_args(parser):
         "--prompt-batch-size",
         type=int,
         help="Number of prompts to generate per cycle",
-        default=50,
+        default=100,
     )
 
     parser.add_argument(

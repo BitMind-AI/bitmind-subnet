@@ -98,7 +98,7 @@ class GenerativeChallengeManager:
         n_needed = len(miner_uids)
 
         prompt_entries = self.content_manager.sample_prompts(
-            k=n_needed, modality=modality.value, remove=False
+            k=n_needed, modality=modality.value, remove=False, strategy="least_used",
         )
         if len(prompt_entries) < n_needed:
             bt.logging.info(

@@ -1511,6 +1511,18 @@ class ContentDB:
                     )
                 )
 
+            # Increment used_count and update last_used for sampled prompts
+            if entries:
+                import time
+                now = time.time()
+                ids = [e.id for e in entries]
+                placeholders = ",".join("?" * len(ids))
+                conn.execute(
+                    f"""UPDATE prompts SET used_count = used_count + 1,
+                        last_used = ? WHERE id IN ({placeholders})""",
+                    [now] + ids,
+                )
+
             # If remove=True, delete sampled prompts (only if enough remain after deletion)
             if remove and entries:
                 count_query = f"SELECT COUNT(*) FROM prompts WHERE {where_clause}"
