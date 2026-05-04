@@ -140,6 +140,37 @@ AI_SOURCE_TYPES = {
     "http://cv.iptc.org/newscodes/digitalsourcetype/compositeWithTrainedAlgorithmicMedia",
 }
 
+PROVIDER_PROFILES = {
+    "openai": {
+        "aliases": ("OpenAI", "DALL-E", "Sora", "Truepic"),
+        "requires_ai_source": False,
+    },
+    "google": {
+        "aliases": ("Google", "Imagen", "Gemini", "Veo"),
+        "requires_ai_source": False,
+    },
+    "adobe": {
+        "aliases": ("Adobe", "Firefly"),
+        "requires_ai_source": False,
+    },
+    "microsoft": {
+        "aliases": ("Microsoft", "Copilot", "Designer"),
+        "requires_ai_source": False,
+    },
+    "runway": {
+        "aliases": ("Runway",),
+        "requires_ai_source": False,
+    },
+    "stability_ai": {
+        "aliases": ("Stability AI", "Stable Diffusion", "Stable Video"),
+        "requires_ai_source": False,
+    },
+    "black_forest_labs": {
+        "aliases": ("Black Forest Labs", "FLUX"),
+        "requires_ai_source": False,
+    },
+}
+
 
 class C2PAVerificationResult:
     def __init__(
@@ -154,6 +185,9 @@ class C2PAVerificationResult:
         model_name: Optional[str] = None,
         manifest_data: Optional[Dict[str, Any]] = None,
         validation_errors: Optional[List[str]] = None,
+        provider_profile: Optional[str] = None,
+        metadata_complete: bool = False,
+        policy_warnings: Optional[List[str]] = None,
         error: Optional[str] = None,
     ):
         self.verified = verified
@@ -166,6 +200,9 @@ class C2PAVerificationResult:
         self.model_name = model_name
         self.manifest_data = manifest_data or {}
         self.validation_errors = validation_errors or []
+        self.provider_profile = provider_profile
+        self.metadata_complete = metadata_complete
+        self.policy_warnings = policy_warnings or []
         self.error = error
 
     def to_dict(self) -> Dict[str, Any]:
@@ -178,9 +215,56 @@ class C2PAVerificationResult:
             "is_self_signed": self.is_self_signed,
             "ai_generated": self.ai_generated,
             "model_name": self.model_name,
+            "provider_profile": self.provider_profile,
+            "metadata_complete": self.metadata_complete,
+            "policy_warnings": self.policy_warnings,
             "validation_errors": self.validation_errors,
             "error": self.error,
         }
+
+
+def _classify_provider_profile(
+    cert_subject: Optional[str],
+    cert_issuer: Optional[str],
+    claim_generator: Optional[str],
+    ai_generated: bool,
+) -> Dict[str, Any]:
+    """Classify provider-specific C2PA metadata without enforcing policy."""
+    haystack = " ".join(
+        value for value in (cert_subject, claim_generator) if value
+    ).lower()
+
+    provider_profile = None
+    for profile_name, profile in PROVIDER_PROFILES.items():
+        aliases = profile.get("aliases", ())
+        if any(alias.lower() in haystack for alias in aliases):
+            provider_profile = profile_name
+            break
+
+    policy_warnings = []
+    if not provider_profile:
+        policy_warnings.append("unknown_provider_profile")
+    if not cert_issuer:
+        policy_warnings.append("missing_cert_issuer")
+    if not cert_subject:
+        policy_warnings.append("missing_cert_subject")
+    if not claim_generator:
+        policy_warnings.append("missing_claim_generator")
+    if not ai_generated:
+        profile_requires = (
+            PROVIDER_PROFILES[provider_profile].get("requires_ai_source", True)
+            if provider_profile
+            else True
+        )
+        if profile_requires:
+            policy_warnings.append("missing_ai_source_assertion")
+
+    metadata_complete = bool(cert_issuer and (cert_subject or claim_generator))
+    return {
+        "provider_profile": provider_profile,
+        "metadata_complete": metadata_complete,
+        "policy_warnings": policy_warnings,
+    }
 
 
 def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
@@ -274,10 +358,20 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
 
         ai_generated = _check_ai_generated(manifest_data)
         model_name = _extract_model_name(manifest_data)
+        provider_audit = _classify_provider_profile(
+            cert_subject=cert_subject,
+            cert_issuer=cert_issuer,
+            claim_generator=claim_generator,
+            ai_generated=ai_generated,
+        )
 
         bt.logging.info(
             f"C2PA verified: issuer={claim_generator}, model_name={model_name}, "
-            f"cert_subject={cert_subject}, cert_issuer={cert_issuer}, ai_generated={ai_generated}"
+            f"cert_subject={cert_subject}, cert_issuer={cert_issuer}, "
+            f"ai_generated={ai_generated}, "
+            f"provider_profile={provider_audit['provider_profile']}, "
+            f"metadata_complete={provider_audit['metadata_complete']}, "
+            f"policy_warnings={provider_audit['policy_warnings']}"
         )
 
         return C2PAVerificationResult(
@@ -289,7 +383,13 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
             is_self_signed=False,
             ai_generated=ai_generated,
             model_name=model_name,
-            manifest_data={"raw": manifest_json},
+            manifest_data={
+                "raw": manifest_json,
+                "provider_audit": provider_audit,
+            },
+            provider_profile=provider_audit["provider_profile"],
+            metadata_complete=provider_audit["metadata_complete"],
+            policy_warnings=provider_audit["policy_warnings"],
         )
 
     except Exception as e:
