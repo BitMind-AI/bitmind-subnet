@@ -77,7 +77,11 @@ def run_verification(
         and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
     )
     passed_verifications = sum(1 for r in results if r.passed)
-    failed_verifications = sum(1 for r in results if r.verification_score is not None and not r.passed)
+    failed_verifications = sum(
+        1 for r in results
+        if r.verification_score is not None and not r.passed
+        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+    )
 
     bt.logging.info(
         f"Verification batch complete: {successful_verifications}/{len(results)} processed, "
@@ -333,7 +337,11 @@ def verify_media(
 
 def _bucket_stats(results: List[VerificationResult], threshold: float) -> Dict[str, Any]:
     """Aggregate count / pass-rate / score-stats for a slice of results."""
-    scored = [r for r in results if r.verification_score]
+    scored = [
+        r for r in results
+        if r.verification_score
+        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+    ]
     scores = [r.verification_score["score"] for r in scored]
     n = len(results)
     n_scored = len(scored)
@@ -450,10 +458,22 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
         }
 
     total = len(results)
-    successful = sum(1 for r in results if r.verification_score is not None)
+    corrupted = sum(
+        1 for r in results
+        if isinstance(r.verification_score, dict) and r.verification_score.get("corrupted")
+    )
+    successful = sum(
+        1 for r in results
+        if r.verification_score is not None
+        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+    )
     passed = sum(1 for r in results if r.passed)
-    failed = sum(1 for r in results if r.verification_score is not None and not r.passed)
-    errors = sum(1 for r in results if r.verification_score is None)
+    failed = sum(
+        1 for r in results
+        if r.verification_score is not None and not r.passed
+        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+    )
+    errors = sum(1 for r in results if r.verification_score is None) + corrupted
 
     scores = [
         (
@@ -463,6 +483,7 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
         )
         for r in results
         if r.verification_score is not None
+        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
     ]
     avg_score = sum(scores) / len(scores) if scores else 0.0
 
