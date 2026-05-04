@@ -3,6 +3,7 @@ from statistics import mean, median
 from typing import List, Dict, Any, Optional, Tuple
 
 import bittensor as bt
+import numpy as np
 import torch
 
 from gas.cache.content_manager import ContentManager
@@ -11,6 +12,7 @@ from .clip_utils import (
     calculate_clip_alignment_consensus,
     preload_clip_models,
     find_near_duplicate_by_embedding,
+    DEFAULT_EMBEDDING_SIMILARITY_THRESHOLD,
     serialize_features,
 )
 
@@ -284,12 +286,37 @@ def verify_media(
                 exclude_ids=current_batch_ids, limit=5000,
             )
 
+            accepted_batch_embeddings = []
             for result in verification_results:
                 if not result.passed:
                     continue
                 entry = result.media_entry
                 features = entry_to_features.get(entry.id)
                 if features is None:
+                    continue
+
+                query = features.astype(np.float32)
+                query_norm = query / (np.linalg.norm(query) + 1e-8)
+                current_batch_dup = None
+                for prior_entry_id, prior_features in accepted_batch_embeddings:
+                    prior = prior_features.astype(np.float32)
+                    prior_norm = prior / (np.linalg.norm(prior) + 1e-8)
+                    sim = float(np.dot(query_norm, prior_norm))
+                    if sim > DEFAULT_EMBEDDING_SIMILARITY_THRESHOLD:
+                        current_batch_dup = (prior_entry_id, sim)
+                        break
+
+                if current_batch_dup is not None:
+                    dup_id, sim = current_batch_dup
+                    bt.logging.warning(
+                        f"REJECTED near-duplicate in current batch: media_id={entry.id} "
+                        f"matches {dup_id} with cosine_sim={sim:.4f}"
+                    )
+                    result.passed = False
+                    if result.verification_score:
+                        result.verification_score["embedding_duplicate"] = True
+                        result.verification_score["embedding_duplicate_of"] = dup_id
+                        result.verification_score["embedding_duplicate_scope"] = "current_batch"
                     continue
 
                 near_dup = find_near_duplicate_by_embedding(features, stored_embeddings)
@@ -303,6 +330,10 @@ def verify_media(
                     if result.verification_score:
                         result.verification_score["embedding_duplicate"] = True
                         result.verification_score["embedding_duplicate_of"] = dup_id
+                        result.verification_score["embedding_duplicate_scope"] = "stored"
+                    continue
+
+                accepted_batch_embeddings.append((entry.id, features))
 
                 # Store embedding for future duplicate checks
                 try:

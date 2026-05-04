@@ -451,6 +451,13 @@ def add_validator_args(parser):
         default=0.96,
     )
 
+    parser.add_argument(
+        "--verification.global-dup-hamming-threshold",
+        type=int,
+        help="Hamming distance threshold for global (cross-prompt) perceptual hash duplicate detection (default: 4)",
+        default=4,
+    )
+
 
 def add_generation_service_args(parser):
     """Add generation service specific arguments to the parser."""
