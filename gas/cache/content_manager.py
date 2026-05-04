@@ -644,11 +644,6 @@ class ContentManager:
 			outcome_stats = self.content_db.get_challenge_outcome_stats_last_n_hours(
 				lookback_hours=lookback_hours, limit=limit_val
 			)
-			if outcome_stats:
-				bt.logging.info(
-					f"Retrieved challenge-outcome stats for {len(outcome_stats)} miners"
-				)
-				return outcome_stats
 
 			verified_media = self.get_recent_verified_miner_media(
 				lookback_hours=lookback_hours, limit=limit_val
@@ -656,12 +651,20 @@ class ContentManager:
 			failed_media = self.get_recent_failed_miner_media(
 				lookback_hours=lookback_hours, limit=limit_val
 			)
-			if not verified_media and not failed_media:
+			if not verified_media and not failed_media and not outcome_stats:
 				bt.logging.debug(f"No verified or failed miner media in last {lookback_hours}h")
 				return {}
-			return self._build_verification_stats_from_verified_and_failed(
+			legacy_stats = self._build_verification_stats_from_verified_and_failed(
 				verified_media, failed_media
 			)
+
+			if outcome_stats:
+				bt.logging.info(
+					f"Retrieved challenge-outcome stats for {len(outcome_stats)} miners"
+				)
+				return self._merge_verification_stats(legacy_stats, outcome_stats)
+
+			return legacy_stats
 		except Exception as e:
 			bt.logging.error(f"Error getting verification stats for last {lookback_hours}h: {e}")
 			import traceback
@@ -725,6 +728,33 @@ class ContentManager:
 			}
 		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
 		return verification_stats
+
+	def _merge_verification_stats(
+		self,
+		legacy_stats: Dict[str, Dict[str, Any]],
+		outcome_stats: Dict[str, Dict[str, Any]],
+	) -> Dict[str, Dict[str, Any]]:
+		"""Merge legacy media-based stats with challenge-outcome stats.
+
+		For miners present in both sources, outcome data takes precedence,
+		supplemented by legacy verified_media_ids. Miners in only one source
+		pass through unchanged — no miner is dropped during transition.
+		"""
+		merged = {}
+		all_hotkeys = set(legacy_stats.keys()) | set(outcome_stats.keys())
+		for hotkey in all_hotkeys:
+			legacy = legacy_stats.get(hotkey, {})
+			outcome = outcome_stats.get(hotkey, {})
+			if outcome:
+				entry = dict(outcome)
+				if not entry.get("verified_media_ids"):
+					entry["verified_media_ids"] = legacy.get("verified_media_ids", [])
+				if "uid" not in entry:
+					entry["uid"] = legacy.get("uid")
+				merged[hotkey] = entry
+			else:
+				merged[hotkey] = dict(legacy)
+		return merged
 
 	def upload_batch_to_huggingface(
 		self, 
