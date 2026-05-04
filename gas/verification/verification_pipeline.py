@@ -201,11 +201,13 @@ def verify_media(
                     f"Corrupted/invalid video detected: {media_entry.file_path} (ID: {media_entry.id})"
                 )
                 corrupted_videos.append(media_entry)
-                # Still create a failed result for this entry
                 result = VerificationResult(
                     media_entry=media_entry,
                     original_prompt=prompt,
-                    verification_score=None,
+                    verification_score={
+                        "consensus_details": consensus_result,
+                        "corrupted": True,
+                    },
                     passed=False,
                 )
                 verification_results.append(result)
@@ -364,7 +366,7 @@ def _log_breakdowns(results: List[VerificationResult], threshold: float) -> None
         score = r.verification_score or {}
         if isinstance(score, dict):
             details = score.get("consensus_details") or {}
-            if details.get("corrupted"):
+            if details.get("corrupted") or score.get("corrupted"):
                 corrupted_count += 1
             if score.get("embedding_duplicate"):
                 embedding_duplicate_count += 1
