@@ -736,9 +736,16 @@ class ContentManager:
 	) -> Dict[str, Dict[str, Any]]:
 		"""Merge legacy media-based stats with challenge-outcome stats.
 
-		Post-deployment events appear in both sources. Use max() rather than
-		sum() to avoid double-counting: legacy always includes outcome's
-		events plus any pre-deployment media verified in the same window.
+		Post-deployment, verified events appear in both sources (same CLIP
+		pass recorded in both media and outcome). Use max() to avoid
+		double-counting those.
+
+		Failed events partially overlap (CLIP fails) but outcome also tracks
+		pre-storage rejections that never create a media row. Use sum() so
+		pre-storage rejections are always counted — the CLIP-fail overlap
+		is a minor pessimism that self-resolves when the transition window
+		(≤4h lookback) elapses and outcome >= legacy for all event types.
+
 		Miners in only one source pass through unchanged.
 		"""
 		merged = {}
@@ -751,9 +758,9 @@ class ContentManager:
 				legacy.get("total_verified", 0),
 				outcome.get("total_verified", 0),
 			)
-			failed = max(
-				legacy.get("total_failed", 0),
-				outcome.get("total_failed", 0),
+			failed = (
+				legacy.get("total_failed", 0)
+				+ outcome.get("total_failed", 0)
 			)
 			total_evaluated = verified + failed
 			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
