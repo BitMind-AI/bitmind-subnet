@@ -87,6 +87,9 @@ class MediaEntry:
     c2pa_verified: Optional[bool] = False  # C2PA validation passed
     c2pa_issuer: Optional[str] = None  # Issuer name if C2PA verified
 
+    # Miner challenge tracking
+    task_id: Optional[str] = None
+
     # Common fields
     created_at: float = None
     resolution: Optional[tuple[int, int]] = None  # (width, height)
@@ -123,3 +126,26 @@ class VerificationResult:
         self.generated_caption = generated_caption
         self.verification_score = verification_score
         self.passed = passed
+
+
+@dataclass
+class ChallengeOutcome:
+    """Represents a generation-miner challenge outcome for reward accounting."""
+
+    task_id: str
+    uid: int
+    hotkey: str
+    prompt_id: str
+    modality: str
+    status: str
+    failure_reason: Optional[str] = None
+    media_id: Optional[str] = None
+    created_at: float = None
+    updated_at: float = None
+
+    def __post_init__(self):
+        now = time.time()
+        if self.created_at is None:
+            self.created_at = now
+        if self.updated_at is None:
+            self.updated_at = self.created_at

@@ -211,6 +211,12 @@ class ContentManager:
 				perceptual_hash=perceptual_hash,
 				c2pa_verified=c2pa_verified,
 				c2pa_issuer=c2pa_issuer,
+				task_id=task_id,
+			)
+			self.content_db.update_challenge_outcome(
+				task_id=task_id,
+				status="stored",
+				media_id=media_id,
 			)
 
 			bt.logging.info(f"Saved miner media to {save_path} with database ID: {media_id}")
@@ -529,6 +535,44 @@ class ContentManager:
 		"""Mark miner media as failed verification."""
 		return self.content_db.mark_miner_media_failed_verification(media_id)
 
+	def record_challenge_outcome(
+		self,
+		task_id: str,
+		uid: int,
+		hotkey: str,
+		prompt_id: str,
+		modality: str,
+		status: str = "pending",
+		failure_reason: Optional[str] = None,
+		media_id: Optional[str] = None,
+		created_at: Optional[float] = None,
+	) -> bool:
+		return self.content_db.record_challenge_outcome(
+			task_id=task_id,
+			uid=uid,
+			hotkey=hotkey,
+			prompt_id=prompt_id,
+			modality=modality,
+			status=status,
+			failure_reason=failure_reason,
+			media_id=media_id,
+			created_at=created_at,
+		)
+
+	def update_challenge_outcome(
+		self,
+		task_id: str,
+		status: str,
+		failure_reason: Optional[str] = None,
+		media_id: Optional[str] = None,
+	) -> bool:
+		return self.content_db.update_challenge_outcome(
+			task_id=task_id,
+			status=status,
+			failure_reason=failure_reason,
+			media_id=media_id,
+		)
+
 	def store_clip_embedding(self, media_id: str, embedding_blob: bytes) -> bool:
 		"""Store a CLIP embedding for a media entry (deep-feature duplicate detection)."""
 		return self.content_db.update_media_embedding(media_id, embedding_blob)
@@ -597,18 +641,30 @@ class ContentManager:
 		"""
 		try:
 			limit_val = limit or 1000
+			outcome_stats = self.content_db.get_challenge_outcome_stats_last_n_hours(
+				lookback_hours=lookback_hours, limit=limit_val
+			)
+
 			verified_media = self.get_recent_verified_miner_media(
 				lookback_hours=lookback_hours, limit=limit_val
 			)
 			failed_media = self.get_recent_failed_miner_media(
 				lookback_hours=lookback_hours, limit=limit_val
 			)
-			if not verified_media and not failed_media:
+			if not verified_media and not failed_media and not outcome_stats:
 				bt.logging.debug(f"No verified or failed miner media in last {lookback_hours}h")
 				return {}
-			return self._build_verification_stats_from_verified_and_failed(
+			legacy_stats = self._build_verification_stats_from_verified_and_failed(
 				verified_media, failed_media
 			)
+
+			if outcome_stats:
+				bt.logging.info(
+					f"Retrieved challenge-outcome stats for {len(outcome_stats)} miners"
+				)
+				return self._merge_verification_stats(legacy_stats, outcome_stats)
+
+			return legacy_stats
 		except Exception as e:
 			bt.logging.error(f"Error getting verification stats for last {lookback_hours}h: {e}")
 			import traceback
@@ -672,6 +728,70 @@ class ContentManager:
 			}
 		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
 		return verification_stats
+
+	def _merge_verification_stats(
+		self,
+		legacy_stats: Dict[str, Dict[str, Any]],
+		outcome_stats: Dict[str, Dict[str, Any]],
+	) -> Dict[str, Dict[str, Any]]:
+		"""Merge legacy media-based stats with challenge-outcome stats.
+
+		Post-deployment, verified events appear in both sources (same CLIP
+		pass recorded in both media and outcome). Use max() to avoid
+		double-counting those.
+
+		Failed events partially overlap (CLIP fails) but outcome also tracks
+		pre-storage rejections that never create a media row. Use sum() so
+		pre-storage rejections are always counted — the CLIP-fail overlap
+		is a minor pessimism that self-resolves when the transition window
+		(≤4h lookback) elapses and outcome >= legacy for all event types.
+
+		Miners in only one source pass through unchanged.
+		"""
+		merged = {}
+		all_hotkeys = set(legacy_stats.keys()) | set(outcome_stats.keys())
+		for hotkey in all_hotkeys:
+			legacy = legacy_stats.get(hotkey, {})
+			outcome = outcome_stats.get(hotkey, {})
+
+			verified = max(
+				legacy.get("total_verified", 0),
+				outcome.get("total_verified", 0),
+			)
+			failed = (
+				legacy.get("total_failed", 0)
+				+ outcome.get("total_failed", 0)
+			)
+			total_evaluated = verified + failed
+			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
+
+			legacy_ids = legacy.get("media_ids", [])
+			outcome_ids = outcome.get("media_ids", [])
+			if len(outcome_ids) >= len(legacy_ids):
+				all_ids = outcome_ids
+			else:
+				all_ids = list(dict.fromkeys(legacy_ids + outcome_ids))
+
+			last_ts = max(
+				legacy.get("last_timestamp", 0) or 0,
+				outcome.get("last_timestamp", 0) or 0,
+			)
+
+			uid_legacy = legacy.get("uid")
+			uid_outcome = outcome.get("uid")
+			uid = uid_outcome if uid_outcome is not None else uid_legacy
+
+			merged[hotkey] = {
+				"uid": uid,
+				"total_verified": verified,
+				"total_submissions": total_evaluated,
+				"total_failed": failed,
+				"total_evaluated": total_evaluated,
+				"pass_rate": pass_rate,
+				"media_ids": all_ids,
+				"last_timestamp": last_ts,
+			}
+		return merged
 
 	def upload_batch_to_huggingface(
 		self, 

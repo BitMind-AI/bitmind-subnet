@@ -140,9 +140,11 @@ class GenerativeChallengeManager:
 
         if response_data and response_data.get("task_id"):
             miner_task_id = response_data.get("task_id")
+            miner_hotkey = self.metagraph.hotkeys[uid]
             with self.challenge_lock:
                 self.challenge_tasks[miner_task_id] = {
                     "uid": uid,
+                    "hotkey": miner_hotkey,
                     "prompt_id": prompt_entry.id,
                     "prompt_content": prompt_entry.content,
                     "modality": modality,
@@ -150,6 +152,14 @@ class GenerativeChallengeManager:
                     "status": "pending",
                     "sent_at": time.time(),
                 }
+            self.content_manager.record_challenge_outcome(
+                task_id=miner_task_id,
+                uid=uid,
+                hotkey=miner_hotkey,
+                prompt_id=prompt_entry.id,
+                modality=modality.value,
+                status="pending",
+            )
             bt.logging.info(
                 f"Stored challenge task {miner_task_id} for UID {uid}. Total active tasks: {len(self.challenge_tasks)}"
             )
@@ -223,10 +233,16 @@ class GenerativeChallengeManager:
                     )
                     return Response(status_code=200, content="Task not found in current session")
                 generator_uid = self.challenge_tasks[task_id].get("uid")
+                generator_hotkey = self.challenge_tasks[task_id].get("hotkey") or self.metagraph.hotkeys[generator_uid]
                 del self.challenge_tasks[task_id]
+            self.content_manager.update_challenge_outcome(
+                task_id=task_id,
+                status="failed",
+                failure_reason=f"miner_reported_failure: {err_msg}",
+            )
             bt.logging.warning(
                 f"Generative task failed (miner-reported): task_id={task_id} uid={generator_uid} "
-                f"error={err_msg!r} (IP: {client_ip})"
+                f"hotkey={generator_hotkey[:16]}... error={err_msg!r} (IP: {client_ip})"
             )
             return Response(status_code=200, content="Failure recorded")
 
@@ -293,12 +309,17 @@ class GenerativeChallengeManager:
 
                 del self.challenge_tasks[task_id]
                 return Response(status_code=200, content="Binary content received")
-            else:
-                self.challenge_tasks[task_id]["status"] = "failed"
-                self.challenge_tasks[task_id]["error_message"] = error_message or "Failed to store binary content"
 
-                del self.challenge_tasks[task_id]
-                return Response(status_code=400, content=error_message or "Failed to store binary content")
+            # Storage failed — release lock before DB call
+            failure_reason = error_message or "Failed to store binary content"
+            del self.challenge_tasks[task_id]
+
+        self.content_manager.update_challenge_outcome(
+            task_id=task_id,
+            status="failed",
+            failure_reason=failure_reason,
+        )
+        return Response(status_code=400, content=failure_reason)
 
     async def store_binary_content(
         self, binary_data: bytes, content_type: str, generator_uid: int, task_id: str
@@ -642,6 +663,14 @@ class GenerativeChallengeManager:
                     bt.logging.debug(f"Removed stale task {task_id} during state save")
 
                 tasks_to_save = self.challenge_tasks.copy()
+
+            # Release lock before making blocking DB calls
+            for task_id in stale_tasks:
+                self.content_manager.update_challenge_outcome(
+                    task_id=task_id,
+                    status="failed",
+                    failure_reason="challenge_timeout",
+                )
 
             filepath = os.path.join(save_dir, filename)
             with open(filepath, 'wb') as f:

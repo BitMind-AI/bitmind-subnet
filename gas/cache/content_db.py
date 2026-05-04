@@ -10,7 +10,7 @@ import random
 
 import bittensor as bt
 
-from gas.cache.types import PromptEntry, MediaEntry
+from gas.cache.types import ChallengeOutcome, PromptEntry, MediaEntry
 from gas.types import Modality, MediaType, SOURCE_TYPE_TO_DB_NAME_FIELD, SourceType
 
 
@@ -165,6 +165,25 @@ class ContentDB:
             """
             )
 
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS generator_challenge_outcomes (
+                    task_id TEXT PRIMARY KEY,
+                    uid INTEGER NOT NULL,
+                    hotkey TEXT NOT NULL,
+                    prompt_id TEXT NOT NULL,
+                    modality TEXT NOT NULL CHECK (modality IN ('image', 'video', 'audio')),
+                    status TEXT NOT NULL CHECK (status IN ('pending', 'stored', 'verified', 'failed')),
+                    failure_reason TEXT,
+                    media_id TEXT,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    FOREIGN KEY (prompt_id) REFERENCES prompts (id),
+                    FOREIGN KEY (media_id) REFERENCES media (id)
+                )
+            """
+            )
+
             # Create indexes for better performance
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_prompts_content_type ON prompts (content_type)"
@@ -228,6 +247,21 @@ class ContentDB:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_miner_media_created_at ON miner_media (created_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_challenge_outcomes_hotkey ON generator_challenge_outcomes (hotkey)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_challenge_outcomes_uid ON generator_challenge_outcomes (uid)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_challenge_outcomes_status ON generator_challenge_outcomes (status)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_challenge_outcomes_updated_at ON generator_challenge_outcomes (updated_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_challenge_outcomes_media_id ON generator_challenge_outcomes (media_id)"
             )
 
             # Add 'uploaded' column to media table if it doesn't exist (conditional migration)
@@ -319,6 +353,26 @@ class ContentDB:
             except Exception as e:
                 if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
                     bt.logging.error(f"Unexpected error adding 'c2pa_issuer' column: {e}")
+
+            # Add task_id column for generation challenge outcome linkage (migration)
+            try:
+                conn.execute("ALTER TABLE media ADD COLUMN task_id TEXT")
+                bt.logging.info("Added 'task_id' column to media table")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_media_task_id ON media (task_id)"
+                )
+                conn.commit()
+            except Exception as e:
+                if "duplicate column name" not in str(e).lower() and "already exists" not in str(e).lower():
+                    bt.logging.error(f"Unexpected error adding 'task_id' column: {e}")
+                else:
+                    try:
+                        conn.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_media_task_id ON media (task_id)"
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass
 
             # Add modality column to prompts table (migration)
             try:
@@ -494,6 +548,11 @@ class ContentDB:
                 if "c2pa_issuer" in row.keys() and row["c2pa_issuer"] is not None
                 else None
             ),
+            task_id=(
+                row["task_id"]
+                if "task_id" in row.keys() and row["task_id"] is not None
+                else None
+            ),
             created_at=row["created_at"],
             generation_args=(
                 json.loads(row["generation_args"]) if row["generation_args"] else None
@@ -528,6 +587,7 @@ class ContentDB:
         perceptual_hash: Optional[str] = None,
         c2pa_verified: Optional[bool] = None,
         c2pa_issuer: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> str:
         media_id = str(uuid.uuid4())
         created_at = time.time()
@@ -542,8 +602,8 @@ class ContentDB:
                                  model_name, download_url, scraper_name, dataset_name, 
                                  dataset_source_file, dataset_index, uid, hotkey, verified,
                                  created_at, generation_args, mask_path, timestamp, resolution, 
-                                 file_size, format, perceptual_hash, c2pa_verified, c2pa_issuer)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 file_size, format, perceptual_hash, c2pa_verified, c2pa_issuer, task_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     media_id,
@@ -571,6 +631,7 @@ class ContentDB:
                     perceptual_hash,
                     c2pa_verified,
                     c2pa_issuer,
+                    task_id,
                 ),
             )
             conn.commit()
@@ -703,6 +764,196 @@ class ContentDB:
             )
             return int(cursor.fetchone()[0])
 
+    def record_challenge_outcome(
+        self,
+        task_id: str,
+        uid: int,
+        hotkey: str,
+        prompt_id: str,
+        modality: str,
+        status: str = "pending",
+        failure_reason: Optional[str] = None,
+        media_id: Optional[str] = None,
+        created_at: Optional[float] = None,
+    ) -> bool:
+        """Insert or update a generation challenge outcome."""
+        try:
+            now = time.time()
+            created_at = created_at or now
+            with self._get_db_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO generator_challenge_outcomes (
+                        task_id, uid, hotkey, prompt_id, modality, status,
+                        failure_reason, media_id, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(task_id) DO UPDATE SET
+                        uid = excluded.uid,
+                        hotkey = excluded.hotkey,
+                        prompt_id = excluded.prompt_id,
+                        modality = excluded.modality,
+                        status = excluded.status,
+                        failure_reason = excluded.failure_reason,
+                        media_id = COALESCE(excluded.media_id, generator_challenge_outcomes.media_id),
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        task_id,
+                        uid,
+                        hotkey,
+                        prompt_id,
+                        modality,
+                        status,
+                        failure_reason,
+                        media_id,
+                        created_at,
+                        now,
+                    ),
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            bt.logging.error(f"Error recording challenge outcome for task {task_id}: {e}")
+            return False
+
+    def update_challenge_outcome(
+        self,
+        task_id: str,
+        status: str,
+        failure_reason: Optional[str] = None,
+        media_id: Optional[str] = None,
+    ) -> bool:
+        """Update an existing challenge outcome status."""
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE generator_challenge_outcomes
+                    SET status = ?,
+                        failure_reason = ?,
+                        media_id = COALESCE(?, media_id),
+                        updated_at = ?
+                    WHERE task_id = ?
+                    """,
+                    (status, failure_reason, media_id, time.time(), task_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            bt.logging.error(f"Error updating challenge outcome for task {task_id}: {e}")
+            return False
+
+    def mark_challenge_outcome_for_media(
+        self,
+        media_id: str,
+        status: str,
+        failure_reason: Optional[str] = None,
+    ) -> bool:
+        """Update a challenge outcome using its stored media row."""
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE generator_challenge_outcomes
+                    SET status = ?,
+                        failure_reason = ?,
+                        media_id = COALESCE(media_id, ?),
+                        updated_at = ?
+                    WHERE media_id = ?
+                       OR task_id = (SELECT task_id FROM media WHERE id = ?)
+                    """,
+                    (status, failure_reason, media_id, time.time(), media_id, media_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            bt.logging.error(f"Error updating challenge outcome for media {media_id}: {e}")
+            return False
+
+    def get_challenge_outcomes_last_n_hours(
+        self, lookback_hours: float = 2.0, limit: int = 1000
+    ) -> List[ChallengeOutcome]:
+        """Get terminal generation challenge outcomes from the last N hours."""
+        try:
+            cutoff_timestamp = time.time() - (lookback_hours * 3600)
+            if limit is None:
+                limit = 1000
+            limit = int(limit)
+            with self._get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM generator_challenge_outcomes
+                    WHERE status IN ('verified', 'failed')
+                      AND updated_at >= ?
+                    ORDER BY updated_at DESC
+                    LIMIT ?
+                    """,
+                    (cutoff_timestamp, limit),
+                )
+                return [
+                    ChallengeOutcome(
+                        task_id=row["task_id"],
+                        uid=row["uid"],
+                        hotkey=row["hotkey"],
+                        prompt_id=row["prompt_id"],
+                        modality=row["modality"],
+                        status=row["status"],
+                        failure_reason=row["failure_reason"],
+                        media_id=row["media_id"],
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
+                    )
+                    for row in cursor.fetchall()
+                ]
+        except Exception as e:
+            bt.logging.error(f"Error getting recent challenge outcomes: {e}")
+            return []
+
+    def get_challenge_outcome_stats_last_n_hours(
+        self, lookback_hours: float = 2.0, limit: int = 1000
+    ) -> Dict[str, Dict[str, Any]]:
+        """Build reward stats from terminal challenge outcomes."""
+        outcomes = self.get_challenge_outcomes_last_n_hours(lookback_hours, limit)
+        miner_stats: Dict[str, Dict[str, Any]] = {}
+        for outcome in outcomes:
+            hotkey = outcome.hotkey
+            if hotkey not in miner_stats:
+                miner_stats[hotkey] = {
+                    "uid": outcome.uid,
+                    "verified_media_ids": [],
+                    "total_verified": 0,
+                    "total_failed": 0,
+                    "last_timestamp": outcome.updated_at,
+                }
+            if outcome.status == "verified":
+                miner_stats[hotkey]["total_verified"] += 1
+                if outcome.media_id:
+                    miner_stats[hotkey]["verified_media_ids"].append(outcome.media_id)
+            elif outcome.status == "failed":
+                miner_stats[hotkey]["total_failed"] += 1
+            if outcome.updated_at > miner_stats[hotkey]["last_timestamp"]:
+                miner_stats[hotkey]["last_timestamp"] = outcome.updated_at
+
+        verification_stats = {}
+        for hotkey, stats in miner_stats.items():
+            verified = stats["total_verified"]
+            failed = stats["total_failed"]
+            total_evaluated = verified + failed
+            pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
+            verification_stats[hotkey] = {
+                "uid": stats["uid"],
+                "total_verified": verified,
+                "total_submissions": total_evaluated,
+                "total_failed": failed,
+                "total_evaluated": total_evaluated,
+                "pass_rate": pass_rate,
+                "media_ids": stats["verified_media_ids"],
+                "last_timestamp": stats["last_timestamp"],
+            }
+        return verification_stats
+
     def mark_miner_media_verified(self, media_id: str) -> bool:
         try:
             with self._get_db_connection() as conn:
@@ -713,7 +964,10 @@ class ContentDB:
                     (media_id,),
                 )
                 conn.commit()
-                return cursor.rowcount > 0
+                updated = cursor.rowcount > 0
+            if updated:
+                self.mark_challenge_outcome_for_media(media_id, "verified")
+            return updated
         except Exception as e:
             bt.logging.error(f"Error marking miner media as verified: {e}")
             return False
@@ -728,7 +982,12 @@ class ContentDB:
                     (media_id,),
                 )
                 conn.commit()
-                return cursor.rowcount > 0
+                updated = cursor.rowcount > 0
+            if updated:
+                self.mark_challenge_outcome_for_media(
+                    media_id, "failed", "clip_verification_failed"
+                )
+            return updated
         except Exception as e:
             bt.logging.error(f"Error marking miner media as failed verification: {e}")
             return False
