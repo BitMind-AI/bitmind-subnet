@@ -205,8 +205,11 @@ def verify_media(
                     media_entry=media_entry,
                     original_prompt=prompt,
                     verification_score={
+                        "score": 0.0,
                         "consensus_details": consensus_result,
                         "corrupted": True,
+                        "passed": False,
+                        "threshold": threshold,
                     },
                     passed=False,
                 )
