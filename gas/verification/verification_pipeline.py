@@ -59,7 +59,9 @@ def run_verification(
 
     bt.logging.info("Verification batch complete, updating database")
     for result in results:
-        if result.verification_score:  # Only process if verification actually ran
+        vs = result.verification_score or {}
+        is_corrupted = isinstance(vs, dict) and vs.get("corrupted", False)
+        if result.verification_score and not is_corrupted:
             try:
                 if result.passed:
                     content_manager.mark_miner_media_verified(result.media_entry.id)
@@ -72,6 +74,7 @@ def run_verification(
 
     successful_verifications = sum(
         1 for r in results if r.verification_score is not None
+        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
     )
     passed_verifications = sum(1 for r in results if r.passed)
     failed_verifications = sum(1 for r in results if r.verification_score is not None and not r.passed)
