@@ -61,7 +61,7 @@ def run_verification(
 
     bt.logging.info("Verification batch complete, updating database")
     for result in results:
-        if result.verification_score:  # Only process if verification actually ran
+        if result.verification_score and not _is_corrupted(result):
             try:
                 if result.passed:
                     content_manager.mark_miner_media_verified(result.media_entry.id)
@@ -73,10 +73,13 @@ def run_verification(
                 bt.logging.error(f"Error marking media verification status: {e}")
 
     successful_verifications = sum(
-        1 for r in results if r.verification_score is not None
+        1 for r in results if r.verification_score is not None and not _is_corrupted(r)
     )
     passed_verifications = sum(1 for r in results if r.passed)
-    failed_verifications = sum(1 for r in results if r.verification_score is not None and not r.passed)
+    failed_verifications = sum(
+        1 for r in results
+        if r.verification_score is not None and not r.passed and not _is_corrupted(r)
+    )
 
     bt.logging.info(
         f"Verification batch complete: {successful_verifications}/{len(results)} processed, "
@@ -203,11 +206,16 @@ def verify_media(
                     f"Corrupted/invalid video detected: {media_entry.file_path} (ID: {media_entry.id})"
                 )
                 corrupted_videos.append(media_entry)
-                # Still create a failed result for this entry
                 result = VerificationResult(
                     media_entry=media_entry,
                     original_prompt=prompt,
-                    verification_score=None,
+                    verification_score={
+                        "score": 0.0,
+                        "consensus_details": consensus_result,
+                        "corrupted": True,
+                        "passed": False,
+                        "threshold": threshold,
+                    },
                     passed=False,
                 )
                 verification_results.append(result)
@@ -354,9 +362,17 @@ def verify_media(
         ]
 
 
+def _is_corrupted(result: VerificationResult) -> bool:
+    vs = result.verification_score
+    return isinstance(vs, dict) and bool(vs.get("corrupted", False))
+
+
 def _bucket_stats(results: List[VerificationResult], threshold: float) -> Dict[str, Any]:
     """Aggregate count / pass-rate / score-stats for a slice of results."""
-    scored = [r for r in results if r.verification_score]
+    scored = [
+        r for r in results
+        if r.verification_score and not _is_corrupted(r)
+    ]
     scores = [r.verification_score["score"] for r in scored]
     n = len(results)
     n_scored = len(scored)
@@ -387,6 +403,32 @@ def _log_breakdowns(results: List[VerificationResult], threshold: float) -> None
         f"{overall['min']:.3f}/{overall['max']:.3f} "
         f"threshold={threshold:.3f}"
     )
+
+    corrupted_count = 0
+    embedding_duplicate_count = 0
+    embedding_duplicate_by_miner: Dict[Tuple[Any, str], int] = defaultdict(int)
+    for r in results:
+        score = r.verification_score or {}
+        if isinstance(score, dict):
+            if _is_corrupted(r):
+                corrupted_count += 1
+            if score.get("embedding_duplicate"):
+                embedding_duplicate_count += 1
+                m = r.media_entry
+                embedding_duplicate_by_miner[(m.uid, (m.hotkey or "")[:8])] += 1
+
+    if corrupted_count or embedding_duplicate_count:
+        bt.logging.warning(
+            f"[VERIFY-ABUSE-SUMMARY] corrupted={corrupted_count} "
+            f"embedding_duplicates={embedding_duplicate_count}"
+        )
+        for key, count in sorted(
+            embedding_duplicate_by_miner.items(),
+            key=lambda kv: -kv[1],
+        ):
+            bt.logging.warning(
+                f"[VERIFY-ABUSE-BY-MINER] key={key!r} embedding_duplicates={count}"
+            )
 
     def _log_group(label: str, groups: Dict[Any, List[VerificationResult]]) -> None:
         # Sort by sample count descending so the most active buckets surface first.
@@ -446,10 +488,16 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
         }
 
     total = len(results)
-    successful = sum(1 for r in results if r.verification_score is not None)
+    corrupted = sum(1 for r in results if _is_corrupted(r))
+    successful = sum(
+        1 for r in results if r.verification_score is not None and not _is_corrupted(r)
+    )
     passed = sum(1 for r in results if r.passed)
-    failed = sum(1 for r in results if r.verification_score is not None and not r.passed)
-    errors = sum(1 for r in results if r.verification_score is None)
+    failed = sum(
+        1 for r in results
+        if r.verification_score is not None and not r.passed and not _is_corrupted(r)
+    )
+    errors = sum(1 for r in results if r.verification_score is None) + corrupted
 
     scores = [
         (
@@ -458,7 +506,7 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
             else r.verification_score
         )
         for r in results
-        if r.verification_score is not None
+        if r.verification_score is not None and not _is_corrupted(r)
     ]
     avg_score = sum(scores) / len(scores) if scores else 0.0
 
