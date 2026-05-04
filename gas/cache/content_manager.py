@@ -736,10 +736,10 @@ class ContentManager:
 	) -> Dict[str, Dict[str, Any]]:
 		"""Merge legacy media-based stats with challenge-outcome stats.
 
-		During the transition window (outcome data only covers challenges
-		sent after deployment), counts from both sources are summed so no
-		miner's totals drop. Miners in only one source pass through
-		unchanged — no miner is dropped.
+		Post-deployment events appear in both sources. Use max() rather than
+		sum() to avoid double-counting: legacy always includes outcome's
+		events plus any pre-deployment media verified in the same window.
+		Miners in only one source pass through unchanged.
 		"""
 		merged = {}
 		all_hotkeys = set(legacy_stats.keys()) | set(outcome_stats.keys())
@@ -747,14 +747,23 @@ class ContentManager:
 			legacy = legacy_stats.get(hotkey, {})
 			outcome = outcome_stats.get(hotkey, {})
 
-			verified = legacy.get("total_verified", 0) + outcome.get("total_verified", 0)
-			failed = legacy.get("total_failed", 0) + outcome.get("total_failed", 0)
+			verified = max(
+				legacy.get("total_verified", 0),
+				outcome.get("total_verified", 0),
+			)
+			failed = max(
+				legacy.get("total_failed", 0),
+				outcome.get("total_failed", 0),
+			)
 			total_evaluated = verified + failed
 			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
 
 			legacy_ids = legacy.get("media_ids", [])
 			outcome_ids = outcome.get("media_ids", [])
-			all_ids = list(dict.fromkeys(legacy_ids + outcome_ids))
+			if len(outcome_ids) >= len(legacy_ids):
+				all_ids = outcome_ids
+			else:
+				all_ids = list(dict.fromkeys(legacy_ids + outcome_ids))
 
 			last_ts = max(
 				legacy.get("last_timestamp", 0) or 0,
