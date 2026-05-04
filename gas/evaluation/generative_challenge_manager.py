@@ -35,6 +35,8 @@ from gas.verification.duplicate_detection import (
     DEFAULT_TEMPORAL_TAMPER_RATIO,
 )
 
+GLOBAL_DUPLICATE_HAMMING_THRESHOLD = 4
+
 
 class GenerativeChallengeManager:
     def __init__(
@@ -368,7 +370,7 @@ class GenerativeChallengeManager:
                 except Exception as e:
                     bt.logging.debug(f"Temporal tampering check skipped: {e}")
 
-            # Step 2: Compute perceptual hash and check for duplicates within same prompt
+            # Step 2: Compute perceptual hash and check prompt/global duplicates
             perceptual_hash = None
             try:
                 perceptual_hash = compute_media_hash(binary_data, modality=modality_str)
@@ -385,6 +387,19 @@ class GenerativeChallengeManager:
                             f"matches media {dup_media_id} with distance {dup_distance}"
                         )
                         return None, "Duplicate content detected"
+
+                    global_duplicate_info = self.content_manager.check_duplicate(
+                        perceptual_hash,
+                        threshold=GLOBAL_DUPLICATE_HAMMING_THRESHOLD,
+                        prompt_id=None,
+                    )
+                    if global_duplicate_info:
+                        dup_media_id, dup_distance = global_duplicate_info
+                        bt.logging.warning(
+                            f"REJECTED global duplicate from UID {generator_uid} task {task_id}: "
+                            f"matches media {dup_media_id} with distance {dup_distance}"
+                        )
+                        return None, "Global duplicate content detected"
             except Exception as e:
                 bt.logging.debug(f"Duplicate detection skipped: {e}")
 
