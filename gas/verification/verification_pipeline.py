@@ -357,6 +357,33 @@ def _log_breakdowns(results: List[VerificationResult], threshold: float) -> None
         f"threshold={threshold:.3f}"
     )
 
+    corrupted_count = 0
+    embedding_duplicate_count = 0
+    embedding_duplicate_by_miner: Dict[Tuple[Any, str], int] = defaultdict(int)
+    for r in results:
+        score = r.verification_score or {}
+        if isinstance(score, dict):
+            details = score.get("consensus_details") or {}
+            if details.get("corrupted"):
+                corrupted_count += 1
+            if score.get("embedding_duplicate"):
+                embedding_duplicate_count += 1
+                m = r.media_entry
+                embedding_duplicate_by_miner[(m.uid, (m.hotkey or "")[:8])] += 1
+
+    if corrupted_count or embedding_duplicate_count:
+        bt.logging.warning(
+            f"[VERIFY-ABUSE-SUMMARY] corrupted={corrupted_count} "
+            f"embedding_duplicates={embedding_duplicate_count}"
+        )
+        for key, count in sorted(
+            embedding_duplicate_by_miner.items(),
+            key=lambda kv: -kv[1],
+        ):
+            bt.logging.warning(
+                f"[VERIFY-ABUSE-BY-MINER] key={key!r} embedding_duplicates={count}"
+            )
+
     def _log_group(label: str, groups: Dict[Any, List[VerificationResult]]) -> None:
         # Sort by sample count descending so the most active buckets surface first.
         ordered = sorted(groups.items(), key=lambda kv: -len(kv[1]))
