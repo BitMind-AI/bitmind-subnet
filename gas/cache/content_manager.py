@@ -736,24 +736,41 @@ class ContentManager:
 	) -> Dict[str, Dict[str, Any]]:
 		"""Merge legacy media-based stats with challenge-outcome stats.
 
-		For miners present in both sources, outcome data takes precedence,
-		supplemented by legacy media_ids. Miners in only one source
-		pass through unchanged — no miner is dropped during transition.
+		During the transition window (outcome data only covers challenges
+		sent after deployment), counts from both sources are summed so no
+		miner's totals drop. Miners in only one source pass through
+		unchanged — no miner is dropped.
 		"""
 		merged = {}
 		all_hotkeys = set(legacy_stats.keys()) | set(outcome_stats.keys())
 		for hotkey in all_hotkeys:
 			legacy = legacy_stats.get(hotkey, {})
 			outcome = outcome_stats.get(hotkey, {})
-			if outcome:
-				entry = dict(outcome)
-				if not entry.get("media_ids"):
-					entry["media_ids"] = legacy.get("media_ids", [])
-				if "uid" not in entry:
-					entry["uid"] = legacy.get("uid")
-				merged[hotkey] = entry
-			else:
-				merged[hotkey] = dict(legacy)
+
+			verified = legacy.get("total_verified", 0) + outcome.get("total_verified", 0)
+			failed = legacy.get("total_failed", 0) + outcome.get("total_failed", 0)
+			total_evaluated = verified + failed
+			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
+
+			legacy_ids = legacy.get("media_ids", [])
+			outcome_ids = outcome.get("media_ids", [])
+			all_ids = list(dict.fromkeys(legacy_ids + outcome_ids))
+
+			last_ts = max(
+				legacy.get("last_timestamp", 0) or 0,
+				outcome.get("last_timestamp", 0) or 0,
+			)
+
+			merged[hotkey] = {
+				"uid": outcome.get("uid") or legacy.get("uid"),
+				"total_verified": verified,
+				"total_submissions": total_evaluated,
+				"total_failed": failed,
+				"total_evaluated": total_evaluated,
+				"pass_rate": pass_rate,
+				"media_ids": all_ids,
+				"last_timestamp": last_ts,
+			}
 		return merged
 
 	def upload_batch_to_huggingface(
