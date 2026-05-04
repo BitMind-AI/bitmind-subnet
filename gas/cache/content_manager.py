@@ -770,8 +770,12 @@ class ContentManager:
 				outcome.get("last_timestamp", 0) or 0,
 			)
 
+			uid_legacy = legacy.get("uid")
+			uid_outcome = outcome.get("uid")
+			uid = uid_outcome if uid_outcome is not None else uid_legacy
+
 			merged[hotkey] = {
-				"uid": outcome.get("uid") or legacy.get("uid"),
+				"uid": uid,
 				"total_verified": verified,
 				"total_submissions": total_evaluated,
 				"total_failed": failed,
