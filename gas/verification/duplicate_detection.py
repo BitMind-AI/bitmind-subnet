@@ -426,39 +426,6 @@ def detect_temporal_tampering(
     return is_tampered, ratio, jumps, total
 
 
-def extract_phash(full_hash: str) -> str:
-    """
-    Extract the primary pHash from a combined hash string.
-    
-    Hash format: "phash" or "phash|crop_segments" or "phash_framecount"
-    """
-    # Handle video hashes with frame count suffix
-    if '_' in full_hash:
-        full_hash = full_hash.split('_')[0]
-    
-    # Handle combined hash with crop-resistant segments
-    if '|' in full_hash:
-        full_hash = full_hash.split('|')[0]
-
-    if ',' in full_hash:
-        return full_hash.split(',')[0]
-
-    return full_hash
-
-
-def extract_phashes(full_hash: str) -> List[str]:
-    """
-    Extract one or more primary pHashes from a combined hash string.
-
-    Video hashes may contain multiple comma-separated frame hashes.
-    """
-    if '_' in full_hash:
-        full_hash = full_hash.split('_')[0]
-    if '|' in full_hash:
-        full_hash = full_hash.split('|')[0]
-    return [h for h in full_hash.split(',') if h]
-
-
 def extract_crop_segments(full_hash: str) -> List[str]:
     """
     Extract crop-resistant hash segments from a combined hash string.
@@ -500,16 +467,13 @@ def hamming_distance(hash1: str, hash2: str) -> int:
             return -1
 
         if len(hashes1) > 1 and len(hashes2) > 1:
-            # Compute all-pairs distance and take the min to avoid
-            # silently dropping trailing hashes when lengths differ (zip truncation)
+            # Use paired average over the shorter list when lengths differ
+            # so a single dropped frame doesn't change the comparison strategy
             if len(hashes1) != len(hashes2):
-                distances = [
-                    imagehash.hex_to_hash(h1) - imagehash.hex_to_hash(h2)
-                    for h1 in hashes1
-                    for h2 in hashes2
-                ]
-                return min(distances) if distances else -1
-
+                bt.logging.debug(
+                    f"Multi-hash length mismatch: {len(hashes1)} vs {len(hashes2)}. "
+                    f"Comparing over {min(len(hashes1), len(hashes2))} paired frames."
+                )
             paired = zip(hashes1, hashes2)
             distances = [
                 imagehash.hex_to_hash(h1) - imagehash.hex_to_hash(h2)
