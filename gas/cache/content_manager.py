@@ -737,7 +737,7 @@ class ContentManager:
 		"""Merge legacy media-based stats with challenge-outcome stats.
 
 		For miners present in both sources, outcome data takes precedence,
-		supplemented by legacy verified_media_ids. Miners in only one source
+		supplemented by legacy media_ids. Miners in only one source
 		pass through unchanged — no miner is dropped during transition.
 		"""
 		merged = {}
@@ -747,8 +747,8 @@ class ContentManager:
 			outcome = outcome_stats.get(hotkey, {})
 			if outcome:
 				entry = dict(outcome)
-				if not entry.get("verified_media_ids"):
-					entry["verified_media_ids"] = legacy.get("verified_media_ids", [])
+				if not entry.get("media_ids"):
+					entry["media_ids"] = legacy.get("media_ids", [])
 				if "uid" not in entry:
 					entry["uid"] = legacy.get("uid")
 				merged[hotkey] = entry
