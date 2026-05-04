@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+import hashlib
 import bittensor as bt
 import numpy as np
 from PIL import Image
@@ -64,15 +65,38 @@ def clear_clip_models():
     )
 
 
-def extract_temporal_frames(video_path: str) -> List[np.ndarray]:
+def _sample_temporal_frame_indices(total_frames: int, num_frames: int, seed: str) -> np.ndarray:
+    """Sample deterministic, jittered frame indices across the full video."""
+    if total_frames <= 0:
+        return np.array([], dtype=int)
+    sample_count = min(num_frames, total_frames)
+    if sample_count == total_frames:
+        return np.arange(total_frames, dtype=int)
+    if sample_count <= 2:
+        return np.linspace(0, total_frames - 1, sample_count, dtype=int)
+
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    rng = np.random.default_rng(int.from_bytes(digest[:8], "big"))
+    internal_count = sample_count - 2
+    bins = np.linspace(1, total_frames - 2, internal_count + 1, dtype=int)
+    internal_indices = []
+    for start, end in zip(bins[:-1], bins[1:]):
+        if end <= start:
+            internal_indices.append(start)
+        else:
+            internal_indices.append(int(rng.integers(start, end + 1)))
+    return np.array(sorted({0, total_frames - 1, *internal_indices}), dtype=int)
+
+
+def extract_temporal_frames(video_path: str, num_frames: int = 8) -> List[np.ndarray]:
     """
-    Extract 4 frames uniformly from a video for temporal analysis.
+    Extract deterministic jittered frames across a video for temporal analysis.
     
         Args:
             video_path: Path to video file
             
         Returns:
-            List of 4 frames as numpy arrays (RGB format), or empty list if video is invalid
+            List of frames as numpy arrays (RGB format), or empty list if video is invalid
     """
     cap = None
     try:
@@ -94,8 +118,11 @@ def extract_temporal_frames(video_path: str) -> List[np.ndarray]:
         frames = []
         failed_reads = 0
         
-        # Sample 8 frames uniformly across the video duration
-        frame_indices = np.linspace(0, total_frames - 1, min(4, total_frames), dtype=int)
+        frame_indices = _sample_temporal_frame_indices(
+            total_frames=total_frames,
+            num_frames=num_frames,
+            seed=f"{Path(video_path).name}:{total_frames}",
+        )
             
         for frame_idx in frame_indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -139,7 +166,7 @@ def process_video_temporal(
     device: str,
 ) -> Optional[torch.Tensor]:
     """
-    Process a video using 4 uniformly sampled frames with mean aggregation.
+    Process a video using jittered multi-frame sampling with mean aggregation.
     
     Args:
         video_path: Path to video file

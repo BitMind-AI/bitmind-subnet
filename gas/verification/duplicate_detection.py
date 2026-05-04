@@ -7,6 +7,7 @@ Includes crop-resistant hashing to detect cropped duplicates.
 """
 
 import io
+import hashlib
 from pathlib import Path
 from typing import Optional, List, Tuple, Union
 
@@ -166,9 +167,36 @@ def compute_crop_resistant_hash(
         return None
 
 
+def _sample_video_frame_indices(
+    total_frames: int,
+    num_frames: int,
+    seed: str,
+) -> np.ndarray:
+    """Sample deterministic, jittered frame indices across the full video."""
+    if total_frames <= 0:
+        return np.array([], dtype=int)
+    sample_count = min(num_frames, total_frames)
+    if sample_count == total_frames:
+        return np.arange(total_frames, dtype=int)
+    if sample_count <= 2:
+        return np.linspace(0, total_frames - 1, sample_count, dtype=int)
+
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    rng = np.random.default_rng(int.from_bytes(digest[:8], "big"))
+    internal_count = sample_count - 2
+    bins = np.linspace(1, total_frames - 2, internal_count + 1, dtype=int)
+    internal_indices = []
+    for start, end in zip(bins[:-1], bins[1:]):
+        if end <= start:
+            internal_indices.append(start)
+        else:
+            internal_indices.append(int(rng.integers(start, end + 1)))
+    return np.array(sorted({0, total_frames - 1, *internal_indices}), dtype=int)
+
+
 def compute_video_hash(
     video_path: Union[str, Path],
-    num_frames: int = 4,
+    num_frames: int = 8,
     hash_size: int = 16,
     include_crop_resistant: bool = True,
 ) -> Optional[str]:
@@ -208,8 +236,11 @@ def compute_video_hash(
             cap.release()
             return None
 
-        # Sample frames uniformly
-        frame_indices = np.linspace(0, total_frames - 1, min(num_frames, total_frames), dtype=int)
+        frame_indices = _sample_video_frame_indices(
+            total_frames=total_frames,
+            num_frames=num_frames,
+            seed=f"{video_path.name}:{total_frames}",
+        )
         frame_hashes = []
         all_crop_segments = []
 
@@ -227,7 +258,7 @@ def compute_video_hash(
                 frame_hashes.append(str(phash))
 
                 # Compute crop-resistant hash for key frames
-                if include_crop_resistant and len(all_crop_segments) < 8:
+                if include_crop_resistant and len(all_crop_segments) < 12:
                     try:
                         crop_hash = compute_crop_resistant_hash(image)
                         if crop_hash:
@@ -243,13 +274,13 @@ def compute_video_hash(
             bt.logging.warning(f"Could not extract any frames from video: {video_path}")
             return None
 
-        # Combine frame hashes into single string
-        # Format: "primary_hash_framecount" or "primary_hash|crop_segments_framecount"
-        primary_hash = frame_hashes[0]
+        # Combine frame hashes so duplicate checks compare more than the first frame.
+        # Format: "frame_hash,frame_hash|crop_segments_framecount"
+        primary_hash = ",".join(frame_hashes)
         
         if include_crop_resistant and all_crop_segments:
             # Deduplicate and limit segments
-            unique_segments = list(dict.fromkeys(all_crop_segments))[:6]
+            unique_segments = list(dict.fromkeys(all_crop_segments))[:10]
             crop_part = ";".join(unique_segments)
             combined_hash = f"{primary_hash}|{crop_part}_{len(frame_hashes)}"
         else:
@@ -302,7 +333,7 @@ def compute_media_hash(
 def compute_temporal_video_hashes(
     video_path: Union[str, Path],
     hash_size: int = 16,
-    max_frames: int = 100,
+    max_frames: int = 120,
 ) -> Optional[List[str]]:
     """
     Extract pHash for every frame in temporal order, up to max_frames.
@@ -331,21 +362,32 @@ def compute_temporal_video_hashes(
             cap.release()
             return None
 
-        n = min(total_frames, max_frames)
         hashes = []
+        if total_frames <= max_frames:
+            windows = [(0, total_frames)]
+        else:
+            window_count = min(6, max(1, max_frames // 20))
+            frames_per_window = max(2, max_frames // window_count)
+            max_start = max(0, total_frames - frames_per_window)
+            starts = np.linspace(0, max_start, window_count, dtype=int)
+            windows = [(int(start), frames_per_window) for start in starts]
 
-        for _ in range(n):
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(frame_rgb)
-            ph = imagehash.phash(image, hash_size=hash_size)
-            hashes.append(str(ph))
+        for window_idx, (start, length) in enumerate(windows):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+            for _ in range(length):
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                image = Image.fromarray(frame_rgb)
+                ph = imagehash.phash(image, hash_size=hash_size)
+                hashes.append(str(ph))
+            if window_idx < len(windows) - 1:
+                hashes.append("")
 
         cap.release()
 
-        if len(hashes) < 2:
+        if len([h for h in hashes if h]) < 2:
             return None
 
         return hashes
@@ -358,7 +400,7 @@ def compute_temporal_video_hashes(
 def detect_temporal_tampering(
     video_path: Union[str, Path],
     jump_threshold: int = DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
-    max_frames: int = 100,
+    max_frames: int = 120,
     tamper_ratio: float = DEFAULT_TEMPORAL_TAMPER_RATIO,
 ) -> Tuple[bool, float, int, int]:
     """
@@ -382,13 +424,16 @@ def detect_temporal_tampering(
         return False, 0.0, 0, 0
 
     jumps = 0
-    total = len(hashes) - 1
+    total = 0
 
     for i in range(1, len(hashes)):
+        if not hashes[i - 1] or not hashes[i]:
+            continue
         try:
             h1 = imagehash.hex_to_hash(hashes[i - 1])
             h2 = imagehash.hex_to_hash(hashes[i])
             distance = h1 - h2
+            total += 1
             if distance > jump_threshold:
                 jumps += 1
         except Exception:
@@ -418,9 +463,25 @@ def extract_phash(full_hash: str) -> str:
     
     # Handle combined hash with crop-resistant segments
     if '|' in full_hash:
-        return full_hash.split('|')[0]
-    
+        full_hash = full_hash.split('|')[0]
+
+    if ',' in full_hash:
+        return full_hash.split(',')[0]
+
     return full_hash
+
+
+def extract_phashes(full_hash: str) -> List[str]:
+    """
+    Extract one or more primary pHashes from a combined hash string.
+
+    Video hashes may contain multiple comma-separated frame hashes.
+    """
+    if '_' in full_hash:
+        full_hash = full_hash.split('_')[0]
+    if '|' in full_hash:
+        full_hash = full_hash.split('|')[0]
+    return [h for h in full_hash.split(',') if h]
 
 
 def extract_crop_segments(full_hash: str) -> List[str]:
@@ -437,6 +498,8 @@ def extract_crop_segments(full_hash: str) -> List[str]:
         return []
     
     crop_part = parts[1]
+    if '_' in crop_part:
+        crop_part = crop_part.split('_')[0]
     return crop_part.split(';') if crop_part else []
 
 
@@ -456,15 +519,25 @@ def hamming_distance(hash1: str, hash2: str) -> int:
         return -1
 
     try:
-        # Extract primary pHash from combined formats
-        h1 = extract_phash(hash1)
-        h2 = extract_phash(hash2)
+        hashes1 = extract_phashes(hash1)
+        hashes2 = extract_phashes(hash2)
+        if not hashes1 or not hashes2:
+            return -1
 
-        # Convert hex strings back to imagehash objects
-        ihash1 = imagehash.hex_to_hash(h1)
-        ihash2 = imagehash.hex_to_hash(h2)
+        if len(hashes1) > 1 and len(hashes2) > 1:
+            paired = zip(hashes1, hashes2)
+            distances = [
+                imagehash.hex_to_hash(h1) - imagehash.hex_to_hash(h2)
+                for h1, h2 in paired
+            ]
+            return round(sum(distances) / len(distances)) if distances else -1
 
-        return ihash1 - ihash2  # imagehash overloads subtraction for Hamming distance
+        distances = [
+            imagehash.hex_to_hash(h1) - imagehash.hex_to_hash(h2)
+            for h1 in hashes1
+            for h2 in hashes2
+        ]
+        return min(distances) if distances else -1
 
     except Exception as e:
         bt.logging.warning(f"Failed to compute Hamming distance: {e}")
