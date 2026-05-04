@@ -35,8 +35,6 @@ from gas.verification.duplicate_detection import (
     DEFAULT_TEMPORAL_TAMPER_RATIO,
 )
 
-GLOBAL_DUPLICATE_HAMMING_THRESHOLD = 4
-
 
 class GenerativeChallengeManager:
     def __init__(
@@ -390,7 +388,7 @@ class GenerativeChallengeManager:
 
                     global_duplicate_info = self.content_manager.check_duplicate(
                         perceptual_hash,
-                        threshold=GLOBAL_DUPLICATE_HAMMING_THRESHOLD,
+                        threshold=getattr(getattr(self.config, 'verification', None), 'global_dup_hamming_threshold', 4),
                         prompt_id=None,
                     )
                     if global_duplicate_info:
