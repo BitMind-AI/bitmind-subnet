@@ -309,17 +309,17 @@ class GenerativeChallengeManager:
 
                 del self.challenge_tasks[task_id]
                 return Response(status_code=200, content="Binary content received")
-            else:
-                self.challenge_tasks[task_id]["status"] = "failed"
-                self.challenge_tasks[task_id]["error_message"] = error_message or "Failed to store binary content"
-                self.content_manager.update_challenge_outcome(
-                    task_id=task_id,
-                    status="failed",
-                    failure_reason=error_message or "Failed to store binary content",
-                )
 
-                del self.challenge_tasks[task_id]
-                return Response(status_code=400, content=error_message or "Failed to store binary content")
+            # Storage failed — release lock before DB call
+            failure_reason = error_message or "Failed to store binary content"
+            del self.challenge_tasks[task_id]
+
+        self.content_manager.update_challenge_outcome(
+            task_id=task_id,
+            status="failed",
+            failure_reason=failure_reason,
+        )
+        return Response(status_code=400, content=failure_reason)
 
     async def store_binary_content(
         self, binary_data: bytes, content_type: str, generator_uid: int, task_id: str
@@ -631,15 +631,18 @@ class GenerativeChallengeManager:
                         stale_tasks.append(task_id)
 
                 for task_id in stale_tasks:
-                    self.content_manager.update_challenge_outcome(
-                        task_id=task_id,
-                        status="failed",
-                        failure_reason="challenge_timeout",
-                    )
                     del self.challenge_tasks[task_id]
                     bt.logging.debug(f"Removed stale task {task_id} during state save")
 
                 tasks_to_save = self.challenge_tasks.copy()
+
+            # Release lock before making blocking DB calls
+            for task_id in stale_tasks:
+                self.content_manager.update_challenge_outcome(
+                    task_id=task_id,
+                    status="failed",
+                    failure_reason="challenge_timeout",
+                )
 
             filepath = os.path.join(save_dir, filename)
             with open(filepath, 'wb') as f:
