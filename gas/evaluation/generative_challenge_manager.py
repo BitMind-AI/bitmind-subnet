@@ -344,10 +344,15 @@ class GenerativeChallengeManager:
                     )
                     return None, "Corrupted or unreadable media"
             except Exception as e:
-                bt.logging.debug(f"Corruption check error (allowing): {e}")
+                bt.logging.warning(
+                    f"REJECTED media from UID {generator_uid} task {task_id}: "
+                    f"corruption check error: {e}"
+                )
+                return None, f"Corruption check error: {e}"
 
             # Step 1b: Check for temporal tampering in videos (frame shuffling/splicing/speed-up)
             if modality_str == "video":
+                tmp_path = None
                 try:
                     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                         tmp.write(binary_data)
@@ -357,7 +362,6 @@ class GenerativeChallengeManager:
                         jump_threshold=DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
                         tamper_ratio=DEFAULT_TEMPORAL_TAMPER_RATIO,
                     )
-                    os.unlink(tmp_path)
                     if is_tampered:
                         bt.logging.warning(
                             f"REJECTED temporally tampered video from UID {generator_uid} "
@@ -366,7 +370,14 @@ class GenerativeChallengeManager:
                         )
                         return None, "Temporally tampered video detected"
                 except Exception as e:
-                    bt.logging.debug(f"Temporal tampering check skipped: {e}")
+                    bt.logging.warning(
+                        f"REJECTED video from UID {generator_uid} task {task_id}: "
+                        f"temporal tampering check error: {e}"
+                    )
+                    return None, f"Temporal tampering check error: {e}"
+                finally:
+                    if tmp_path:
+                        Path(tmp_path).unlink(missing_ok=True)
 
             # Step 2: Compute perceptual hash and check for duplicates within same prompt
             perceptual_hash = None
@@ -386,7 +397,11 @@ class GenerativeChallengeManager:
                         )
                         return None, "Duplicate content detected"
             except Exception as e:
-                bt.logging.debug(f"Duplicate detection skipped: {e}")
+                bt.logging.warning(
+                    f"REJECTED media from UID {generator_uid} task {task_id}: "
+                    f"duplicate detection error: {e}"
+                )
+                return None, f"Duplicate detection error: {e}"
 
             # Step 3: Verify C2PA content credentials - REQUIRE trusted issuer
             c2pa_verified = False
