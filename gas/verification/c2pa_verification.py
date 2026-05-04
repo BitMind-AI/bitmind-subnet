@@ -231,7 +231,7 @@ def _classify_provider_profile(
 ) -> Dict[str, Any]:
     """Classify provider-specific C2PA metadata without enforcing policy."""
     haystack = " ".join(
-        value for value in (cert_subject, cert_issuer, claim_generator) if value
+        value for value in (cert_subject, claim_generator) if value
     ).lower()
 
     provider_profile = None
