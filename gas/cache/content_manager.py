@@ -211,6 +211,12 @@ class ContentManager:
 				perceptual_hash=perceptual_hash,
 				c2pa_verified=c2pa_verified,
 				c2pa_issuer=c2pa_issuer,
+				task_id=task_id,
+			)
+			self.content_db.update_challenge_outcome(
+				task_id=task_id,
+				status="stored",
+				media_id=media_id,
 			)
 
 			bt.logging.info(f"Saved miner media to {save_path} with database ID: {media_id}")
@@ -529,6 +535,44 @@ class ContentManager:
 		"""Mark miner media as failed verification."""
 		return self.content_db.mark_miner_media_failed_verification(media_id)
 
+	def record_challenge_outcome(
+		self,
+		task_id: str,
+		uid: int,
+		hotkey: str,
+		prompt_id: str,
+		modality: str,
+		status: str = "pending",
+		failure_reason: Optional[str] = None,
+		media_id: Optional[str] = None,
+		created_at: Optional[float] = None,
+	) -> bool:
+		return self.content_db.record_challenge_outcome(
+			task_id=task_id,
+			uid=uid,
+			hotkey=hotkey,
+			prompt_id=prompt_id,
+			modality=modality,
+			status=status,
+			failure_reason=failure_reason,
+			media_id=media_id,
+			created_at=created_at,
+		)
+
+	def update_challenge_outcome(
+		self,
+		task_id: str,
+		status: str,
+		failure_reason: Optional[str] = None,
+		media_id: Optional[str] = None,
+	) -> bool:
+		return self.content_db.update_challenge_outcome(
+			task_id=task_id,
+			status=status,
+			failure_reason=failure_reason,
+			media_id=media_id,
+		)
+
 	def store_clip_embedding(self, media_id: str, embedding_blob: bytes) -> bool:
 		"""Store a CLIP embedding for a media entry (deep-feature duplicate detection)."""
 		return self.content_db.update_media_embedding(media_id, embedding_blob)
@@ -597,6 +641,15 @@ class ContentManager:
 		"""
 		try:
 			limit_val = limit or 1000
+			outcome_stats = self.content_db.get_challenge_outcome_stats_last_n_hours(
+				lookback_hours=lookback_hours, limit=limit_val
+			)
+			if outcome_stats:
+				bt.logging.info(
+					f"Retrieved challenge-outcome stats for {len(outcome_stats)} miners"
+				)
+				return outcome_stats
+
 			verified_media = self.get_recent_verified_miner_media(
 				lookback_hours=lookback_hours, limit=limit_val
 			)
