@@ -85,7 +85,18 @@ def _sample_temporal_frame_indices(total_frames: int, num_frames: int, seed: str
             internal_indices.append(start)
         else:
             internal_indices.append(int(rng.integers(start, end + 1)))
-    return np.array(sorted({0, total_frames - 1, *internal_indices}), dtype=int)
+
+    # Dedup while preserving count: fill missing slots with nearest unique neighbours
+    result = sorted({0, total_frames - 1, *internal_indices})
+    if len(result) < sample_count:
+        all_candidates = list(range(total_frames))
+        for idx in result:
+            all_candidates.remove(idx)
+        missing = sample_count - len(result)
+        fill_indices = np.linspace(0, len(all_candidates) - 1, missing, dtype=int)
+        result.extend(all_candidates[i] for i in fill_indices)
+        result.sort()
+    return np.array(result, dtype=int)
 
 
 def extract_temporal_frames(video_path: str, num_frames: int = 8) -> List[np.ndarray]:

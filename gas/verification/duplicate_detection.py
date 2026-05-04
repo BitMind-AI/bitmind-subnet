@@ -500,6 +500,16 @@ def hamming_distance(hash1: str, hash2: str) -> int:
             return -1
 
         if len(hashes1) > 1 and len(hashes2) > 1:
+            # Compute all-pairs distance and take the min to avoid
+            # silently dropping trailing hashes when lengths differ (zip truncation)
+            if len(hashes1) != len(hashes2):
+                distances = [
+                    imagehash.hex_to_hash(h1) - imagehash.hex_to_hash(h2)
+                    for h1 in hashes1
+                    for h2 in hashes2
+                ]
+                return min(distances) if distances else -1
+
             paired = zip(hashes1, hashes2)
             distances = [
                 imagehash.hex_to_hash(h1) - imagehash.hex_to_hash(h2)
