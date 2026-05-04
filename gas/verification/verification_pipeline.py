@@ -59,9 +59,7 @@ def run_verification(
 
     bt.logging.info("Verification batch complete, updating database")
     for result in results:
-        vs = result.verification_score or {}
-        is_corrupted = isinstance(vs, dict) and vs.get("corrupted", False)
-        if result.verification_score and not is_corrupted:
+        if result.verification_score and not _is_corrupted(result):
             try:
                 if result.passed:
                     content_manager.mark_miner_media_verified(result.media_entry.id)
@@ -73,14 +71,12 @@ def run_verification(
                 bt.logging.error(f"Error marking media verification status: {e}")
 
     successful_verifications = sum(
-        1 for r in results if r.verification_score is not None
-        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+        1 for r in results if r.verification_score is not None and not _is_corrupted(r)
     )
     passed_verifications = sum(1 for r in results if r.passed)
     failed_verifications = sum(
         1 for r in results
-        if r.verification_score is not None and not r.passed
-        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+        if r.verification_score is not None and not r.passed and not _is_corrupted(r)
     )
 
     bt.logging.info(
@@ -335,12 +331,16 @@ def verify_media(
         ]
 
 
+def _is_corrupted(result: VerificationResult) -> bool:
+    vs = result.verification_score
+    return isinstance(vs, dict) and bool(vs.get("corrupted", False))
+
+
 def _bucket_stats(results: List[VerificationResult], threshold: float) -> Dict[str, Any]:
     """Aggregate count / pass-rate / score-stats for a slice of results."""
     scored = [
         r for r in results
-        if r.verification_score
-        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+        if r.verification_score and not _is_corrupted(r)
     ]
     scores = [r.verification_score["score"] for r in scored]
     n = len(results)
@@ -379,8 +379,7 @@ def _log_breakdowns(results: List[VerificationResult], threshold: float) -> None
     for r in results:
         score = r.verification_score or {}
         if isinstance(score, dict):
-            details = score.get("consensus_details") or {}
-            if details.get("corrupted") or score.get("corrupted"):
+            if _is_corrupted(r):
                 corrupted_count += 1
             if score.get("embedding_duplicate"):
                 embedding_duplicate_count += 1
@@ -458,20 +457,14 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
         }
 
     total = len(results)
-    corrupted = sum(
-        1 for r in results
-        if isinstance(r.verification_score, dict) and r.verification_score.get("corrupted")
-    )
+    corrupted = sum(1 for r in results if _is_corrupted(r))
     successful = sum(
-        1 for r in results
-        if r.verification_score is not None
-        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+        1 for r in results if r.verification_score is not None and not _is_corrupted(r)
     )
     passed = sum(1 for r in results if r.passed)
     failed = sum(
         1 for r in results
-        if r.verification_score is not None and not r.passed
-        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+        if r.verification_score is not None and not r.passed and not _is_corrupted(r)
     )
     errors = sum(1 for r in results if r.verification_score is None) + corrupted
 
@@ -482,8 +475,7 @@ def get_verification_summary(results: List[VerificationResult]) -> Dict[str, Any
             else r.verification_score
         )
         for r in results
-        if r.verification_score is not None
-        and not (isinstance(r.verification_score, dict) and r.verification_score.get("corrupted"))
+        if r.verification_score is not None and not _is_corrupted(r)
     ]
     avg_score = sum(scores) / len(scores) if scores else 0.0
 
