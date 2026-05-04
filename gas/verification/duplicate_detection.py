@@ -426,6 +426,33 @@ def detect_temporal_tampering(
     return is_tampered, ratio, jumps, total
 
 
+def extract_phashes(full_hash: str) -> List[str]:
+    """
+    Extract all frame hashes from a combined hash string.
+
+    Hash formats:
+      - Image: "phash" or "phash|crop_segments"
+      - Video (single): "phash_framecount" or "phash|crop_segments_framecount"
+      - Video (multi):  "phash1,phash2|crop_segments_framecount"
+    """
+    if not full_hash:
+        return []
+
+    # Strip framecount suffix: "hash1,hash2_8" -> "hash1,hash2"
+    hash_part = full_hash
+    if '_' in full_hash:
+        parts = full_hash.rsplit('_', 1)
+        if parts[-1].isdigit():
+            hash_part = parts[0]
+
+    # Strip crop segments: "hash1,hash2|seg1;seg2" -> "hash1,hash2"
+    if '|' in hash_part:
+        hash_part = hash_part.split('|')[0]
+
+    # Split on comma for multi-frame hashes
+    return [h.strip() for h in hash_part.split(',') if h.strip()]
+
+
 def extract_crop_segments(full_hash: str) -> List[str]:
     """
     Extract crop-resistant hash segments from a combined hash string.
