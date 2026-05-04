@@ -355,8 +355,8 @@ class GenerativeChallengeManager:
                 tmp_path = None
                 try:
                     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-                        tmp.write(binary_data)
                         tmp_path = tmp.name
+                        tmp.write(binary_data)
                     is_tampered, ratio, jumps, total = detect_temporal_tampering(
                         tmp_path,
                         jump_threshold=DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
