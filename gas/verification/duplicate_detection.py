@@ -7,7 +7,6 @@ Includes crop-resistant hashing to detect cropped duplicates.
 """
 
 import io
-import hashlib
 from pathlib import Path
 from typing import Optional, List, Tuple, Union
 
@@ -21,6 +20,9 @@ try:
 except ImportError:
     IMAGEHASH_AVAILABLE = False
     bt.logging.warning("imagehash not installed. Duplicate detection will be disabled.")
+
+
+from gas.verification.clip_utils import _sample_temporal_frame_indices
 
 
 # Default Hamming distance threshold for near-duplicate detection
@@ -167,33 +169,6 @@ def compute_crop_resistant_hash(
         return None
 
 
-def _sample_video_frame_indices(
-    total_frames: int,
-    num_frames: int,
-    seed: str,
-) -> np.ndarray:
-    """Sample deterministic, jittered frame indices across the full video."""
-    if total_frames <= 0:
-        return np.array([], dtype=int)
-    sample_count = min(num_frames, total_frames)
-    if sample_count == total_frames:
-        return np.arange(total_frames, dtype=int)
-    if sample_count <= 2:
-        return np.linspace(0, total_frames - 1, sample_count, dtype=int)
-
-    digest = hashlib.sha256(seed.encode("utf-8")).digest()
-    rng = np.random.default_rng(int.from_bytes(digest[:8], "big"))
-    internal_count = sample_count - 2
-    bins = np.linspace(1, total_frames - 2, internal_count + 1, dtype=int)
-    internal_indices = []
-    for start, end in zip(bins[:-1], bins[1:]):
-        if end <= start:
-            internal_indices.append(start)
-        else:
-            internal_indices.append(int(rng.integers(start, end + 1)))
-    return np.array(sorted({0, total_frames - 1, *internal_indices}), dtype=int)
-
-
 def compute_video_hash(
     video_path: Union[str, Path],
     num_frames: int = 8,
@@ -236,7 +211,7 @@ def compute_video_hash(
             cap.release()
             return None
 
-        frame_indices = _sample_video_frame_indices(
+        frame_indices = _sample_temporal_frame_indices(
             total_frames=total_frames,
             num_frames=num_frames,
             seed=f"{video_path.name}:{total_frames}",
