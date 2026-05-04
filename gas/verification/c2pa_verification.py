@@ -251,7 +251,13 @@ def _classify_provider_profile(
     if not claim_generator:
         policy_warnings.append("missing_claim_generator")
     if not ai_generated:
-        policy_warnings.append("missing_ai_source_assertion")
+        profile_requires = (
+            PROVIDER_PROFILES[provider_profile].get("requires_ai_source", True)
+            if provider_profile
+            else True
+        )
+        if profile_requires:
+            policy_warnings.append("missing_ai_source_assertion")
 
     metadata_complete = bool(cert_issuer and (cert_subject or claim_generator))
     return {
