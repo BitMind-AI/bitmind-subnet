@@ -45,7 +45,7 @@ VALIDATOR_CMD+=" --netuid ${NETUID}"
 VALIDATOR_CMD+=" --subtensor.chain_endpoint ${CHAIN_ENDPOINT}"
 VALIDATOR_CMD+=" --neuron.callback_port ${CALLBACK_PORT}"
 VALIDATOR_CMD+=" --cache.base-dir /root/.cache/sn34"
-VALIDATOR_CMD+=" --benchmark.api-url ${BENCHMARK_API_URL}"
+VALIDATOR_CMD+=" --benchmark-api-url ${BENCHMARK_API_URL}"
 VALIDATOR_CMD+=" ${LOG_PARAM}"
 VALIDATOR_CMD+=" --autoupdate-off"
 

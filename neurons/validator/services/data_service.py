@@ -63,7 +63,12 @@ class DataService:
             min_source_threshold=self.config.min_source_threshold,
         )
 
-        self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN") or os.environ.get("HUGGING_FACE_TOKEN")
+        if not self.hf_token:
+            raise RuntimeError(
+                "[DATA-SERVICE] HUGGINGFACE_HUB_TOKEN (or deprecated HUGGING_FACE_TOKEN) "
+                "environment variable must be set"
+            )
         self.hf_dataset_repos = {
             "image": self.config.hf_image_repo,
             "video": self.config.hf_video_repo,
@@ -405,7 +410,7 @@ class DataService:
                 )
                 post_generator_verification_upload(
                     self.validator_wallet,
-                    self.config.benchmark.api_url,
+                    self.config.benchmark_api_url,
                     _VERIFICATION_STATS_LOOKBACK_HOURS,
                     stats,
                 )
