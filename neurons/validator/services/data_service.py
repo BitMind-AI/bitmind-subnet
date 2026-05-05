@@ -100,9 +100,7 @@ class DataService:
         self.is_running = False
         self.step = 0
 
-        # Required by the @on_block_interval decorator. DataService's init is
-        # fully synchronous, so callbacks are safe to run as soon as the
-        # substrate subscription starts.
+        # Required by the @on_block_interval decorator
         self.initialization_complete = True
 
         self.substrate_manager = SubstrateConnectionManager(
@@ -301,9 +299,6 @@ class DataService:
                 )
                 return False
 
-            # `metadata["modality"]` may be a `Modality` enum (which subclasses
-            # `str`, so `.lower()` returns the value) or a plain string.
-            # `Modality(...)` is idempotent for the enum case.
             dataset_source_file = metadata.get("source_parquet") or metadata.get(
                 "source_zip", "unknown"
             )
@@ -354,20 +349,36 @@ class DataService:
                 self.uploader_thread = None
 
             try:
-                total = self.content_manager.content_db.count_unuploaded_media(modality="image")
-                if total < self.config.upload_image_threshold:
+                image_count = self.content_manager.content_db.count_unuploaded_media(modality="image")
+                video_count = self.content_manager.content_db.count_unuploaded_media(modality="video")
+                image_thresh = self.config.upload_image_threshold
+                video_thresh = self.config.upload_video_threshold
+
+                modalities: list[str] = []
+                if image_count >= image_thresh:
+                    modalities.append("image")
+                if video_count >= video_thresh:
+                    modalities.append("video")
+
+                if not modalities:
                     bt.logging.debug(
                         f"[DATA-SERVICE] Upload threshold not met: "
-                        f"{total} < {self.config.upload_image_threshold}"
+                        f"image {image_count}/{image_thresh}, video {video_count}/{video_thresh}"
                     )
                     return
 
-                batches = min(
-                    self.config.upload_max_batches,
-                    total // self.config.upload_image_threshold,
-                )
+                # Per-modality batch counts (each modality drains itself across iterations)
+                # Use the larger so we make enough passes to drain whichever modality has more.
+                per_modality_batches = {
+                    "image": image_count // max(image_thresh, 1),
+                    "video": video_count // max(video_thresh, 1),
+                }
+                triggered_batch_counts = [per_modality_batches[m] for m in modalities]
+                batches = min(self.config.upload_max_batches, max(triggered_batch_counts))
+
                 bt.logging.info(
-                    f"[DATA-SERVICE] Upload threshold met: {total} >= {self.config.upload_image_threshold}. "
+                    f"[DATA-SERVICE] Upload triggered for {modalities}: "
+                    f"image {image_count}/{image_thresh}, video {video_count}/{video_thresh}. "
                     f"Will upload {batches} batch(es)"
                 )
             except Exception as e:
@@ -379,16 +390,16 @@ class DataService:
                 return
 
             self.uploader_thread = Thread(
-                target=self._uploader_worker, args=(batches,), daemon=True
+                target=self._uploader_worker, args=(batches, modalities), daemon=True
             )
             self.uploader_thread_start_time = time.time()
             self.uploader_thread.start()
 
-    def _uploader_worker(self, batches: int) -> None:
+    def _uploader_worker(self, batches: int, modalities: list[str]) -> None:
         try:
             bt.logging.info(
                 f"[DATA-SERVICE] Uploading {batches} batch(es) of "
-                f"{self.config.upload_batch_size} files per modality"
+                f"{self.config.upload_batch_size} files for modalities {modalities}"
             )
             validator_uid = self._resolve_validator_uid()
             uploaded = self.content_manager.upload_batch_to_huggingface(
@@ -403,6 +414,7 @@ class DataService:
                 ),
                 validator_uid=validator_uid,
                 num_batches=batches,
+                modalities=modalities,
             )
             if uploaded and uploaded > 0 and self.validator_wallet:
                 stats = self.content_manager.get_verification_stats_last_n_hours(
