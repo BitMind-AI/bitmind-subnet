@@ -64,14 +64,11 @@ class GeneratorService:
         self.model_registry = None
         self.model_names = []
 
-        self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
-        if self.hf_token:
-            bt.logging.info(
-                f"[GENERATOR-SERVICE] HuggingFace token loaded: {self.hf_token[:10]}..."
-            )
-        else:
-            bt.logging.warning(
-                "[GENERATOR-SERVICE] No HuggingFace token found in environment"
+        self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN") or os.environ.get("HUGGING_FACE_TOKEN")
+        if not self.hf_token:
+            raise RuntimeError(
+                "[GENERATOR-SERVICE] HUGGINGFACE_HUB_TOKEN (or deprecated HUGGING_FACE_TOKEN) "
+                "environment variable must be set"
             )
 
         self.tp_generators = {"nano_banana": nano_banana.generate_image}

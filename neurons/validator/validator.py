@@ -284,7 +284,7 @@ class Validator(BaseNeuron):
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
 
         generator_results = await get_benchmark_results(
-            self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark.api_url
+            self.wallet.hotkey, self.metagraph, base_url=self.config.benchmark_api_url
         )
 
         # Get generator liveness data for filtering inactive generators

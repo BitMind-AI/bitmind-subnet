@@ -55,7 +55,7 @@ def post_generator_verification_upload(
 
     Args:
         wallet: Validator wallet (signs with hotkey).
-        base_url: e.g. config.benchmark.api_url
+        base_url: e.g. config.benchmark_api_url
         lookback_hours: Must match the window used to build verification_stats.
         verification_stats: Output of ContentManager.get_verification_stats_last_n_hours.
 

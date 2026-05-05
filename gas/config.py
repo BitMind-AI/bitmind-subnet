@@ -347,7 +347,7 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
-        "--benchmark.api-url",
+        "--benchmark-api-url",
         type=str,
         help="Base URL for the benchmark API",
         default=os.environ.get("BENCHMARK_API_URL", "https://gas.bitmind.ai"),
