@@ -686,11 +686,14 @@ class ContentManager:
 				miner_stats[hotkey] = {
 					"uid": media.uid,
 					"verified_media_ids": [],
+					"model_names": [],
 					"total_verified": 0,
 					"total_failed": 0,
 					"last_timestamp": media.created_at
 				}
 			miner_stats[hotkey]["verified_media_ids"].append(media.id)
+			if media.model_name:
+				miner_stats[hotkey]["model_names"].append(media.model_name)
 			miner_stats[hotkey]["total_verified"] += 1
 			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
 				miner_stats[hotkey]["last_timestamp"] = media.created_at
@@ -702,6 +705,7 @@ class ContentManager:
 				miner_stats[hotkey] = {
 					"uid": media.uid,
 					"verified_media_ids": [],
+					"model_names": [],
 					"total_verified": 0,
 					"total_failed": 0,
 					"last_timestamp": media.created_at
@@ -724,7 +728,8 @@ class ContentManager:
 				"total_evaluated": total_evaluated,
 				"pass_rate": pass_rate,
 				"media_ids": stats["verified_media_ids"],
-				"last_timestamp": stats["last_timestamp"]
+				"last_timestamp": stats["last_timestamp"],
+				"model_names": stats.get("model_names", []),
 			}
 		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
 		return verification_stats
@@ -790,6 +795,7 @@ class ContentManager:
 				"pass_rate": pass_rate,
 				"media_ids": all_ids,
 				"last_timestamp": last_ts,
+				"model_names": legacy.get("model_names", []) + outcome.get("model_names", []),
 			}
 		return merged
 

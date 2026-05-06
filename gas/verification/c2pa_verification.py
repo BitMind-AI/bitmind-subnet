@@ -646,7 +646,8 @@ def _extract_model_name(manifest_data: Dict[str, Any]) -> Optional[str]:
 
     Checks (in priority order):
     1. `softwareAgent` on c2pa.actions assertions (e.g. older Adobe/Firefly)
-    2. `claim_generator` UA string, filtered to non-infrastructure tokens
+    2. `parameters.model_name` on c2pa.actions (e.g. Seedance stores variant here)
+    3. `claim_generator` UA string, filtered to non-infrastructure tokens
        (e.g. "DALL-E 3/1.0 c2pa-rs/0.36.1" -> "DALL-E 3")
 
     Google's manifests don't expose the specific model (Imagen/Veo/etc.) in
@@ -668,10 +669,16 @@ def _extract_model_name(manifest_data: Dict[str, Any]) -> Optional[str]:
         for assertion in manifest.get("assertions", []):
             if "c2pa.actions" not in assertion.get("label", ""):
                 continue
-            for action in assertion.get("data", {}).get("actions", []):
+            action_data = assertion.get("data", {})
+            for action in action_data.get("actions", []):
                 software_agent = action.get("softwareAgent")
                 if software_agent:
                     return _parse_product_name(software_agent)
+                # Check params.model_name (used by Seedance/BytePlus)
+                params = action.get("parameters", {})
+                model_name = params.get("model_name")
+                if model_name:
+                    return str(model_name)
 
         claim_generator = manifest.get("claim_generator")
         if claim_generator:
