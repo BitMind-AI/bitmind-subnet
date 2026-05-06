@@ -1,14 +1,14 @@
 """
 C2PA Content Credentials verification for miner-submitted media.
-
+ 
 Validates that content has authentic provenance from trusted AI generators
 like OpenAI (DALL-E), Google (Gemini/Imagen), Adobe Firefly, etc.
-
+ 
 Trust Anchors
 -------------
 c2pa-python >= 0.29.0 enforces trust anchor checking by default. Any cert not
 chaining to a root in c2pa-rs's built-in store fires signingCredential.untrusted.
-
+ 
 Several AI providers use private or non-CAI CAs that are not in that store:
   - Stability AI      → GlobalSign GCC R6 SMIME CA 2023 → GlobalSign Root CA - R6
   - Runway (pre-Gen4) → GlobalSign GCC R6 SMIME CA 2023 → GlobalSign Root CA - R6
@@ -18,13 +18,18 @@ Several AI providers use private or non-CAI CAs that are not in that store:
   - OpenAI (Truepic)  → Truepic WebClaimSigningCA (Truepic RootCA not embedded)
   - Adobe             → Adobe Product Services G4 → Adobe Root CA G2 (likely trusted natively)
   - Google            → Google C2PA Root CA G3 (fetched from pki.goog/c2pa/root-g3.crt)
-
+  - ByteDance Seedance → GlobalSign GCC R45 SMIME CA 2025 → GlobalSign Secure Mail Root R45
+ 
 PEM cert chains for these providers live in:
   gas/verification/trust_anchors/
-
+ 
 When running on >= 0.29.0, _build_c2pa_reader() supplies them via the
 Settings/Context API so signingCredential.untrusted is not raised for
 legitimate content from these providers.
+
+Note: OpenAI's Sora 2 (via OpenRouter) uses a self-signed end-entity cert
+(OpenAI Media Service, CA=false) which c2pa-rs correctly rejects. This is
+an OpenAI-side issue — no trust anchor can fix a non-CA self-signed cert.
 """
 
 import json
@@ -50,6 +55,8 @@ _PRIVATE_CA_PEM_FILES = [
     "openai_truepic.pem",     # Truepic WebClaimSigningCA chain
     "adobe.pem",              # Adobe Product Services G4 chain
     "google_c2pa.pem",        # Google C2PA Root CA G3 (fetched from pki.goog)
+    "globalsign_r45.pem",     # GlobalSign Secure Mail Root R45 (ByteDance/Seedance via OpenRouter)
+    "bytedance_seedance.pem", # ByteDance Seedance C2PA (GlobalSign R45 root chain)
 ]
 
 
@@ -120,7 +127,8 @@ TRUSTED_CERT_ISSUERS = {
     "Haiper",
     "Lightricks",       # LTX Studio
     "Shutterstock",
-    "ByteDance",        # Seedream, Seedance
+    "ByteDance",        # Seedream
+    "Byteplus",         # Seedance (ByteDance cloud/BytePlus)
 }
 
 TRUSTED_CA_ISSUERS = {
@@ -167,6 +175,10 @@ PROVIDER_PROFILES = {
     },
     "black_forest_labs": {
         "aliases": ("Black Forest Labs", "FLUX"),
+        "requires_ai_source": False,
+    },
+    "bytedance": {
+        "aliases": ("ByteDance", "BytePlus", "Seedance", "BytePlus_ModelArk"),
         "requires_ai_source": False,
     },
 }

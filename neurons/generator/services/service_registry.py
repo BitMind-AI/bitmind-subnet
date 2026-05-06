@@ -27,9 +27,10 @@ class ServiceRegistry:
       VIDEO_SERVICE=openai|openrouter|stabilityai|runway|none
 
     Services:
-      - openai: DALL-E 3 / Sora video (requires OPENAI_API_KEY; Videos API deprecated,
-        shutdown 2026-09-24) - produces C2PA-signed content
-      - openrouter: Google Gemini via OpenRouter (requires OPEN_ROUTER_API_KEY) - produces C2PA-signed content
+      - openai: DALL-E 3 / Sora video (requires OPENAI_API_KEY) - produces C2PA-signed content
+      - openrouter: Gemini images + Veo/Seedance video via OpenRouter (requires OPEN_ROUTER_API_KEY)
+        Video models gated to C2PA-capable only (Veo 3.1, Seedance 2.0/1.5).
+        Kling, Wan, Hailuo, Sora excluded — they don't produce verifiable C2PA.
       - stabilityai: Stability AI images (requires STABILITY_API_KEY) - produces C2PA-signed content
       - runway: Runway text-to-video (requires RUNWAYML_API_KEY or RUNWAYML_API_SECRET)
       - none: Disable this modality (requests will be rejected)
