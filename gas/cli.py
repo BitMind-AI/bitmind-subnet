@@ -429,6 +429,52 @@ def db_stats(db_path, base_dir, detailed):
         click.echo(f"❌ Error running db_stats script: {e}", err=True)
         sys.exit(1)
 
+@validator.command(name="miner-stats")
+@click.option("--db-path", default=None, help="Path to the prompt database")
+@click.option("--uid", type=int, default=None, help="Show detailed stats for a specific miner UID")
+@click.option("--coldkey", default=None, help="Show detailed stats for all miners under a coldkey (SS58 address)")
+@click.option("--limit", type=int, default=20, help="Number of recent entries to show (default: 20)")
+@click.option("--since", "lookback_hours", type=float, default=None, help="Only consider records from the last N hours")
+@click.option("--by-coldkey", is_flag=True, help="Group the summary table by coldkey (queries chain metagraph)")
+@click.option("--chain-endpoint", default=None, help="Subtensor chain endpoint (used with --by-coldkey/--coldkey)")
+@click.option("--netuid", type=int, default=None, help="Subnet UID for metagraph lookup")
+@click.option("--failed", is_flag=True, help="List stored failed-verification media from failed_media/ dir")
+def miner_stats(db_path, uid, coldkey, limit, lookback_hours, by_coldkey, chain_endpoint, netuid, failed):
+    """Show miner verification stats: pass rates, uploads, challenge outcomes"""
+    if db_path is None:
+        db_path = os.path.join(DEFAULT_CACHE_DIR, "prompts.db")
+
+    miner_stats_script = SCRIPT_DIR / "cache" / "util" / "miner_stats.py"
+    python_interpreter = get_python_interpreter()
+
+    cmd = [python_interpreter, str(miner_stats_script), "--db-path", db_path]
+    if uid is not None:
+        cmd.extend(["--uid", str(uid)])
+    if coldkey is not None:
+        cmd.extend(["--coldkey", coldkey])
+    if limit != 20:
+        cmd.extend(["--limit", str(limit)])
+    if lookback_hours is not None:
+        cmd.extend(["--lookback-hours", str(lookback_hours)])
+    if by_coldkey:
+        cmd.append("--by-coldkey")
+    if chain_endpoint:
+        cmd.extend(["--chain-endpoint", chain_endpoint])
+    if netuid is not None:
+        cmd.extend(["--netuid", str(netuid)])
+    if failed:
+        cmd.append("--failed")
+
+    try:
+        result = subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        click.echo(f"❌ Miner stats failed with exit code {e.returncode}", err=True)
+        sys.exit(e.returncode)
+    except Exception as e:
+        click.echo(f"❌ Error running miner_stats script: {e}", err=True)
+        sys.exit(1)
+
+
 @validator.command(name="db-rows")
 @click.option("--db-path", default=None, help="Path to the prompt database")
 @click.option(

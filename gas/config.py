@@ -298,6 +298,13 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--store-failed-media",
+        action="store_true",
+        help="Save media that fails verification (tampering, duplicates, C2PA) to disk for inspection",
+        default=False,
+    )
+
+    parser.add_argument(
         "--neuron.max-stuck-count",
         type=int,
         help="Number of consecutive heartbeats with no progress before restart",
