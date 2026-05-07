@@ -93,8 +93,19 @@ class GenerativeChallengeManager:
 
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
-        # Sample one unique prompt per miner to prevent Sybil replay attacks
-        modality = random.choice([Modality.IMAGE, Modality.VIDEO])
+        # Sample one unique prompt per miner to prevent Sybil replay attacks.
+        # Modality selection driven by prompt_modalities config.
+        raw = getattr(self.config, 'prompt_modalities', 'video')
+        available = []
+        for item in raw.split(','):
+            item = item.strip().lower()
+            if item == 'image':
+                available.append(Modality.IMAGE)
+            elif item == 'video':
+                available.append(Modality.VIDEO)
+        if not available:
+            available = [Modality.VIDEO]
+        modality = random.choice(available)
         n_needed = len(miner_uids)
 
         prompt_entries = self.content_manager.sample_prompts(

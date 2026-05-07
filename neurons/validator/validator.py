@@ -204,11 +204,11 @@ class Validator(BaseNeuron):
                     )
 
                 # Weight budget (must sum to 1.0)
-                burn_pct      = .93
-                video_pct     = .0
+                burn_pct      = .6
+                video_pct     = .2
                 image_pct     = .0
                 audio_pct     = .0
-                generator_pct = .07
+                generator_pct = .2
 
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["burn"],

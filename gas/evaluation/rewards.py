@@ -4,6 +4,122 @@ from typing import Dict, Optional
 
 import bittensor as bt
 
+from collections import Counter
+
+# Model generation cost in USD per second of video (720p, no audio unless noted).
+# Used to compute reward multipliers: miner gets baseline_ratio * (model_price / baseline_price).
+#
+# These are defaults.  If OPEN_ROUTER_API_KEY is set, live prices are fetched from
+# the /videos/models endpoint at module load and merged on top (so newly added
+# models or price changes are picked up automatically).
+#
+# C2PA blindness note: several providers do NOT expose the model variant in their
+# C2PA manifests.  All Veo (any provider) returns None.  All Runway proprietary
+# models share the same "RunwayML" softwareAgent.  We conservatively use the
+# cheapest variant as baseline and accept the ambiguity in the reward multiplier.
+GENERATOR_MODEL_PRICES: Dict[str, float] = {
+    # Google Veo family (C2PA: no variant exposed — all return None → baseline)
+    "google/veo-3.1-lite":  0.03,   # cheapest Veo — used as baseline
+    "google/veo-3.1-fast":  0.08,
+    "google/veo-3.1":       0.20,
+    # ByteDance Seedance (C2PA: params.model_name — variant IS exposed)
+    "dreamina-seedance-2-0-fast":  0.05,
+    "dreamina-seedance-2-0":       0.12,
+    "dreamina-seedance-1-5-pro":   0.25,
+    # Runway proprietary models (C2PA: softwareAgent = "RunwayML Video Generation")
+    # All share the same C2PA signature; variant is not exposed.
+    # Keyed at cheapest variant (gen3a_turbo/gen4_turbo/act_two, 5 credits/s).
+    # Full Runway pricing at ~$0.01/credit:
+    #   gen4.5 (12cr/s)  gen4_turbo (5cr/s)  gen4_aleph (15cr/s)
+    #   gen3a_turbo (5cr/s)  act_two (5cr/s)
+    # Runway-resold Veo models return None (same as Google Veo) → baseline.
+    "RunwayML": 0.05,
+}
+
+# Cheapest model price — all multipliers are relative to this.
+_GENERATOR_BASELINE_PRICE: float = min(GENERATOR_MODEL_PRICES.values())
+
+# Cached live prices — refreshed at most once per process lifetime on first import.
+# The /videos/models endpoint is free and public (no auth).
+_LIVE_PRICES_FETCHED = False
+
+
+def _fetch_openrouter_prices() -> Dict[str, float]:
+    """Pull live video model prices from OpenRouter /videos/models (free, no auth).
+
+    Only runs once per process — result is cached at module level."""
+    global _LIVE_PRICES_FETCHED
+    if _LIVE_PRICES_FETCHED:
+        return {}
+
+    _LIVE_PRICES_FETCHED = True
+    try:
+        import requests
+        resp = requests.get(
+            "https://openrouter.ai/api/v1/videos/models",
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return {}
+        models = resp.json().get("data", [])
+        prices: Dict[str, float] = {}
+        for m in models:
+            model_id = m.get("id", "")
+            skus = m.get("pricing_skus", {}) or {}
+            # Find the cheapest per-second price for text-to-video
+            candidates = []
+            for key, val in skus.items():
+                if "text_to_video" not in key and "duration_seconds" not in key:
+                    continue
+                try:
+                    candidates.append(float(val))
+                except (ValueError, TypeError):
+                    pass
+            if candidates:
+                prices[model_id] = min(candidates)
+        bt.logging.info(f"Fetched {len(prices)} live OpenRouter video model prices")
+        return prices
+    except Exception as e:
+        bt.logging.debug(f"Could not fetch OpenRouter prices: {e}")
+        return {}
+
+
+# Merge live prices on top of defaults (live wins over hardcoded for same key).
+_live = _fetch_openrouter_prices()
+if _live:
+    GENERATOR_MODEL_PRICES = {**GENERATOR_MODEL_PRICES, **_live}
+    _GENERATOR_BASELINE_PRICE = min(GENERATOR_MODEL_PRICES.values())
+
+
+def _get_model_price(model_name: str) -> float:
+    """Return the USD/second price for a model name, or the baseline price if unknown."""
+    if not model_name:
+        return _GENERATOR_BASELINE_PRICE
+    lower = model_name.lower()
+    # Direct match first
+    for key, price in GENERATOR_MODEL_PRICES.items():
+        if key.lower() == lower:
+            return price
+    # Substring match (for C2PA-extracted names like "Google")
+    for key, price in GENERATOR_MODEL_PRICES.items():
+        if key.lower() in lower:
+            return price
+    return _GENERATOR_BASELINE_PRICE
+
+
+def _compute_average_model_multiplier(model_names: list[str]) -> float:
+    """Average price multiplier across a miner's verified submissions.
+
+    Uses sqrt(price/baseline) to taper extreme ratios (e.g. 8.33x → 2.89x).
+    """
+    if not model_names:
+        return 1.0
+    total = 0.0
+    for name in model_names:
+        price = _get_model_price(name)
+        total += math.sqrt(price / _GENERATOR_BASELINE_PRICE)
+    return total / len(model_names)
+
 
 def get_discriminator_rewards(
     runs,
@@ -124,9 +240,16 @@ def get_generator_base_rewards(verification_stats):
             pass_rate = stats["pass_rate"]
             verified_count = stats["total_verified"]
 
-            # Simple base reward calculation (can be customized)
-            # Higher pass rate = higher reward, with bonus for volume
-            base_reward = pass_rate * min(verified_count, 10)  # Cap volume bonus at 10
+            # Base reward: pass_rate scaled by verified count with diminishing-returns
+            # taper.  First 10 count linearly; beyond 10, log₂ takes over so high-
+            # throughput miners still see gains but can't farm volume indefinitely.
+            volume = min(verified_count, 10) + max(0.0, math.log2(max(1, verified_count - 9)))
+            base_reward = pass_rate * volume
+
+            # Model tier multiplier — rewards miners for using higher-cost models
+            model_names = stats.get("model_names", [])
+            model_mult = _compute_average_model_multiplier(model_names)
+            base_reward *= model_mult
 
             uid_rewards[uid] = base_reward
             all_media_ids.extend(stats["media_ids"])
