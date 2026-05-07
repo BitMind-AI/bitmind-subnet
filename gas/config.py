@@ -458,6 +458,13 @@ def add_validator_args(parser):
         default=4,
     )
 
+    parser.add_argument(
+        "--prompt-modalities",
+        type=str,
+        help="Comma-separated modalities to generate prompts for (image,video). Default: video only",
+        default="video",
+    )
+
 
 def add_generation_service_args(parser):
     """Add generation service specific arguments to the parser."""
