@@ -672,9 +672,13 @@ def _extract_model_name(manifest_data: Dict[str, Any]) -> Optional[str]:
             action_data = assertion.get("data", {})
             for action in action_data.get("actions", []):
                 software_agent = action.get("softwareAgent")
-                if software_agent:
-                    return _parse_product_name(software_agent)
-                # Check params.model_name (used by Seedance/BytePlus)
+                if software_agent and isinstance(software_agent, str):
+                    parsed = _parse_product_name(software_agent)
+                    if parsed:
+                        return parsed
+                # Check params.model_name (used by Seedance/BytePlus).
+                # Must come after softwareAgent because dict softwareAgents
+                # (e.g. {"name":"BytePlus_ModelArk",...}) are infrastructure.
                 params = action.get("parameters", {})
                 model_name = params.get("model_name")
                 if model_name:

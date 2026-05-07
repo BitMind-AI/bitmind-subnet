@@ -13,18 +13,27 @@ from collections import Counter
 # the /videos/models endpoint at module load and merged on top (so newly added
 # models or price changes are picked up automatically).
 #
-# Veo note: C2PA does not expose the Veo variant (lite/fast/base). We conservatively
-# use the lite price as baseline so miners are never penalised, and the actual Veo
-# variant they chose is reflected in whatever multiplier the baseline_ratio gives them.
+# C2PA blindness note: several providers do NOT expose the model variant in their
+# C2PA manifests.  All Veo (any provider) returns None.  All Runway proprietary
+# models share the same "RunwayML" softwareAgent.  We conservatively use the
+# cheapest variant as baseline and accept the ambiguity in the reward multiplier.
 GENERATOR_MODEL_PRICES: Dict[str, float] = {
-    # Google Veo family (C2PA: "Google C2PA Core Generator Library")
+    # Google Veo family (C2PA: no variant exposed — all return None → baseline)
     "google/veo-3.1-lite":  0.03,   # cheapest Veo — used as baseline
     "google/veo-3.1-fast":  0.08,
     "google/veo-3.1":       0.20,
-    # ByteDance Seedance (C2PA: params.model_name = dreamina-seedance-*)
-    "dreamina-seedance-2.0-fast": 0.05,
-    "dreamina-seedance-2.0":      0.12,
-    "dreamina-seedance-1-5-pro":  0.25,
+    # ByteDance Seedance (C2PA: params.model_name — variant IS exposed)
+    "dreamina-seedance-2-0-fast":  0.05,
+    "dreamina-seedance-2-0":       0.12,
+    "dreamina-seedance-1-5-pro":   0.25,
+    # Runway proprietary models (C2PA: softwareAgent = "RunwayML Video Generation")
+    # All share the same C2PA signature; variant is not exposed.
+    # Keyed at cheapest variant (gen3a_turbo/gen4_turbo/act_two, 5 credits/s).
+    # Full Runway pricing at ~$0.01/credit:
+    #   gen4.5 (12cr/s)  gen4_turbo (5cr/s)  gen4_aleph (15cr/s)
+    #   gen3a_turbo (5cr/s)  act_two (5cr/s)
+    # Runway-resold Veo models return None (same as Google Veo) → baseline.
+    "RunwayML": 0.05,
 }
 
 # Cheapest model price — all multipliers are relative to this.
@@ -99,13 +108,16 @@ def _get_model_price(model_name: str) -> float:
 
 
 def _compute_average_model_multiplier(model_names: list[str]) -> float:
-    """Average price multiplier across a miner's verified submissions."""
+    """Average price multiplier across a miner's verified submissions.
+
+    Uses sqrt(price/baseline) to taper extreme ratios (e.g. 8.33x → 2.89x).
+    """
     if not model_names:
         return 1.0
     total = 0.0
     for name in model_names:
         price = _get_model_price(name)
-        total += price / _GENERATOR_BASELINE_PRICE
+        total += math.sqrt(price / _GENERATOR_BASELINE_PRICE)
     return total / len(model_names)
 
 
