@@ -506,6 +506,13 @@ def add_generation_service_args(parser):
     )
 
     parser.add_argument(
+        "--prompt-modalities",
+        type=str,
+        help="Comma-separated modalities to generate prompts for (image,video). Default: video only",
+        default="video",
+    )
+
+    parser.add_argument(
         "--local-batch-size",
         type=int,
         help="Number of local generations to run per cycle",
@@ -544,14 +551,14 @@ def add_data_service_args(parser):
         "--hf-image-repo",
         type=str,
         help="HuggingFace dataset repo for uploaded images",
-        default="gasstation/gs-images-v3",
+        default="gasstation/gs-images-v4",
     )
 
     parser.add_argument(
         "--hf-video-repo",
         type=str,
         help="HuggingFace dataset repo for uploaded videos",
-        default="gasstation/gs-videos-v3",
+        default="gasstation/gs-videos-v4",
     )
 
     parser.add_argument(

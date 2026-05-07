@@ -446,6 +446,19 @@ class GeneratorService:
                 continue
         return {"count": 0, "items": []}
 
+    def _active_prompt_modalities(self) -> set:
+        raw = getattr(self.config, 'prompt_modalities', 'video')
+        mods = set()
+        for item in raw.split(','):
+            item = item.strip().lower()
+            if item == 'image':
+                mods.add(Modality.IMAGE)
+            elif item == 'video':
+                mods.add(Modality.VIDEO)
+        if not mods:
+            mods = {Modality.VIDEO}
+        return mods
+
     def _generate_prompts(self, batch_size: int = 10) -> int:
         """Generate a batch of (image, video) prompt pairs from cached images.
 

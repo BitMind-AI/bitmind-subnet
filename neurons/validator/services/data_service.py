@@ -375,7 +375,6 @@ class DataService:
                 }
                 triggered_batch_counts = [per_modality_batches[m] for m in modalities]
                 batches = min(self.config.upload_max_batches, max(triggered_batch_counts))
-
                 bt.logging.info(
                     f"[DATA-SERVICE] Upload triggered for {modalities}: "
                     f"image {image_count}/{image_thresh}, video {video_count}/{video_thresh}. "
