@@ -65,6 +65,10 @@ def post_generator_verification_upload(
     if not verification_stats:
         return None
 
+    if not base_url:
+        logger.warning("generator-verification-upload: base_url is None, skipping upload")
+        return None
+
     entries = _verification_stats_to_entries(verification_stats)
     if not entries:
         return None

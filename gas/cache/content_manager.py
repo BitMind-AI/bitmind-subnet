@@ -226,6 +226,49 @@ class ContentManager:
 			bt.logging.error(f"Error writing miner media: {e}")
 			return None
 
+	def write_failed_media(
+		self,
+		uid: int,
+		task_id: str,
+		binary_data: bytes,
+		reason: str,
+		content_type: str = "application/octet-stream",
+	) -> Optional[str]:
+		"""Save rejected media to failed_media/ for manual inspection.
+
+		Only used when --store-failed-media is enabled. No DB entry.
+
+		Stores at: <base_dir>/failed_media/<uid>/<reason_slug>/<task_id>.<ext>
+		"""
+		try:
+			# Derive extension from MIME type
+			ct = content_type.split(";")[0].strip().lower()
+			ext_map = {
+				"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
+				"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
+			}
+			ext = ext_map.get(ct, ".bin")
+
+			# Sanitize reason for directory name
+			reason_slug = reason.lower().replace(' ', '_').replace('/', '_')[:64]
+
+			out_dir = Path(self.media_storage.base_dir) / "failed_media" / str(uid) / reason_slug
+			out_dir.mkdir(parents=True, exist_ok=True)
+
+			out_path = out_dir / f"{task_id}{ext}"
+			with open(out_path, "wb") as f:
+				f.write(binary_data)
+
+			bt.logging.info(
+				f"[FAILED-MEDIA] Saved rejected media for UID {uid} task {task_id}: "
+				f"{reason} → {out_path} ({len(binary_data)} bytes)"
+			)
+			return str(out_path)
+
+		except Exception as e:
+			bt.logging.warning(f"Failed to write failed_media for task {task_id}: {e}")
+			return None
+
 	def write_dataset_media(
 		self,
 		modality: Modality,

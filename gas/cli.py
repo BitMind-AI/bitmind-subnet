@@ -383,169 +383,49 @@ def logs(service, follow, tail, docker):
             subprocess.run(["pm2", "logs", service_map.get(service, service)])
 
 
-@validator.command()
+@validator.command(name="miner-stats")
 @click.option("--db-path", default=None, help="Path to the prompt database")
-@click.option("--base-dir", default=None, help="Base directory for cache system")
-@click.option("--detailed", is_flag=True, help="Show detailed breakdown of model names and dataset names")
-def db_stats(db_path, base_dir, detailed):
-    """Show database statistics for prompts, search queries, and media"""
-    # Use DEFAULT_CACHE_DIR if not specified
-    if base_dir is None:
-        base_dir = DEFAULT_CACHE_DIR
-    if db_path is None:
-        db_path = os.path.join(base_dir, "prompts.db")
-
-    # Get the absolute path to the db_stats script
-    db_stats_script = SCRIPT_DIR / "cache" / "util" / "db_stats.py"
-
-    # Use virtual environment Python if available
-    python_interpreter = get_python_interpreter()
-
-    # Build command
-    cmd = [
-        python_interpreter,
-        str(db_stats_script),
-        "--db-path",
-        db_path,
-        "--base-dir",
-        base_dir,
-    ]
-
-    # Add detailed flag if requested
-    if detailed:
-        cmd.append("--detailed")
-
-    # Execute the db_stats script
-    try:
-        result = subprocess.run(cmd, check=True)
-        if result.returncode == 0:
-            click.echo("✅ Database statistics completed!")
-    except subprocess.CalledProcessError as e:
-        click.echo(
-            f"❌ Database statistics failed with exit code {e.returncode}", err=True
-        )
-        sys.exit(e.returncode)
-    except Exception as e:
-        click.echo(f"❌ Error running db_stats script: {e}", err=True)
-        sys.exit(1)
-
-@validator.command(name="db-rows")
-@click.option("--db-path", default=None, help="Path to the prompt database")
-@click.option(
-    "--table",
-    type=click.Choice(["prompts", "media"]),
-    required=True,
-    help="Table to display (prompts or media)",
-)
-@click.option(
-    "--rows", default=10, type=int, help="Number of rows to display (default: 10)"
-)
-@click.option(
-    "--source-type",
-    type=click.Choice(["scraper", "dataset", "generated", "miner"]),
-    help="Filter media table by source type (only applies to media table)",
-)
-@click.option(
-    "--miner-uid",
-    type=int,
-    help="Filter media table by specific miner UID (only applies to media table with source-type=miner)",
-)
-@click.option(
-    "--last-24h",
-    is_flag=True,
-    help="Filter media table to show only entries from the last 24 hours (only applies to media table)",
-)
-@click.option(
-    "--filepaths-only",
-    is_flag=True,
-    help="Display only file paths (only applies to media table)",
-)
-@click.option(
-    "--include-prompts",
-    is_flag=True,
-    help="Include associated prompt content with file paths (only applies to media table)",
-)
-def db_rows(db_path, table, rows, source_type, miner_uid, last_24h, filepaths_only, include_prompts):
-    """Show the first N rows of either the prompts or media table"""
-    # Validate source-type is only used with media table
-    if source_type and table != "media":
-        click.echo("❌ --source-type can only be used with --table media", err=True)
-        sys.exit(1)
-
-    # Validate miner-uid is only used with media table and source-type=miner
-    if miner_uid and (table != "media" or source_type != "miner"):
-        click.echo("❌ --miner-uid can only be used with --table media and --source-type miner", err=True)
-        sys.exit(1)
-
-    # Validate last-24h is only used with media table
-    if last_24h and table != "media":
-        click.echo("❌ --last-24h can only be used with --table media", err=True)
-        sys.exit(1)
-
-    # Validate filepaths-only is only used with media table
-    if filepaths_only and table != "media":
-        click.echo("❌ --filepaths-only can only be used with --table media", err=True)
-        sys.exit(1)
-
-    # Validate include-prompts is only used with media table
-    if include_prompts and table != "media":
-        click.echo("❌ --include-prompts can only be used with --table media", err=True)
-        sys.exit(1)
-
-    # Use DEFAULT_CACHE_DIR if not specified
+@click.option("--uid", type=int, default=None, help="Show detailed stats for a specific miner UID")
+@click.option("--coldkey", default=None, help="Show detailed stats for all miners under a coldkey (SS58 address)")
+@click.option("--limit", type=int, default=20, help="Number of recent entries to show (default: 20)")
+@click.option("--since", "lookback_hours", type=float, default=None, help="Only consider records from the last N hours")
+@click.option("--by-coldkey", is_flag=True, help="Group the summary table by coldkey (queries chain metagraph)")
+@click.option("--chain-endpoint", default=None, help="Subtensor chain endpoint (used with --by-coldkey/--coldkey)")
+@click.option("--netuid", type=int, default=None, help="Subnet UID for metagraph lookup")
+@click.option("--failed", is_flag=True, help="List stored failed-verification media from failed_media/ dir")
+def miner_stats(db_path, uid, coldkey, limit, lookback_hours, by_coldkey, chain_endpoint, netuid, failed):
+    """Show miner verification stats: pass rates, uploads, challenge outcomes"""
     if db_path is None:
         db_path = os.path.join(DEFAULT_CACHE_DIR, "prompts.db")
 
-    # Get the absolute path to the db_rows script
-    db_rows_script = SCRIPT_DIR / "cache" / "util" / "db_rows.py"
-
-    # Use virtual environment Python if available
+    miner_stats_script = SCRIPT_DIR / "cache" / "util" / "miner_stats.py"
     python_interpreter = get_python_interpreter()
 
-    # Build command
-    cmd = [
-        python_interpreter,
-        str(db_rows_script),
-        "--db-path",
-        db_path,
-        "--table",
-        table,
-        "--rows",
-        str(rows),
-    ]
+    cmd = [python_interpreter, str(miner_stats_script), "--db-path", db_path]
+    if uid is not None:
+        cmd.extend(["--uid", str(uid)])
+    if coldkey is not None:
+        cmd.extend(["--coldkey", coldkey])
+    if limit != 20:
+        cmd.extend(["--limit", str(limit)])
+    if lookback_hours is not None:
+        cmd.extend(["--lookback-hours", str(lookback_hours)])
+    if by_coldkey:
+        cmd.append("--by-coldkey")
+    if chain_endpoint:
+        cmd.extend(["--chain-endpoint", chain_endpoint])
+    if netuid is not None:
+        cmd.extend(["--netuid", str(netuid)])
+    if failed:
+        cmd.append("--failed")
 
-    # Add source-type filter if provided
-    if source_type:
-        cmd.extend(["--source-type", source_type])
-
-    # Add miner-uid filter if provided
-    if miner_uid:
-        cmd.extend(["--miner-uid", str(miner_uid)])
-
-    # Add last-24h filter if provided
-    if last_24h:
-        cmd.append("--last-24h")
-
-    # Add filepaths-only flag if provided
-    if filepaths_only:
-        cmd.append("--filepaths-only")
-
-    # Add include-prompts flag if provided
-    if include_prompts:
-        cmd.append("--include-prompts")
-
-    # Execute the db_rows script
     try:
         result = subprocess.run(cmd, check=True)
-        if result.returncode == 0:
-            click.echo("✅ Database rows display completed!")
     except subprocess.CalledProcessError as e:
-        click.echo(
-            f"❌ Database rows display failed with exit code {e.returncode}", err=True
-        )
+        click.echo(f"❌ Miner stats failed with exit code {e.returncode}", err=True)
         sys.exit(e.returncode)
     except Exception as e:
-        click.echo(f"❌ Error running db_rows script: {e}", err=True)
+        click.echo(f"❌ Error running miner_stats script: {e}", err=True)
         sys.exit(1)
 
 

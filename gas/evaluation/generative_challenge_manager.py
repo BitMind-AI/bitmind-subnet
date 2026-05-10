@@ -352,6 +352,18 @@ class GenerativeChallengeManager:
         try:
             bt.logging.trace(f"Storing binary content for task {task_id}, size: {len(binary_data)} bytes")
 
+            # Helper to optionally persist rejected media for manual inspection
+            store_failed = getattr(self.config, 'store_failed_media', False)
+
+            def _reject(reason: str) -> tuple[None, str]:
+                if store_failed:
+                    self.content_manager.write_failed_media(
+                        uid=generator_uid, task_id=task_id,
+                        binary_data=binary_data, reason=reason,
+                        content_type=content_type,
+                    )
+                return None, reason
+
             # Get task info from challenge tracker
             task_info = self.challenge_tasks.get(task_id)
             if not task_info:
@@ -374,13 +386,13 @@ class GenerativeChallengeManager:
                         f"REJECTED corrupted media from UID {generator_uid} task {task_id}: "
                         f"media is unreadable or invalid"
                     )
-                    return None, "Corrupted or unreadable media"
+                    return _reject("Corrupted or unreadable media")
             except Exception as e:
                 bt.logging.warning(
                     f"REJECTED media from UID {generator_uid} task {task_id}: "
                     f"corruption check error: {e}"
                 )
-                return None, f"Corruption check error: {e}"
+                return _reject(f"Corruption check error: {e}")
 
             # Step 1b: Check for temporal tampering in videos (frame shuffling/splicing/speed-up)
             if modality_str == "video":
@@ -400,13 +412,13 @@ class GenerativeChallengeManager:
                             f"task {task_id}: {jumps}/{total} frame jumps "
                             f"(ratio={ratio:.2%})"
                         )
-                        return None, "Temporally tampered video detected"
+                        return _reject("Temporally tampered video detected")
                 except Exception as e:
                     bt.logging.warning(
                         f"REJECTED video from UID {generator_uid} task {task_id}: "
                         f"temporal tampering check error: {e}"
                     )
-                    return None, f"Temporal tampering check error: {e}"
+                    return _reject(f"Temporal tampering check error: {e}")
                 finally:
                     if tmp_path:
                         Path(tmp_path).unlink(missing_ok=True)
@@ -427,7 +439,7 @@ class GenerativeChallengeManager:
                             f"REJECTED duplicate from UID {generator_uid} task {task_id}: "
                             f"matches media {dup_media_id} with distance {dup_distance}"
                         )
-                        return None, "Duplicate content detected"
+                        return _reject("Duplicate content detected")
 
                     global_duplicate_info = self.content_manager.check_duplicate(
                         perceptual_hash,
@@ -440,13 +452,13 @@ class GenerativeChallengeManager:
                             f"REJECTED global duplicate from UID {generator_uid} task {task_id}: "
                             f"matches media {dup_media_id} with distance {dup_distance}"
                         )
-                        return None, "Global duplicate content detected"
+                        return _reject("Global duplicate content detected")
             except Exception as e:
                 bt.logging.warning(
                     f"REJECTED media from UID {generator_uid} task {task_id}: "
                     f"duplicate detection error: {e}"
                 )
-                return None, f"Duplicate detection error: {e}"
+                return _reject(f"Duplicate detection error: {e}")
 
             # Step 3: Verify C2PA content credentials - REQUIRE trusted issuer
             c2pa_verified = False
@@ -469,13 +481,13 @@ class GenerativeChallengeManager:
                         f"REJECTED from UID {generator_uid} task {task_id}: "
                         f"C2PA check failed ({rejection_reason})"
                     )
-                    return None, f"C2PA verification failed: {rejection_reason}"
+                    return _reject(f"C2PA verification failed: {rejection_reason}")
             except Exception as e:
                 bt.logging.error(
                     f"REJECTED from UID {generator_uid} task {task_id}: "
                     f"C2PA verification error: {e}"
                 )
-                return None, f"C2PA verification error: {e}"
+                return _reject(f"C2PA verification error: {e}")
 
             # Step 4: All checks passed - store the media
             filepath = self.content_manager.write_miner_media(

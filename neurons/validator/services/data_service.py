@@ -349,8 +349,14 @@ class DataService:
                 self.uploader_thread = None
 
             try:
-                image_count = self.content_manager.content_db.count_unuploaded_media(modality="image")
-                video_count = self.content_manager.content_db.count_unuploaded_media(modality="video")
+                # Only count source types the uploader actually handles (miner verified + generated)
+                miner_img = self.content_manager.content_db.count_unuploaded_media(modality="image", source_type="miner")
+                gen_img = self.content_manager.content_db.count_unuploaded_media(modality="image", source_type="generated")
+                image_count = miner_img + gen_img
+
+                miner_vid = self.content_manager.content_db.count_unuploaded_media(modality="video", source_type="miner")
+                gen_vid = self.content_manager.content_db.count_unuploaded_media(modality="video", source_type="generated")
+                video_count = miner_vid + gen_vid
                 image_thresh = self.config.upload_image_threshold
                 video_thresh = self.config.upload_video_threshold
 
