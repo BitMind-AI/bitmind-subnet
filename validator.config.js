@@ -190,6 +190,7 @@ if (config.startData) {
       '--netuid', netuid.toString(),
       '--subtensor.chain_endpoint', config.chainEndpoint,
       '--cache.base-dir', config.cacheDir,
+      '--benchmark-api-url', config.benchmarkApiUrl,
       '--dataset-interval', config.datasetInterval,
       logParam,
     ].join(' '),
