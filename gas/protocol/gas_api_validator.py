@@ -1,15 +1,12 @@
 """Synchronous gas.bitmind.ai calls from validator worker threads (Epistula v2)."""
 
 import json
-import logging
 from typing import Any, Dict, List, Optional
 
 import bittensor as bt
 import requests
 
 from gas.protocol.epistula import generate_header
-
-logger = logging.getLogger(__name__)
 
 GAS_VERIFICATION_UPLOAD_PATH = "/api/v1/validator/generator-verification-upload"
 _DEFAULT_TIMEOUT_S = 60
@@ -35,7 +32,7 @@ def _verification_stats_to_entries(
             }
         )
         if len(entries) >= _MAX_ENTRIES:
-            logger.warning(
+            bt.logging.warning(
                 "Verification upload capped at %s generators (truncate remainder)",
                 _MAX_ENTRIES,
             )
@@ -66,7 +63,7 @@ def post_generator_verification_upload(
         return None
 
     if not base_url:
-        logger.warning("generator-verification-upload: base_url is None, skipping upload")
+        bt.logging.warning("generator-verification-upload: base_url is None, skipping upload")
         return None
 
     entries = _verification_stats_to_entries(verification_stats)
@@ -85,11 +82,11 @@ def post_generator_verification_upload(
     try:
         response = requests.post(url, data=body, headers=headers, timeout=timeout_s)
     except requests.RequestException as e:
-        logger.warning("generator-verification-upload request failed: %s", e)
+        bt.logging.warning("generator-verification-upload request failed: %s", e)
         return None
 
     if response.status_code != 200:
-        logger.warning(
+        bt.logging.warning(
             "generator-verification-upload HTTP %s: %s",
             response.status_code,
             (response.text or "")[:500],
@@ -100,10 +97,10 @@ def post_generator_verification_upload(
         data = response.json()
         inserted = int(data.get("inserted", 0))
     except (ValueError, TypeError, json.JSONDecodeError):
-        logger.warning("generator-verification-upload: bad JSON response")
+        bt.logging.warning("generator-verification-upload: bad JSON response")
         return None
 
-    logger.info(
+    bt.logging.info(
         "Posted generator verification upload: %s rows (lookback_hours=%s)",
         inserted,
         lookback_hours,
