@@ -59,7 +59,7 @@ dependencies = [
     "async-substrate-interface>=1.5.1",
     "ftfy==6.3.1",
     "huggingface_hub>=0.17.0",
-    "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@main",
+    "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@v0.6.5",
     "imagehash>=4.3.1",
     "c2pa-python>=0.29.0",
     "runwayml>=4.13.0",
