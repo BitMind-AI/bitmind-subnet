@@ -548,6 +548,13 @@ def add_data_service_args(parser):
     """Add data service specific arguments to the parser."""
 
     parser.add_argument(
+        "--benchmark-api-url",
+        type=str,
+        help="Base URL for the benchmark API (used for verification upload)",
+        default=os.environ.get("BENCHMARK_API_URL", "https://gas.bitmind.ai"),
+    )
+
+    parser.add_argument(
         "--upload-check-interval",
         type=int,
         help="Upload interval in blocks (default: 300 = 1 hour)",
