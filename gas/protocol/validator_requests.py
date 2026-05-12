@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
 from gas.protocol.epistula import generate_header
-from gas.types import Modality, MediaType
+from gas.types import MinerType, Modality, MediaType
 
 
 async def get_miner_type(
@@ -162,6 +162,118 @@ async def query_generative_miner(
 
             except json.JSONDecodeError:
                 response["error"] = "Failed to decode JSON response"
+                return response
+
+    except asyncio.TimeoutError:
+        response["status"] = 408
+        response["error"] = "Request timed out"
+    except aiohttp.ClientConnectorError as e:
+        response["status"] = 503
+        response["error"] = f"Connection error: {str(e)}"
+    except aiohttp.ClientError as e:
+        response["status"] = 400
+        response["error"] = f"Network error: {str(e)}"
+    except Exception as e:
+        response["error"] = f"Unknown error: {str(e)}"
+
+    return response
+
+
+def build_artifact_task_payload(
+    role: MinerType,
+    task_id: str,
+    r2_source: Dict[str, Any],
+    parameters: Optional[Dict[str, Any]] = None,
+    artifact_spec: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload = {
+        "task_id": task_id,
+        "role": role.value,
+        "source": {
+            "type": "r2",
+            **{key: value for key, value in r2_source.items() if value is not None},
+        },
+    }
+    if "path" in payload["source"] and "prefix" not in payload["source"]:
+        payload["source"]["prefix"] = payload["source"]["path"]
+    if artifact_spec:
+        payload["artifact_spec"] = {
+            key: value for key, value in artifact_spec.items() if value is not None
+        }
+    if parameters:
+        payload["parameters"] = parameters
+    return payload
+
+
+async def query_artifact_miner(
+    uid: int,
+    axon_info: bt.AxonInfo,
+    session: aiohttp.ClientSession,
+    hotkey: bt.Keypair,
+    role: MinerType,
+    task_id: str,
+    r2_source: Dict[str, Any],
+    parameters: Optional[Dict[str, Any]],
+    artifact_spec: Optional[Dict[str, Any]],
+    total_timeout: float,
+    connect_timeout: Optional[float] = None,
+    sock_connect_timeout: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Ask an encoder/captioner miner to pull a dataset shard from R2.
+
+    Completion and quality are verified out-of-band and fed into the DPS
+    artifact reward stats; this request only assigns the work.
+    """
+    response = {
+        "uid": uid,
+        "hotkey": axon_info.hotkey,
+        "status": 500,
+        "task_id": task_id,
+        "accepted": False,
+        "error": "",
+    }
+
+    try:
+        base_url = f"http://{axon_info.ip}:{axon_info.port}"
+        url = f"{base_url}/artifact_task"
+        payload = build_artifact_task_payload(
+            role=role,
+            task_id=task_id,
+            r2_source=r2_source,
+            parameters=parameters,
+            artifact_spec=artifact_spec,
+        )
+        body_bytes = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            **generate_header(hotkey, body_bytes, axon_info.hotkey),
+        }
+
+        async with session.post(
+            url,
+            headers=headers,
+            data=body_bytes,
+            timeout=aiohttp.ClientTimeout(
+                total=total_timeout,
+                connect=connect_timeout,
+                sock_connect=sock_connect_timeout,
+            ),
+        ) as res:
+            response["status"] = res.status
+            if res.status not in [200, 201, 202]:
+                response["error"] = f"HTTP {res.status} error: {await res.text()}"
+                return response
+            try:
+                data = await res.json()
+                if isinstance(data, dict):
+                    response["task_id"] = data.get("task_id", task_id)
+                    response["accepted"] = bool(data.get("accepted", True))
+                else:
+                    response["accepted"] = True
+                return response
+            except json.JSONDecodeError:
+                response["accepted"] = True
                 return response
 
     except asyncio.TimeoutError:

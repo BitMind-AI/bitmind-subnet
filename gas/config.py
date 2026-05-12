@@ -6,6 +6,13 @@ MAINNET_UID = 34
 TESTNET_UID = 379
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
 def validate_config_and_neuron_path(config):
     r"""Checks/validates the config namespace object."""
     full_path = os.path.expanduser(
@@ -181,6 +188,112 @@ def add_miner_args(parser):
         default=2,
         help="Number of worker threads for task processing",
     )
+
+    parser.add_argument(
+        "--miner.type",
+        type=str,
+        choices=["GENERATOR", "ENCODER", "CAPTIONER"],
+        default=os.environ.get("MINER_TYPE", "GENERATOR"),
+        help="Miner role advertised to validators",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.processor-command",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_PROCESSOR_COMMAND"),
+        help="Optional command run for encoder/captioner artifact tasks; receives task metadata through environment variables",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-endpoint-url",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_ENDPOINT_URL"),
+        help="Miner output R2 endpoint URL for DPS artifacts",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-bucket",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_BUCKET"),
+        help="Miner output R2 bucket for DPS artifacts",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-region",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_REGION", "auto"),
+        help="Miner output R2/S3 region hint; R2 commonly accepts auto",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-prefix",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_PREFIX", "dps-artifacts/"),
+        help="Miner output R2 prefix for DPS artifacts",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-read-access-key-id",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_READ_ACCESS_KEY_ID"),
+        help="Validator-readable access key id for miner DPS artifacts",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-read-secret-access-key",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_READ_SECRET_ACCESS_KEY"),
+        help="Validator-readable secret access key for miner DPS artifacts",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-read-session-token",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_READ_SESSION_TOKEN"),
+        help="Optional validator-readable session token for miner DPS artifacts",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-format",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_FORMAT", "npz"),
+        help="Published DPS artifact output format, e.g. npz, parquet, jsonl",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-manifest-url",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_MANIFEST_URL"),
+        help="Optional public or validator-readable manifest URL for miner DPS artifact outputs",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-manifest-key",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_MANIFEST_KEY"),
+        help="Optional R2 manifest object key for miner DPS artifact outputs",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-write-access-key-id",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_WRITE_ACCESS_KEY_ID"),
+        help="Miner write access key id for uploading DPS artifacts to R2",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-write-secret-access-key",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_WRITE_SECRET_ACCESS_KEY"),
+        help="Miner write secret access key for uploading DPS artifacts to R2",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-write-session-token",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_WRITE_SESSION_TOKEN"),
+        help="Optional miner write session token for uploading DPS artifacts to R2",
+    )
     
     # Webhook configuration
     parser.add_argument(
@@ -218,6 +331,13 @@ def add_validator_args(parser):
         type=int,
         help="How often we send challenges to generative miners, measured in 12 second blocks.",
         default=110,
+    )
+
+    parser.add_argument(
+        "--dps-artifact-task-interval",
+        type=int,
+        help="How often validators assign R2 artifact tasks to encoder/captioner miners, measured in 12 second blocks.",
+        default=int(os.environ.get("DPS_ARTIFACT_TASK_INTERVAL", 360)),
     )
 
     parser.add_argument(
@@ -358,6 +478,144 @@ def add_validator_args(parser):
         type=str,
         help="Base URL for the benchmark API",
         default=os.environ.get("BENCHMARK_API_URL", "https://gas.bitmind.ai"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact-rewards-path",
+        type=str,
+        help="Optional JSON file containing DPS mechanism-1 artifact verification stats",
+        default=os.environ.get("DPS_ARTIFACT_REWARDS_PATH") or os.environ.get("ENCODER_REWARDS_PATH"),
+    )
+
+    parser.add_argument(
+        "--enable-dps-artifact-mechanism",
+        action="store_true",
+        help="Submit a second weight vector for DPS artifact mechanism 1",
+        default=_env_bool("ENABLE_DPS_ARTIFACT_MECHANISM"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.publish-input-to-chain",
+        action="store_true",
+        help="Publish validator DPS input R2 location and scoped read credentials to the subnet commitment",
+        default=_env_bool("DPS_ARTIFACT_PUBLISH_INPUT_TO_CHAIN"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact-mechanism-id",
+        type=int,
+        help="Bittensor mechanism id for DPS artifact rewards",
+        default=int(os.environ.get("DPS_ARTIFACT_MECHANISM_ID", 1)),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.encoder-weight",
+        type=float,
+        help="Mechanism-1 budget share for encoder rewards",
+        default=float(os.environ.get("DPS_ARTIFACT_ENCODER_WEIGHT", 0.8)),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.captioner-weight",
+        type=float,
+        help="Mechanism-1 budget share reserved for captioner rewards",
+        default=float(os.environ.get("DPS_ARTIFACT_CAPTIONER_WEIGHT", 0.2)),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.sample-size",
+        type=int,
+        help="Maximum encoder/captioner miners per role to receive each R2 artifact assignment round; 0 means all active miners.",
+        default=int(os.environ.get("DPS_ARTIFACT_SAMPLE_SIZE", 0)),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.resolution",
+        type=str,
+        help="Required artifact input/output resolution for DPS encoder/captioner tasks, e.g. 512x512 or 720p",
+        default=os.environ.get("DPS_ARTIFACT_RESOLUTION"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.max-frames",
+        type=int,
+        help="Maximum frames miners should use per DPS artifact item",
+        default=(
+            int(os.environ["DPS_ARTIFACT_MAX_FRAMES"])
+            if os.environ.get("DPS_ARTIFACT_MAX_FRAMES")
+            else None
+        ),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.encoding-model",
+        type=str,
+        help="VAE encoder or encoding model miners must use for DPS artifact tasks",
+        default=os.environ.get("DPS_ARTIFACT_ENCODING_MODEL")
+        or os.environ.get("DPS_ARTIFACT_VAE_ENCODER"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-endpoint-url",
+        type=str,
+        help="Cloudflare R2 endpoint URL for DPS artifact source data",
+        default=os.environ.get("DPS_ARTIFACT_R2_ENDPOINT_URL"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-bucket",
+        type=str,
+        help="Cloudflare R2 bucket containing DPS artifact source data",
+        default=os.environ.get("DPS_ARTIFACT_R2_BUCKET"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-prefix",
+        type=str,
+        help="Cloudflare R2 key prefix for the current DPS artifact dataset shard",
+        default=os.environ.get("DPS_ARTIFACT_R2_PREFIX"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-manifest-url",
+        type=str,
+        help="Public or presigned R2 manifest URL describing the data shard miners should pull",
+        default=os.environ.get("DPS_ARTIFACT_R2_MANIFEST_URL"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-manifest-key",
+        type=str,
+        help="R2 object key for the DPS artifact data manifest",
+        default=os.environ.get("DPS_ARTIFACT_R2_MANIFEST_KEY"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-region",
+        type=str,
+        help="R2/S3 region hint for clients; R2 commonly accepts auto",
+        default=os.environ.get("DPS_ARTIFACT_R2_REGION", "auto"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-read-access-key-id",
+        type=str,
+        help="Scoped read-only R2 access key id for miners; chain commitments are public",
+        default=os.environ.get("DPS_ARTIFACT_R2_READ_ACCESS_KEY_ID"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-read-secret-access-key",
+        type=str,
+        help="Scoped read-only R2 secret access key for miners; chain commitments are public",
+        default=os.environ.get("DPS_ARTIFACT_R2_READ_SECRET_ACCESS_KEY"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.r2-read-session-token",
+        type=str,
+        help="Optional scoped R2 read session token for miners; chain commitments are public",
+        default=os.environ.get("DPS_ARTIFACT_R2_READ_SESSION_TOKEN"),
     )
 
     parser.add_argument(

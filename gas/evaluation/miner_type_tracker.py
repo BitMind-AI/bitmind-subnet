@@ -80,8 +80,14 @@ class MinerTypeTracker:
                 continue
 
             miner_type_str = response.get("miner_type", "") or ""
-            if miner_type_str.lower() == "generator":
-                miner_type = MinerType.GENERATOR
+            try:
+                miner_type = MinerType(miner_type_str.upper())
+            except ValueError:
+                if miner_type_str:
+                    bt.logging.trace(
+                        f"UID {uid}: unknown miner_type={miner_type_str!r}; "
+                        "defaulting to discriminator"
+                    )
 
             if miner_type:
                 old_type = self.miner_types.get(uid)

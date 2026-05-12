@@ -34,6 +34,7 @@ def create_set_weights(version: int, netuid: int):
         metagraph: "bt.metagraph",
         subtensor: "bt.subtensor",
         weights: Tuple[List[int], List[float]],
+        mechid: int = 0,
     ):
         uids, raw_weights = weights
         if not len(uids):
@@ -52,24 +53,50 @@ def create_set_weights(version: int, netuid: int):
             metagraph=metagraph,
         )
 
-        #bt.logging.info("Setting Weights: " + str(processed_weights))
-        #bt.logging.info("Weight Uids: " + str(processed_weight_uids))
+        def _success_and_message(response):
+            if isinstance(response, tuple):
+                return response
+            if hasattr(response, "success"):
+                return bool(response.success), getattr(response, "message", "")
+            return bool(response), ""
+
         for _ in range(3):
-            result, message = subtensor.set_weights(
-                wallet=wallet,
-                netuid=netuid,
-                uids=processed_weight_uids,  # type: ignore
-                weights=processed_weights,
-                wait_for_finalization=False,
-                wait_for_inclusion=False,
-                version_key=version,
-                max_retries=1,
-            )
+            kwargs = {
+                "wallet": wallet,
+                "netuid": netuid,
+                "uids": processed_weight_uids,  # type: ignore
+                "weights": processed_weights,
+                "wait_for_finalization": False,
+                "wait_for_inclusion": False,
+                "version_key": version,
+            }
+            try:
+                response = subtensor.set_weights(
+                    **kwargs,
+                    mechid=mechid,
+                    max_attempts=1,
+                )
+            except TypeError as e:
+                if "mechid" not in str(e) and "max_attempts" not in str(e):
+                    raise
+                if mechid != 0 and "mechid" in str(e):
+                    raise RuntimeError(
+                        "This Bittensor SDK does not support mechanism-specific "
+                        "set_weights; upgrade before enabling mechanism 1."
+                    ) from e
+                response = subtensor.set_weights(
+                    **kwargs,
+                    max_retries=1,
+                )
+
+            result, message = _success_and_message(response)
             if result is True:
-                bt.logging.success("set_weights on chain successfully!")
+                bt.logging.success(
+                    f"set_weights on chain successfully for mechanism {mechid}!"
+                )
                 break
             else:
-                bt.logging.error(f"set_weights failed {message}")
+                bt.logging.error(f"set_weights failed for mechanism {mechid}: {message}")
             time.sleep(15)
 
     return set_weights
@@ -139,4 +166,3 @@ class SubstrateConnectionManager:
         self.running = False
         if self.task:
             self.task.cancel()
-
