@@ -1,6 +1,6 @@
 import math
 import time
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 import bittensor as bt
 
@@ -386,3 +386,202 @@ def get_generator_reward_multipliers(
         bt.logging.error(traceback.format_exc())
 
     return rewards
+
+
+def _clamp(value, min_value: float = 0.0, max_value: Optional[float] = None) -> float:
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        value = min_value
+    if math.isnan(value):
+        value = min_value
+    value = max(min_value, value)
+    if max_value is not None:
+        value = min(max_value, value)
+    return value
+
+
+def _get_artifact_rewards(
+    artifact_stats,
+    correctness_keys: tuple[str, ...],
+    default_correctness_key: str,
+    role_name: str,
+) -> Dict[int, float]:
+    """
+    Compute DPS artifact-mechanism rewards from verification stats.
+
+    Expected stat fields per miner:
+        uid, accepted_work_units, correctness/quality rate,
+        availability_rate, timeliness_multiplier, novelty_multiplier, penalties
+
+    Compatibility aliases are accepted so the DPS validator layer can feed this
+    function from existing verification summaries while full task pipelines are
+    being rolled out.
+    """
+    rewards: Dict[int, float] = {}
+    if not artifact_stats:
+        return rewards
+
+    if isinstance(artifact_stats, dict):
+        records = artifact_stats.values()
+    else:
+        records = artifact_stats
+
+    for stats in records:
+        if not isinstance(stats, dict) or "uid" not in stats:
+            continue
+
+        try:
+            uid = int(stats["uid"])
+        except (TypeError, ValueError):
+            continue
+
+        accepted_work_units = _clamp(
+            stats.get("accepted_work_units", stats.get("total_verified", 0))
+        )
+        correctness_value = stats.get(default_correctness_key)
+        for key in correctness_keys:
+            if correctness_value is not None:
+                break
+            correctness_value = stats.get(key)
+        correctness_rate = _clamp(correctness_value, max_value=1.0)
+        availability_rate = _clamp(
+            stats.get("availability_rate", 1.0 if accepted_work_units > 0 else 0.0),
+            max_value=1.0,
+        )
+        timeliness_multiplier = _clamp(
+            stats.get("timeliness_multiplier", stats.get("timeliness", 1.0))
+        )
+        novelty_multiplier = _clamp(
+            stats.get("novelty_multiplier", stats.get("novelty", 1.0))
+        )
+        penalties = _clamp(stats.get("penalties", stats.get("penalty", 0.0)))
+
+        score = (
+            accepted_work_units
+            * correctness_rate
+            * availability_rate
+            * timeliness_multiplier
+            * novelty_multiplier
+            - penalties
+        )
+        rewards[uid] = max(0.0, score)
+
+    bt.logging.info(f"Computed {role_name} rewards for {len(rewards)} miners: {rewards}")
+    return rewards
+
+
+def get_encoder_rewards(encoder_stats) -> Dict[int, float]:
+    """
+    Compute DPS encoder rewards from deterministic verification stats.
+
+    Formula:
+        accepted_work_units * deterministic_correctness_rate *
+        availability_rate * timeliness_multiplier * novelty_multiplier - penalties
+    """
+    return _get_artifact_rewards(
+        encoder_stats,
+        correctness_keys=("correctness_rate", "pass_rate"),
+        default_correctness_key="deterministic_correctness_rate",
+        role_name="encoder",
+    )
+
+
+def get_captioner_rewards(captioner_stats) -> Dict[int, float]:
+    """
+    Compute DPS captioner rewards for mechanism 1.
+
+    Captioning is quality-verifiable rather than deterministic, so validators
+    should feed a semantic quality score once that pipeline is live.
+    """
+    return _get_artifact_rewards(
+        captioner_stats,
+        correctness_keys=("semantic_quality_rate", "quality_score", "pass_rate"),
+        default_correctness_key="caption_quality_rate",
+        role_name="captioner",
+    )
+
+
+def artifact_stats_with_uids(role_stats, hotkeys):
+    records = artifact_stat_records(role_stats)
+    hotkey_to_uid = {hotkey: uid for uid, hotkey in enumerate(hotkeys)}
+    normalized_records = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        record = dict(record)
+        if "uid" not in record:
+            hotkey = (
+                record.get("hotkey")
+                or record.get("ss58_address")
+                or record.get("coldkey")
+            )
+            if hotkey in hotkey_to_uid:
+                record["uid"] = hotkey_to_uid[hotkey]
+        if "uid" in record:
+            normalized_records.append(record)
+    return normalized_records
+
+
+def artifact_stat_records(role_stats):
+    if not role_stats:
+        return []
+    if not isinstance(role_stats, dict):
+        return role_stats
+    if any(
+        key in role_stats
+        for key in (
+            "uid",
+            "hotkey",
+            "ss58_address",
+            "accepted_work_units",
+            "total_verified",
+            "pass_rate",
+            "quality_score",
+        )
+    ):
+        return [role_stats]
+
+    records = []
+    for hotkey, stats in role_stats.items():
+        if not isinstance(stats, dict):
+            continue
+        stats = dict(stats)
+        stats.setdefault("hotkey", hotkey)
+        records.append(stats)
+    return records
+
+
+def normalize_rewards_to_weight_budget(
+    scores,
+    active_uids: Iterable[int],
+    special_uids: Iterable[int],
+    budget: float,
+) -> tuple[object, float]:
+    """
+    Normalize role scores into a fixed weight budget.
+
+    Returns:
+        (weights, unallocated_budget). Unallocated budget is non-zero when there
+        are no active non-special UIDs with positive score.
+    """
+    import numpy as np
+
+    weights = np.zeros_like(scores, dtype=np.float32)
+    special_uids = set(special_uids)
+    active_uids = [
+        int(uid)
+        for uid in active_uids
+        if 0 <= int(uid) < len(scores) and int(uid) not in special_uids
+    ]
+
+    if not active_uids or budget <= 0:
+        return weights, max(0.0, float(budget))
+
+    role_scores = np.array([max(0.0, float(scores[uid])) for uid in active_uids])
+    score_sum = float(np.sum(role_scores))
+    if score_sum <= 0 or np.isnan(score_sum):
+        return weights, max(0.0, float(budget))
+
+    weights[active_uids] = role_scores / score_sum * float(budget)
+    return weights, 0.0

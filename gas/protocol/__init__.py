@@ -7,7 +7,9 @@ from .epistula import (
 )
 
 from .validator_requests import (
+    build_artifact_task_payload,
     get_miner_type,
+    query_artifact_miner,
     query_generative_miner,
 )
 

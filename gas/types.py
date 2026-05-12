@@ -14,6 +14,8 @@ class NeuronType(Enum):
 class MinerType(Enum):
     DISCRIMINATOR = "DISCRIMINATOR"
     GENERATOR = "GENERATOR"
+    ENCODER = "ENCODER"
+    CAPTIONER = "CAPTIONER"
 
 
 class DiscriminatorType(Enum):
@@ -210,16 +212,25 @@ class DiscriminatorModelId:
 
     def to_compressed_str(self) -> str:
         """Convert to compressed string for chain storage"""
+        return json.dumps(self.to_dict(), separators=(",", ":"))
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for registry storage"""
         data = {
             "key": self.key,
             "hash": self.hash,
         }
-        return json.dumps(data, separators=(",", ":"))
+        return data
 
     @classmethod
     def from_compressed_str(cls, compressed_str: str) -> "DiscriminatorModelId":
         """Create DiscriminatorModelId from compressed string"""
         data = json.loads(compressed_str)
+        return cls.from_dict(data)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DiscriminatorModelId":
+        """Create DiscriminatorModelId from dictionary"""
         return cls(
             key=data["key"],
             hash=data["hash"],
@@ -259,6 +270,172 @@ class DiscriminatorModelMetadata:
             hash=data["id"]["hash"],
         )
         return cls(id=model_id, block=data["block"])
+
+
+@dataclass
+class ArtifactR2Location:
+    """R2 location and scoped credentials for DPS artifact exchange."""
+
+    bucket: str
+    path: str
+    endpoint_url: Optional[str] = None
+    region: Optional[str] = "auto"
+    access_key_id: Optional[str] = None
+    secret_access_key: Optional[str] = None
+    session_token: Optional[str] = None
+    manifest_url: Optional[str] = None
+    manifest_key: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        data = {
+            "bucket": self.bucket,
+            "path": self.path,
+            "endpoint_url": self.endpoint_url,
+            "region": self.region,
+            "access_key_id": self.access_key_id,
+            "secret_access_key": self.secret_access_key,
+            "session_token": self.session_token,
+            "manifest_url": self.manifest_url,
+            "manifest_key": self.manifest_key,
+        }
+        return {key: value for key, value in data.items() if value is not None}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ArtifactR2Location":
+        return cls(
+            bucket=data["bucket"],
+            path=data.get("path") or data.get("prefix", ""),
+            endpoint_url=data.get("endpoint_url"),
+            region=data.get("region", "auto"),
+            access_key_id=data.get("access_key_id"),
+            secret_access_key=data.get("secret_access_key"),
+            session_token=data.get("session_token"),
+            manifest_url=data.get("manifest_url"),
+            manifest_key=data.get("manifest_key"),
+        )
+
+
+@dataclass
+class ArtifactChainMetadata:
+    """DPS artifact metadata stored in a hotkey chain commitment."""
+
+    kind: str
+    role: MinerType
+    r2: ArtifactR2Location
+    version: int = 1
+    task_id: Optional[str] = None
+    artifact_format: Optional[str] = None
+    artifact_hash: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        data = {
+            "v": self.version,
+            "kind": self.kind,
+            "role": self.role.value,
+            "r2": self.r2.to_dict(),
+            "task_id": self.task_id,
+            "artifact_format": self.artifact_format,
+            "artifact_hash": self.artifact_hash,
+        }
+        return {key: value for key, value in data.items() if value is not None}
+
+    def registry_key(self) -> str:
+        task_part = self.task_id or "default"
+        return f"{self.kind}:{self.role.value}:{task_part}"
+
+    def to_compressed_str(self) -> str:
+        return json.dumps(self.to_dict(), separators=(",", ":"))
+
+    @classmethod
+    def from_compressed_str(cls, compressed_str: str) -> "ArtifactChainMetadata":
+        data = json.loads(compressed_str)
+        return cls.from_dict(data)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ArtifactChainMetadata":
+        if data.get("kind") not in ("dps_input", "dps_output"):
+            raise ValueError(f"Unsupported artifact metadata kind: {data.get('kind')}")
+        return cls(
+            version=int(data.get("v", 1)),
+            kind=data["kind"],
+            role=MinerType(data["role"]),
+            r2=ArtifactR2Location.from_dict(data["r2"]),
+            task_id=data.get("task_id"),
+            artifact_format=data.get("artifact_format"),
+            artifact_hash=data.get("artifact_hash"),
+        )
+
+
+@dataclass
+class ChainMetadataRegistry:
+    """Single-commitment registry for multiple subnet metadata records."""
+
+    entries: Dict[str, dict] = field(default_factory=dict)
+    discriminator_model: Optional[DiscriminatorModelId] = None
+    version: int = 1
+
+    kind: str = "dps_registry"
+
+    def to_compressed_str(self) -> str:
+        data = {
+            "v": self.version,
+            "kind": self.kind,
+            "entries": self.entries,
+        }
+        if self.discriminator_model is not None:
+            data["discriminator_model"] = self.discriminator_model.to_dict()
+        return json.dumps(data, separators=(",", ":"))
+
+    def upsert_artifact(self, metadata: ArtifactChainMetadata):
+        self.entries[metadata.registry_key()] = metadata.to_dict()
+
+    def get_artifacts(
+        self,
+        expected_kind: Optional[str] = None,
+        role: Optional[MinerType] = None,
+        task_id: Optional[str] = None,
+    ) -> List[ArtifactChainMetadata]:
+        artifacts = []
+        for entry in self.entries.values():
+            try:
+                artifact = ArtifactChainMetadata.from_dict(entry)
+            except Exception:
+                continue
+            if expected_kind and artifact.kind != expected_kind:
+                continue
+            if role and artifact.role != role:
+                continue
+            if task_id and artifact.task_id != task_id:
+                continue
+            artifacts.append(artifact)
+        return artifacts
+
+    @classmethod
+    def from_compressed_str(cls, compressed_str: str) -> "ChainMetadataRegistry":
+        data = json.loads(compressed_str)
+        if data.get("kind") == "dps_registry":
+            discriminator_model = None
+            if data.get("discriminator_model"):
+                discriminator_model = DiscriminatorModelId.from_dict(
+                    data["discriminator_model"]
+                )
+            return cls(
+                version=int(data.get("v", 1)),
+                entries=data.get("entries", {}),
+                discriminator_model=discriminator_model,
+            )
+
+        registry = cls()
+        if data.get("kind") in ("dps_input", "dps_output"):
+            artifact = ArtifactChainMetadata.from_dict(data)
+            registry.upsert_artifact(artifact)
+            return registry
+
+        if "key" in data and "hash" in data:
+            registry.discriminator_model = DiscriminatorModelId.from_dict(data)
+            return registry
+
+        raise ValueError("Unsupported chain metadata payload")
 
 
 class ValidatorConfig(BaseModel):

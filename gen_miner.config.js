@@ -27,8 +27,10 @@ function getAutoUpdateParam(autoUpdate) {
   return autoUpdate === 'true' ? '' : '--autoupdate-off';
 }
 
-// Dynamically load environment variables from .env.gen_miner
-const envPath = path.resolve(__dirname, '.env.gen_miner');
+// Dynamically load environment variables. Use MINER_ENV_FILE=.env.encoder_miner
+// for DPS encoder/captioner artifact miners.
+const envFile = process.env.MINER_ENV_FILE || '.env.gen_miner';
+const envPath = path.resolve(__dirname, envFile);
 const envConfig = require('dotenv').config({ path: envPath });
 const envFileVars = envConfig.parsed || {};
 
@@ -85,8 +87,8 @@ const HF_HOME_RESOLVED = process.env.HF_HOME
   || process.env.HUGGINGFACE_CACHE_DIR
   || path.join(os.homedir(), '.cache', 'huggingface');
 
-// Build dynamic environment from .env.gen_miner file
-// Adding new API keys to .env.gen_miner makes them available
+// Build dynamic environment from the selected miner env file.
+// Adding new API keys to that file makes them available
 // to the miner without needing to modify this config file
 const DYNAMIC_ENV = {
   HF_HOME: HF_HOME_RESOLVED,
@@ -146,4 +148,3 @@ const apps = [
 module.exports = {
   apps,
 };
-

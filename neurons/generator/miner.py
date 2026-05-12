@@ -1,7 +1,10 @@
 import asyncio
 import inspect
+import json
 import os
 import requests
+import shlex
+import subprocess
 import sys
 import time
 import traceback
@@ -18,8 +21,9 @@ from bittensor.core.extrinsics.serving import serve_extrinsic
 from dotenv import load_dotenv
 
 from gas.protocol.epistula import get_verifier
-from gas.types import NeuronType, MinerType
+from gas.types import ArtifactChainMetadata, ArtifactR2Location, NeuronType, MinerType
 from gas.utils import print_info
+from gas.utils.chain_artifact_metadata_store import ChainArtifactMetadataStore
 from gas.verification import detect_media_format
 from neurons.base import BaseNeuron
 from neurons.generator.task_manager import TaskManager, GenerationTask, TaskStatus
@@ -44,6 +48,13 @@ class GenerativeMiner(BaseNeuron):
         max_task_age_hours = getattr(self.config.miner, "max_task_age_hours", 24)
         self.task_manager = TaskManager(max_task_age_hours=max_task_age_hours)
         self.service_registry = ServiceRegistry(self.config)
+        self.miner_type = MinerType(
+            getattr(self.config.miner, "type", MinerType.GENERATOR.value).upper()
+        )
+        self.artifact_metadata_store = ChainArtifactMetadataStore(
+            self.subtensor,
+            self.config.netuid,
+        )
 
         self.external_ip = self.config.axon.external_ip or self.config.axon.ip
         if not self.external_ip:
@@ -500,7 +511,7 @@ class GenerativeMiner(BaseNeuron):
             {
                 "uid": self.uid,
                 "hotkey": self.wallet.hotkey.ss58_address,
-                "miner_type": MinerType.GENERATOR.value,
+                "miner_type": self.miner_type.value,
                 "services": services,
                 "task_stats": task_stats,
                 "config": {
@@ -519,6 +530,172 @@ class GenerativeMiner(BaseNeuron):
                 "uptime": time.time() - getattr(self, "_start_time", time.time()),
             }
         )
+
+    async def artifact_task(self, request: Request):
+        """Accept a DPS encoder/captioner artifact assignment."""
+        try:
+            body = await request.json()
+            task_id = body.get("task_id")
+            role = MinerType((body.get("role") or "").upper())
+            source = body.get("source") or {}
+            signed_by = request.headers.get("Epistula-Signed-By")
+
+            if role != self.miner_type:
+                return self._error_response(
+                    f"Miner role {self.miner_type.value} cannot accept {role.value} tasks",
+                    409,
+                )
+            if not task_id:
+                return self._error_response("Missing required field: task_id", 400)
+            if source.get("type") != "r2":
+                source = await self._source_from_validator_commitment(signed_by, role)
+            if source.get("type") != "r2":
+                return self._error_response("Artifact source must be type=r2", 400)
+
+            processor_result = self._run_artifact_processor(task_id, role, source)
+            output_metadata = self._build_output_metadata(
+                task_id=task_id,
+                role=role,
+                processor_result=processor_result,
+            )
+            await self.artifact_metadata_store.store_artifact_metadata(
+                self.wallet,
+                output_metadata,
+            )
+            bt.logging.info(
+                f"Published DPS {role.value.lower()} output metadata for task {task_id}"
+            )
+            return self._success_response(
+                {
+                    "accepted": True,
+                    "task_id": task_id,
+                    "role": role.value,
+                    "output": output_metadata.r2.to_dict(),
+                },
+                202,
+            )
+        except ValueError as e:
+            return self._error_response(str(e), 400)
+        except Exception as e:
+            bt.logging.error(f"Error handling artifact task: {e}")
+            bt.logging.error(traceback.format_exc())
+            return self._error_response(str(e), 500)
+
+    def _run_artifact_processor(self, task_id: str, role: MinerType, source: Dict[str, Any]):
+        command = getattr(self.config.dps_artifact, "processor_command", None)
+        if not command:
+            bt.logging.warning(
+                "No DPS artifact processor command configured; publishing output metadata only"
+            )
+            return {}
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "DPS_TASK_ID": task_id,
+                "DPS_ROLE": role.value,
+                "DPS_SOURCE_BUCKET": source.get("bucket", ""),
+                "DPS_SOURCE_PATH": source.get("path") or source.get("prefix", ""),
+                "DPS_SOURCE_MANIFEST_URL": source.get("manifest_url", ""),
+                "DPS_SOURCE_MANIFEST_KEY": source.get("manifest_key", ""),
+                "DPS_SOURCE_ENDPOINT_URL": source.get("endpoint_url", ""),
+                "DPS_SOURCE_ACCESS_KEY_ID": source.get("access_key_id", ""),
+                "DPS_SOURCE_SECRET_ACCESS_KEY": source.get("secret_access_key", ""),
+                "DPS_OUTPUT_BUCKET": getattr(self.config.dps_artifact, "output_r2_bucket", "") or "",
+                "DPS_OUTPUT_PREFIX": self._output_prefix(task_id),
+                "DPS_OUTPUT_ENDPOINT_URL": getattr(
+                    self.config.dps_artifact, "output_r2_endpoint_url", ""
+                ) or "",
+            }
+        )
+        result = subprocess.run(
+            shlex.split(command),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Artifact processor failed with code {result.returncode}: {result.stderr}"
+            )
+        try:
+            payload = json.loads(result.stdout) if result.stdout.strip() else {}
+            return payload if isinstance(payload, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+    async def _source_from_validator_commitment(
+        self,
+        validator_hotkey: Optional[str],
+        role: MinerType,
+    ):
+        if not validator_hotkey or validator_hotkey not in self.metagraph.hotkeys:
+            return {}
+        validator_uid = self.metagraph.hotkeys.index(validator_hotkey)
+        metadata = await self.artifact_metadata_store.retrieve_artifact_metadata(
+            uid=validator_uid,
+            expected_kind="dps_input",
+            role=role,
+        )
+        if metadata is None:
+            metadata = await self.artifact_metadata_store.retrieve_artifact_metadata(
+                uid=validator_uid,
+                expected_kind="dps_input",
+            )
+        if metadata is None:
+            return {}
+        source = metadata.r2.to_dict()
+        source["type"] = "r2"
+        if "path" in source and "prefix" not in source:
+            source["prefix"] = source["path"]
+        return source
+
+    def _build_output_metadata(
+        self,
+        task_id: str,
+        role: MinerType,
+        processor_result: Optional[Dict[str, Any]] = None,
+    ):
+        artifact_config = self.config.dps_artifact
+        processor_result = processor_result or {}
+        bucket = getattr(artifact_config, "output_r2_bucket", None)
+        if not bucket:
+            raise ValueError("--dps-artifact.output-r2-bucket is required")
+
+        return ArtifactChainMetadata(
+            kind="dps_output",
+            role=role,
+            task_id=task_id,
+            artifact_format=getattr(artifact_config, "output_format", "npz"),
+            artifact_hash=processor_result.get("artifact_hash"),
+            r2=ArtifactR2Location(
+                bucket=bucket,
+                path=processor_result.get("path") or self._output_prefix(task_id),
+                endpoint_url=getattr(artifact_config, "output_r2_endpoint_url", None),
+                access_key_id=getattr(
+                    artifact_config, "output_r2_read_access_key_id", None
+                ),
+                secret_access_key=getattr(
+                    artifact_config, "output_r2_read_secret_access_key", None
+                ),
+                session_token=getattr(
+                    artifact_config, "output_r2_read_session_token", None
+                ),
+                manifest_url=(
+                    processor_result.get("manifest_url")
+                    or getattr(artifact_config, "output_r2_manifest_url", None)
+                ),
+                manifest_key=(
+                    processor_result.get("manifest_key")
+                    or getattr(artifact_config, "output_r2_manifest_key", None)
+                ),
+            ),
+        )
+
+    def _output_prefix(self, task_id: str):
+        base = getattr(self.config.dps_artifact, "output_r2_prefix", "dps-artifacts/")
+        return f"{base.rstrip('/')}/{task_id}/"
 
     async def get_health_check(self, request: Request):
         """Health check endpoint."""
@@ -671,6 +848,12 @@ class GenerativeMiner(BaseNeuron):
         router.add_api_route(
             "/gen_video",
             self.generate_video,
+            dependencies=[Depends(verifier)],
+            methods=["POST"],
+        )
+        router.add_api_route(
+            "/artifact_task",
+            self.artifact_task,
             dependencies=[Depends(verifier)],
             methods=["POST"],
         )

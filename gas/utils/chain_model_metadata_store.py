@@ -3,7 +3,11 @@ from typing import Optional
 
 import bittensor as bt
 
-from gas.types import DiscriminatorModelId as ModelId, DiscriminatorModelMetadata as ModelMetadata
+from gas.types import (
+    ChainMetadataRegistry,
+    DiscriminatorModelId as ModelId,
+    DiscriminatorModelMetadata as ModelMetadata,
+)
 from gas.utils import run_in_thread
 
 
@@ -27,7 +31,20 @@ class ChainModelMetadataStore:
         ttl: int = 60,
     ):
         """Stores model metadata on this subnet for a specific wallet."""
-        data = model_id.to_compressed_str()
+        uid = self.subtensor.get_uid_for_hotkey_on_subnet(
+            wallet.hotkey.ss58_address,
+            self.netuid,
+        )
+        chain_str = run_in_thread(
+            functools.partial(self.subtensor.get_commitment, self.netuid, uid),
+            ttl,
+        )
+        try:
+            registry = ChainMetadataRegistry.from_compressed_str(chain_str)
+        except Exception:
+            registry = ChainMetadataRegistry()
+        registry.discriminator_model = model_id
+        data = registry.to_compressed_str()
 
         commit_partial = functools.partial(
             self.subtensor.commit,
@@ -63,10 +80,12 @@ class ChainModelMetadataStore:
 
         chain_str = run_in_thread(commitment_partial, ttl)
 
-        model_id = None
         bt.logging.info(f"chain_str: {chain_str}")
         try:
-            model_id = ModelId.from_compressed_str(chain_str)
+            registry = ChainMetadataRegistry.from_compressed_str(chain_str)
+            model_id = registry.discriminator_model
+            if model_id is None:
+                model_id = ModelId.from_compressed_str(chain_str)
         except:
             bt.logging.trace(
                 f"Failed to parse the metadata on the chain for hotkey {hotkey}."
