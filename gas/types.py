@@ -273,6 +273,38 @@ class DiscriminatorModelMetadata:
 
 
 @dataclass
+class ArtifactTaskSpec:
+    """Encoding/captioning constraints for a DPS artifact task."""
+
+    resolution: Optional[str] = None
+    max_frames: Optional[int] = None
+    encoding_model: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        data = {
+            "resolution": self.resolution,
+            "max_frames": self.max_frames,
+            "encoding_model": self.encoding_model,
+        }
+        return {key: value for key, value in data.items() if value is not None}
+
+    @classmethod
+    def from_dict(cls, data: Optional[dict]) -> Optional["ArtifactTaskSpec"]:
+        if not data:
+            return None
+        max_frames = data.get("max_frames")
+        if max_frames == "":
+            max_frames = None
+        return cls(
+            resolution=data.get("resolution"),
+            max_frames=int(max_frames) if max_frames is not None else None,
+            encoding_model=data.get("encoding_model")
+            or data.get("vae_encoder")
+            or data.get("model"),
+        )
+
+
+@dataclass
 class ArtifactR2Location:
     """R2 location and scoped credentials for DPS artifact exchange."""
 
@@ -326,6 +358,7 @@ class ArtifactChainMetadata:
     task_id: Optional[str] = None
     artifact_format: Optional[str] = None
     artifact_hash: Optional[str] = None
+    artifact_spec: Optional[ArtifactTaskSpec] = None
 
     def to_dict(self) -> dict:
         data = {
@@ -336,6 +369,11 @@ class ArtifactChainMetadata:
             "task_id": self.task_id,
             "artifact_format": self.artifact_format,
             "artifact_hash": self.artifact_hash,
+            "artifact_spec": (
+                self.artifact_spec.to_dict()
+                if self.artifact_spec is not None
+                else None
+            ),
         }
         return {key: value for key, value in data.items() if value is not None}
 
@@ -363,6 +401,7 @@ class ArtifactChainMetadata:
             task_id=data.get("task_id"),
             artifact_format=data.get("artifact_format"),
             artifact_hash=data.get("artifact_hash"),
+            artifact_spec=ArtifactTaskSpec.from_dict(data.get("artifact_spec")),
         )
 
 

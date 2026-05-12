@@ -21,7 +21,13 @@ from bittensor.core.extrinsics.serving import serve_extrinsic
 from dotenv import load_dotenv
 
 from gas.protocol.epistula import get_verifier
-from gas.types import ArtifactChainMetadata, ArtifactR2Location, NeuronType, MinerType
+from gas.types import (
+    ArtifactChainMetadata,
+    ArtifactR2Location,
+    ArtifactTaskSpec,
+    NeuronType,
+    MinerType,
+)
 from gas.utils import print_info
 from gas.utils.chain_artifact_metadata_store import ChainArtifactMetadataStore
 from gas.verification import detect_media_format
@@ -538,6 +544,7 @@ class GenerativeMiner(BaseNeuron):
             task_id = body.get("task_id")
             role = MinerType((body.get("role") or "").upper())
             source = body.get("source") or {}
+            artifact_spec = ArtifactTaskSpec.from_dict(body.get("artifact_spec"))
             signed_by = request.headers.get("Epistula-Signed-By")
 
             if role != self.miner_type:
@@ -548,15 +555,24 @@ class GenerativeMiner(BaseNeuron):
             if not task_id:
                 return self._error_response("Missing required field: task_id", 400)
             if source.get("type") != "r2":
-                source = await self._source_from_validator_commitment(signed_by, role)
+                source, committed_spec = await self._source_from_validator_commitment(
+                    signed_by, role
+                )
+                artifact_spec = artifact_spec or committed_spec
             if source.get("type") != "r2":
                 return self._error_response("Artifact source must be type=r2", 400)
 
-            processor_result = self._run_artifact_processor(task_id, role, source)
+            processor_result = self._run_artifact_processor(
+                task_id,
+                role,
+                source,
+                artifact_spec,
+            )
             output_metadata = self._build_output_metadata(
                 task_id=task_id,
                 role=role,
                 processor_result=processor_result,
+                artifact_spec=artifact_spec,
             )
             await self.artifact_metadata_store.store_artifact_metadata(
                 self.wallet,
@@ -581,7 +597,13 @@ class GenerativeMiner(BaseNeuron):
             bt.logging.error(traceback.format_exc())
             return self._error_response(str(e), 500)
 
-    def _run_artifact_processor(self, task_id: str, role: MinerType, source: Dict[str, Any]):
+    def _run_artifact_processor(
+        self,
+        task_id: str,
+        role: MinerType,
+        source: Dict[str, Any],
+        artifact_spec: Optional[ArtifactTaskSpec] = None,
+    ):
         command = getattr(self.config.dps_artifact, "processor_command", None)
         if not command:
             bt.logging.warning(
@@ -601,10 +623,38 @@ class GenerativeMiner(BaseNeuron):
                 "DPS_SOURCE_ENDPOINT_URL": source.get("endpoint_url", ""),
                 "DPS_SOURCE_ACCESS_KEY_ID": source.get("access_key_id", ""),
                 "DPS_SOURCE_SECRET_ACCESS_KEY": source.get("secret_access_key", ""),
+                "DPS_SOURCE_SESSION_TOKEN": source.get("session_token", ""),
+                "DPS_SOURCE_REGION": source.get("region", "auto"),
+                "DPS_ARTIFACT_RESOLUTION": (
+                    artifact_spec.resolution if artifact_spec else ""
+                ) or "",
+                "DPS_ARTIFACT_MAX_FRAMES": (
+                    str(artifact_spec.max_frames)
+                    if artifact_spec and artifact_spec.max_frames is not None
+                    else ""
+                ),
+                "DPS_ARTIFACT_ENCODING_MODEL": (
+                    artifact_spec.encoding_model if artifact_spec else ""
+                ) or "",
+                "DPS_ARTIFACT_VAE_ENCODER": (
+                    artifact_spec.encoding_model if artifact_spec else ""
+                ) or "",
                 "DPS_OUTPUT_BUCKET": getattr(self.config.dps_artifact, "output_r2_bucket", "") or "",
                 "DPS_OUTPUT_PREFIX": self._output_prefix(task_id),
                 "DPS_OUTPUT_ENDPOINT_URL": getattr(
                     self.config.dps_artifact, "output_r2_endpoint_url", ""
+                ) or "",
+                "DPS_OUTPUT_REGION": getattr(
+                    self.config.dps_artifact, "output_r2_region", "auto"
+                ) or "auto",
+                "DPS_OUTPUT_WRITE_ACCESS_KEY_ID": getattr(
+                    self.config.dps_artifact, "output_r2_write_access_key_id", ""
+                ) or "",
+                "DPS_OUTPUT_WRITE_SECRET_ACCESS_KEY": getattr(
+                    self.config.dps_artifact, "output_r2_write_secret_access_key", ""
+                ) or "",
+                "DPS_OUTPUT_WRITE_SESSION_TOKEN": getattr(
+                    self.config.dps_artifact, "output_r2_write_session_token", ""
                 ) or "",
             }
         )
@@ -631,7 +681,7 @@ class GenerativeMiner(BaseNeuron):
         role: MinerType,
     ):
         if not validator_hotkey or validator_hotkey not in self.metagraph.hotkeys:
-            return {}
+            return {}, None
         validator_uid = self.metagraph.hotkeys.index(validator_hotkey)
         metadata = await self.artifact_metadata_store.retrieve_artifact_metadata(
             uid=validator_uid,
@@ -644,18 +694,19 @@ class GenerativeMiner(BaseNeuron):
                 expected_kind="dps_input",
             )
         if metadata is None:
-            return {}
+            return {}, None
         source = metadata.r2.to_dict()
         source["type"] = "r2"
         if "path" in source and "prefix" not in source:
             source["prefix"] = source["path"]
-        return source
+        return source, metadata.artifact_spec
 
     def _build_output_metadata(
         self,
         task_id: str,
         role: MinerType,
         processor_result: Optional[Dict[str, Any]] = None,
+        artifact_spec: Optional[ArtifactTaskSpec] = None,
     ):
         artifact_config = self.config.dps_artifact
         processor_result = processor_result or {}
@@ -669,6 +720,7 @@ class GenerativeMiner(BaseNeuron):
             task_id=task_id,
             artifact_format=getattr(artifact_config, "output_format", "npz"),
             artifact_hash=processor_result.get("artifact_hash"),
+            artifact_spec=artifact_spec,
             r2=ArtifactR2Location(
                 bucket=bucket,
                 path=processor_result.get("path") or self._output_prefix(task_id),

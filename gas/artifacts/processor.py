@@ -1,9 +1,8 @@
 import hashlib
 import json
 import os
-from pathlib import Path
-from urllib.parse import urlparse
-from urllib.request import urlopen
+
+from gas.artifacts.r2_transport import ArtifactR2Transport, join_key
 
 
 def main():
@@ -12,20 +11,34 @@ def main():
     output_bucket = os.environ["DPS_OUTPUT_BUCKET"]
     output_prefix = os.environ["DPS_OUTPUT_PREFIX"].strip("/")
     output_endpoint = os.environ.get("DPS_OUTPUT_ENDPOINT_URL", "")
+    output_region = os.environ.get("DPS_OUTPUT_REGION", "auto")
+    output_write_key = os.environ.get("DPS_OUTPUT_WRITE_ACCESS_KEY_ID", "")
+    output_write_secret = os.environ.get("DPS_OUTPUT_WRITE_SECRET_ACCESS_KEY", "")
+    output_write_token = os.environ.get("DPS_OUTPUT_WRITE_SESSION_TOKEN", "")
 
     source_items = _load_source_items()
     artifact_name = "encodings.jsonl" if role == "ENCODER" else "captions.jsonl"
     artifact_bytes = _build_artifact_bytes(task_id, role, source_items)
     artifact_sha = _sha256(artifact_bytes)
 
-    output_dir = _output_dir(output_endpoint, output_bucket, output_prefix)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    artifact_path = output_dir / artifact_name
-    artifact_path.write_bytes(artifact_bytes)
+    transport = ArtifactR2Transport()
+    artifact_key = join_key(output_prefix, artifact_name)
+    transport.write_object(
+        endpoint_url=output_endpoint,
+        bucket=output_bucket,
+        key=artifact_key,
+        data=artifact_bytes,
+        content_type="application/jsonl",
+        region=output_region,
+        access_key_id=output_write_key,
+        secret_access_key=output_write_secret,
+        session_token=output_write_token,
+    )
 
     manifest = {
         "task_id": task_id,
         "role": role,
+        "artifact_spec": _artifact_spec(),
         "artifacts": [
             {
                 "path": artifact_name,
@@ -35,8 +48,18 @@ def main():
             }
         ],
     }
-    manifest_path = output_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
+    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
+    transport.write_object(
+        endpoint_url=output_endpoint,
+        bucket=output_bucket,
+        key=join_key(output_prefix, "manifest.json"),
+        data=manifest_bytes,
+        content_type="application/json",
+        region=output_region,
+        access_key_id=output_write_key,
+        secret_access_key=output_write_secret,
+        session_token=output_write_token,
+    )
 
     print(
         json.dumps(
@@ -54,11 +77,9 @@ def _load_source_items():
     manifest_url = os.environ.get("DPS_SOURCE_MANIFEST_URL")
     manifest_key = os.environ.get("DPS_SOURCE_MANIFEST_KEY") or "manifest.json"
     if manifest_url:
-        raw = _read_url(manifest_url)
+        raw = ArtifactR2Transport().read_url(manifest_url)
     else:
-        source_dir = _source_dir()
-        manifest_path = source_dir / manifest_key
-        raw = manifest_path.read_bytes() if manifest_path.exists() else b"{}"
+        raw = _read_source_object(manifest_key)
 
     try:
         manifest = json.loads(raw.decode("utf-8"))
@@ -71,6 +92,22 @@ def _load_source_items():
     return items
 
 
+def _read_source_object(relative_key: str) -> bytes:
+    transport = ArtifactR2Transport()
+    try:
+        return transport.read_object(
+            endpoint_url=os.environ.get("DPS_SOURCE_ENDPOINT_URL", ""),
+            bucket=os.environ.get("DPS_SOURCE_BUCKET", ""),
+            key=join_key(os.environ.get("DPS_SOURCE_PATH", ""), relative_key),
+            region=os.environ.get("DPS_SOURCE_REGION", "auto"),
+            access_key_id=os.environ.get("DPS_SOURCE_ACCESS_KEY_ID", ""),
+            secret_access_key=os.environ.get("DPS_SOURCE_SECRET_ACCESS_KEY", ""),
+            session_token=os.environ.get("DPS_SOURCE_SESSION_TOKEN", ""),
+        )
+    except FileNotFoundError:
+        return b"{}"
+
+
 def _build_artifact_bytes(task_id: str, role: str, source_items: list) -> bytes:
     rows = []
     for index, item in enumerate(source_items):
@@ -79,34 +116,24 @@ def _build_artifact_bytes(task_id: str, role: str, source_items: list) -> bytes:
         if role == "CAPTIONER":
             payload = {"item": item_key, "caption": f"dps caption {digest[:16]}"}
         else:
-            payload = {"item": item_key, "encoding": digest}
+            payload = {
+                "item": item_key,
+                "encoding": digest,
+                "resolution": os.environ.get("DPS_ARTIFACT_RESOLUTION", ""),
+                "max_frames": os.environ.get("DPS_ARTIFACT_MAX_FRAMES", ""),
+                "encoding_model": os.environ.get("DPS_ARTIFACT_ENCODING_MODEL", ""),
+            }
         rows.append(json.dumps(payload, separators=(",", ":")))
     return ("\n".join(rows) + "\n").encode("utf-8")
 
 
-def _source_dir() -> Path:
-    endpoint = os.environ.get("DPS_SOURCE_ENDPOINT_URL", "")
-    bucket = os.environ.get("DPS_SOURCE_BUCKET", "")
-    source_path = os.environ.get("DPS_SOURCE_PATH", "").strip("/")
-    if endpoint.startswith("file://"):
-        return Path(urlparse(endpoint).path) / bucket / source_path
-    return Path(bucket) / source_path
-
-
-def _output_dir(endpoint: str, bucket: str, prefix: str) -> Path:
-    if endpoint.startswith("file://"):
-        return Path(urlparse(endpoint).path) / bucket / prefix
-    return Path(bucket) / prefix
-
-
-def _read_url(url: str) -> bytes:
-    parsed = urlparse(url)
-    if parsed.scheme == "file":
-        return Path(parsed.path).read_bytes()
-    if parsed.scheme in ("http", "https"):
-        with urlopen(url, timeout=30) as response:
-            return response.read()
-    return Path(url).read_bytes()
+def _artifact_spec() -> dict:
+    spec = {
+        "resolution": os.environ.get("DPS_ARTIFACT_RESOLUTION"),
+        "max_frames": os.environ.get("DPS_ARTIFACT_MAX_FRAMES"),
+        "encoding_model": os.environ.get("DPS_ARTIFACT_ENCODING_MODEL"),
+    }
+    return {key: value for key, value in spec.items() if value}
 
 
 def _sha256(data: bytes) -> str:

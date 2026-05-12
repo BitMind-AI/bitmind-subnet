@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from gas.artifacts.processor import main as artifact_processor_main
+from gas.artifacts.r2_transport import ArtifactR2Transport
 from gas.evaluation.artifact_verifier import ArtifactVerifier
 from gas.evaluation.rewards import (
     artifact_stats_with_uids,
@@ -20,6 +21,7 @@ from gas.protocol.validator_requests import build_artifact_task_payload
 from gas.types import (
     ArtifactChainMetadata,
     ArtifactR2Location,
+    ArtifactTaskSpec,
     ChainMetadataRegistry,
     DiscriminatorModelId,
     MinerType,
@@ -153,6 +155,11 @@ class EncoderIncentiveTest(unittest.TestCase):
                 "ignored": None,
             },
             parameters={"expected_output": "encoder"},
+            artifact_spec={
+                "resolution": "512x512",
+                "max_frames": 16,
+                "encoding_model": "stabilityai/sd-vae-ft-mse",
+            },
         )
 
         self.assertEqual(payload["task_id"], "task-1")
@@ -164,6 +171,11 @@ class EncoderIncentiveTest(unittest.TestCase):
         self.assertEqual(payload["source"]["access_key_id"], "read-key")
         self.assertEqual(payload["source"]["secret_access_key"], "read-secret")
         self.assertNotIn("ignored", payload["source"])
+        self.assertEqual(payload["artifact_spec"]["resolution"], "512x512")
+        self.assertEqual(payload["artifact_spec"]["max_frames"], 16)
+        self.assertEqual(
+            payload["artifact_spec"]["encoding_model"], "stabilityai/sd-vae-ft-mse"
+        )
         self.assertEqual(payload["parameters"]["expected_output"], "encoder")
 
     def test_artifact_chain_metadata_round_trip(self):
@@ -173,6 +185,11 @@ class EncoderIncentiveTest(unittest.TestCase):
             task_id="task-1",
             artifact_format="npz",
             artifact_hash="sha256:abc",
+            artifact_spec=ArtifactTaskSpec(
+                resolution="512x512",
+                max_frames=16,
+                encoding_model="vae-a",
+            ),
             r2=ArtifactR2Location(
                 bucket="miner-output",
                 path="encodings/task-1/",
@@ -190,6 +207,9 @@ class EncoderIncentiveTest(unittest.TestCase):
         self.assertEqual(decoded.role, MinerType.ENCODER)
         self.assertEqual(decoded.task_id, "task-1")
         self.assertEqual(decoded.artifact_format, "npz")
+        self.assertEqual(decoded.artifact_spec.resolution, "512x512")
+        self.assertEqual(decoded.artifact_spec.max_frames, 16)
+        self.assertEqual(decoded.artifact_spec.encoding_model, "vae-a")
         self.assertEqual(decoded.r2.bucket, "miner-output")
         self.assertEqual(decoded.r2.path, "encodings/task-1/")
         self.assertEqual(decoded.r2.access_key_id, "validator-read-key")
@@ -253,6 +273,9 @@ class EncoderIncentiveTest(unittest.TestCase):
                         "DPS_OUTPUT_ENDPOINT_URL": f"file://{root}",
                         "DPS_OUTPUT_BUCKET": "miner-output",
                         "DPS_OUTPUT_PREFIX": "encodings/task-1",
+                        "DPS_ARTIFACT_RESOLUTION": "512x512",
+                        "DPS_ARTIFACT_MAX_FRAMES": "16",
+                        "DPS_ARTIFACT_ENCODING_MODEL": "vae-a",
                     }
                 )
                 with redirect_stdout(StringIO()):
@@ -266,6 +289,11 @@ class EncoderIncentiveTest(unittest.TestCase):
                 role=MinerType.ENCODER,
                 task_id="task-1",
                 artifact_format="jsonl",
+                artifact_spec=ArtifactTaskSpec(
+                    resolution="512x512",
+                    max_frames=16,
+                    encoding_model="vae-a",
+                ),
                 r2=ArtifactR2Location(
                     bucket="miner-output",
                     path="encodings/task-1",
@@ -283,6 +311,85 @@ class EncoderIncentiveTest(unittest.TestCase):
             self.assertEqual(stats["accepted_work_units"], 2)
             self.assertEqual(stats["deterministic_correctness_rate"], 1.0)
             self.assertEqual(stats["penalties"], 0.0)
+
+    def test_verifier_rejects_bad_single_artifact_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "miner-output" / "encodings" / "task-1"
+            output_dir.mkdir(parents=True)
+            (output_dir / "encodings.jsonl").write_text("{}\n")
+            manifest = {
+                "artifacts": [
+                    {
+                        "path": "encodings.jsonl",
+                        "sha256": "sha256:"
+                        + "0" * 64,
+                        "work_units": 3,
+                    }
+                ]
+            }
+            (output_dir / "manifest.json").write_text(json.dumps(manifest))
+
+            metadata = ArtifactChainMetadata(
+                kind="dps_output",
+                role=MinerType.ENCODER,
+                task_id="task-1",
+                artifact_hash="sha256:" + "1" * 64,
+                r2=ArtifactR2Location(
+                    bucket="miner-output",
+                    path="encodings/task-1",
+                    endpoint_url=f"file://{root}",
+                    manifest_key="manifest.json",
+                ),
+            )
+
+            stats = ArtifactVerifier().verify(uid=7, hotkey="hk7", metadata=metadata)
+
+            self.assertEqual(stats["accepted_work_units"], 0)
+            self.assertEqual(stats["deterministic_correctness_rate"], 0.0)
+            self.assertEqual(stats["penalties"], 3.0)
+
+    def test_transport_uses_s3_client_for_authenticated_r2(self):
+        calls = {}
+
+        class Body:
+            def read(self):
+                return b"payload"
+
+        class Client:
+            def get_object(self, Bucket, Key):
+                calls["get"] = (Bucket, Key)
+                return {"Body": Body()}
+
+            def put_object(self, Bucket, Key, Body, ContentType):
+                calls["put"] = (Bucket, Key, Body, ContentType)
+
+        transport = ArtifactR2Transport()
+        transport._s3_client = lambda **_: Client()
+
+        data = transport.read_object(
+            endpoint_url="https://abc.r2.cloudflarestorage.com",
+            bucket="dps",
+            key="source/manifest.json",
+            access_key_id="key",
+            secret_access_key="secret",
+        )
+        transport.write_object(
+            endpoint_url="https://abc.r2.cloudflarestorage.com",
+            bucket="out",
+            key="task/manifest.json",
+            data=b"{}",
+            content_type="application/json",
+            access_key_id="key",
+            secret_access_key="secret",
+        )
+
+        self.assertEqual(data, b"payload")
+        self.assertEqual(calls["get"], ("dps", "source/manifest.json"))
+        self.assertEqual(
+            calls["put"],
+            ("out", "task/manifest.json", b"{}", "application/json"),
+        )
 
 
 if __name__ == "__main__":

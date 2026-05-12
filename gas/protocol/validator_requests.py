@@ -184,6 +184,7 @@ def build_artifact_task_payload(
     task_id: str,
     r2_source: Dict[str, Any],
     parameters: Optional[Dict[str, Any]] = None,
+    artifact_spec: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     payload = {
         "task_id": task_id,
@@ -195,6 +196,10 @@ def build_artifact_task_payload(
     }
     if "path" in payload["source"] and "prefix" not in payload["source"]:
         payload["source"]["prefix"] = payload["source"]["path"]
+    if artifact_spec:
+        payload["artifact_spec"] = {
+            key: value for key, value in artifact_spec.items() if value is not None
+        }
     if parameters:
         payload["parameters"] = parameters
     return payload
@@ -209,6 +214,7 @@ async def query_artifact_miner(
     task_id: str,
     r2_source: Dict[str, Any],
     parameters: Optional[Dict[str, Any]],
+    artifact_spec: Optional[Dict[str, Any]],
     total_timeout: float,
     connect_timeout: Optional[float] = None,
     sock_connect_timeout: Optional[float] = None,
@@ -236,6 +242,7 @@ async def query_artifact_miner(
             task_id=task_id,
             r2_source=r2_source,
             parameters=parameters,
+            artifact_spec=artifact_spec,
         )
         body_bytes = json.dumps(payload).encode("utf-8")
         headers = {

@@ -219,6 +219,13 @@ def add_miner_args(parser):
     )
 
     parser.add_argument(
+        "--dps-artifact.output-r2-region",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_REGION", "auto"),
+        help="Miner output R2/S3 region hint; R2 commonly accepts auto",
+    )
+
+    parser.add_argument(
         "--dps-artifact.output-r2-prefix",
         type=str,
         default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_PREFIX", "dps-artifacts/"),
@@ -265,6 +272,27 @@ def add_miner_args(parser):
         type=str,
         default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_MANIFEST_KEY"),
         help="Optional R2 manifest object key for miner DPS artifact outputs",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-write-access-key-id",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_WRITE_ACCESS_KEY_ID"),
+        help="Miner write access key id for uploading DPS artifacts to R2",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-write-secret-access-key",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_WRITE_SECRET_ACCESS_KEY"),
+        help="Miner write secret access key for uploading DPS artifacts to R2",
+    )
+
+    parser.add_argument(
+        "--dps-artifact.output-r2-write-session-token",
+        type=str,
+        default=os.environ.get("DPS_ARTIFACT_OUTPUT_R2_WRITE_SESSION_TOKEN"),
+        help="Optional miner write session token for uploading DPS artifacts to R2",
     )
     
     # Webhook configuration
@@ -499,6 +527,32 @@ def add_validator_args(parser):
         type=int,
         help="Maximum encoder/captioner miners per role to receive each R2 artifact assignment round; 0 means all active miners.",
         default=int(os.environ.get("DPS_ARTIFACT_SAMPLE_SIZE", 0)),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.resolution",
+        type=str,
+        help="Required artifact input/output resolution for DPS encoder/captioner tasks, e.g. 512x512 or 720p",
+        default=os.environ.get("DPS_ARTIFACT_RESOLUTION"),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.max-frames",
+        type=int,
+        help="Maximum frames miners should use per DPS artifact item",
+        default=(
+            int(os.environ["DPS_ARTIFACT_MAX_FRAMES"])
+            if os.environ.get("DPS_ARTIFACT_MAX_FRAMES")
+            else None
+        ),
+    )
+
+    parser.add_argument(
+        "--dps-artifact.encoding-model",
+        type=str,
+        help="VAE encoder or encoding model miners must use for DPS artifact tasks",
+        default=os.environ.get("DPS_ARTIFACT_ENCODING_MODEL")
+        or os.environ.get("DPS_ARTIFACT_VAE_ENCODER"),
     )
 
     parser.add_argument(

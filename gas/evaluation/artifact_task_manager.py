@@ -7,7 +7,12 @@ import aiohttp
 import bittensor as bt
 
 from gas.protocol.validator_requests import query_artifact_miner
-from gas.types import ArtifactChainMetadata, ArtifactR2Location, MinerType
+from gas.types import (
+    ArtifactChainMetadata,
+    ArtifactR2Location,
+    ArtifactTaskSpec,
+    MinerType,
+)
 from gas.utils.chain_artifact_metadata_store import ChainArtifactMetadataStore
 from gas.evaluation.artifact_verifier import ArtifactVerifier
 
@@ -44,6 +49,7 @@ class ArtifactTaskManager:
             kind="dps_input",
             role=MinerType.ENCODER,
             r2=r2_location,
+            artifact_spec=self._artifact_spec(),
         )
         await self.metadata_store.store_artifact_metadata(self.wallet, metadata)
         bt.logging.info("Published DPS artifact input R2 metadata to chain")
@@ -119,7 +125,8 @@ class ArtifactTaskManager:
         return reward_stats
 
     async def send_artifact_task(self, uid: int, role: MinerType, r2_source, block: int = 0):
-        task_id = self._task_id(role, uid, r2_source, block)
+        artifact_spec = self._artifact_spec()
+        task_id = self._task_id(role, uid, r2_source, block, artifact_spec)
         parameters = {
             "assignment_time": time.time(),
             "expected_output": role.value.lower(),
@@ -135,6 +142,7 @@ class ArtifactTaskManager:
                 task_id=task_id,
                 r2_source=r2_source,
                 parameters=parameters,
+                artifact_spec=artifact_spec.to_dict() if artifact_spec else None,
                 total_timeout=self.config.neuron.miner_total_timeout,
                 connect_timeout=getattr(self.config.neuron, "miner_connect_timeout", None),
                 sock_connect_timeout=getattr(
@@ -204,6 +212,18 @@ class ArtifactTaskManager:
             manifest_key=getattr(artifact_config, "r2_manifest_key", None),
         )
 
+    def _artifact_spec(self):
+        artifact_config = getattr(self.config, "dps_artifact", None)
+        if artifact_config is None:
+            return None
+
+        spec = ArtifactTaskSpec(
+            resolution=getattr(artifact_config, "resolution", None),
+            max_frames=getattr(artifact_config, "max_frames", None),
+            encoding_model=getattr(artifact_config, "encoding_model", None),
+        )
+        return spec if spec.to_dict() else None
+
     def _verify_output_metadata(self, uid: int, metadata: ArtifactChainMetadata):
         try:
             stats = self.artifact_verifier.verify(
@@ -255,10 +275,21 @@ class ArtifactTaskManager:
             stats["caption_quality_rate"] = quality
         return stats
 
-    def _task_id(self, role: MinerType, uid: int, r2_source, block: int = 0):
+    def _task_id(
+        self,
+        role: MinerType,
+        uid: int,
+        r2_source,
+        block: int = 0,
+        artifact_spec: ArtifactTaskSpec | None = None,
+    ):
         interval = int(getattr(self.config, "dps_artifact_task_interval", 1) or 1)
         epoch = int(block // interval) if block else 0
+        source_identity = {
+            "source": r2_source,
+            "artifact_spec": artifact_spec.to_dict() if artifact_spec else {},
+        }
         source_hash = hashlib.sha256(
-            json.dumps(r2_source, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(source_identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()[:12]
         return f"dps-{role.value.lower()}-{uid}-e{epoch}-{source_hash}"

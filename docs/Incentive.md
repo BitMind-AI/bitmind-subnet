@@ -128,6 +128,9 @@ Validator input publishing and task assignment are configured independently from
 --enable-dps-artifact-mechanism \
 --dps-artifact.publish-input-to-chain \
 --dps-artifact-task-interval 360 \
+--dps-artifact.resolution 512x512 \
+--dps-artifact.max-frames 16 \
+--dps-artifact.encoding-model stabilityai/sd-vae-ft-mse \
 --dps-artifact.r2-endpoint-url https://<account>.r2.cloudflarestorage.com \
 --dps-artifact.r2-bucket dps-artifacts \
 --dps-artifact.r2-prefix encoder/shard-001/ \
@@ -150,6 +153,11 @@ The validator writes a compact chain commitment shaped like:
     "manifest_url": "https://example.com/manifest.json",
     "access_key_id": "<prefix-scoped-read-key>",
     "secret_access_key": "<prefix-scoped-read-secret>"
+  },
+  "artifact_spec": {
+    "resolution": "512x512",
+    "max_frames": 16,
+    "encoding_model": "stabilityai/sd-vae-ft-mse"
   }
 }
 ```
@@ -170,13 +178,18 @@ The validator may also send a signed `/artifact_task` nudge to active mechanism-
     "access_key_id": "<prefix-scoped-read-key>",
     "secret_access_key": "<prefix-scoped-read-secret>"
   },
+  "artifact_spec": {
+    "resolution": "512x512",
+    "max_frames": 16,
+    "encoding_model": "stabilityai/sd-vae-ft-mse"
+  },
   "parameters": {
     "expected_output": "encoder"
   }
 }
 ```
 
-Miner output commitments use the same registry envelope with `kind: "dps_output"`, the miner's artifact R2 location, validator-readable credentials, optional manifest info, and optional artifact hash. Miners can expose artifact behavior by running with `--miner.type ENCODER` or `--miner.type CAPTIONER`. If `--dps-artifact.processor-command` is configured, the miner runs that command for each artifact task and passes source/output metadata through environment variables such as `DPS_SOURCE_BUCKET`, `DPS_SOURCE_PATH`, `DPS_SOURCE_ACCESS_KEY_ID`, `DPS_SOURCE_SECRET_ACCESS_KEY`, `DPS_OUTPUT_BUCKET`, and `DPS_OUTPUT_PREFIX`. The command may print JSON with `artifact_hash`, `manifest_url`, `manifest_key`, or `path`, which the miner publishes in its `dps_output` commitment.
+Miner output commitments use the same registry envelope with `kind: "dps_output"`, the miner's artifact R2 location, validator-readable credentials, optional manifest info, optional artifact hash, and the artifact spec used for the task. Miners can expose artifact behavior by running with `--miner.type ENCODER` or `--miner.type CAPTIONER`. If `--dps-artifact.processor-command` is configured, the miner runs that command for each artifact task and passes source/output metadata through environment variables such as `DPS_SOURCE_BUCKET`, `DPS_SOURCE_PATH`, `DPS_SOURCE_ACCESS_KEY_ID`, `DPS_SOURCE_SECRET_ACCESS_KEY`, `DPS_SOURCE_SESSION_TOKEN`, `DPS_OUTPUT_BUCKET`, `DPS_OUTPUT_PREFIX`, `DPS_OUTPUT_WRITE_ACCESS_KEY_ID`, `DPS_OUTPUT_WRITE_SECRET_ACCESS_KEY`, `DPS_ARTIFACT_RESOLUTION`, `DPS_ARTIFACT_MAX_FRAMES`, and `DPS_ARTIFACT_ENCODING_MODEL`. The command may print JSON with `artifact_hash`, `manifest_url`, `manifest_key`, or `path`, which the miner publishes in its `dps_output` commitment.
 
 Use `.env.encoder_miner.template` for mechanism-1 artifact miners rather than `.env.gen_miner.template`:
 
@@ -191,9 +204,9 @@ The repo includes a reference processor for local/fake-R2 testing and determinis
 --dps-artifact.processor-command "python -m gas.artifacts.processor"
 ```
 
-The validator artifact verifier reads the published manifest, fetches each listed artifact file, checks SHA-256 hashes, counts accepted work units, and writes mechanism-1 reward stats.
+The reference processor and validator verifier use S3-compatible R2 transport when endpoint URL plus access key/secret are present, while still supporting `file://` fake R2 for local tests. The validator artifact verifier reads the published manifest, checks that the manifest artifact spec matches the assignment, fetches each listed artifact file, checks SHA-256 hashes, validates the top-level single-artifact hash when present, counts accepted work units, and writes mechanism-1 reward stats.
 
-Task IDs are deterministic by role, UID, assignment epoch, and R2 source hash:
+Task IDs are deterministic by role, UID, assignment epoch, R2 source hash, and artifact spec hash:
 
 ```text
 dps-{role}-{uid}-e{epoch}-{source_hash}
