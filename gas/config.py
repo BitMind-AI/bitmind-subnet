@@ -217,7 +217,7 @@ def add_validator_args(parser):
         "--generator-challenge-interval",
         type=int,
         help="How often we send challenges to generative miners, measured in 12 second blocks.",
-        default=110,
+        default=220,
     )
 
     parser.add_argument(
@@ -301,7 +301,7 @@ def add_validator_args(parser):
         "--store-failed-media",
         action="store_true",
         help="Save media that fails verification (tampering, duplicates, C2PA) to disk for inspection",
-        default=False,
+        default=True,
     )
 
     parser.add_argument(
