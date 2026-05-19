@@ -1,4 +1,4 @@
-__all__ = ["ContentManager", "MediaStorage", "ContentDB", "PromptEntry", "MediaEntry", "Media"]
+__all__ = ["ContentManager", "MediaStorage", "PromptEntry", "MediaEntry", "Media"]
 
 
 def __getattr__(name):
@@ -8,9 +8,6 @@ def __getattr__(name):
     if name == "MediaStorage":
         from .media_storage import MediaStorage
         return MediaStorage
-    if name == "ContentDB":
-        from .content_db import ContentDB
-        return ContentDB
     if name in {"Media", "PromptEntry", "MediaEntry"}:
         from .types import Media, PromptEntry, MediaEntry
         return {
