@@ -787,13 +787,4 @@ def _is_trusted_issuer(
     return False
 
 
-def is_from_trusted_generator(media_data: Union[bytes, str, Path], require_ai_label: bool = False) -> bool:
-    """Check if media is from a trusted AI generator with valid cryptographic proof."""
-    result = verify_c2pa(media_data)
-    if not result.verified or not result.signature_valid:
-        return False
-    if result.is_self_signed or not result.is_trusted_issuer:
-        return False
-    if require_ai_label and not result.ai_generated:
-        return False
-    return True
+

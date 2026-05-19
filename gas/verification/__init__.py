@@ -28,7 +28,6 @@ from .duplicate_detection import (
 )
 from .c2pa_verification import (
     verify_c2pa,
-    is_from_trusted_generator,
     C2PAVerificationResult,
     TRUSTED_CERT_ISSUERS,
     TRUSTED_CA_ISSUERS,
