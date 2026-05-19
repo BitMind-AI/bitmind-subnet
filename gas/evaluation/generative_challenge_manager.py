@@ -21,7 +21,7 @@ from pathlib import Path
 from PIL import Image
 from typing import Any, Dict, Optional
 
-from gas.cache.content_db import PromptEntry
+from gas.cache.types import PromptEntry
 from gas.cache.content_manager import ContentManager
 from gas.protocol.epistula import generate_header, get_verifier
 from gas.protocol.validator_requests import query_generative_miner
