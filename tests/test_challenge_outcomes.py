@@ -49,6 +49,15 @@ class ChallengeOutcomeStatsTest(unittest.TestCase):
             self.assertEqual(stats["hotkey-1"]["total_evaluated"], 2)
             self.assertEqual(stats["hotkey-1"]["pass_rate"], 0.5)
             self.assertEqual(stats["hotkey-1"]["media_ids"], [media_id])
+            # Per-modality fields (hard cutover)
+            self.assertEqual(stats["hotkey-1"]["image_verified"], 1)
+            self.assertEqual(stats["hotkey-1"]["image_failed"], 1)
+            self.assertEqual(stats["hotkey-1"]["image_pass_rate"], 0.5)
+            self.assertEqual(stats["hotkey-1"]["video_verified"], 0)
+            self.assertEqual(stats["hotkey-1"]["video_failed"], 0)
+            self.assertEqual(stats["hotkey-1"]["video_pass_rate"], 0.0)
+            self.assertEqual(stats["hotkey-1"]["image_model_names"], [])
+            self.assertEqual(stats["hotkey-1"]["video_model_names"], [])
 
 
 if __name__ == "__main__":

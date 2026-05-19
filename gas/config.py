@@ -347,24 +347,10 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
-        "--scoring.binary-weight",
-        type=float,
-        help="Weight for binary classification scoring",
-        default=0.75,
-    )
-
-    parser.add_argument(
         "--benchmark-api-url",
         type=str,
         help="Base URL for the benchmark API",
         default=os.environ.get("BENCHMARK_API_URL", "https://gas.bitmind.ai"),
-    )
-
-    parser.add_argument(
-        "--scoring.multiclass-weight",
-        type=float,
-        help="Weight for multiclass classification scoring",
-        default=0.25,
     )
 
     parser.add_argument(

@@ -670,177 +670,26 @@ class ContentManager:
 		self, lookback_hours: float = 2.0, limit: int = None
 	) -> Dict[str, Dict[str, Any]]:
 		"""
-		Get verification statistics for miner media in the last N hours: pass and fail
-		counts and pass rate. Includes both rewarded and unrewarded verified media.
-		Use for generator base rewards (eligibility = verified submission in last N hours).
+		Get verification statistics from challenge outcomes table only (hard cutover).
+		Per-modality counts (image/video) are included for split reward weighting.
 
 		Args:
 			lookback_hours: Number of hours to look back (default 2.0).
 			limit: Maximum number of entries per type to consider (default 1000).
 
 		Returns:
-			Dict mapping miner hotkey to verification stats: total_verified (passed),
-			total_failed (failed), total_evaluated, pass_rate, media_ids (verified only).
+			Dict mapping miner hotkey to verification stats, with per-modality breakdown.
 		"""
 		try:
 			limit_val = limit or 1000
-			outcome_stats = self.content_db.get_challenge_outcome_stats_last_n_hours(
+			return self.content_db.get_challenge_outcome_stats_last_n_hours(
 				lookback_hours=lookback_hours, limit=limit_val
 			)
-
-			verified_media = self.get_recent_verified_miner_media(
-				lookback_hours=lookback_hours, limit=limit_val
-			)
-			failed_media = self.get_recent_failed_miner_media(
-				lookback_hours=lookback_hours, limit=limit_val
-			)
-			if not verified_media and not failed_media and not outcome_stats:
-				bt.logging.debug(f"No verified or failed miner media in last {lookback_hours}h")
-				return {}
-			legacy_stats = self._build_verification_stats_from_verified_and_failed(
-				verified_media, failed_media
-			)
-
-			if outcome_stats:
-				bt.logging.info(
-					f"Retrieved challenge-outcome stats for {len(outcome_stats)} miners"
-				)
-				return self._merge_verification_stats(legacy_stats, outcome_stats)
-
-			return legacy_stats
 		except Exception as e:
 			bt.logging.error(f"Error getting verification stats for last {lookback_hours}h: {e}")
 			import traceback
 			bt.logging.error(traceback.format_exc())
 			return {}
-
-	def _build_verification_stats_from_verified_and_failed(
-		self,
-		verified_media: List[MediaEntry],
-		failed_media: List[MediaEntry],
-	) -> Dict[str, Dict[str, Any]]:
-		"""Build verification stats from verified and failed media (e.g. both from last N hours)."""
-		miner_stats = {}
-		for media in verified_media:
-			if not media.hotkey or not media.uid:
-				continue
-			hotkey = media.hotkey
-			if hotkey not in miner_stats:
-				miner_stats[hotkey] = {
-					"uid": media.uid,
-					"verified_media_ids": [],
-					"model_names": [],
-					"total_verified": 0,
-					"total_failed": 0,
-					"last_timestamp": media.created_at
-				}
-			miner_stats[hotkey]["verified_media_ids"].append(media.id)
-			if media.model_name:
-				miner_stats[hotkey]["model_names"].append(media.model_name)
-			miner_stats[hotkey]["total_verified"] += 1
-			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
-				miner_stats[hotkey]["last_timestamp"] = media.created_at
-		for media in failed_media:
-			if not media.hotkey or not media.uid:
-				continue
-			hotkey = media.hotkey
-			if hotkey not in miner_stats:
-				miner_stats[hotkey] = {
-					"uid": media.uid,
-					"verified_media_ids": [],
-					"model_names": [],
-					"total_verified": 0,
-					"total_failed": 0,
-					"last_timestamp": media.created_at
-				}
-			miner_stats[hotkey]["total_failed"] += 1
-			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
-				miner_stats[hotkey]["last_timestamp"] = media.created_at
-
-		verification_stats = {}
-		for hotkey, stats in miner_stats.items():
-			verified = stats["total_verified"]
-			failed = stats["total_failed"]
-			total_evaluated = verified + failed
-			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
-			verification_stats[hotkey] = {
-				"uid": stats["uid"],
-				"total_verified": verified,
-				"total_submissions": total_evaluated,
-				"total_failed": failed,
-				"total_evaluated": total_evaluated,
-				"pass_rate": pass_rate,
-				"media_ids": stats["verified_media_ids"],
-				"last_timestamp": stats["last_timestamp"],
-				"model_names": stats.get("model_names", []),
-			}
-		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
-		return verification_stats
-
-	def _merge_verification_stats(
-		self,
-		legacy_stats: Dict[str, Dict[str, Any]],
-		outcome_stats: Dict[str, Dict[str, Any]],
-	) -> Dict[str, Dict[str, Any]]:
-		"""Merge legacy media-based stats with challenge-outcome stats.
-
-		Post-deployment, verified events appear in both sources (same CLIP
-		pass recorded in both media and outcome). Use max() to avoid
-		double-counting those.
-
-		Failed events partially overlap (CLIP fails) but outcome also tracks
-		pre-storage rejections that never create a media row. Use sum() so
-		pre-storage rejections are always counted — the CLIP-fail overlap
-		is a minor pessimism that self-resolves when the transition window
-		(≤4h lookback) elapses and outcome >= legacy for all event types.
-
-		Miners in only one source pass through unchanged.
-		"""
-		merged = {}
-		all_hotkeys = set(legacy_stats.keys()) | set(outcome_stats.keys())
-		for hotkey in all_hotkeys:
-			legacy = legacy_stats.get(hotkey, {})
-			outcome = outcome_stats.get(hotkey, {})
-
-			verified = max(
-				legacy.get("total_verified", 0),
-				outcome.get("total_verified", 0),
-			)
-			failed = (
-				legacy.get("total_failed", 0)
-				+ outcome.get("total_failed", 0)
-			)
-			total_evaluated = verified + failed
-			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
-
-			legacy_ids = legacy.get("media_ids", [])
-			outcome_ids = outcome.get("media_ids", [])
-			if len(outcome_ids) >= len(legacy_ids):
-				all_ids = outcome_ids
-			else:
-				all_ids = list(dict.fromkeys(legacy_ids + outcome_ids))
-
-			last_ts = max(
-				legacy.get("last_timestamp", 0) or 0,
-				outcome.get("last_timestamp", 0) or 0,
-			)
-
-			uid_legacy = legacy.get("uid")
-			uid_outcome = outcome.get("uid")
-			uid = uid_outcome if uid_outcome is not None else uid_legacy
-
-			merged[hotkey] = {
-				"uid": uid,
-				"total_verified": verified,
-				"total_submissions": total_evaluated,
-				"total_failed": failed,
-				"total_evaluated": total_evaluated,
-				"pass_rate": pass_rate,
-				"media_ids": all_ids,
-				"last_timestamp": last_ts,
-				"model_names": legacy.get("model_names", []) + outcome.get("model_names", []),
-			}
-		return merged
 
 	def upload_batch_to_huggingface(
 		self, 

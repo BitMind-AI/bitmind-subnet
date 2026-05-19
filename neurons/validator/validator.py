@@ -103,14 +103,6 @@ class Validator(BaseNeuron):
             ]
         )
 
-        self.reward_config = {
-            "window": self.config.scoring.window,
-            "image_score_weight": self.config.scoring.image_weight,
-            "video_score_weight": self.config.scoring.video_weight,
-            "binary_score_weight": self.config.scoring.binary_weight,
-            "multiclass_score_weight": self.config.scoring.multiclass_weight,
-        }
-
         # SETUP HEARTBEAT THREAD
         if self.config.neuron.heartbeat:
             self.heartbeat_thread = Thread(name="heartbeat", target=self.heartbeat)
@@ -309,11 +301,21 @@ class Validator(BaseNeuron):
                 f"No benchmark multipliers; applying default fool rate "
                 f"{DEFAULT_FOOL_RATE_FALLBACK} to {len(all_generator_uids)} generators"
             )
-        rewards = {
-            uid: generator_base_rewards.get(uid, 0)
-            * reward_multipliers.get(uid, DEFAULT_FOOL_RATE_FALLBACK)
-            for uid in all_generator_uids
-        }
+
+        # Combine per-modality base rewards with fool-rate multiplier.
+        # Image and video contributions are weighted independently via config.
+        image_weight = self.config.scoring.image_weight
+        video_weight = self.config.scoring.video_weight
+        rewards = {}
+        for uid in all_generator_uids:
+            base = generator_base_rewards.get(uid, {"image": 0, "video": 0})
+            mult = reward_multipliers.get(uid, DEFAULT_FOOL_RATE_FALLBACK)
+            rewards[uid] = (
+                image_weight * base["image"] + video_weight * base["video"]
+            ) * mult
+        bt.logging.debug(
+            f"Image weight: {image_weight}, Video weight: {video_weight}"
+        )
 
         if len(rewards) == 0:
             if not generator_base_rewards:

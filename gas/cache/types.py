@@ -140,6 +140,7 @@ class ChallengeOutcome:
     status: str
     failure_reason: Optional[str] = None
     media_id: Optional[str] = None
+    model_name: Optional[str] = None
     created_at: float = None
     updated_at: float = None
 

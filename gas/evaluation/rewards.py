@@ -4,8 +4,6 @@ from typing import Dict, Optional
 
 import bittensor as bt
 
-from collections import Counter
-
 # Model generation cost in USD per second of video (720p, no audio unless noted).
 # Used to compute reward multipliers: miner gets baseline_ratio * (model_price / baseline_price).
 #
@@ -121,91 +119,10 @@ def _compute_average_model_multiplier(model_names: list[str]) -> float:
     return total / len(model_names)
 
 
-def get_discriminator_rewards(
-    runs,
-    metagraph,
-    image_score_weight: float = 0.5,
-    video_score_weight: float = 0.5,
-    binary_score_weight: float = 0.5,
-    multiclass_score_weight: float = 0.5,
-):
-    """
-    Process discriminator results to extract rewards from MCC scores.
-    Handles separate image and video detection models per miner.
-
-    Args:
-        runs: List of DiscriminatorResult objects from API
-        metagraph: Bittensor metagraph for SS58 to UID mapping
-        image_score_weight: Weight for image modality rewards
-        video_score_weight: Weight for video modality rewards
-        binary_score_weight: Weight for binary MCC
-        multiclass_score_weight: Weight for multiclass MCC
-
-    Returns:
-        dict: Mapping of UID to combined reward score for discriminators
-    """
-    
-    # Store rewards by UID and modality
-    miner_modality_rewards = {}
-    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
-
-    if not runs:
-        bt.logging.warning("No discriminator runs data provided")
-        return {}
-
-    try:
-        for result in runs:
-            if not isinstance(result, dict):
-                bt.logging.warning(f"Invalid result format: {type(result)}")
-                continue
-
-            ss58_address = result.get("discriminator_address")
-            if not ss58_address or ss58_address not in ss58_to_uid:
-                continue
-
-            uid = ss58_to_uid[ss58_address]
-            modality = result.get("modality")
-            if not modality:
-                bt.logging.warning(f"Missing modality for UID {uid}")
-                continue
-
-            if uid not in miner_modality_rewards:
-                miner_modality_rewards[uid] = {}
-
-            # Handle potential None or non-numeric values
-            binary_mcc = result.get("binary_mcc", 0)
-            multiclass_mcc = result.get("multiclass_mcc", 0)
-
-            try:
-                binary_mcc = float(binary_mcc) if binary_mcc is not None else 0
-                multiclass_mcc = float(multiclass_mcc) if multiclass_mcc is not None else 0
-            except (ValueError, TypeError):
-                bt.logging.warning(f"Invalid MCC values for UID {uid}: binary={binary_mcc}, multiclass={multiclass_mcc}")
-                binary_mcc = 0
-                multiclass_mcc = 0
-
-            miner_modality_rewards[uid][modality] = binary_score_weight * max(
-                0, binary_mcc
-            ) + multiclass_score_weight * max(0, multiclass_mcc)
-
-    except Exception as e:
-        bt.logging.error(f"Error processing discriminator rewards: {e}")
-        import traceback
-        bt.logging.error(traceback.format_exc())
-
-    # Combine image and video rewards for each miner
-    final_multipliers = {}
-    for uid, modality_rewards in miner_modality_rewards.items():
-        final_multipliers[uid] = image_score_weight * modality_rewards.get(
-            "image", 0.0
-        ) + video_score_weight * modality_rewards.get("video", 0.0)
-
-    return final_multipliers
-
-
 def get_generator_base_rewards(verification_stats):
     """
-    Compute base rewards for generators based on their verification pass rates.
+    Compute base rewards for generators based on their verification pass rates,
+    split by modality (image/video) so they can be weighted independently.
 
     Args:
         verification_stats: Dict mapping hotkey to verification stats from
@@ -218,13 +135,21 @@ def get_generator_base_rewards(verification_stats):
                     "total_failed": int,
                     "total_evaluated": int,
                     "pass_rate": float,
+                    "image_verified": int,
+                    "image_failed": int,
+                    "image_pass_rate": float,
+                    "image_model_names": list[str],
+                    "video_verified": int,
+                    "video_failed": int,
+                    "video_pass_rate": float,
+                    "video_model_names": list[str],
                     "media_ids": List[str]
                 }
             }
 
     Returns:
         tuple: (uid_rewards_dict, media_ids_to_mark)
-            - uid_rewards_dict: Mapping of UID to base reward score
+            - uid_rewards_dict: Mapping of UID to {"image": float, "video": float}
             - media_ids_to_mark: List of media IDs to mark as rewarded
     """
     try:
@@ -237,24 +162,31 @@ def get_generator_base_rewards(verification_stats):
 
         for hotkey, stats in verification_stats.items():
             uid = int(stats["uid"])
-            pass_rate = stats["pass_rate"]
-            verified_count = stats["total_verified"]
 
-            # Base reward: pass_rate scaled by verified count with diminishing-returns
-            # taper.  First 10 count linearly; beyond 10, log₂ takes over so high-
-            # throughput miners still see gains but can't farm volume indefinitely.
-            volume = min(verified_count, 10) + max(0.0, math.log2(max(1, verified_count - 9)))
-            base_reward = pass_rate * volume
+            # --- Image modality ---
+            image_verified = stats.get("image_verified", 0)
+            image_pass_rate = stats.get("image_pass_rate", 0.0)
+            image_volume = min(image_verified, 10) + max(0.0, math.log2(max(1, image_verified - 9)))
+            image_base = image_pass_rate * image_volume
+            image_model_mult = _compute_average_model_multiplier(
+                stats.get("image_model_names", [])
+            )
+            image_base *= image_model_mult
 
-            # Model tier multiplier — rewards miners for using higher-cost models
-            model_names = stats.get("model_names", [])
-            model_mult = _compute_average_model_multiplier(model_names)
-            base_reward *= model_mult
+            # --- Video modality ---
+            video_verified = stats.get("video_verified", 0)
+            video_pass_rate = stats.get("video_pass_rate", 0.0)
+            video_volume = min(video_verified, 10) + max(0.0, math.log2(max(1, video_verified - 9)))
+            video_base = video_pass_rate * video_volume
+            video_model_mult = _compute_average_model_multiplier(
+                stats.get("video_model_names", [])
+            )
+            video_base *= video_model_mult
 
-            uid_rewards[uid] = base_reward
+            uid_rewards[uid] = {"image": image_base, "video": video_base}
             all_media_ids.extend(stats["media_ids"])
 
-        bt.logging.info(f"Computed base rewards for {len(uid_rewards)} miners: {uid_rewards}")
+        bt.logging.info(f"Computed per-modality base rewards for {len(uid_rewards)} miners: {uid_rewards}")
 
         return uid_rewards, all_media_ids
 
