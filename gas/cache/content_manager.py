@@ -5,7 +5,8 @@ from typing import Any, Dict, List, Optional
 import bittensor as bt
 import numpy as np
 
-from gas.cache.content_db import ContentDB, SOURCE_TYPE_TO_DB_NAME_FIELD
+
+from gas.types import SOURCE_TYPE_TO_DB_NAME_FIELD
 from gas.cache.media_storage import MediaStorage
 from gas.cache.types import Media, MediaEntry, PromptEntry
 from gas.cache.util import extract_media_info, get_format_from_content
@@ -46,8 +47,18 @@ class ContentManager:
 			base_dir = Path("~/.cache/sn34").expanduser()
 
 		self.base_dir = Path(base_dir)
-		self.content_db = ContentDB(self.base_dir / "prompts.db")
+
 		self.media_storage = MediaStorage(self.base_dir)
+
+		from gas.cache.db import ConnectionManager, PromptStore, MediaStore, ChallengeStore
+		from gas.cache.db.connection import create_schema
+
+		self.db = ConnectionManager(self.base_dir / "prompts.db")
+		with self.db.connect() as conn:
+			create_schema(conn)
+		self.prompts = PromptStore(self.db)
+		self.challenges = ChallengeStore(self.db)
+		self.media = MediaStore(self.db, self.prompts, self.challenges)
 
 		self.max_per_source = max_per_source
 		self.enable_source_limits = enable_source_limits
@@ -65,7 +76,7 @@ class ContentManager:
 		modality: Optional[str] = None,
 	) -> str:
 		try:
-			prompt_id = self.content_db.add_prompt_entry(
+			prompt_id = self.prompts.add_prompt_entry(
 				content=content,
 				source_media_id=source_media_id,
 				modality=modality,
@@ -122,7 +133,7 @@ class ContentManager:
 
 			resolution, file_size = extract_media_info(save_path, media_data.modality)
 
-			media_id = self.content_db.add_media_entry(
+			media_id = self.media.add_media_entry(
 				prompt_id=media_data.prompt_id,
 				file_path=save_path,
 				modality=media_data.modality,
@@ -194,7 +205,7 @@ class ContentManager:
 				return None
 
 			resolution, file_size = extract_media_info(save_path, modality)
-			media_id = self.content_db.add_media_entry(
+			media_id = self.media.add_media_entry(
 				prompt_id=prompt_id,
 				file_path=save_path,
 				modality=modality,
@@ -213,7 +224,7 @@ class ContentManager:
 				c2pa_issuer=c2pa_issuer,
 				task_id=task_id,
 			)
-			self.content_db.update_challenge_outcome(
+			self.challenges.update_outcome(
 				task_id=task_id,
 				status="stored",
 				media_id=media_id,
@@ -317,7 +328,7 @@ class ContentManager:
 			file_size = extract_media_info(save_path, media_data.modality)[1]
 
 		# Add entry to database with source_type='dataset'
-		media_id = self.content_db.add_media_entry(
+		media_id = self.media.add_media_entry(
 			prompt_id=None,  # Dataset media is not tied to prompts
 			file_path=save_path,
 			modality=media_data.modality,
@@ -351,7 +362,7 @@ class ContentManager:
 			strategy: Sampling strategy ('random', 'least_used', 'oldest', 'newest')
 			modality: Optional modality filter ('image', 'video', 'audio')
 		"""
-		return self.content_db.sample_prompt_entries(
+		return self.prompts.sample_prompt_entries(
 			k=k,
 			remove=remove,
 			strategy=strategy,
@@ -360,7 +371,7 @@ class ContentManager:
 		)
 
 	def get_prompt_by_id(self, prompt_id: str) -> Optional[str]:
-		return self.content_db.get_prompt_by_id(prompt_id)
+		return self.prompts.get_prompt_by_id(prompt_id)
 
 	def sample_media_with_content(
 		self,
@@ -371,7 +382,7 @@ class ContentManager:
 		**kwargs,
 	) -> Optional[Dict[str, Any]]:
 		should_remove = remove_from_cache if remove_from_cache is not None else self.remove_on_sample
-		media_entries = self.content_db.sample_media_entries(
+		media_entries = self.media.sample_media_entries(
 			k=count,
 			modality=modality,
 			media_type=media_type,
@@ -448,7 +459,7 @@ class ContentManager:
 				returned, so e.g. video models do not get fed prompts that
 				were composed for image generation.
 		"""
-		prompt_entries = self.content_db.sample_prompt_entries(
+		prompt_entries = self.prompts.sample_prompt_entries(
 			k=k,
 			remove=remove,
 			strategy=strategy,
@@ -459,7 +470,7 @@ class ContentManager:
 		for prompt in prompt_entries:
 			if not prompt.source_media_id:
 				continue
-			media_entries = self.content_db.get_media_entries(media_id=prompt.source_media_id)
+			media_entries = self.media.get_media_entries(media_id=prompt.source_media_id)
 			if not media_entries:
 				continue
 			media_content = self.media_storage.retrieve_media(
@@ -479,7 +490,7 @@ class ContentManager:
 		if not self.enable_source_limits:
 			return results
 		try:
-			counts = self.content_db.get_source_counts()
+			counts = self.media.get_source_counts()
 			for source_type_str, sources in counts.items():
 				st = SourceType(source_type_str)
 				for source_name, count in sources.items():
@@ -502,14 +513,14 @@ class ContentManager:
 		if not col:
 			return 0
 
-		current = self.content_db.get_source_count(source_type, source_name)
+		current = self.media.get_source_count(source_type, source_name)
 		if current <= max_count:
 			return 0
 
 		to_remove = current - max_count
 		order_clause = 'created_at ASC' if self.prune_strategy in ('oldest', 'least_used') else 'RANDOM()'
 
-		with self.content_db._get_db_connection() as conn:
+		with self.db.connect() as conn:
 			cursor = conn.execute(
 				f"""
 				SELECT file_path FROM media
@@ -534,7 +545,7 @@ class ContentManager:
 
 		try:
 			if media_id and not file_path:
-				media_entry = self.content_db.get_media_entries(media_id=media_id)
+				media_entry = self.media.get_media_entries(media_id=media_id)
 				if not media_entry:
 					return False
 				file_path = media_entry[0].file_path
@@ -545,7 +556,7 @@ class ContentManager:
 				if not success:
 					return False
 
-			return self.content_db.delete_media_entry_by_file_path(file_path)
+			return self.media.delete_media_entry_by_file_path(file_path)
 
 		except Exception as e:
 			bt.logging.error(f"Error deleting media: {e}")
@@ -565,18 +576,18 @@ class ContentManager:
 		Returns:
 			List of MediaEntry objects matching the verification status
 		"""
-		return self.content_db.get_miner_media(verification_status=verification_status)
+		return self.media.get_miner_media(verification_status=verification_status)
 
 	def get_pending_verification_count(self) -> int:
 		"""Get count of media entries pending verification."""
-		return self.content_db.count_miner_media(verification_status="pending")
+		return self.media.count_miner_media(verification_status="pending")
 
 	def mark_miner_media_verified(self, media_id: str) -> bool:
-		return self.content_db.mark_miner_media_verified(media_id)
+		return self.media.mark_miner_media_verified(media_id)
 
 	def mark_miner_media_failed_verification(self, media_id: str) -> bool:
 		"""Mark miner media as failed verification."""
-		return self.content_db.mark_miner_media_failed_verification(media_id)
+		return self.media.mark_miner_media_failed_verification(media_id)
 
 	def record_challenge_outcome(
 		self,
@@ -590,7 +601,7 @@ class ContentManager:
 		media_id: Optional[str] = None,
 		created_at: Optional[float] = None,
 	) -> bool:
-		return self.content_db.record_challenge_outcome(
+		return self.challenges.record_outcome(
 			task_id=task_id,
 			uid=uid,
 			hotkey=hotkey,
@@ -609,7 +620,7 @@ class ContentManager:
 		failure_reason: Optional[str] = None,
 		media_id: Optional[str] = None,
 	) -> bool:
-		return self.content_db.update_challenge_outcome(
+		return self.challenges.update_outcome(
 			task_id=task_id,
 			status=status,
 			failure_reason=failure_reason,
@@ -618,7 +629,7 @@ class ContentManager:
 
 	def store_clip_embedding(self, media_id: str, embedding_blob: bytes) -> bool:
 		"""Store a CLIP embedding for a media entry (deep-feature duplicate detection)."""
-		return self.content_db.update_media_embedding(media_id, embedding_blob)
+		return self.media.update_media_embedding(media_id, embedding_blob)
 
 	def get_embeddings_for_duplicate_check(
 		self, exclude_ids: Optional[List[str]] = None, limit: int = 5000
@@ -633,7 +644,7 @@ class ContentManager:
 		Returns:
 			List of (media_id, clip_embedding_blob) tuples
 		"""
-		return self.content_db.get_stored_embeddings(exclude_ids=exclude_ids, limit=limit)
+		return self.media.get_stored_embeddings(exclude_ids=exclude_ids, limit=limit)
 
 	def get_unuploaded_media(
 		self, 
@@ -641,206 +652,55 @@ class ContentManager:
 		modality: str = None, 
 		source_type: str = None
 	) -> List[MediaEntry]:
-		return self.content_db.get_unuploaded_media(
+		return self.media.get_unuploaded_media(
 			limit=limit,
 			modality=modality,
 			source_type=source_type
 		)
 
 	def mark_media_uploaded(self, media_ids: List[str]) -> bool:
-		return self.content_db.mark_media_uploaded(media_ids)
+		return self.media.mark_media_uploaded(media_ids)
 
 	def mark_media_rewarded(self, media_ids: List[str]) -> bool:
 		"""Mark media entries as rewarded."""
-		return self.content_db.mark_media_rewarded(media_ids)
+		return self.media.mark_media_rewarded(media_ids)
 
 	def get_unrewarded_verified_miner_media(self, limit: int = 100) -> List[MediaEntry]:
 		"""Get verified miner media entries that haven't been rewarded yet."""
-		return self.content_db.get_unrewarded_verified_miner_media(limit=limit)
+		return self.media.get_unrewarded_verified_miner_media(limit=limit)
 
 	def get_recent_verified_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
 		"""Get verified miner media entries from the last N hours."""
-		return self.content_db.get_recent_verified_miner_media(lookback_hours=lookback_hours, limit=limit)
+		return self.media.get_recent_verified_miner_media(lookback_hours=lookback_hours, limit=limit)
 
 	def get_recent_failed_miner_media(self, lookback_hours: float = 2.0, limit: int = 1000) -> List[MediaEntry]:
 		"""Get miner media that failed verification in the last N hours."""
-		return self.content_db.get_recent_failed_miner_media(lookback_hours=lookback_hours, limit=limit)
+		return self.media.get_recent_failed_miner_media(lookback_hours=lookback_hours, limit=limit)
 
 	def get_verification_stats_last_n_hours(
 		self, lookback_hours: float = 2.0, limit: int = None
 	) -> Dict[str, Dict[str, Any]]:
 		"""
-		Get verification statistics for miner media in the last N hours: pass and fail
-		counts and pass rate. Includes both rewarded and unrewarded verified media.
-		Use for generator base rewards (eligibility = verified submission in last N hours).
+		Get verification statistics from challenge outcomes table only (hard cutover).
+		Per-modality counts (image/video) are included for split reward weighting.
 
 		Args:
 			lookback_hours: Number of hours to look back (default 2.0).
 			limit: Maximum number of entries per type to consider (default 1000).
 
 		Returns:
-			Dict mapping miner hotkey to verification stats: total_verified (passed),
-			total_failed (failed), total_evaluated, pass_rate, media_ids (verified only).
+			Dict mapping miner hotkey to verification stats, with per-modality breakdown.
 		"""
 		try:
 			limit_val = limit or 1000
-			outcome_stats = self.content_db.get_challenge_outcome_stats_last_n_hours(
+			return self.challenges.get_outcome_stats_last_n_hours(
 				lookback_hours=lookback_hours, limit=limit_val
 			)
-
-			verified_media = self.get_recent_verified_miner_media(
-				lookback_hours=lookback_hours, limit=limit_val
-			)
-			failed_media = self.get_recent_failed_miner_media(
-				lookback_hours=lookback_hours, limit=limit_val
-			)
-			if not verified_media and not failed_media and not outcome_stats:
-				bt.logging.debug(f"No verified or failed miner media in last {lookback_hours}h")
-				return {}
-			legacy_stats = self._build_verification_stats_from_verified_and_failed(
-				verified_media, failed_media
-			)
-
-			if outcome_stats:
-				bt.logging.info(
-					f"Retrieved challenge-outcome stats for {len(outcome_stats)} miners"
-				)
-				return self._merge_verification_stats(legacy_stats, outcome_stats)
-
-			return legacy_stats
 		except Exception as e:
 			bt.logging.error(f"Error getting verification stats for last {lookback_hours}h: {e}")
 			import traceback
 			bt.logging.error(traceback.format_exc())
 			return {}
-
-	def _build_verification_stats_from_verified_and_failed(
-		self,
-		verified_media: List[MediaEntry],
-		failed_media: List[MediaEntry],
-	) -> Dict[str, Dict[str, Any]]:
-		"""Build verification stats from verified and failed media (e.g. both from last N hours)."""
-		miner_stats = {}
-		for media in verified_media:
-			if not media.hotkey or not media.uid:
-				continue
-			hotkey = media.hotkey
-			if hotkey not in miner_stats:
-				miner_stats[hotkey] = {
-					"uid": media.uid,
-					"verified_media_ids": [],
-					"model_names": [],
-					"total_verified": 0,
-					"total_failed": 0,
-					"last_timestamp": media.created_at
-				}
-			miner_stats[hotkey]["verified_media_ids"].append(media.id)
-			if media.model_name:
-				miner_stats[hotkey]["model_names"].append(media.model_name)
-			miner_stats[hotkey]["total_verified"] += 1
-			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
-				miner_stats[hotkey]["last_timestamp"] = media.created_at
-		for media in failed_media:
-			if not media.hotkey or not media.uid:
-				continue
-			hotkey = media.hotkey
-			if hotkey not in miner_stats:
-				miner_stats[hotkey] = {
-					"uid": media.uid,
-					"verified_media_ids": [],
-					"model_names": [],
-					"total_verified": 0,
-					"total_failed": 0,
-					"last_timestamp": media.created_at
-				}
-			miner_stats[hotkey]["total_failed"] += 1
-			if media.created_at > miner_stats[hotkey]["last_timestamp"]:
-				miner_stats[hotkey]["last_timestamp"] = media.created_at
-
-		verification_stats = {}
-		for hotkey, stats in miner_stats.items():
-			verified = stats["total_verified"]
-			failed = stats["total_failed"]
-			total_evaluated = verified + failed
-			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
-			verification_stats[hotkey] = {
-				"uid": stats["uid"],
-				"total_verified": verified,
-				"total_submissions": total_evaluated,
-				"total_failed": failed,
-				"total_evaluated": total_evaluated,
-				"pass_rate": pass_rate,
-				"media_ids": stats["verified_media_ids"],
-				"last_timestamp": stats["last_timestamp"],
-				"model_names": stats.get("model_names", []),
-			}
-		bt.logging.info(f"Retrieved verification stats for {len(verification_stats)} miners")
-		return verification_stats
-
-	def _merge_verification_stats(
-		self,
-		legacy_stats: Dict[str, Dict[str, Any]],
-		outcome_stats: Dict[str, Dict[str, Any]],
-	) -> Dict[str, Dict[str, Any]]:
-		"""Merge legacy media-based stats with challenge-outcome stats.
-
-		Post-deployment, verified events appear in both sources (same CLIP
-		pass recorded in both media and outcome). Use max() to avoid
-		double-counting those.
-
-		Failed events partially overlap (CLIP fails) but outcome also tracks
-		pre-storage rejections that never create a media row. Use sum() so
-		pre-storage rejections are always counted — the CLIP-fail overlap
-		is a minor pessimism that self-resolves when the transition window
-		(≤4h lookback) elapses and outcome >= legacy for all event types.
-
-		Miners in only one source pass through unchanged.
-		"""
-		merged = {}
-		all_hotkeys = set(legacy_stats.keys()) | set(outcome_stats.keys())
-		for hotkey in all_hotkeys:
-			legacy = legacy_stats.get(hotkey, {})
-			outcome = outcome_stats.get(hotkey, {})
-
-			verified = max(
-				legacy.get("total_verified", 0),
-				outcome.get("total_verified", 0),
-			)
-			failed = (
-				legacy.get("total_failed", 0)
-				+ outcome.get("total_failed", 0)
-			)
-			total_evaluated = verified + failed
-			pass_rate = (verified / total_evaluated) if total_evaluated > 0 else 0.0
-
-			legacy_ids = legacy.get("media_ids", [])
-			outcome_ids = outcome.get("media_ids", [])
-			if len(outcome_ids) >= len(legacy_ids):
-				all_ids = outcome_ids
-			else:
-				all_ids = list(dict.fromkeys(legacy_ids + outcome_ids))
-
-			last_ts = max(
-				legacy.get("last_timestamp", 0) or 0,
-				outcome.get("last_timestamp", 0) or 0,
-			)
-
-			uid_legacy = legacy.get("uid")
-			uid_outcome = outcome.get("uid")
-			uid = uid_outcome if uid_outcome is not None else uid_legacy
-
-			merged[hotkey] = {
-				"uid": uid,
-				"total_verified": verified,
-				"total_submissions": total_evaluated,
-				"total_failed": failed,
-				"total_evaluated": total_evaluated,
-				"pass_rate": pass_rate,
-				"media_ids": all_ids,
-				"last_timestamp": last_ts,
-				"model_names": legacy.get("model_names", []) + outcome.get("model_names", []),
-			}
-		return merged
 
 	def upload_batch_to_huggingface(
 		self, 
@@ -881,7 +741,7 @@ class ContentManager:
 
 				for modality in modalities:
 					# First, get verified miner media up to batch size
-					verified_miner_media = self.content_db.get_unuploaded_media(
+					verified_miner_media = self.media.get_unuploaded_media(
 						limit=upload_batch_size, 
 						modality=modality, 
 						source_type='miner'
@@ -891,7 +751,7 @@ class ContentManager:
 					remaining_slots = max(0, upload_batch_size - len(verified_miner_media))
 					validator_media = []
 					if remaining_slots > 0:
-						validator_media = self.content_db.get_unuploaded_media(
+						validator_media = self.media.get_unuploaded_media(
 							limit=remaining_slots, 
 							modality=modality, 
 							source_type='generated'
@@ -967,7 +827,7 @@ class ContentManager:
 		Returns:
 			Dictionary with counts for each modality/media_type combination
 		"""
-		return self.content_db.get_dataset_media_counts()
+		return self.media.get_dataset_media_counts()
 
 	def get_source_count(self, source_type: SourceType, source_name: str) -> int:
 		"""
@@ -978,7 +838,7 @@ class ContentManager:
 		Returns:
 			Count of media items for this source
 		"""
-		return self.content_db.get_source_count(source_type, source_name)
+		return self.media.get_source_count(source_type, source_name)
 
 	def needs_more_data(self, source_type: SourceType, source_name: str) -> bool:
 		"""
@@ -1011,7 +871,7 @@ class ContentManager:
 			Tuple of (media_id, hamming_distance) for closest match, or None if no duplicate
 		"""
 		from gas.verification.duplicate_detection import check_duplicate_in_db
-		return check_duplicate_in_db(self.content_db, perceptual_hash, threshold, limit, prompt_id=prompt_id)
+		return check_duplicate_in_db(self.db, perceptual_hash, threshold, limit, prompt_id=prompt_id)
 
 	def cleanup_uploaded_media(
 		self,
@@ -1037,7 +897,7 @@ class ContentManager:
 
 		try:
 			while True:
-				media_deleted, prompts_deleted, file_paths = self.content_db.cleanup_uploaded_media(
+				media_deleted, prompts_deleted, file_paths = self.media.cleanup_uploaded_media(
 					min_age_hours=min_age_hours,
 					require_rewarded=require_rewarded,
 					batch_size=batch_size,

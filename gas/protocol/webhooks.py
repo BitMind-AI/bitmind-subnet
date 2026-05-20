@@ -369,24 +369,6 @@ def get_webhook_stats_tracker() -> WebhookStatsTracker:
     return _stats_tracker
 
 
-def print_webhook_stats():
-    """Print webhook stats summary to logs."""
-    get_webhook_stats_tracker().print_summary()
-
-
-def get_webhook_stats_json() -> Dict[str, Any]:
-    """Get webhook stats as a JSON-serializable dict."""
-    return get_webhook_stats_tracker().get_summary()
-
-
-def reset_webhook_stats():
-    """Reset all webhook stats."""
-    tracker = get_webhook_stats_tracker()
-    tracker._stats = {}
-    tracker._save_stats()
-    bt.logging.info("Webhook stats have been reset")
-
-
 def send_success_webhook(
     task: "GenerationTask",
     result: Dict[str, Any],

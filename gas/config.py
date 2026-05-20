@@ -336,21 +336,14 @@ def add_validator_args(parser):
         "--scoring.image-weight",
         type=float,
         help="Weight for image modality scoring",
-        default=0.6,
+        default=0.06,
     )
 
     parser.add_argument(
         "--scoring.video-weight",
         type=float,
         help="Weight for video modality scoring",
-        default=0.4,
-    )
-
-    parser.add_argument(
-        "--scoring.binary-weight",
-        type=float,
-        help="Weight for binary classification scoring",
-        default=0.75,
+        default=0.94,
     )
 
     parser.add_argument(
@@ -358,13 +351,6 @@ def add_validator_args(parser):
         type=str,
         help="Base URL for the benchmark API",
         default=os.environ.get("BENCHMARK_API_URL", "https://gas.bitmind.ai"),
-    )
-
-    parser.add_argument(
-        "--scoring.multiclass-weight",
-        type=float,
-        help="Weight for multiclass classification scoring",
-        default=0.25,
     )
 
     parser.add_argument(
@@ -468,8 +454,8 @@ def add_validator_args(parser):
     parser.add_argument(
         "--prompt-modalities",
         type=str,
-        help="Comma-separated modalities to generate prompts for (image,video). Default: video only",
-        default="video",
+        help="Comma-separated modalities to generate prompts for (image,video). Default: video,image",
+        default="video,image",
     )
 
 
@@ -522,8 +508,8 @@ def add_generation_service_args(parser):
     parser.add_argument(
         "--prompt-modalities",
         type=str,
-        help="Comma-separated modalities to generate prompts for (image,video). Default: video only",
-        default="video",
+        help="Comma-separated modalities to generate prompts for (image,video). Default: video,image",
+        default="video,image",
     )
 
     parser.add_argument(

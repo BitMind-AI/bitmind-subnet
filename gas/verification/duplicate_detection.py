@@ -642,7 +642,7 @@ def find_duplicates(
 
 
 def check_duplicate_in_db(
-    content_db,
+    db,
     new_hash: str,
     threshold: int = DEFAULT_HAMMING_THRESHOLD,
     crop_match_threshold: int = DEFAULT_CROP_RESISTANT_MATCH_THRESHOLD,
@@ -657,7 +657,7 @@ def check_duplicate_in_db(
     search structure (LSH, FAISS, etc.) instead of linear scan.
 
     Args:
-        content_db: ContentDB instance
+        db: An object with a .connect() method (ConnectionManager)
         new_hash: Hash to check (may include crop-resistant segments)
         threshold: Maximum Hamming distance for pHash duplicate
         crop_match_threshold: Minimum crop segment matches for duplicate
@@ -668,7 +668,7 @@ def check_duplicate_in_db(
         Tuple of (media_id, distance) for closest match, or None if no duplicate
     """
     try:
-        with content_db._get_db_connection() as conn:
+        with db.connect() as conn:
             if prompt_id:
                 cursor = conn.execute(
                     """
