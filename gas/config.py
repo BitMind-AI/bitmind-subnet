@@ -52,13 +52,6 @@ def add_args(parser):
     )
 
     parser.add_argument(
-        "--mock",
-        action="store_true",
-        help="Run in mock mode",
-        default=False,
-    )
-
-    parser.add_argument(
         "--autoupdate-off",
         action="store_false",
         dest="autoupdate",
@@ -175,13 +168,6 @@ def add_miner_args(parser):
         help="Interval (seconds) between task cleanup runs",
     )
 
-    parser.add_argument(
-        "--miner.worker-threads",
-        type=int,
-        default=2,
-        help="Number of worker threads for task processing",
-    )
-    
     # Webhook configuration
     parser.add_argument(
         "--miner.webhook-max-retries",
@@ -221,20 +207,6 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
-        "--dataset-download-interval",
-        type=int,
-        help="How often to download and extract datasets, measured in 12 second blocks (default: 720 = 2.4 hours)",
-        default=1800,
-    )
-
-    parser.add_argument(
-        "--wandb-restart-interval",
-        type=int,
-        help="How often we restart wandb run to avoid log truncation",
-        default=2000,
-    )
-
-    parser.add_argument(
         "--neuron.callback-port",
         type=int,
         help="Port for generative challenge callbacks (internal binding)",
@@ -249,31 +221,10 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
-        "--neuron.max-state-backup-hours",
-        type=float,
-        help="The oldest backup of validator state to load in the case of a failure to load most recent",
-        default=1,
-    )
-
-    parser.add_argument(
         "--neuron.miner-total-timeout",
         type=float,
         help="Total timeout for miner requests in seconds",
         default=240.0,
-    )
-
-    parser.add_argument(
-        "--neuron.miner-connect-timeout",
-        type=float,
-        help="TCP connection timeout for miner requests in seconds",
-        default=6.0,
-    )
-
-    parser.add_argument(
-        "--neuron.miner-sock-connect-timeout",
-        type=float,
-        help="Socket connection timeout for miner requests in seconds",
-        default=5.0,
     )
 
     parser.add_argument(
@@ -288,13 +239,6 @@ def add_validator_args(parser):
         type=float,
         help="Interval between heartbeat checks in seconds",
         default=60.0,
-    )
-
-    parser.add_argument(
-        "--neuron.lock-sleep-seconds",
-        type=float,
-        help="Sleep duration when lock is held in seconds",
-        default=5.0,
     )
 
     parser.add_argument(
@@ -319,20 +263,6 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
-        "--scoring.moving-average-alpha",
-        type=float,
-        help="Alpha for miner score EMA",
-        default=0.05,
-    )
-
-    parser.add_argument(
-        "--scoring.window",
-        type=int,
-        help="Number of recent predictions to consider in evaluation",
-        default=200,
-    )
-
-    parser.add_argument(
         "--scoring.image-weight",
         type=float,
         help="Weight for image modality scoring",
@@ -351,97 +281,6 @@ def add_validator_args(parser):
         type=str,
         help="Base URL for the benchmark API",
         default=os.environ.get("BENCHMARK_API_URL", "https://gas.bitmind.ai"),
-    )
-
-    parser.add_argument(
-        "--challenge.image-prob",
-        type=float,
-        help="Probability of selecting image modality for challenges",
-        default=0.5,
-    )
-
-    parser.add_argument(
-        "--challenge.video-prob",
-        type=float,
-        help="Probability of selecting video modality for challenges",
-        default=0.5,
-    )
-
-    parser.add_argument(
-        "--challenge.real-prob",
-        type=float,
-        help="Probability of selecting real media for challenges",
-        default=0.4,
-    )
-
-    parser.add_argument(
-        "--challenge.synthetic-prob",
-        type=float,
-        help="Probability of selecting synthetic media for challenges",
-        default=0.3,
-    )
-
-    parser.add_argument(
-        "--challenge.semisynthetic-prob",
-        type=float,
-        help="Probability of selecting semisynthetic media for challenges",
-        default=0.3,
-    )
-
-    parser.add_argument(
-        "--challenge.generator-prob",
-        type=float,
-        help="Probability of selecting generator content for synthetic and semisynthetic challenges",
-        default=0.5,
-    )
-
-    parser.add_argument(
-        "--challenge.multi-video-prob",
-        type=float,
-        help="Probability of stitching together two videos of the same media type",
-        default=0.2,
-    )
-
-    parser.add_argument(
-        "--challenge.min-clip-duration",
-        type=float,
-        help="Minimum video clip duration in seconds",
-        default=1.0,
-    )
-
-    parser.add_argument(
-        "--challenge.max-clip-duration",
-        type=float,
-        help="Maximum video clip duration in seconds",
-        default=6.0,
-    )
-
-    parser.add_argument(
-        "--challenge.max-frames",
-        type=int,
-        help="Maximum number of video frames to sample for a challenge",
-        default=24,
-    )
-
-    parser.add_argument(
-        "--verification.temporal-phash-jump-threshold",
-        type=int,
-        help="Hamming distance threshold for detecting frame jumps in tampered videos (default: 30)",
-        default=30,
-    )
-
-    parser.add_argument(
-        "--verification.temporal-tamper-ratio",
-        type=float,
-        help="Fraction of frames that must be jumps to flag as tampered (default: 0.10)",
-        default=0.10,
-    )
-
-    parser.add_argument(
-        "--verification.embedding-dup-threshold",
-        type=float,
-        help="Cosine similarity threshold for CLIP embedding duplicate detection (default: 0.96)",
-        default=0.96,
     )
 
     parser.add_argument(
@@ -467,35 +306,6 @@ def add_generation_service_args(parser):
         type=str,
         help="Device to use for generation models (cuda/cpu)",
         default="cuda",
-    )
-
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        help="Batch size for generation",
-        default=1,
-    )
-
-    parser.add_argument(
-        "--tasks",
-        type=str,
-        nargs="+",
-        help="List of generation tasks to run",
-        default=["prompt", "t2i", "i2i", "t2v", "i2v"],
-    )
-
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        help="Maximum number of retries for generation",
-        default=3,
-    )
-
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        help="Timeout for generation operations in seconds",
-        default=300,
     )
 
     parser.add_argument(
@@ -576,23 +386,9 @@ def add_data_service_args(parser):
     )
 
     parser.add_argument(
-        "--dataset-videos-per-zip",
-        type=int,
-        help="Number of videos to extract per zip file (default: 50)",
-        default=200,
-    )
-
-    parser.add_argument(
         "--dataset-parquet-per-dataset",
         type=int,
         help="Number of parquet files to download per dataset (default: 5)",
-        default=2,
-    )
-
-    parser.add_argument(
-        "--dataset-zips-per-dataset",
-        type=int,
-        help="Number of zip files to download per dataset (default: 2)",
         default=2,
     )
 
@@ -607,7 +403,7 @@ def add_data_service_args(parser):
         "--upload-image-threshold",
         type=int,
         help="Minimum number of unuploaded image files to trigger an image upload cycle",
-        default=1000,
+        default=50,
     )
 
     parser.add_argument(
