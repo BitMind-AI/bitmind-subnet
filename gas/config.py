@@ -403,7 +403,7 @@ def add_data_service_args(parser):
         "--upload-image-threshold",
         type=int,
         help="Minimum number of unuploaded image files to trigger an image upload cycle",
-        default=200,
+        default=50,
     )
 
     parser.add_argument(
