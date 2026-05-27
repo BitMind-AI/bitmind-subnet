@@ -198,26 +198,28 @@ def get_generator_base_rewards(verification_stats):
         return {}, []
 
 
-def get_generator_reward_multipliers(
+def get_generator_fool_bonuses(
     generator_results, 
     metagraph,
     generator_liveness: Optional[Dict[str, float]] = None,
     max_inactive_hours: int = 24,
 ):
     """
-    Process generator results to extract rewards from fool counts.
-    
+    Compute fool-rate bonuses for generators.  Returns a bonus in [0, 2] that
+    is applied as (1 + bonus) to base verification rewards, so miners with zero
+    fool rate still receive their base rewards and fooling detectors adds extra.
+
     Optionally filters out inactive generators based on liveness tracking.
 
     Args:
         generator_results: List of GeneratorResult objects from API
         metagraph: Bittensor metagraph for SS58 to UID mapping
         generator_liveness: Optional dict mapping hotkey to last activity timestamp.
-                           If provided, generators not seen within max_inactive_hours will get 0 rewards.
-        max_inactive_hours: Maximum hours of inactivity before generator is considered inactive (default: 48)
+                           If provided, generators not seen within max_inactive_hours are excluded.
+        max_inactive_hours: Maximum hours of inactivity (default: 24)
 
     Returns:
-        dict: Mapping of UID to reward score for generators
+        dict: Mapping of UID to fool-rate bonus (0.0–2.0)
     """    
     rewards = {}
     ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
@@ -299,13 +301,13 @@ def get_generator_reward_multipliers(
                         # Penalize very small sample sizes
                         sample_size_multiplier = max(0.5, total_count / reference_count)
 
-                    # Final reward combines fool rate with sample size bonus
-                    base_reward = fool_rate * sample_size_multiplier
-                    rewards[uid] = max(0, min(2.0, base_reward))  # Allow rewards up to 2.0 for high sample sizes
+                    # Fool-rate bonus — added on top of base rewards as (1 + bonus)
+                    fool_bonus = fool_rate * sample_size_multiplier
+                    rewards[uid] = max(0.0, min(2.0, fool_bonus))
 
                     bt.logging.debug(f"Generator {ss58_address[:8]}... UID {uid}: fool_rate={fool_rate:.3f}, "
                                    f"sample_size={total_count}, sample_size_multiplier={sample_size_multiplier:.3f}, "
-                                   f"final_multiplier={rewards[uid]:.3f}")
+                                   f"fool_bonus={rewards[uid]:.3f}")
                 else:
                     bt.logging.warning(f"Zero total count for generator {ss58_address}")
 
