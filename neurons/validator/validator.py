@@ -32,7 +32,7 @@ from gas.evaluation import (
     GenerativeChallengeManager,
     MinerTypeTracker,
     get_generator_base_rewards,
-    get_generator_reward_multipliers,
+    get_generator_fool_bonuses,
 )
 
 try:
@@ -287,32 +287,26 @@ class Validator(BaseNeuron):
             if generator_liveness:
                 bt.logging.debug(f"Using liveness data for {len(generator_liveness)} generators")
         
-        reward_multipliers = get_generator_reward_multipliers(
+        fool_bonuses = get_generator_fool_bonuses(
             generator_results, 
             self.metagraph,
             generator_liveness=generator_liveness,
             max_inactive_hours=max_inactive_hours,
         )
-        # HOTFIX: default fool-rate fallback lowered from 0.01 to 0.005.
-        DEFAULT_FOOL_RATE_FALLBACK = 0.005
-        all_generator_uids = set(generator_base_rewards.keys()) | set(reward_multipliers.keys())
-        if not reward_multipliers:
-            bt.logging.warning(
-                f"No benchmark multipliers; applying default fool rate "
-                f"{DEFAULT_FOOL_RATE_FALLBACK} to {len(all_generator_uids)} generators"
-            )
+        all_generator_uids = set(generator_base_rewards.keys()) | set(fool_bonuses.keys())
 
-        # Combine per-modality base rewards with fool-rate multiplier.
+        # Combine per-modality base rewards with fool-rate bonus (1 + bonus).
+        # Base rewards always count; fool rate adds a bonus on top.
         # Image and video contributions are weighted independently via config.
         image_weight = self.config.scoring.image_weight
         video_weight = self.config.scoring.video_weight
         rewards = {}
         for uid in all_generator_uids:
             base = generator_base_rewards.get(uid, {"image": 0, "video": 0})
-            mult = reward_multipliers.get(uid, DEFAULT_FOOL_RATE_FALLBACK)
+            bonus = fool_bonuses.get(uid, 0.0)
             rewards[uid] = (
                 image_weight * base["image"] + video_weight * base["video"]
-            ) * mult
+            ) * (1.0 + bonus)
         bt.logging.debug(
             f"Image weight: {image_weight}, Video weight: {video_weight}"
         )
