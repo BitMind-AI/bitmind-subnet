@@ -226,7 +226,7 @@ class ContentManager:
 			)
 			self.challenges.update_outcome(
 				task_id=task_id,
-				status="verified",
+				status="stored",
 				media_id=media_id,
 			)
 

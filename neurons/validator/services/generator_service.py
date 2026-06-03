@@ -245,7 +245,8 @@ class GeneratorService:
                     break
 
                 self._run_job({"kind": "gen_tps", "args": {"k": self.config.tps_batch_size}})
-                self._run_job({"kind": "gen_local", "args": {"k": self.gen_batch_size}})
+                # gen_local temporarily disabled 
+                # self._run_job({"kind": "gen_local", "args": {"k": self.gen_batch_size}})
                 self._run_verification()
 
             except Exception as e:
