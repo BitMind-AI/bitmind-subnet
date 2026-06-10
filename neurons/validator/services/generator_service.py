@@ -446,6 +446,37 @@ class GeneratorService:
                 continue
         return {"count": 0, "items": []}
 
+    def _recent_settings_pool(self, limit: int = 200) -> list:
+        """Empirical pool of scene settings from recent prompts' scene_json.
+
+        Used by the scene-remix path so resampled settings follow the
+        real-world distribution of observed locations rather than a
+        hardcoded list. Returns [] on any failure (remix falls back to its
+        built-in defaults).
+        """
+        import json as _json
+
+        try:
+            with self.content_manager.db.connect() as conn:
+                rows = conn.execute(
+                    "SELECT scene_json FROM prompts "
+                    "WHERE scene_json IS NOT NULL "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            pool = []
+            for (blob,) in rows:
+                try:
+                    setting = (_json.loads(blob).get("setting") or "").strip()
+                    if setting:
+                        pool.append(setting)
+                except Exception:
+                    continue
+            return pool
+        except Exception as e:
+            bt.logging.debug(f"[GENERATOR-SERVICE] settings pool unavailable: {e}")
+            return []
+
     def _active_prompt_modalities(self) -> set:
         raw = getattr(self.config, 'prompt_modalities', 'video')
         mods = set()
@@ -503,6 +534,30 @@ class GeneratorService:
             return 0
 
         # ------------------------------------------------------------------
+        # Phase 2b: Scene remix — append semi-synthetic variants for ~25%
+        # of successfully extracted scenes. Breaks scraper-distribution
+        # inheritance while keeping most of the real scene's structure.
+        # ------------------------------------------------------------------
+        import random as _random
+
+        from gas.generation.prompts.scene_remix import remix
+
+        rng = _random.Random()
+        setting_pool = self._recent_settings_pool()
+        origins = ["vlm"] * len(scenes)
+        remix_sources = [
+            (i, s) for i, s in enumerate(scenes) if s is not None
+        ]
+        n_remix = max(0, int(len(remix_sources) * 0.25))
+        for i, source_scene in rng.sample(remix_sources, n_remix) if n_remix else []:
+            try:
+                scenes.append(remix(source_scene, rng, setting_pool=setting_pool))
+                items.append(items[i])  # same source media row
+                origins.append("remix")
+            except Exception as e:
+                bt.logging.warning(f"Scene remix failed: {e}")
+
+        # ------------------------------------------------------------------
         # Phase 3: LLM stage — compose prompts from cached scenes (LLM only)
         # ------------------------------------------------------------------
         # Sample the committed per-prompt axes (register, camera, length,
@@ -519,6 +574,10 @@ class GeneratorService:
             else {}
             for scene in scenes
         ]
+        # Tag remixed scenes so the audit can separate the two populations.
+        for scene_specs, origin in zip(specs, origins):
+            for spec in scene_specs.values():
+                spec.origin = origin
         prompts_list = self.prompt_generator.compose_prompts_from_scenes(
             scenes, specs=specs
         )
@@ -554,7 +613,8 @@ class GeneratorService:
                     generated += 1
 
         bt.logging.info(
-            f"[GENERATOR-SERVICE] Added {generated} prompts to database"
+            f"[GENERATOR-SERVICE] Added {generated} prompts to database "
+            f"({origins.count('vlm')} vlm + {origins.count('remix')} remix scenes)"
             + (f" ({skipped_dups} near-duplicates skipped)" if skipped_dups else "")
         )
         return generated
