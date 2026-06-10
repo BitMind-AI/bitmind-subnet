@@ -54,6 +54,7 @@ from transformers import (
 )
 
 from gas.generation.prompts.register_sampler import PromptSpec, sample_spec
+from gas.generation.prompts.prompt_qc import validate as qc_validate
 from gas.generation.prompts.scene import SceneDescription, extract_scene_with_vlm
 from gas.types import Modality
 
@@ -515,6 +516,27 @@ class PromptGenerator:
 
         user = self._build_user_message(scene, prior, length_spec, spec=spec)
 
+        text = self._generate_once(system, user, max_new_tokens, temperature)
+        ok, reason = qc_validate(text, spec)
+        if not ok:
+            bt.logging.debug(f"Prompt QC reject ({kind}): {reason}; retrying once")
+            retry_user = (
+                user
+                + f"\n\nPrevious attempt rejected: {reason}. "
+                "Fix exactly that problem and output the paragraph only."
+            )
+            text = self._generate_once(system, retry_user, max_new_tokens, temperature)
+            ok, reason = qc_validate(text, spec)
+            if not ok:
+                raise ValueError(f"Prompt failed QC twice ({kind}): {reason}")
+
+        prior.append(text)
+        return text
+
+    def _generate_once(
+        self, system: str, user: str, max_new_tokens: int, temperature: float
+    ) -> str:
+        """One LLM call + cleanup. Split out so the QC retry path can reuse it."""
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -530,9 +552,7 @@ class PromptGenerator:
             return_full_text=False,
             pad_token_id=self.llm.tokenizer.eos_token_id,
         )
-        text = self._clean_output(out[0]["generated_text"])
-        prior.append(text)
-        return text
+        return self._clean_output(out[0]["generated_text"])
 
     @staticmethod
     def _build_user_message(

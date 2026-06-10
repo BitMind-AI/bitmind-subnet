@@ -468,6 +468,7 @@ class GeneratorService:
         peak VRAM at ~60 GB instead of ~69 GB.
         """
         generated = 0
+        skipped_dups = 0
 
         # ------------------------------------------------------------------
         # Phase 1: Collect images for the batch
@@ -537,7 +538,7 @@ class GeneratorService:
             )
             for modality, prompt in prompts.items():
                 spec = scene_specs.get(modality)
-                self.content_manager.write_prompt(
+                prompt_id = self.content_manager.write_prompt(
                     content=prompt,
                     source_media_id=item["id"],
                     modality=modality.value,
@@ -547,9 +548,15 @@ class GeneratorService:
                     scene_json=scene_blob,
                     spec_json=_json.dumps(spec.to_dict()) if spec else None,
                 )
-                generated += 1
+                if prompt_id is None:
+                    skipped_dups += 1
+                else:
+                    generated += 1
 
-        bt.logging.info(f"[GENERATOR-SERVICE] Added {generated} prompts to database")
+        bt.logging.info(
+            f"[GENERATOR-SERVICE] Added {generated} prompts to database"
+            + (f" ({skipped_dups} near-duplicates skipped)" if skipped_dups else "")
+        )
         return generated
 
     def _models_for_modality(self, modality: Modality) -> list:

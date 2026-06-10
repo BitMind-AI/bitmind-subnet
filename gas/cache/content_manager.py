@@ -79,7 +79,8 @@ class ContentManager:
 		event_count: Optional[int] = None,
 		scene_json: Optional[str] = None,
 		spec_json: Optional[str] = None,
-	) -> str:
+	) -> Optional[str]:
+		"""Write a prompt; returns its id, or None if rejected as a near-duplicate."""
 		try:
 			prompt_id = self.prompts.add_prompt_entry(
 				content=content,
