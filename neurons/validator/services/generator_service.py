@@ -504,18 +504,48 @@ class GeneratorService:
         # ------------------------------------------------------------------
         # Phase 3: LLM stage — compose prompts from cached scenes (LLM only)
         # ------------------------------------------------------------------
-        prompts_list = self.prompt_generator.compose_prompts_from_scenes(scenes)
+        # Sample the committed per-prompt axes (register, camera, length,
+        # events) OUTSIDE the LLM so prompt diversity is explicit and
+        # auditable rather than left to the composer's collapsed prior.
+        from gas.generation.prompts.register_sampler import sample_spec
+
+        specs = [
+            {
+                Modality.IMAGE: sample_spec("image"),
+                Modality.VIDEO: sample_spec("video"),
+            }
+            if scene is not None
+            else {}
+            for scene in scenes
+        ]
+        prompts_list = self.prompt_generator.compose_prompts_from_scenes(
+            scenes, specs=specs
+        )
         self.prompt_generator.unload_llm()
 
         # ------------------------------------------------------------------
         # Phase 4: Write results to database
         # ------------------------------------------------------------------
-        for item, prompts in zip(items, prompts_list):
+        import json as _json
+        from dataclasses import asdict as _asdict
+
+        for item, scene, scene_specs, prompts in zip(items, scenes, specs, prompts_list):
+            scene_blob = (
+                _json.dumps(_asdict(scene), ensure_ascii=False)
+                if scene is not None
+                else None
+            )
             for modality, prompt in prompts.items():
+                spec = scene_specs.get(modality)
                 self.content_manager.write_prompt(
                     content=prompt,
                     source_media_id=item["id"],
                     modality=modality.value,
+                    register=spec.register if spec else None,
+                    length_band=spec.length_band if spec else None,
+                    event_count=spec.event_count if spec else None,
+                    scene_json=scene_blob,
+                    spec_json=_json.dumps(spec.to_dict()) if spec else None,
                 )
                 generated += 1
 

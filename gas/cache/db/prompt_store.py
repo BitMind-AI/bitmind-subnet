@@ -26,8 +26,19 @@ class PromptStore:
         content_type: str = "prompt",
         source_media_id: Optional[str] = None,
         modality: Optional[str] = None,
+        register: Optional[str] = None,
+        length_band: Optional[str] = None,
+        event_count: Optional[int] = None,
+        scene_json: Optional[str] = None,
+        spec_json: Optional[str] = None,
     ) -> str:
-        """Insert a prompt, returning its id (or existing id if duplicate)."""
+        """Insert a prompt, returning its id (or existing id if duplicate).
+
+        The optional spec fields (register/length_band/event_count/scene_json/
+        spec_json) record which sampled PromptSpec and VLM scene produced the
+        prompt, making prompt diversity auditable
+        (scripts/prompt_diversity_report.py).
+        """
         import sqlite3
 
         prompt_id = str(uuid.uuid4())
@@ -37,10 +48,26 @@ class PromptStore:
             try:
                 conn.execute(
                     """
-                    INSERT INTO prompts (id, content, content_type, modality, created_at, source_media_id)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO prompts (
+                        id, content, content_type, modality, created_at,
+                        source_media_id, register, length_band, event_count,
+                        scene_json, spec_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (prompt_id, content, content_type, modality, created_at, source_media_id),
+                    (
+                        prompt_id,
+                        content,
+                        content_type,
+                        modality,
+                        created_at,
+                        source_media_id,
+                        register,
+                        length_band,
+                        event_count,
+                        scene_json,
+                        spec_json,
+                    ),
                 )
                 conn.commit()
                 return prompt_id
