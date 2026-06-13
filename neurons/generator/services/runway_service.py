@@ -28,13 +28,24 @@ DEFAULT_RATIO = "1280:720"
 DEFAULT_DURATION_VEO = 8
 
 # Runway POST /v1/text_to_video — accepted ``model`` values (API contract).
+#
+# C2PA status (confirmed via live test, 2026-06-14):
+#   veo3, veo3.1, veo3.1_fast  — signed by Google LLC; validators accept ✓
+#   seedance2, seedance2_fast  — signed by Byteplus Pte. Ltd.; validators accept ✓
+#   gen4.5                     — claimSignature.mismatch; validators REJECT ✗
+#                                Runway's signing infra bug — re-test after Runway fixes it.
 TEXT_TO_VIDEO_MODELS: frozenset[str] = frozenset(
-    {"gen4.5", "veo3.1", "veo3.1_fast", "veo3"}
+    {"gen4.5", "veo3.1", "veo3.1_fast", "veo3", "seedance2", "seedance2_fast"}
 )
 
 VEO31_RATIOS = frozenset({"1280:720", "720:1280", "1080:1920", "1920:1080"})
 GEN45_RATIOS = frozenset({"1280:720", "720:1280"})
 VEO_DURATIONS = (4, 6, 8)
+# seedance2 supports up to 1080p; seedance2_fast caps at 720p (no 1080p).
+# Both support 4–15 s and the same set of aspect ratios.
+SEEDANCE_RATIOS = frozenset({"1280:720", "720:1280", "1080:1920", "1920:1080", "1080:1080"})
+SEEDANCE_DURATION_MIN = 4
+SEEDANCE_DURATION_MAX = 15
 
 
 def resolve_runway_api_key() -> str | None:
@@ -292,6 +303,23 @@ class RunwayService(BaseGenerationService):
                 "ratio": ratio,
                 "duration": 8,
             }
+
+        if model in ("seedance2", "seedance2_fast"):
+            ratio = self._pick_ratio(
+                params.get("ratio", DEFAULT_RATIO), SEEDANCE_RATIOS, DEFAULT_RATIO
+            )
+            dur = max(SEEDANCE_DURATION_MIN, min(SEEDANCE_DURATION_MAX, int(params.get("duration", 5))))
+            kwargs = {
+                "model": model,
+                "prompt_text": prompt,
+                "ratio": cast(Any, ratio),
+                "duration": dur,
+            }
+            if "audio" in params:
+                kwargs["audio"] = bool(params["audio"])
+            if "seed" in params:
+                kwargs["seed"] = int(params["seed"])
+            return kwargs
 
         # Exhaustive if TEXT_TO_VIDEO_MODELS stays in sync with API
         raise AssertionError(f"Unhandled canonical model {model!r}")

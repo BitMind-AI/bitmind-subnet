@@ -21,17 +21,16 @@ GENERATOR_MODEL_PRICES: Dict[str, float] = {
     "google/veo-3.1-fast":  0.08,
     "google/veo-3.1":       0.20,
     # ByteDance Seedance (C2PA: params.model_name — variant IS exposed)
-    "dreamina-seedance-2-0-fast":  0.05,
-    "dreamina-seedance-2-0":       0.12,
-    "dreamina-seedance-1-5-pro":   0.25,
-    # Runway proprietary models (C2PA: softwareAgent = "RunwayML Video Generation")
-    # All share the same C2PA signature; variant is not exposed.
-    # Keyed at cheapest variant (gen3a_turbo/gen4_turbo/act_two, 5 credits/s).
-    # Full Runway pricing at ~$0.01/credit:
-    #   gen4.5 (12cr/s)  gen4_turbo (5cr/s)  gen4_aleph (15cr/s)
-    #   gen3a_turbo (5cr/s)  act_two (5cr/s)
-    # Runway-resold Veo models return None (same as Google Veo) → baseline.
-    "RunwayML": 0.05,
+    # Pricing is per-token; figures are 720p-with-audio references (USD/s).
+    # Covers both OpenRouter (bytedance/*) and Runway (seedance2/seedance2_fast) —
+    # both route through ByteDance's own C2PA signing (sig issuer: Byteplus Pte. Ltd.).
+    # Confirmed via live test: seedance-1-5-pro has NO C2PA on OpenRouter and is
+    # not offered on Runway — only the 2.0 variants are validator-eligible.
+    "dreamina-seedance-2-0-fast":  0.12,   # ~$0.121/s at 720p
+    "dreamina-seedance-2-0":       0.15,   # ~$0.151/s at 720p
+    # Runway gen4.5: C2PA manifest present but claimSignature.mismatch — validators
+    # reject all gen4.5 content until Runway fixes their signing infra.
+    # "RunwayML": 0.05,  # re-enable when gen4.5 signature is fixed
 }
 
 # Cheapest model price — all multipliers are relative to this.
