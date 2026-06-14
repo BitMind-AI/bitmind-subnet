@@ -103,9 +103,11 @@ def remix(
         stub_bits.append(f"in {new_setting}")
     updates["caption"] = " ".join(stub_bits) + "."
 
-    # Observed cues belong to the original pixels; a remixed context can
-    # keep dynamic candidates (they travel with the subject) but observed
-    # motion cues may contradict the new context.
+    # Observed cues and plausible_events are both grounded in the original
+    # pixels; a remixed context (different time of day, weather, or
+    # setting) can make them misleading.  Dynamic candidates travel with
+    # the subject and stay.
     updates["observed_motion_cues"] = []
+    updates["plausible_events"] = []
 
     return dc_replace(scene, **updates)
