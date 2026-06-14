@@ -141,9 +141,9 @@ PLAIN_BANNED_PHRASES: Tuple[str, ...] = (
 
 # Length bands: (probability, (min_words, max_words))
 _LENGTH_BANDS: Dict[str, Tuple[float, Tuple[int, int]]] = {
-    "short": (0.25, (50, 90)),
-    "medium": (0.45, (90, 140)),
-    "long": (0.30, (140, 210)),
+    "short": (0.25, (80, 130)),
+    "medium": (0.45, (130, 180)),
+    "long": (0.30, (180, 240)),
 }
 
 # Event count distribution for video prompts.
