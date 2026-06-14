@@ -388,18 +388,25 @@ class PromptGenerator:
                 Modality.IMAGE: sample_spec("image"),
                 Modality.VIDEO: sample_spec("video"),
             }
+            result = {}
             try:
-                image_prompt = self._compose(
+                result[Modality.IMAGE] = self._compose(
                     scene, kind="image", spec=scene_specs.get(Modality.IMAGE)
                 )
-                video_prompt = self._compose(
+            except Exception as e:
+                bt.logging.warning(f"LLM composition failed for scene (image): {e}")
+            try:
+                result[Modality.VIDEO] = self._compose(
                     scene, kind="video", spec=scene_specs.get(Modality.VIDEO)
                 )
-                self._log_generated_prompts(scene, image_prompt, video_prompt)
-                results.append({Modality.IMAGE: image_prompt, Modality.VIDEO: video_prompt})
             except Exception as e:
-                bt.logging.warning(f"LLM composition failed for scene: {e}")
-                results.append({})
+                bt.logging.warning(f"LLM composition failed for scene (video): {e}")
+            self._log_generated_prompts(
+                scene,
+                result.get(Modality.IMAGE, ""),
+                result.get(Modality.VIDEO, ""),
+            )
+            results.append(result)
         return results
 
     # ------------------------------------------------------------------
