@@ -24,14 +24,14 @@ VIDEO_API_BASE = "https://openrouter.ai/api/v1/videos"
 #   kwaivgi/kling-v3.0-pro, kwaivgi/kling-v3.0-std, kwaivgi/kling-video-o1
 #   alibaba/wan-2.6, alibaba/wan-2.7
 #   minimax/hailuo-2.3
+#   bytedance/seedance-1-5-pro  — no JUMBF data in output, confirmed via live test
 #
 # Disabled (broken cert chain — can't be fixed with trust anchors):
 #   openai/sora-2-pro  — self-signed end-entity cert (CA=false), c2pa-rs rejects it
 #
 # Enabled (produces verifiable C2PA content):
 #   google/veo-3.1, google/veo-3.1-fast, google/veo-3.1-lite  — Google C2PA Root CA G3
-#   bytedance/seedance-2.0, bytedance/seedance-2.0-fast        — GlobalSign R45 chain
-#   bytedance/seedance-1-5-pro                                  — GlobalSign R45 chain
+#   bytedance/seedance-2.0, bytedance/seedance-2.0-fast        — GlobalSign R45 chain (Byteplus Pte. Ltd.)
 VIDEO_MODELS: Dict[str, Dict[str, Any]] = {
     "google/veo-3.1": {
         "durations": [4, 6, 8],
@@ -69,14 +69,6 @@ VIDEO_MODELS: Dict[str, Dict[str, Any]] = {
         "durations": list(range(4, 16)),
         "ratios": ["1:1", "3:4", "9:16", "4:3", "16:9", "21:9", "9:21"],
         "resolutions": ["480p", "720p"],
-        "generate_audio": True,
-        "supports_seed": True,
-        "frame_images": ["first_frame", "last_frame"],
-    },
-    "bytedance/seedance-1-5-pro": {
-        "durations": list(range(4, 13)),
-        "ratios": ["1:1", "3:4", "9:16", "9:21", "4:3", "16:9", "21:9"],
-        "resolutions": ["480p", "720p", "1080p"],
         "generate_audio": True,
         "supports_seed": True,
         "frame_images": ["first_frame", "last_frame"],
