@@ -122,16 +122,20 @@ class GenerativeChallengeManager:
             )
             return
 
-        # Assign random modality per miner, cycling prompts within each pool
+        # Assign random modality per miner, cycling prompts within each pool.
+        # Only modalities with non-empty pools are eligible — avoids silently
+        # skipping miners when one modality has no cached prompts.
         tasks = []
         modality_counters = {m: 0 for m in available}
         for uid in miner_uids:
-            mod = random.choice(available)
+            mods_with_prompts = [m for m in available if prompt_pools[m]]
+            if not mods_with_prompts:
+                break
+            mod = random.choice(mods_with_prompts)
             pool = prompt_pools[mod]
-            if pool:
-                ix = modality_counters[mod] % len(pool)
-                modality_counters[mod] += 1
-                tasks.append(self.send_generative_request(uid, pool[ix], mod))
+            ix = modality_counters[mod] % len(pool)
+            modality_counters[mod] += 1
+            tasks.append(self.send_generative_request(uid, pool[ix], mod))
 
         await asyncio.gather(*tasks)
 
