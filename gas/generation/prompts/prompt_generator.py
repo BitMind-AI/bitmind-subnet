@@ -519,7 +519,10 @@ class PromptGenerator:
 
         if spec is not None:
             # ~1.5 tokens/word headroom above the band ceiling.
-            max_new_tokens = min(max_new_tokens, int(spec.length_words[1] * 1.5) + 40)
+            # The spec-derived budget replaces the legacy cap (which was
+            # sized for a single 60-120 image / 100-180 video band and
+            # would truncate long-band compositions).
+            max_new_tokens = int(spec.length_words[1] * 1.5) + 40
 
         user = self._build_user_message(scene, prior, length_spec, spec=spec)
 
