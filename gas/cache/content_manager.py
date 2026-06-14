@@ -74,12 +74,23 @@ class ContentManager:
 		content: str,
 		source_media_id: Optional[str] = None,
 		modality: Optional[str] = None,
-	) -> str:
+		register: Optional[str] = None,
+		length_band: Optional[str] = None,
+		event_count: Optional[int] = None,
+		scene_json: Optional[str] = None,
+		spec_json: Optional[str] = None,
+	) -> Optional[str]:
+		"""Write a prompt; returns its id, or None if rejected as a near-duplicate."""
 		try:
 			prompt_id = self.prompts.add_prompt_entry(
 				content=content,
 				source_media_id=source_media_id,
 				modality=modality,
+				register=register,
+				length_band=length_band,
+				event_count=event_count,
+				scene_json=scene_json,
+				spec_json=spec_json,
 			)
 			bt.logging.debug(f"Added prompt (modality={modality}) to database with ID: {prompt_id}")
 			return prompt_id

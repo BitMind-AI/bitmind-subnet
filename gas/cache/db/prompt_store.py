@@ -1,5 +1,6 @@
 """PromptStore — CRUD and sampling for the prompts table."""
 
+import re
 import time
 import uuid
 from typing import List, Dict, Optional, Tuple, Any
@@ -13,8 +14,47 @@ from gas.cache.db.connection import ConnectionManager
 class PromptStore:
     """Data access for the ``prompts`` table."""
 
+    # Near-duplicate guard: a new prompt is rejected when its 5-gram Jaccard
+    # similarity against any of the most recent prompts in the same modality
+    # exceeds this threshold. Catches paraphrase-level repeats that the
+    # UNIQUE(content, ...) constraint misses. 0.45 empirically: two word
+    # substitutions in a ~35-word prompt already drop 5-gram Jaccard to ~0.5,
+    # while genuinely distinct prompts score near 0.
+    NEAR_DUP_JACCARD = 0.45
+    NEAR_DUP_LOOKBACK = 200
+
     def __init__(self, db: ConnectionManager):
         self.db = db
+
+    @staticmethod
+    def _shingles(text: str, n: int = 5) -> set:
+        tokens = re.findall(r"[a-z']+", text.lower())
+        if len(tokens) < n:
+            return {tuple(tokens)}
+        return {tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1)}
+
+    def _is_near_duplicate(self, content: str, modality: Optional[str]) -> bool:
+        """True when content is a paraphrase-level repeat of a recent prompt."""
+        new_sh = self._shingles(content)
+        if not new_sh:
+            return False
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT content FROM prompts
+                WHERE modality IS ?
+                ORDER BY created_at DESC LIMIT ?
+                """,
+                (modality, self.NEAR_DUP_LOOKBACK),
+            ).fetchall()
+        for (existing,) in rows:
+            if existing == content:
+                continue  # exact dups are handled by the UNIQUE constraint
+            old_sh = self._shingles(existing)
+            inter = len(new_sh & old_sh)
+            if inter and inter / len(new_sh | old_sh) > self.NEAR_DUP_JACCARD:
+                return True
+        return False
 
     # ------------------------------------------------------------------
     # CRUD
@@ -26,21 +66,58 @@ class PromptStore:
         content_type: str = "prompt",
         source_media_id: Optional[str] = None,
         modality: Optional[str] = None,
-    ) -> str:
-        """Insert a prompt, returning its id (or existing id if duplicate)."""
+        register: Optional[str] = None,
+        length_band: Optional[str] = None,
+        event_count: Optional[int] = None,
+        scene_json: Optional[str] = None,
+        spec_json: Optional[str] = None,
+    ) -> Optional[str]:
+        """Insert a prompt, returning its id (or existing id if duplicate).
+
+        Returns None when the prompt is rejected as a near-duplicate of a
+        recent same-modality prompt (paraphrase-level repeat).
+
+        The optional spec fields (register/length_band/event_count/scene_json/
+        spec_json) record which sampled PromptSpec and VLM scene produced the
+        prompt, making prompt diversity auditable
+        (scripts/prompt_diversity_report.py).
+        """
         import sqlite3
 
         prompt_id = str(uuid.uuid4())
         created_at = time.time()
 
+        if self._is_near_duplicate(content, modality):
+            bt.logging.debug(
+                f"Rejected near-duplicate prompt (modality={modality}): "
+                f"{content[:80]!r}..."
+            )
+            return None
+
         with self.db.connect() as conn:
             try:
                 conn.execute(
                     """
-                    INSERT INTO prompts (id, content, content_type, modality, created_at, source_media_id)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO prompts (
+                        id, content, content_type, modality, created_at,
+                        source_media_id, register, length_band, event_count,
+                        scene_json, spec_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (prompt_id, content, content_type, modality, created_at, source_media_id),
+                    (
+                        prompt_id,
+                        content,
+                        content_type,
+                        modality,
+                        created_at,
+                        source_media_id,
+                        register,
+                        length_band,
+                        event_count,
+                        scene_json,
+                        spec_json,
+                    ),
                 )
                 conn.commit()
                 return prompt_id

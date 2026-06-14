@@ -93,8 +93,7 @@ class GenerativeChallengeManager:
 
         bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
 
-        # Sample one unique prompt per miner to prevent Sybil replay attacks.
-        # Modality selection driven by prompt_modalities config.
+        # Sample prompts per modality, then assign random modality per miner.
         raw = getattr(self.config, 'prompt_modalities', 'video')
         available = []
         for item in raw.split(','):
@@ -105,29 +104,38 @@ class GenerativeChallengeManager:
                 available.append(Modality.VIDEO)
         if not available:
             available = [Modality.VIDEO]
-        modality = random.choice(available)
+
+        # Pre-sample prompts for each modality
+        prompt_pools = {}
         n_needed = len(miner_uids)
-
-        prompt_entries = self.content_manager.sample_prompts(
-            k=n_needed, modality=modality.value, remove=False, strategy="least_used",
-        )
-        if len(prompt_entries) < n_needed:
-            bt.logging.info(
-                f"Only {len(prompt_entries)}/{n_needed} prompts available for {modality.value}. "
-                "Using what's available."
+        for mod in available:
+            entries = self.content_manager.sample_prompts(
+                k=n_needed, modality=mod.value, remove=False, strategy="least_used",
             )
+            prompt_pools[mod] = entries
 
-        if not prompt_entries:
+        # Check at least one pool has prompts
+        total_prompts = sum(len(v) for v in prompt_pools.values())
+        if total_prompts == 0:
             bt.logging.info(
                 "Waiting for prompt cache to be populated. Skipping generative challenge."
             )
             return
 
-        # Assign one unique prompt per miner, cycling if fewer prompts than miners
+        # Assign random modality per miner, cycling prompts within each pool.
+        # Only modalities with non-empty pools are eligible — avoids silently
+        # skipping miners when one modality has no cached prompts.
         tasks = []
-        for i, uid in enumerate(miner_uids):
-            prompt_entry = prompt_entries[i % len(prompt_entries)]
-            tasks.append(self.send_generative_request(uid, prompt_entry, modality))
+        modality_counters = {m: 0 for m in available}
+        for uid in miner_uids:
+            mods_with_prompts = [m for m in available if prompt_pools[m]]
+            if not mods_with_prompts:
+                break
+            mod = random.choice(mods_with_prompts)
+            pool = prompt_pools[mod]
+            ix = modality_counters[mod] % len(pool)
+            modality_counters[mod] += 1
+            tasks.append(self.send_generative_request(uid, pool[ix], mod))
 
         await asyncio.gather(*tasks)
 

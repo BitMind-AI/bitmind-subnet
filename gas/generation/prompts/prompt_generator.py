@@ -53,6 +53,8 @@ from transformers import (
     pipeline,
 )
 
+from gas.generation.prompts.register_sampler import PromptSpec, sample_spec
+from gas.generation.prompts.prompt_qc import validate as qc_validate
 from gas.generation.prompts.scene import SceneDescription, extract_scene_with_vlm
 from gas.types import Modality
 
@@ -79,7 +81,10 @@ _VIDEO_SYSTEM = (
     "You write text-to-video prompts.\n\n"
     "You will receive a structured scene that a vision-language model "
     "extracted from a reference photograph, plus the same VLM's dense "
-    "caption of that image.\n\n"
+    "caption of that image. You may also receive a COMMITTED SHOT SPEC: "
+    "when present it is authoritative — register, camera behavior, length, "
+    "and event count are already decided; your job is only to realize them "
+    "vividly and plausibly for THIS scene.\n\n"
     "Your job: imagine the scene as a 5-10 second video clip and write "
     "a SINGLE fluent paragraph describing that clip. Match the visual "
     "register implied by the source — that might be a casual phone "
@@ -88,7 +93,8 @@ _VIDEO_SYSTEM = (
     "editorial shot, polished narrative cinema, or many other "
     "possibilities. Do not always default to polished cinematography.\n\n"
     "REQUIREMENTS\n"
-    "- 100-180 words, present tense, one paragraph, no line breaks.\n"
+    "- Present tense, one paragraph, no line breaks. Respect the length "
+    "given in the shot spec (or the user turn).\n"
     "- Make the scene visually concrete: subject + action, setting, "
     "what is moving, lighting and atmosphere. Include framing, camera "
     "behavior, lens, depth of field, color palette, or pacing only "
@@ -118,7 +124,9 @@ _IMAGE_SYSTEM = (
     "You write text-to-image prompts.\n\n"
     "You will receive a structured scene that a vision-language model "
     "extracted from a reference photograph, plus the same VLM's dense "
-    "caption of that image.\n\n"
+    "caption of that image. You may also receive a COMMITTED SHOT SPEC: "
+    "when present it is authoritative — register, length, and style "
+    "constraints are already decided; realize them for THIS scene.\n\n"
     "Your job: rewrite the scene as a SINGLE dense natural-language "
     "image prompt with maximum visual specificity. Match the visual "
     "register implied by the source — that might be a casual snapshot, "
@@ -127,7 +135,8 @@ _IMAGE_SYSTEM = (
     "other possibilities. Do not always default to polished editorial "
     "photography.\n\n"
     "REQUIREMENTS\n"
-    "- 60-120 words, one paragraph, no line breaks.\n"
+    "- One paragraph, no line breaks. Respect the length given in the "
+    "shot spec (or the user turn).\n"
     "- Lead with the most salient element for THIS scene; vary the "
     "structure across calls. Include framing, lens, color palette, "
     "lighting, mood, composition, or style/medium only when they fit "
@@ -343,12 +352,21 @@ class PromptGenerator:
         return scenes
 
     def compose_prompts_from_scenes(
-        self, scenes: list[SceneDescription]
+        self,
+        scenes: list[SceneDescription],
+        specs: Optional[list[dict]] = None,
     ) -> list[dict[Modality, str]]:
         """LLM-only: compose (image, video) prompts from cached scenes.
 
         Loads LLM if needed. Does NOT load or touch the VLM.
         Caller should call :meth:`unload_llm` after this to free ~60 GB.
+
+        Args:
+            scenes: One SceneDescription (or None) per source image.
+            specs: Optional list parallel to `scenes`; each entry is a dict
+                mapping Modality -> PromptSpec for that scene. When omitted,
+                a spec is sampled per scene per modality (so direct callers
+                still get diversified output).
 
         Returns one dict per input scene, mapping Modality -> prompt.
         Positions with ``None`` scenes produce empty dicts.
@@ -362,18 +380,33 @@ class PromptGenerator:
         self._prior_video_prompts.clear()
 
         results: list[dict[Modality, str]] = []
-        for scene in scenes:
+        for i, scene in enumerate(scenes):
             if scene is None:
                 results.append({})
                 continue
+            scene_specs = specs[i] if specs and i < len(specs) and specs[i] else {
+                Modality.IMAGE: sample_spec("image"),
+                Modality.VIDEO: sample_spec("video"),
+            }
+            result = {}
             try:
-                image_prompt = self._compose(scene, kind="image")
-                video_prompt = self._compose(scene, kind="video")
-                self._log_generated_prompts(scene, image_prompt, video_prompt)
-                results.append({Modality.IMAGE: image_prompt, Modality.VIDEO: video_prompt})
+                result[Modality.IMAGE] = self._compose(
+                    scene, kind="image", spec=scene_specs.get(Modality.IMAGE)
+                )
             except Exception as e:
-                bt.logging.warning(f"LLM composition failed for scene: {e}")
-                results.append({})
+                bt.logging.warning(f"LLM composition failed for scene (image): {e}")
+            try:
+                result[Modality.VIDEO] = self._compose(
+                    scene, kind="video", spec=scene_specs.get(Modality.VIDEO)
+                )
+            except Exception as e:
+                bt.logging.warning(f"LLM composition failed for scene (video): {e}")
+            self._log_generated_prompts(
+                scene,
+                result.get(Modality.IMAGE, ""),
+                result.get(Modality.VIDEO, ""),
+            )
+            results.append(result)
         return results
 
     # ------------------------------------------------------------------
@@ -452,8 +485,18 @@ class PromptGenerator:
     # LLM composition
     # ------------------------------------------------------------------
 
-    def _compose(self, scene: SceneDescription, *, kind: str) -> str:
+    def _compose(
+        self,
+        scene: SceneDescription,
+        *,
+        kind: str,
+        spec: Optional[PromptSpec] = None,
+    ) -> str:
         """Single LLM forward pass that writes the canonical prompt for a modality.
+
+        When `spec` is provided, length budget and max_new_tokens follow the
+        sampled length band instead of the legacy fixed ranges, and the
+        committed spec block is injected into the user message.
 
         Returns the LLM output verbatim (with light whitespace cleanup).
         Raises on failure; the caller is the worker loop, which logs and
@@ -474,8 +517,36 @@ class PromptGenerator:
         else:
             raise ValueError(f"Unknown kind: {kind}")
 
-        user = self._build_user_message(scene, prior, length_spec)
+        if spec is not None:
+            # ~1.5 tokens/word headroom above the band ceiling.
+            # The spec-derived budget replaces the legacy cap (which was
+            # sized for a single 60-120 image / 100-180 video band and
+            # would truncate long-band compositions).
+            max_new_tokens = int(spec.length_words[1] * 1.5) + 40
 
+        user = self._build_user_message(scene, prior, length_spec, spec=spec)
+
+        text = self._generate_once(system, user, max_new_tokens, temperature)
+        ok, reason = qc_validate(text, spec)
+        if not ok:
+            bt.logging.debug(f"Prompt QC reject ({kind}): {reason}; retrying once")
+            retry_user = (
+                user
+                + f"\n\nPrevious attempt rejected: {reason}. "
+                "Fix exactly that problem and output the paragraph only."
+            )
+            text = self._generate_once(system, retry_user, max_new_tokens, temperature)
+            ok, reason = qc_validate(text, spec)
+            if not ok:
+                raise ValueError(f"Prompt failed QC twice ({kind}): {reason}")
+
+        prior.append(text)
+        return text
+
+    def _generate_once(
+        self, system: str, user: str, max_new_tokens: int, temperature: float
+    ) -> str:
+        """One LLM call + cleanup. Split out so the QC retry path can reuse it."""
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -491,17 +562,23 @@ class PromptGenerator:
             return_full_text=False,
             pad_token_id=self.llm.tokenizer.eos_token_id,
         )
-        text = self._clean_output(out[0]["generated_text"])
-        prior.append(text)
-        return text
+        return self._clean_output(out[0]["generated_text"])
 
     @staticmethod
     def _build_user_message(
         scene: SceneDescription,
         prior_prompts: Deque[str],
         length_spec: str,
+        spec: Optional["PromptSpec"] = None,
     ) -> str:
-        """Build the user turn: scene facts + dense caption + prior-prompt feedback.
+        """Build the user turn: committed spec + scene facts + dense caption + prior-prompt feedback.
+
+        `spec` (when provided) carries the sampled per-prompt axes —
+        register, camera behavior, length band, event budget, style
+        strictness — as COMMITTED facts the LLM must render. Sampling
+        these outside the LLM is what breaks the single-register,
+        single-voice monoculture: the LLM is a strong renderer but a
+        weak diversity source.
 
         `prior_prompts` is the recent per-modality composition history
         for the current batch (sliding window, capped at `_PRIOR_WINDOW`
@@ -514,7 +591,8 @@ class PromptGenerator:
         `length_spec` restates the system-prompt word range here in the
         user turn because LLMs weight closer-to-output instructions more
         heavily, and the verbose prior-prompt history was inflating
-        outputs above the system-prompt cap.
+        outputs above the system-prompt cap. When `spec` is provided it
+        supersedes `length_spec`.
         """
         scene_dict = asdict(scene)
         # Drop the dense caption from the JSON since we surface it
@@ -522,7 +600,50 @@ class PromptGenerator:
         caption = scene_dict.pop("caption", "")
         scene_json = json.dumps(scene_dict, indent=2, ensure_ascii=False)
 
-        parts = [
+        parts: List[str] = []
+
+        if spec is not None:
+            lo, hi = spec.length_words
+            spec_lines = [
+                "COMMITTED SHOT SPEC (authoritative — render exactly this, "
+                "do not negotiate):",
+                f"- register: {spec.register} — {spec.register_directives}",
+            ]
+            if spec.modality == "video":
+                spec_lines.append(f"- camera: {spec.camera_motion}")
+                if spec.event_count > 0:
+                    event_line = (
+                        f"- events: exactly {spec.event_count} discrete "
+                        "event(s) must occur mid-clip (someone/something "
+                        "enters, exits, passes, falls, or changes state — "
+                        "pick what fits the scene)"
+                    )
+                    if scene.plausible_events:
+                        event_line += (
+                            "; draw from: "
+                            + "; ".join(scene.plausible_events)
+                        )
+                    spec_lines.append(event_line)
+                else:
+                    spec_lines.append(
+                        "- events: none — ambient motion only, nothing "
+                        "discrete happens"
+                    )
+            spec_lines.append(f"- length: {lo}-{hi} words")
+            if spec.style_strictness == "plain":
+                banned = ", ".join(f'"{p}"' for p in spec.banned_phrases)
+                spec_lines.append(
+                    "- style: plain, factual, non-literary. Forbidden in "
+                    f"this register: similes, negation litanies, closing "
+                    f"aphorisms, and the phrases: {banned}"
+                )
+            else:
+                spec_lines.append(
+                    "- style: free — match the register's natural voice"
+                )
+            parts += ["\n".join(spec_lines), ""]
+
+        parts += [
             "Reference image, structured scene facts (from VLM):",
             scene_json,
             "",
@@ -546,11 +667,19 @@ class PromptGenerator:
                 history,
             ]
 
-        parts += [
-            "",
-            f"Strict length: {length_spec}. Do not exceed.",
-            "Compose the prompt now. Output the paragraph only.",
-        ]
+        if spec is not None:
+            lo, hi = spec.length_words
+            parts += [
+                "",
+                f"Strict length: {lo}-{hi} words. Do not exceed.",
+                "Compose the prompt now. Output the paragraph only.",
+            ]
+        else:
+            parts += [
+                "",
+                f"Strict length: {length_spec}. Do not exceed.",
+                "Compose the prompt now. Output the paragraph only.",
+            ]
         return "\n".join(parts)
 
     @staticmethod

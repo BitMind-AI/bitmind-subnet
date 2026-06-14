@@ -59,6 +59,7 @@ class SceneDescription:
     framing: str = "unknown"
     style: str = ""
     mood: str = ""
+    plausible_events: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -75,7 +76,12 @@ class SceneDescription:
         if not caption:
             raise ValueError("SceneDescription requires a non-empty caption")
 
-        for list_field in ("static_elements", "dynamic_candidates", "observed_motion_cues"):
+        for list_field in (
+            "static_elements",
+            "dynamic_candidates",
+            "observed_motion_cues",
+            "plausible_events",
+        ):
             value = clean.get(list_field)
             if value is None:
                 clean[list_field] = []
@@ -142,6 +148,10 @@ _SCHEMA_INSTRUCTION = (
     "- observed_motion_cues: list of motion signals already visible in the "
     "image (e.g. ['hair blowing left', 'visible motion blur on cyclist', "
     "'water surface ripples', 'tilted gait']). Use [] if none.\n"
+    "- plausible_events: list of 2-4 discrete events that could believably "
+    "happen in this scene within 10 seconds (e.g. ['a waiter passes behind "
+    "him', 'the phone on the desk lights up', 'a gust scatters the napkins', "
+    "'a car crosses the intersection']). Ground them in what the image shows.\n"
     "- camera_distance: one of [close-up, medium, wide, aerial].\n"
     "- framing: one of [portrait, landscape, square].\n"
     "- style: short phrase (e.g. 'documentary photography', 'cinematic', "

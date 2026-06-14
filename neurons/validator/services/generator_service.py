@@ -224,6 +224,9 @@ class GeneratorService:
         """Main generation loop."""
         bt.logging.info("[GENERATOR-SERVICE] Starting generation work loop")
 
+        # Clear any pending verification backlog before the first generation cycle.
+        self._run_verification()
+
         while not self._stop_requested.is_set():
             try:
                 self._await_media(min_needed=1, max_wait_s=1200, poll_s=10)
@@ -447,6 +450,37 @@ class GeneratorService:
                 continue
         return {"count": 0, "items": []}
 
+    def _recent_settings_pool(self, limit: int = 200) -> list:
+        """Empirical pool of scene settings from recent prompts' scene_json.
+
+        Used by the scene-remix path so resampled settings follow the
+        real-world distribution of observed locations rather than a
+        hardcoded list. Returns [] on any failure (remix falls back to its
+        built-in defaults).
+        """
+        import json as _json
+
+        try:
+            with self.content_manager.db.connect() as conn:
+                rows = conn.execute(
+                    "SELECT scene_json FROM prompts "
+                    "WHERE scene_json IS NOT NULL "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            pool = []
+            for (blob,) in rows:
+                try:
+                    setting = (_json.loads(blob).get("setting") or "").strip()
+                    if setting:
+                        pool.append(setting)
+                except Exception:
+                    continue
+            return pool
+        except Exception as e:
+            bt.logging.debug(f"[GENERATOR-SERVICE] settings pool unavailable: {e}")
+            return []
+
     def _active_prompt_modalities(self) -> set:
         raw = getattr(self.config, 'prompt_modalities', 'video')
         mods = set()
@@ -469,6 +503,7 @@ class GeneratorService:
         peak VRAM at ~60 GB instead of ~69 GB.
         """
         generated = 0
+        skipped_dups = 0
 
         # ------------------------------------------------------------------
         # Phase 1: Collect images for the batch
@@ -503,24 +538,89 @@ class GeneratorService:
             return 0
 
         # ------------------------------------------------------------------
+        # Phase 2b: Scene remix — append semi-synthetic variants for ~25%
+        # of successfully extracted scenes. Breaks scraper-distribution
+        # inheritance while keeping most of the real scene's structure.
+        # ------------------------------------------------------------------
+        import random as _random
+
+        from gas.generation.prompts.scene_remix import remix
+
+        rng = _random.Random()
+        setting_pool = self._recent_settings_pool()
+        origins = ["vlm"] * len(scenes)
+        remix_sources = [
+            (i, s) for i, s in enumerate(scenes) if s is not None
+        ]
+        n_remix = max(0, int(len(remix_sources) * 0.25))
+        for i, source_scene in rng.sample(remix_sources, n_remix) if n_remix else []:
+            try:
+                scenes.append(remix(source_scene, rng, setting_pool=setting_pool))
+                items.append(items[i])  # same source media row
+                origins.append("remix")
+            except Exception as e:
+                bt.logging.warning(f"Scene remix failed: {e}")
+
+        # ------------------------------------------------------------------
         # Phase 3: LLM stage — compose prompts from cached scenes (LLM only)
         # ------------------------------------------------------------------
-        prompts_list = self.prompt_generator.compose_prompts_from_scenes(scenes)
+        # Sample the committed per-prompt axes (register, camera, length,
+        # events) OUTSIDE the LLM so prompt diversity is explicit and
+        # auditable rather than left to the composer's collapsed prior.
+        from gas.generation.prompts.register_sampler import sample_spec
+
+        specs = [
+            {
+                Modality.IMAGE: sample_spec("image"),
+                Modality.VIDEO: sample_spec("video"),
+            }
+            if scene is not None
+            else {}
+            for scene in scenes
+        ]
+        # Tag remixed scenes so the audit can separate the two populations.
+        for scene_specs, origin in zip(specs, origins):
+            for spec in scene_specs.values():
+                spec.origin = origin
+        prompts_list = self.prompt_generator.compose_prompts_from_scenes(
+            scenes, specs=specs
+        )
         self.prompt_generator.unload_llm()
 
         # ------------------------------------------------------------------
         # Phase 4: Write results to database
         # ------------------------------------------------------------------
-        for item, prompts in zip(items, prompts_list):
+        import json as _json
+        from dataclasses import asdict as _asdict
+
+        for item, scene, scene_specs, prompts in zip(items, scenes, specs, prompts_list):
+            scene_blob = (
+                _json.dumps(_asdict(scene), ensure_ascii=False)
+                if scene is not None
+                else None
+            )
             for modality, prompt in prompts.items():
-                self.content_manager.write_prompt(
+                spec = scene_specs.get(modality)
+                prompt_id = self.content_manager.write_prompt(
                     content=prompt,
                     source_media_id=item["id"],
                     modality=modality.value,
+                    register=spec.register if spec else None,
+                    length_band=spec.length_band if spec else None,
+                    event_count=spec.event_count if spec else None,
+                    scene_json=scene_blob,
+                    spec_json=_json.dumps(spec.to_dict()) if spec else None,
                 )
-                generated += 1
+                if prompt_id is None:
+                    skipped_dups += 1
+                else:
+                    generated += 1
 
-        bt.logging.info(f"[GENERATOR-SERVICE] Added {generated} prompts to database")
+        bt.logging.info(
+            f"[GENERATOR-SERVICE] Added {generated} prompts to database "
+            f"({origins.count('vlm')} vlm + {origins.count('remix')} remix scenes)"
+            + (f" ({skipped_dups} near-duplicates skipped)" if skipped_dups else "")
+        )
         return generated
 
     def _models_for_modality(self, modality: Modality) -> list:

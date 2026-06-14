@@ -2,6 +2,7 @@ import asyncio
 import sys
 import json
 import traceback
+import time
 from time import sleep
 from threading import Thread
 
@@ -333,14 +334,16 @@ class Validator(BaseNeuron):
         alpha = 0.5
         self.scores = alpha * reward_arr + (1 - alpha) * self.scores
 
-        # Hard cutoff: zero out scores for generators not active within liveness window
-        # This prevents inactive miners from retaining any accumulated score via EMA decay
+        # Hard cutoff: zero out scores for generators not active within liveness window.
+        # Checks the actual last_seen timestamp, not just dict membership.
         if generator_liveness:
+            cutoff = time.time() - max_inactive_hours * 3600
             inactive_count = 0
             for uid in range(len(self.scores)):
-                if uid < len(self.metagraph.hotkeys):
+                if uid < len(self.metagraph.hotkeys) and self.scores[uid] > 0:
                     hotkey = self.metagraph.hotkeys[uid]
-                    if hotkey not in generator_liveness and self.scores[uid] > 0:
+                    last_seen = generator_liveness.get(hotkey, 0)
+                    if last_seen < cutoff:
                         self.scores[uid] = 0
                         inactive_count += 1
             if inactive_count > 0:

@@ -60,6 +60,17 @@ MIGRATIONS = [
             "ALTER TABLE media ADD COLUMN clip_embedding BLOB",
         ],
     ),
+    (
+        "add_prompt_spec_columns",
+        [
+            "ALTER TABLE prompts ADD COLUMN register TEXT",
+            "ALTER TABLE prompts ADD COLUMN length_band TEXT",
+            "ALTER TABLE prompts ADD COLUMN event_count INTEGER",
+            "ALTER TABLE prompts ADD COLUMN scene_json TEXT",
+            "ALTER TABLE prompts ADD COLUMN spec_json TEXT",
+            "CREATE INDEX IF NOT EXISTS idx_prompts_register ON prompts (register)",
+        ],
+    ),
 ]
 
 
