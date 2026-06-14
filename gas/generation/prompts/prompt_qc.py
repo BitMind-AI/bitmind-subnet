@@ -16,6 +16,13 @@ from typing import Optional, Tuple
 
 from gas.generation.prompts.register_sampler import PromptSpec
 
+# Tokenizer for word-boundary-aware phrase matching.
+_WORD_RE = re.compile(r"[a-z']+")
+
+
+def _tokens(text: str) -> list[str]:
+    return _WORD_RE.findall(text.lower())
+
 # Tolerance around the committed word band (fraction of the bound).
 _BAND_TOLERANCE = 0.20
 
@@ -75,9 +82,12 @@ def validate(text: str, spec: Optional[PromptSpec]) -> Tuple[bool, str]:
         )
 
     if spec.style_strictness == "plain" and spec.banned_phrases:
-        lowered = text.lower()
+        words = _tokens(text)
         for phrase in spec.banned_phrases:
-            if phrase in lowered:
-                return False, f"banned phrase for plain register: {phrase!r}"
+            phrase_tokens = _tokens(phrase)
+            plen = len(phrase_tokens)
+            for i in range(len(words) - plen + 1):
+                if words[i : i + plen] == phrase_tokens:
+                    return False, f"banned phrase for plain register: {phrase!r}"
 
     return True, ""
