@@ -24,7 +24,7 @@ def _tokens(text: str) -> list[str]:
     return _WORD_RE.findall(text.lower())
 
 # Tolerance around the committed word band (fraction of the bound).
-_BAND_TOLERANCE = 0.20
+_BAND_TOLERANCE = 0.25
 
 # Case-insensitive prefixes/fragments that mark LLM meta-output rather than
 # a prompt. Checked anywhere in the first 80 chars.
