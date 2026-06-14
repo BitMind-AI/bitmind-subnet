@@ -224,6 +224,9 @@ class GeneratorService:
         """Main generation loop."""
         bt.logging.info("[GENERATOR-SERVICE] Starting generation work loop")
 
+        # Clear any pending verification backlog before the first generation cycle.
+        self._run_verification()
+
         while not self._stop_requested.is_set():
             try:
                 self._await_media(min_needed=1, max_wait_s=1200, poll_s=10)
