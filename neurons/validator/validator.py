@@ -197,9 +197,9 @@ class Validator(BaseNeuron):
                     )
 
                 # Weight budget (must sum to 1.0)
-                burn_pct      = .9
-                video_pct     = .0
-                image_pct     = .0
+                burn_pct      = .4
+                video_pct     = .3
+                image_pct     = .2
                 audio_pct     = .0
                 generator_pct = .1
 
