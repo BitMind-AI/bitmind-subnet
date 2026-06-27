@@ -611,13 +611,29 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
             sn34 = r["sn34_score"]
             mcc = r.get("mcc")
             brier = r.get("brier")
+            base_sn34 = r.get("base_sn34_score")
+            aug_sn34 = r.get("aug_sn34_score")
+            aug_mcc = r.get("aug_binary_mcc")
+            aug_brier = r.get("aug_binary_brier")
 
             bar_len = 20
             filled = int(sn34 * bar_len)
             bar = f"\033[32m{'█' * filled}\033[0m{DIM}{'░' * (bar_len - filled)}{RESET}"
 
+            has_aug = aug_sn34 is not None
+
+            def _f(v):
+                return f"{v:.4f}" if v is not None else "—"
+
             click.echo(f"  ┌─ {mod} │ {vert_tag} │ {bar}")
-            click.echo(f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  {mcc:.4f}    Brier  {brier:.4f}" if mcc is not None and brier is not None else f"  │  SN34  {BOLD}{sn34:.4f}{RESET}    MCC  —         Brier  —")
+            click.echo(f"  │  SN34   {BOLD}{sn34:.4f}{RESET}")
+            if has_aug:
+                click.echo(f"  │  {DIM}        {'Base':>8}   {'Aug':>8}{RESET}")
+                click.echo(f"  │  {DIM}SN34    {_f(base_sn34):>8}   {_f(aug_sn34):>8}{RESET}")
+                click.echo(f"  │  {DIM}MCC     {_f(mcc):>8}   {_f(aug_mcc):>8}{RESET}")
+                click.echo(f"  │  {DIM}Brier   {_f(brier):>8}   {_f(aug_brier):>8}{RESET}")
+            else:
+                click.echo(f"  │  {DIM}MCC  {_f(mcc)}    Brier  {_f(brier)}{RESET}")
         else:
             status_str = f"{color}{icon} {r['status'].upper()}{RESET}"
             elapsed = elapsed_str(r.get("started_at")) if r["status"] in ("running", "queued") else ""
