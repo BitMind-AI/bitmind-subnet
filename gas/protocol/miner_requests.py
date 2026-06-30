@@ -300,6 +300,42 @@ def fetch_performance(
     return {"success": True, "runs": resp.json()}
 
 
+def fetch_models(
+    wallet: bt.wallet,
+    modality: Optional[str] = None,
+    api_url: Optional[str] = None,
+) -> Dict:
+    """Query the miner's own model submissions via the GAS API.
+
+    Returns a dict with 'success', 'models' (list of dicts), and optionally 'error'.
+    Each model dict contains: model_id, modality, vertical, exam_status, benchmark_status,
+    upload_timestamp, exam_reason, benchmark_reason, benchmark_runs.
+    benchmark_runs is empty for models that failed or have not yet passed the entrance exam.
+    """
+    base = api_url or os.environ.get("GAS_API_URL", GAS_API_BASE_URL)
+    url = f"{base}/api/v1/miner/models"
+
+    params: Dict[str, str] = {}
+    if modality:
+        params["modality"] = modality
+
+    headers = generate_header(wallet.hotkey, b"")
+
+    try:
+        resp = httpx.get(url, headers=headers, params=params, timeout=30)
+    except httpx.RequestError as e:
+        return {"success": False, "models": [], "error": f"Request failed: {e}"}
+
+    if resp.status_code != 200:
+        return {
+            "success": False,
+            "models": [],
+            "error": f"API error {resp.status_code}: {resp.text}",
+        }
+
+    return {"success": True, "models": resp.json()}
+
+
 def fetch_generator_performance(
     wallet: bt.wallet,
     modality: Optional[str] = None,

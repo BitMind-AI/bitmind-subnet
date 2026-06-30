@@ -505,12 +505,11 @@ discriminator.add_command(push_discriminator, name="push")
 @click.option("--wallet-name", default="default", help="Bittensor wallet name")
 @click.option("--wallet-hotkey", default="default", help="Bittensor hotkey name")
 @click.option("--modality", type=click.Choice(["image", "video", "audio"]), default=None, help="Filter by modality")
-@click.option("--vertical", type=click.Choice(["general", "human"]), default=None, help="Filter by vertical")
 @click.option("--api-url", default=None, help="GAS API base URL (default: production)")
-def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
-    """Query your discriminator's benchmark performance (epistula-authenticated)."""
+def perf(wallet_name, wallet_hotkey, modality, api_url):
+    """Show your discriminator models: entrance exam results and benchmark scores."""
     import bittensor as bt
-    from gas.protocol.miner_requests import fetch_performance
+    from gas.protocol.miner_requests import fetch_models
 
     try:
         wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
@@ -519,34 +518,59 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
         sys.exit(1)
 
     addr = wallet.hotkey.ss58_address
-
     click.echo()
     click.echo(f"  ⛽  {addr}")
     click.echo()
 
-    result = fetch_performance(wallet, modality=modality, vertical=vertical, api_url=api_url)
+    result = fetch_models(wallet, modality=modality, api_url=api_url)
 
     if not result["success"]:
         click.echo(f"  ❌  {result['error']}", err=True)
         sys.exit(1)
 
-    runs = result["runs"]
-    if not runs:
-        click.echo("  No benchmark runs found.")
+    models = result["models"]
+    if not models:
+        click.echo("  No model submissions found for this round.")
         return
 
     from datetime import datetime, timezone
 
-    def parse_started_at(started_at):
-        if not started_at:
+    RESET = "\033[0m"
+    DIM = "\033[2m"
+    BOLD = "\033[1m"
+    GREEN = "\033[32m"
+    RED = "\033[31m"
+    YELLOW = "\033[33m"
+    CYAN = "\033[36m"
+
+    def parse_ts(ts):
+        if not ts:
             return None
         try:
-            return datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
         except (ValueError, TypeError):
             return None
 
-    def elapsed_str(started_at):
-        t = parse_started_at(started_at)
+    def ago_str(ts):
+        t = parse_ts(ts)
+        if not t:
+            return ""
+        delta = datetime.now(timezone.utc) - t
+        total_mins = int(delta.total_seconds()) // 60
+        if total_mins < 1:
+            return "just now"
+        if total_mins < 60:
+            return f"{total_mins}m ago"
+        hrs = total_mins // 60
+        mins = total_mins % 60
+        if hrs < 24:
+            return f"{hrs}h {mins}m ago" if mins else f"{hrs}h ago"
+        days = hrs // 24
+        rem_hrs = hrs % 24
+        return f"{days}d {rem_hrs}h ago" if rem_hrs else f"{days}d ago"
+
+    def elapsed_str(ts):
+        t = parse_ts(ts)
         if not t:
             return ""
         delta = datetime.now(timezone.utc) - t
@@ -559,94 +583,97 @@ def perf(wallet_name, wallet_hotkey, modality, vertical, api_url):
         hrs = mins // 60
         return f"{hrs}h {mins % 60}m"
 
-    def ago_str(started_at):
-        t = parse_started_at(started_at)
-        if not t:
-            return ""
-        delta = datetime.now(timezone.utc) - t
-        total_mins = int(delta.total_seconds()) // 60
-        if total_mins < 1:
-            return "just now"
-        if total_mins < 60:
-            return f"{total_mins} minute{'s' if total_mins != 1 else ''} ago"
-        hrs = total_mins // 60
-        mins = total_mins % 60
-        if hrs < 24:
-            parts = [f"{hrs} hour{'s' if hrs != 1 else ''}"]
-            if mins:
-                parts.append(f"{mins} min")
-            return " ".join(parts) + " ago"
-        days = hrs // 24
-        rem_hrs = hrs % 24
-        parts = [f"{days} day{'s' if days != 1 else ''}"]
-        if rem_hrs:
-            parts.append(f"{rem_hrs}h")
-        return " ".join(parts) + " ago"
+    def _f(v):
+        return f"{v:.4f}" if v is not None else "—"
 
-    def fmt_started_at(started_at):
-        t = parse_started_at(started_at)
-        if not t:
-            return ""
-        ts = t.strftime("%Y-%m-%d %H:%M UTC")
-        ago = ago_str(started_at)
-        return f"{ts} ({ago})" if ago else ts
-
-    STATUS_STYLE = {
-        "success": ("✅", "\033[32m"),   # green
-        "running": ("⏳", "\033[33m"),   # yellow
-        "queued":  ("🕐", "\033[36m"),   # cyan
-        "failed":  ("❌", "\033[31m"),   # red
+    EXAM_STATUS_STYLE = {
+        "passed":    (GREEN + "✅ PASSED" + RESET, GREEN),
+        "failed":    (RED + "❌ FAILED" + RESET, RED),
+        "running":   (YELLOW + "⏳ RUNNING" + RESET, YELLOW),
+        "examining": (YELLOW + "⏳ EXAMINING" + RESET, YELLOW),
+        "pending":   (CYAN + "🕐 PENDING" + RESET, CYAN),
+        "uploaded":  (CYAN + "🕐 PENDING" + RESET, CYAN),
     }
-    RESET = "\033[0m"
-    DIM = "\033[2m"
-    BOLD = "\033[1m"
+    BENCH_STATUS_STYLE = {
+        "success": ("✅", GREEN),
+        "running": ("⏳", YELLOW),
+        "queued":  ("🕐", CYAN),
+        "failed":  ("❌", RED),
+    }
 
-    for r in runs:
-        icon, color = STATUS_STYLE.get(r["status"], ("•", ""))
-        mod = r["modality"].upper()
-        vert = r["vertical"]
-        vert_tag = f"\033[33m{vert}\033[0m" if vert == "human" else f"{DIM}{vert}{RESET}"
+    for m in models:
+        mod = m["modality"].upper()
+        vert = m["vertical"]
+        vert_tag = f"{YELLOW}{vert}{RESET}" if vert == "human" else f"{DIM}{vert}{RESET}"
+        uploaded = ago_str(m.get("upload_timestamp"))
+        uploaded_tag = f"  {DIM}·  uploaded {uploaded}{RESET}" if uploaded else ""
 
-        if r.get("sn34_score") is not None:
-            sn34 = r["sn34_score"]
-            mcc = r.get("mcc")
-            brier = r.get("brier")
-            base_sn34 = r.get("base_sn34_score")
-            aug_sn34 = r.get("aug_sn34_score")
-            aug_mcc = r.get("aug_binary_mcc")
-            aug_brier = r.get("aug_binary_brier")
-
-            bar_len = 20
-            filled = int(sn34 * bar_len)
-            bar = f"\033[32m{'█' * filled}\033[0m{DIM}{'░' * (bar_len - filled)}{RESET}"
-
-            has_aug = aug_sn34 is not None
-
-            def _f(v):
-                return f"{v:.4f}" if v is not None else "—"
-
-            click.echo(f"  ┌─ {mod} │ {vert_tag} │ {bar}")
-            click.echo(f"  │  SN34   {BOLD}{sn34:.4f}{RESET}")
-            if has_aug:
-                click.echo(f"  │  {DIM}        {'Base':>8}   {'Aug':>8}{RESET}")
-                click.echo(f"  │  {DIM}SN34    {_f(base_sn34):>8}   {_f(aug_sn34):>8}{RESET}")
-                click.echo(f"  │  {DIM}MCC     {_f(mcc):>8}   {_f(aug_mcc):>8}{RESET}")
-                click.echo(f"  │  {DIM}Brier   {_f(brier):>8}   {_f(aug_brier):>8}{RESET}")
-            else:
-                click.echo(f"  │  {DIM}MCC  {_f(mcc)}    Brier  {_f(brier)}{RESET}")
-        else:
-            status_str = f"{color}{icon} {r['status'].upper()}{RESET}"
-            elapsed = elapsed_str(r.get("started_at")) if r["status"] in ("running", "queued") else ""
-            time_tag = f"  {DIM}({elapsed}){RESET}" if elapsed else ""
-            click.echo(f"  ┌─ {mod} │ {vert_tag} │ {status_str}{time_tag}")
-            click.echo(f"  │  {DIM}Scores pending…{RESET}")
-
-        started_tag = fmt_started_at(r.get("started_at"))
-        time_suffix = f"  •  {started_tag}" if started_tag else ""
-        click.echo(f"  └─ {DIM}{r['run_id']}{time_suffix}{RESET}")
+        click.echo(f"  ── {BOLD}{mod}{RESET} ({vert_tag}){uploaded_tag}")
+        click.echo(f"  {DIM}model {m['model_id']}{RESET}")
         click.echo()
 
-    click.echo(f"  {len(runs)} run(s) total.")
+        # Exam status
+        exam_status = m.get("exam_status", "unknown")
+        exam_label, _ = EXAM_STATUS_STYLE.get(exam_status, (exam_status.upper(), ""))
+        click.echo(f"  exam    {exam_label}")
+
+        exam_reason = m.get("exam_reason")
+        if exam_reason:
+            for line in exam_reason.split(" | "):
+                click.echo(f"          {DIM}{line}{RESET}")
+
+        click.echo()
+
+        # Benchmark runs
+        runs = m.get("benchmark_runs") or []
+        if not runs:
+            if exam_status in ("failed",):
+                click.echo(f"  {DIM}(no benchmark runs — model must pass entrance exam first){RESET}")
+            elif exam_status in ("pending", "uploaded", "running", "examining"):
+                click.echo(f"  {DIM}(benchmark runs will appear after the entrance exam completes){RESET}")
+            else:
+                click.echo(f"  {DIM}(no benchmark runs yet){RESET}")
+        else:
+            for r in runs:
+                icon, color = BENCH_STATUS_STYLE.get(r["status"], ("•", ""))
+                r_vert = r["vertical"]
+                r_vert_tag = f"{YELLOW}{r_vert}{RESET}" if r_vert == "human" else f"{DIM}{r_vert}{RESET}"
+
+                if r.get("sn34_score") is not None:
+                    sn34 = r["sn34_score"]
+                    mcc = r.get("mcc")
+                    brier = r.get("brier")
+                    base_sn34 = r.get("base_sn34_score")
+                    aug_sn34 = r.get("aug_sn34_score")
+                    aug_mcc = r.get("aug_binary_mcc")
+                    aug_brier = r.get("aug_binary_brier")
+
+                    bar_len = 20
+                    filled = int(sn34 * bar_len)
+                    bar = f"{GREEN}{'█' * filled}{RESET}{DIM}{'░' * (bar_len - filled)}{RESET}"
+
+                    click.echo(f"  ┌─ {mod} │ {r_vert_tag} │ {bar}")
+                    click.echo(f"  │  SN34   {BOLD}{sn34:.4f}{RESET}")
+                    if aug_sn34 is not None:
+                        click.echo(f"  │  {DIM}        {'Base':>8}   {'Aug':>8}{RESET}")
+                        click.echo(f"  │  {DIM}SN34    {_f(base_sn34):>8}   {_f(aug_sn34):>8}{RESET}")
+                        click.echo(f"  │  {DIM}MCC     {_f(mcc):>8}   {_f(aug_mcc):>8}{RESET}")
+                        click.echo(f"  │  {DIM}Brier   {_f(brier):>8}   {_f(aug_brier):>8}{RESET}")
+                    else:
+                        click.echo(f"  │  {DIM}MCC  {_f(mcc)}    Brier  {_f(brier)}{RESET}")
+                else:
+                    status_str = f"{color}{icon} {r['status'].upper()}{RESET}"
+                    elapsed = elapsed_str(r.get("started_at")) if r["status"] in ("running", "queued") else ""
+                    time_tag = f"  {DIM}({elapsed}){RESET}" if elapsed else ""
+                    click.echo(f"  ┌─ {mod} │ {r_vert_tag} │ {status_str}{time_tag}")
+                    click.echo(f"  │  {DIM}Scores pending…{RESET}")
+
+                run_ago = ago_str(r.get("started_at"))
+                time_suffix = f"  {DIM}·  {run_ago}{RESET}" if run_ago else ""
+                click.echo(f"  └─ {DIM}{r['run_id']}{RESET}{time_suffix}")
+                click.echo()
+
+        click.echo()
 
 
 discriminator.add_command(perf, name="perf")
