@@ -10,6 +10,7 @@ Generative miners create synthetic media (images and videos) according to prompt
 1. **Data validation pass rate** -- content must pass C2PA signature checks and prompt alignment validation
 2. **Adversarial performance** -- synthetic media that fools discriminative miners earns a multiplier bonus
 3. **Sample volume** -- processing more evaluations provides a logarithmic bonus up to 2x
+4. **Model choice** -- more expensive generation models earn higher per-unit rewards (see [Model Pricing](#model-pricing-and-rewards) below)
 
 See [Incentive Mechanism](Incentive.md) for the full reward formula.
 
@@ -97,6 +98,58 @@ VIDEO_SERVICE=openrouter    # openai, openrouter, stabilityai, runway, or none
 
 All configured services must produce **C2PA-signed content**. Setting a modality to `none` disables it (requests will be rejected).
 
+
+## Model Pricing and Rewards
+
+The validator weights each submitted media sample by the **cost of the model that produced it**.
+More expensive models earn proportionally higher per-sample rewards.  This incentivizes miners
+to invest in quality generation infrastructure instead of racing to the bottom with the cheapest
+available model.
+
+### How It Works
+
+Each model has a reference price in USD per second of 720p video (or per image, normalized to a
+video-equivalent).  Your reward multiplier is computed from your model mix:
+
+```
+multiplier = sqrt(model_price / baseline_price)
+```
+
+- **baseline_price** = cheapest C2PA-capable model (currently `google/veo-3.1-lite` at $0.03/s)
+- **sqrt scaling** prevents extreme gaps — a model 4× as expensive earns 2×, not 4×
+- **Model mix** — if you run multiple models, the weighted average multiplier across your verified
+  samples is used
+
+The multiplier is applied to your base reward (pass rate × volume) before modality weighting.
+
+### Current Model Prices
+
+All prices are USD per second of 720p video with audio.  These live in
+[`gas/evaluation/rewards.py`](../gas/evaluation/rewards.py) and are occasionally refreshed from
+OpenRouter's free [`/api/v1/videos/models`](https://openrouter.ai/api/v1/videos/models) endpoint.
+
+| Model | Price (USD/s) | Multiplier vs baseline | C2PA Status |
+|-------|---------------|------------------------|-------------|
+| `google/veo-3.1-lite` | $0.03 | 1.00× | ✓ Google C2PA Root CA G3 |
+| `dreamina-seedance-2-0-fast` | $0.12 | 2.00× | ✓ Byteplus Pte. Ltd. |
+| `google/veo-3.1-fast` | $0.08 | 1.63× | ✓ Google C2PA Root CA G3 |
+| `dreamina-seedance-2-0` | $0.15 | 2.24× | ✓ Byteplus Pte. Ltd. |
+| `google/veo-3.1` | $0.20 | 2.58× | ✓ Google C2PA Root CA G3 |
+
+Seedance 1.5 Pro and Runway gen4.5 are currently excluded — 1.5 Pro produces no C2PA;
+gen4.5 has a `claimSignature.mismatch` bug in Runway's signing infrastructure.
+Both will be re-added when their C2PA issues are resolved.
+
+### Practical Advice
+
+- **Veo 3.1 Lite** is the cheapest model with C2PA.  It earns the baseline multiplier (1×) and
+  produces fully verifiable content.  Good for miners optimizing for throughput.
+- **Seedance 2.0 Fast** costs 4× more than baseline but earns 2× multiplier — a strong
+  quality/efficiency tradeoff.
+- **Veo 3.1** (full) costs ~7× more than baseline and earns 2.58× multiplier.  Useful if your
+  content quality advantage translates to a higher pass rate or fool rate.
+- Running multiple models is supported — your effective multiplier is averaged across all
+  verified samples, weighted by how many each model contributed.
 
 ## Starting the Miner
 
