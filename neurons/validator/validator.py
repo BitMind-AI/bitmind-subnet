@@ -270,9 +270,12 @@ class Validator(BaseNeuron):
         """
         Update self.scores with exponential moving average of rewards.
         """
-        # Verification stats from last 4h (all verified, rewarded or not) for base rewards.
+        # Verification stats from last 24h (all verified, rewarded or not) for base rewards.
+        # Matches the fool-bonus liveness horizon (max_inactive_hours=24). At the current
+        # challenge rate a 4h window held only ~2 verified gens per modality per miner,
+        # so pass rates and volume were dominated by challenge-scheduling luck.
         verification_stats = self.content_manager.get_verification_stats_last_n_hours(
-            lookback_hours=4.0
+            lookback_hours=24.0
         )
         generator_base_rewards, media_ids = get_generator_base_rewards(verification_stats)
 
@@ -315,7 +318,7 @@ class Validator(BaseNeuron):
         if len(rewards) == 0:
             if not generator_base_rewards:
                 bt.logging.info(
-                    "No generator rewards: no verified submissions on this validator in the last 4h."
+                    "No generator rewards: no verified submissions on this validator in the last 24h."
                 )
             else:
                 bt.logging.trace(
