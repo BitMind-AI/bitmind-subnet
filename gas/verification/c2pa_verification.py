@@ -320,6 +320,17 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
                 error=f"Signature validation failed: {'; '.join(validation_errors)}"
             )
 
+        if not _has_verified_hard_binding(manifest_data):
+            bt.logging.warning(
+                "C2PA rejected: manifest has no verified hard-binding content hash "
+                "(c2pa.hash.* assertion)"
+            )
+            return C2PAVerificationResult(
+                verified=False,
+                signature_valid=True,
+                error="No verified hard-binding content hash assertion in C2PA manifest",
+            )
+
         cert_info = _extract_certificate_info(manifest_data)
         is_self_signed = cert_info.get("is_self_signed", True)
         cert_issuer = cert_info.get("cert_issuer")
@@ -519,6 +530,31 @@ def detect_media_format(data: bytes) -> str:
         return ".ogg"
 
     return ".bin"
+
+
+# Affirmative validation codes proving the manifest is hard-bound to the media
+# content (c2pa.hash.data for images, c2pa.hash.bmff for BMFF video, boxes for
+# JPEG XL/boxes-hashed formats). Without one of these, a signature only proves
+# the manifest itself is intact — not that the pixels/samples are unmodified.
+HARD_BINDING_MATCH_CODES = {
+    "assertion.dataHash.match",
+    "assertion.bmffHash.match",
+    "assertion.boxesHash.match",
+    "assertion.collectionHash.match",
+}
+
+
+def _has_verified_hard_binding(manifest_data: Dict[str, Any]) -> bool:
+    try:
+        success = (
+            manifest_data.get("validation_results", {})
+            .get("activeManifest", {})
+            .get("success", [])
+        )
+        return any(s.get("code") in HARD_BINDING_MATCH_CODES for s in success)
+    except Exception as e:
+        bt.logging.debug(f"Error checking hard binding: {e}")
+        return False
 
 
 def _check_validation_status(manifest_data: Dict[str, Any]) -> List[str]:

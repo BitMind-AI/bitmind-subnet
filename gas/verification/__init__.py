@@ -14,8 +14,6 @@ from .duplicate_detection import (
     compute_video_hash,
     compute_media_hash,
     compute_crop_resistant_hash,
-    compute_temporal_video_hashes,
-    detect_temporal_tampering,
     hamming_distance,
     count_crop_segment_matches,
     is_duplicate,
@@ -23,8 +21,6 @@ from .duplicate_detection import (
     check_duplicate_in_db,
     DEFAULT_HAMMING_THRESHOLD,
     DEFAULT_CROP_RESISTANT_MATCH_THRESHOLD,
-    DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
-    DEFAULT_TEMPORAL_TAMPER_RATIO,
 )
 from .c2pa_verification import (
     verify_c2pa,
