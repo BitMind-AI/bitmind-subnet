@@ -57,6 +57,7 @@ const config = {
   // Features
   autoUpdate: process.env.AUTO_UPDATE || 'false',
   heartbeat: process.env.HEARTBEAT || 'false',
+  storeFailedMedia: process.env.STORE_FAILED_MEDIA === 'true',
   
   // Service intervals
   datasetInterval: process.env.DATASET_INTERVAL || '1800',
@@ -137,6 +138,10 @@ if (config.startValidator) {
   
   if (heartbeatParam) {
     validatorArgs.push(heartbeatParam);
+  }
+
+  if (config.storeFailedMedia) {
+    validatorArgs.push('--store-failed-media');
   }
   
   apps.push({
