@@ -30,6 +30,7 @@ import gas
 def get_running_sn34_apps_via_pm2():
     """
     Query PM2 for running processes and return names starting with 'sn34-'.
+    Returns list of (name, pid) tuples.
     """
     try:
         result = subprocess.run([
@@ -41,7 +42,17 @@ def get_running_sn34_apps_via_pm2():
         apps = json.loads(result.stdout)
         if not isinstance(apps, list):
             return []
-        return [proc.get('name') for proc in apps if isinstance(proc, dict) and isinstance(proc.get('name'), str) and proc.get('name').startswith('sn34-')]
+        entries = []
+        for proc in apps:
+            if not isinstance(proc, dict):
+                continue
+            name = proc.get('name')
+            if not isinstance(name, str) or not name.startswith('sn34-'):
+                continue
+            pid = proc.get('pid') or (proc.get('pm2_env') or {}).get('pm_pid_path') or None
+            # pm2 jlist stores the actual process pid under 'pid'
+            entries.append((name, pid))
+        return entries
     except Exception as e:
         bt.logging.warning(f"Failed to parse pm2 jlist: {e}")
         return []
@@ -49,17 +60,24 @@ def get_running_sn34_apps_via_pm2():
 
 def restart_pm2_services(base_path):
     """
-    Restart running sn34-* PM2 services only. Does not restart other processes.
+    Restart running sn34-* PM2 services only. Skips the current process's own
+    PM2 service — its restart is handled by the os.kill(SIGINT) that follows,
+    which PM2 detects and uses to restart it.
     """
-    app_names = get_running_sn34_apps_via_pm2()
+    entries = get_running_sn34_apps_via_pm2()
 
-    if not app_names:
+    if not entries:
         bt.logging.warning("No sn34-* apps found; skipping PM2 restarts to avoid affecting other processes")
         return False
 
-    # Restart each service individually
+    current_pid = os.getpid()
+
+    # Restart each service individually, skipping self to avoid SIGINT mid-call
     success = True
-    for app_name in app_names:
+    for app_name, app_pid in entries:
+        if app_pid == current_pid:
+            bt.logging.info(f"Skipping self-restart of {app_name} (will be restarted via SIGINT)")
+            continue
         try:
             bt.logging.info(f"Restarting {app_name}...")
             subprocess.run(["pm2", "restart", app_name], check=True)

@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Optional, List, Tuple, Union
 
 import bittensor as bt
-import numpy as np
 from PIL import Image
 
 try:
@@ -33,14 +32,6 @@ DEFAULT_HAMMING_THRESHOLD = 8
 # Threshold for crop-resistant hash segment matching
 # Number of matching segments required to consider as duplicate
 DEFAULT_CROP_RESISTANT_MATCH_THRESHOLD = 2
-
-# Temporal tampering detection thresholds
-# Frame pHash jump: if consecutive frames differ by more than this,
-# they are likely from unrelated parts of the video (shuffle/splice/speed-up)
-DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD = 30
-
-# Fraction of frames that must be "jumps" to classify as tampered
-DEFAULT_TEMPORAL_TAMPER_RATIO = 0.10
 
 
 def compute_image_hash(
@@ -303,127 +294,6 @@ def compute_media_hash(
     else:
         bt.logging.warning(f"Unsupported modality for hashing: {modality}")
         return None
-
-
-def compute_temporal_video_hashes(
-    video_path: Union[str, Path],
-    hash_size: int = 16,
-    max_frames: int = 120,
-) -> Optional[List[str]]:
-    """
-    Extract pHash for every frame in temporal order, up to max_frames.
-    Used for detecting frame shuffling, speed-up, and splicing attacks.
-
-    Args:
-        video_path: Path to video file
-        hash_size: Size of each frame hash
-        max_frames: Maximum number of frames to hash
-
-    Returns:
-        List of pHash strings in temporal order, or None if failed
-    """
-    if not IMAGEHASH_AVAILABLE:
-        return None
-
-    try:
-        import cv2
-
-        cap = cv2.VideoCapture(str(video_path))
-        if not cap.isOpened():
-            return None
-
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if total_frames < 2:
-            cap.release()
-            return None
-
-        hashes = []
-        if total_frames <= max_frames:
-            windows = [(0, total_frames)]
-        else:
-            window_count = min(6, max(1, max_frames // 20))
-            frames_per_window = max(2, max_frames // window_count)
-            max_start = max(0, total_frames - frames_per_window)
-            starts = np.linspace(0, max_start, window_count, dtype=int)
-            windows = [(int(start), frames_per_window) for start in starts]
-
-        for window_idx, (start, length) in enumerate(windows):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, start)
-            for _ in range(length):
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                image = Image.fromarray(frame_rgb)
-                ph = imagehash.phash(image, hash_size=hash_size)
-                hashes.append(str(ph))
-            if window_idx < len(windows) - 1:
-                hashes.append("")
-
-        cap.release()
-
-        if len([h for h in hashes if h]) < 2:
-            return None
-
-        return hashes
-
-    except Exception as e:
-        bt.logging.warning(f"Failed to compute temporal video hashes: {e}")
-        return None
-
-
-def detect_temporal_tampering(
-    video_path: Union[str, Path],
-    jump_threshold: int = DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
-    max_frames: int = 120,
-    tamper_ratio: float = DEFAULT_TEMPORAL_TAMPER_RATIO,
-) -> Tuple[bool, float, int, int]:
-    """
-    Detect temporal tampering (frame shuffling, speed-up, splicing) in a video.
-
-    Normal videos have gradual frame-to-frame pHash changes (low jump rate).
-    Tampered videos have many abrupt jumps where consecutive frames are
-    semantically unrelated.
-
-    Args:
-        video_path: Path to video file
-        jump_threshold: Hamming distance above which a frame transition is a "jump"
-        max_frames: Maximum number of frames to analyze
-        tamper_ratio: Fraction of frames that must be jumps to classify as tampered
-
-    Returns:
-        Tuple of (is_tampered, jump_ratio, num_jumps, total_transitions)
-    """
-    hashes = compute_temporal_video_hashes(video_path, max_frames=max_frames)
-    if not hashes or len(hashes) < 2:
-        return False, 0.0, 0, 0
-
-    jumps = 0
-    total = 0
-
-    for i in range(1, len(hashes)):
-        if not hashes[i - 1] or not hashes[i]:
-            continue
-        try:
-            h1 = imagehash.hex_to_hash(hashes[i - 1])
-            h2 = imagehash.hex_to_hash(hashes[i])
-            distance = h1 - h2
-            total += 1
-            if distance > jump_threshold:
-                jumps += 1
-        except Exception:
-            continue
-
-    ratio = jumps / max(total, 1)
-    is_tampered = ratio > tamper_ratio
-
-    if is_tampered:
-        bt.logging.warning(
-            f"Temporal tampering detected: {jumps}/{total} frame jumps "
-            f"(ratio={ratio:.2%}, threshold={tamper_ratio:.0%})"
-        )
-
-    return is_tampered, ratio, jumps, total
 
 
 def extract_phashes(full_hash: str) -> List[str]:

@@ -29,10 +29,7 @@ from gas.types import MediaType, MinerType, Modality
 from gas.verification.c2pa_verification import verify_c2pa
 from gas.verification.duplicate_detection import (
     compute_media_hash,
-    detect_temporal_tampering,
     DEFAULT_HAMMING_THRESHOLD,
-    DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
-    DEFAULT_TEMPORAL_TAMPER_RATIO,
 )
 
 
@@ -401,35 +398,6 @@ class GenerativeChallengeManager:
                     f"corruption check error: {e}"
                 )
                 return _reject(f"Corruption check error: {e}")
-
-            # Step 1b: Check for temporal tampering in videos (frame shuffling/splicing/speed-up)
-            if modality_str == "video":
-                tmp_path = None
-                try:
-                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-                        tmp_path = tmp.name
-                        tmp.write(binary_data)
-                    is_tampered, ratio, jumps, total = detect_temporal_tampering(
-                        tmp_path,
-                        jump_threshold=DEFAULT_TEMPORAL_PHASH_JUMP_THRESHOLD,
-                        tamper_ratio=DEFAULT_TEMPORAL_TAMPER_RATIO,
-                    )
-                    if is_tampered:
-                        bt.logging.warning(
-                            f"REJECTED temporally tampered video from UID {generator_uid} "
-                            f"task {task_id}: {jumps}/{total} frame jumps "
-                            f"(ratio={ratio:.2%})"
-                        )
-                        return _reject("Temporally tampered video detected")
-                except Exception as e:
-                    bt.logging.warning(
-                        f"REJECTED video from UID {generator_uid} task {task_id}: "
-                        f"temporal tampering check error: {e}"
-                    )
-                    return _reject(f"Temporal tampering check error: {e}")
-                finally:
-                    if tmp_path:
-                        Path(tmp_path).unlink(missing_ok=True)
 
             # Step 2: Compute perceptual hash and check prompt/global duplicates
             perceptual_hash = None

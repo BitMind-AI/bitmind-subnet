@@ -23,7 +23,9 @@ from gas.utils.metagraph import SubstrateConnectionManager
 from gas.protocol.gas_api_validator import post_generator_verification_upload
 
 # Same window as generator base rewards in neurons/validator/validator.py
-_VERIFICATION_STATS_LOOKBACK_HOURS = 4.0
+# Kept in sync with the scoring lookback in validator.update_scores so the
+# stats uploaded to the benchmark API describe the same window used for rewards.
+_VERIFICATION_STATS_LOOKBACK_HOURS = 24.0
 
 
 class DataService:
