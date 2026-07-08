@@ -67,8 +67,9 @@ def verify_signature(
 ) -> Optional[Annotated[str, "Error Message"]]:
     if not isinstance(signature, str):
         return "Invalid Signature"
-    timestamp = int(timestamp)
-    if not isinstance(timestamp, int):
+    try:
+        timestamp = int(timestamp)
+    except (TypeError, ValueError):
         return "Invalid Timestamp"
     if not isinstance(signed_by, str):
         return "Invalid Sender key"
@@ -83,6 +84,9 @@ def verify_signature(
         staleness_ms = now - timestamp
         staleness_seconds = staleness_ms / 1000.0
         return f"Request is too stale: {staleness_seconds:.1f}s old (limit: {allowed_delta_ms/1000.0}s)"
+    if timestamp - allowed_delta_ms > now:
+        skew_seconds = (timestamp - now) / 1000.0
+        return f"Request timestamp is in the future: {skew_seconds:.1f}s ahead (limit: {allowed_delta_ms/1000.0}s)"
     message = f"{sha256(body).hexdigest()}.{uuid}.{timestamp}.{signed_for}"
     verified = keypair.verify(message, signature)
     if not verified:

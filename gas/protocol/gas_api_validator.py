@@ -33,8 +33,7 @@ def _verification_stats_to_entries(
         )
         if len(entries) >= _MAX_ENTRIES:
             bt.logging.warning(
-                "Verification upload capped at %s generators (truncate remainder)",
-                _MAX_ENTRIES,
+                f"Verification upload capped at {_MAX_ENTRIES} generators (truncate remainder)"
             )
             break
     return entries
@@ -82,14 +81,13 @@ def post_generator_verification_upload(
     try:
         response = requests.post(url, data=body, headers=headers, timeout=timeout_s)
     except requests.RequestException as e:
-        bt.logging.warning("generator-verification-upload request failed: %s", e)
+        bt.logging.warning(f"generator-verification-upload request failed: {e}")
         return None
 
     if response.status_code != 200:
         bt.logging.warning(
-            "generator-verification-upload HTTP %s: %s",
-            response.status_code,
-            (response.text or "")[:500],
+            f"generator-verification-upload HTTP {response.status_code}: "
+            f"{(response.text or '')[:500]}"
         )
         return None
 
@@ -101,8 +99,6 @@ def post_generator_verification_upload(
         return None
 
     bt.logging.info(
-        "Posted generator verification upload: %s rows (lookback_hours=%s)",
-        inserted,
-        lookback_hours,
+        f"Posted generator verification upload: {inserted} rows (lookback_hours={lookback_hours})"
     )
     return inserted
