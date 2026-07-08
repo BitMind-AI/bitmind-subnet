@@ -53,6 +53,10 @@ if [[ -n "${EXTERNAL_CALLBACK_PORT:-}" ]]; then
     VALIDATOR_CMD+=" --neuron.external-callback-port ${EXTERNAL_CALLBACK_PORT}"
 fi
 
+if [[ -n "${EXTERNAL_IP:-}" ]]; then
+    VALIDATOR_CMD+=" --neuron.external-ip ${EXTERNAL_IP}"
+fi
+
 if [[ "${HEARTBEAT,,}" == "true" ]]; then
     VALIDATOR_CMD+=" --heartbeat"
 fi

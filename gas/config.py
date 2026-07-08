@@ -221,6 +221,19 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--neuron.external-ip",
+        type=str,
+        help=(
+            "External IP to advertise to miners for callbacks. Defaults to "
+            "auto-detection via checkip.amazonaws.com, which reports this "
+            "machine's outbound NAT IP — on hosts where inbound traffic "
+            "arrives via a different public IP, that auto-detected IP is "
+            "wrong and this must be set explicitly."
+        ),
+        default=None,
+    )
+
+    parser.add_argument(
         "--neuron.miner-total-timeout",
         type=float,
         help="Total timeout for miner requests in seconds",

@@ -64,11 +64,15 @@ class GenerativeChallengeManager:
             self.config.neuron.callback_port
         )
 
-        try:
-            self.external_ip = requests.get("https://checkip.amazonaws.com", timeout=10).text.strip()
-        except Exception as e:
-            bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
-            self.external_ip = "localhost"
+        configured_ip = getattr(self.config.neuron, 'external_ip', None)
+        if configured_ip:
+            self.external_ip = configured_ip
+        else:
+            try:
+                self.external_ip = requests.get("https://checkip.amazonaws.com", timeout=10).text.strip()
+            except Exception as e:
+                bt.logging.error(f"Failed to get external IP: {e}. Using fallback.")
+                self.external_ip = "localhost"
         self.generative_callback_url = f"http://{self.external_ip}:{self.external_port}/generative_callback"
 
         self.init_fastapi()
