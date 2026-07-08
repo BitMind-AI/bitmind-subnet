@@ -95,6 +95,7 @@ class MediaEntry:
     resolution: Optional[tuple[int, int]] = None  # (width, height)
     file_size: Optional[int] = None               # in bytes
     format: Optional[str] = None                  # File format (e.g., "PNG", "JPEG", "MP4")
+    mask_path: Optional[str] = None                # Path to segmentation mask, if any
 
     def __post_init__(self):
         if self.created_at is None:

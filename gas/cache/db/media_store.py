@@ -62,6 +62,7 @@ class MediaStore:
             resolution=resolution,
             file_size=row["file_size"],
             format=row["format"],
+            mask_path=row["mask_path"] if "mask_path" in row.keys() else None,
             perceptual_hash=row["perceptual_hash"] if "perceptual_hash" in row.keys() else None,
             c2pa_verified=bool(row["c2pa_verified"]) if "c2pa_verified" in row.keys() and row["c2pa_verified"] is not None else False,
             c2pa_issuer=row["c2pa_issuer"] if "c2pa_issuer" in row.keys() else None,
@@ -118,6 +119,7 @@ class MediaStore:
         resolution: Optional[Tuple[int, int]] = None,
         file_size: Optional[int] = None,
         format: Optional[str] = None,
+        mask_path: Optional[str] = None,
         perceptual_hash: Optional[str] = None,
         c2pa_verified: Optional[bool] = None,
         c2pa_issuer: Optional[str] = None,
@@ -135,17 +137,17 @@ class MediaStore:
                     download_url, scraper_name, dataset_name, dataset_source_file, dataset_index,
                     model_name, generation_args, uid, hotkey,
                     verified, failed_verification, rewarded,
-                    created_at, timestamp, resolution, file_size, format,
+                    created_at, mask_path, timestamp, resolution, file_size, format,
                     perceptual_hash, c2pa_verified, c2pa_issuer, task_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     media_id, prompt_id, file_path, modality.value, media_type.value, source_type.value,
                     download_url, scraper_name, dataset_name, dataset_source_file, dataset_index,
                     model_name, json.dumps(generation_args) if generation_args else None, uid, hotkey,
                     1 if verified else 0, 1 if failed_verification else 0, 1 if rewarded else 0,
-                    created_at, timestamp,
+                    created_at, mask_path, timestamp,
                     json.dumps(list(resolution)) if resolution else None,
                     file_size, format,
                     perceptual_hash,
