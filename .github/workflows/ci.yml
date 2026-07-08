@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main, refactor/4.9.0]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # Error-level rules only for now (syntax errors, undefined names,
+      # invalid prints/f-strings). Widen as the Phase 2 burndown lands.
+      - run: uvx ruff check --select E9,F63,F7,F82 gas neurons tests
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install test dependencies
+        # Deliberately NOT `uv sync`: the full lock pulls CUDA torch
+        # (several GB) which the current tests don't need. Versions
+        # mirror the pins in pyproject.toml — keep them in step.
+        run: |
+          uv venv --python 3.10
+          uv pip install pytest "bittensor==9.9.0" "pillow==10.4.0" "numpy==2.0.1"
+      - name: Run tests
+        run: uv run --no-project pytest tests/ -q
