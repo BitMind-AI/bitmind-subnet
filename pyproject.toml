@@ -66,6 +66,13 @@ dependencies = [
 [project.scripts]
 gascli = "gas.cli:cli"
 
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
 [tool.setuptools]
 packages = { find = { where = [
     ".",

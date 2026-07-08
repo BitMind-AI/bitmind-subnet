@@ -1444,6 +1444,11 @@ dependencies = [
     { name = "wandb" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = "==1.8.1" },
@@ -1494,6 +1499,9 @@ requires-dist = [
     { name = "uvicorn", specifier = "==0.27.1" },
     { name = "wandb", specifier = "==0.19.9" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0" }]
 
 [[package]]
 name = "gasbench"
