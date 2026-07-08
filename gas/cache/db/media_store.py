@@ -360,23 +360,27 @@ class MediaStore:
                 conn.row_factory = __import__("sqlite3").Row
                 base_where = "(uploaded = 0 OR uploaded IS NULL)"
 
+                params: list = []
                 if source_type == 'miner':
                     source_filter = "(source_type = 'miner' AND verified = 1)"
                 elif source_type == 'generated':
                     source_filter = "source_type = 'generated'"
                 elif source_type in ('scraper', 'dataset'):
-                    source_filter = f"source_type = '{source_type}'"
+                    source_filter = "source_type = ?"
+                    params.append(source_type)
                 else:
                     source_filter = "(source_type IN ('scraper', 'dataset', 'generated') OR (source_type = 'miner' AND verified = 1))"
 
                 query = f"SELECT * FROM media WHERE {base_where} AND {source_filter}"
                 if modality:
-                    query += f" AND modality = '{modality}'"
+                    query += " AND modality = ?"
+                    params.append(modality)
                 query += " ORDER BY (source_type = 'miner' AND verified = 1) DESC, created_at ASC"
                 if limit is not None:
-                    query += f" LIMIT {limit}"
+                    query += " LIMIT ?"
+                    params.append(limit)
 
-                cursor = conn.execute(query)
+                cursor = conn.execute(query, params)
                 entries = []
                 for row in cursor.fetchall():
                     entry = self._row_to_media_entry(row)
@@ -717,7 +721,6 @@ class MediaStore:
                 prompt_ids = [r["prompt_id"] for r in rows if r["prompt_id"]]
 
                 mid_ph = ",".join("?" * len(media_ids))
-                conn.execute(f"DELETE FROM prompts WHERE id IN ({mid_ph})", media_ids)
                 conn.execute(f"DELETE FROM generator_challenge_outcomes WHERE media_id IN ({mid_ph})", media_ids)
                 conn.execute(f"DELETE FROM media WHERE id IN ({mid_ph})", media_ids)
                 conn.commit()

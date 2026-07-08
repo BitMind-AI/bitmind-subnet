@@ -335,7 +335,7 @@ class MediaStorage:
                     mask = None
                     mask_path = None
                     if kwargs.get("require_mask", False):
-                        mask_path = file_path.with_suffix("_mask.npy")
+                        mask_path = file_path.parent / (file_path.stem + "_mask.npy")
                         mask = self.read_mask(mask_path)
                         if mask is None:
                             print(f"Mask not found for {file_path}")
