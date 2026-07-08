@@ -43,20 +43,25 @@ from dataclasses import asdict
 from typing import Callable, Deque, Dict, List, Optional
 
 import bittensor as bt
-import torch
 from PIL import Image
-from transformers import (
-    AutoModelForCausalLM,
-    AutoModelForImageTextToText,
-    AutoProcessor,
-    AutoTokenizer,
-    pipeline,
-)
 
 from gas.generation.prompts.register_sampler import PromptSpec, sample_spec
 from gas.generation.prompts.prompt_qc import validate as qc_validate
 from gas.generation.prompts.scene import SceneDescription, extract_scene_with_vlm
 from gas.types import Modality
+
+# torch/transformers are imported lazily inside the model-load methods so
+# that the message-construction paths (and their tests) work without the
+# GPU runtime stack installed.
+
+
+def _empty_cuda_cache() -> None:
+    try:
+        import torch
+    except ImportError:
+        return
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 # Default VLM: Qwen3-VL-4B-Instruct. ~9GB VRAM in bf16.
@@ -212,6 +217,9 @@ class PromptGenerator:
             return "eager"
 
     def load_vlm(self) -> None:
+        import torch
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+
         bt.logging.debug(f"Loading VLM {self.vlm_name}")
         attn_impl = self._attn_impl()
 
@@ -252,6 +260,9 @@ class PromptGenerator:
         bt.logging.info(f"Loaded VLM {self.vlm_name}")
 
     def load_llm(self) -> None:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
         bt.logging.debug(f"Loading LLM {self.llm_name}")
         m = re.match(r"cuda:(\d+)", self.device)
         gpu_id = int(m.group(1)) if m else 0
@@ -300,8 +311,7 @@ class PromptGenerator:
             self.vlm = None
             self.vlm_processor = None
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        _empty_cuda_cache()
 
     def unload_llm(self) -> None:
         """Drop LLM and reclaim its VRAM."""
@@ -312,8 +322,7 @@ class PromptGenerator:
         self._prior_image_prompts.clear()
         self._prior_video_prompts.clear()
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        _empty_cuda_cache()
 
     def clear_gpu(self) -> None:
         """Drop both models and reclaim VRAM (convenience)."""
@@ -347,8 +356,7 @@ class PromptGenerator:
                 scenes.append(None)  # type: ignore[arg-type]
                 # CUDA OOM can leave the GPU in a bad state; flush so
                 # subsequent VLM calls don't cascade-fail.
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+                _empty_cuda_cache()
         return scenes
 
     def compose_prompts_from_scenes(
