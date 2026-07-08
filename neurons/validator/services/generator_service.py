@@ -502,9 +502,6 @@ class GeneratorService:
         (LLM only on GPU). Never loads both models simultaneously, keeping
         peak VRAM at ~60 GB instead of ~69 GB.
         """
-        generated = 0
-        skipped_dups = 0
-
         # ------------------------------------------------------------------
         # Phase 1: Collect images for the batch
         # ------------------------------------------------------------------
@@ -582,18 +579,20 @@ class GeneratorService:
         for scene_specs, origin in zip(specs, origins):
             for spec in scene_specs.values():
                 spec.origin = origin
-        prompts_list = self.prompt_generator.compose_prompts_from_scenes(
-            scenes, specs=specs
-        )
-        self.prompt_generator.unload_llm()
-
         # ------------------------------------------------------------------
-        # Phase 4: Write results to database
+        # Phase 4: Write each scene's prompts to the database as soon as
+        # it's composed, rather than waiting for the whole batch to finish.
+        # A 100-scene batch can take well over an hour; incremental writes
+        # mean prompts are usable immediately and nothing is lost if the
+        # service restarts mid-batch.
         # ------------------------------------------------------------------
         import json as _json
         from dataclasses import asdict as _asdict
 
-        for item, scene, scene_specs, prompts in zip(items, scenes, specs, prompts_list):
+        counts = {"generated": 0, "skipped_dups": 0}
+
+        def _write_composed(i, scene, scene_specs, prompts):
+            item = items[i]
             scene_blob = (
                 _json.dumps(_asdict(scene), ensure_ascii=False)
                 if scene is not None
@@ -612,9 +611,17 @@ class GeneratorService:
                     spec_json=_json.dumps(spec.to_dict()) if spec else None,
                 )
                 if prompt_id is None:
-                    skipped_dups += 1
+                    counts["skipped_dups"] += 1
                 else:
-                    generated += 1
+                    counts["generated"] += 1
+
+        self.prompt_generator.compose_prompts_from_scenes(
+            scenes, specs=specs, on_composed=_write_composed
+        )
+        self.prompt_generator.unload_llm()
+
+        generated = counts["generated"]
+        skipped_dups = counts["skipped_dups"]
 
         bt.logging.info(
             f"[GENERATOR-SERVICE] Added {generated} prompts to database "

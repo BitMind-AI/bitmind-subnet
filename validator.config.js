@@ -44,6 +44,7 @@ const config = {
   chainEndpoint: process.env.CHAIN_ENDPOINT || '',
   callbackPort: process.env.CALLBACK_PORT || '10525',
   externalCallbackPort: process.env.EXTERNAL_CALLBACK_PORT || null,
+  externalIp: process.env.EXTERNAL_IP || null,
   
   // Cache
   cacheDir: process.env.SN34_CACHE_DIR || path.join(os.homedir(), '.cache', 'sn34'),
@@ -134,6 +135,12 @@ if (config.startValidator) {
   // Add external callback port if provided
   if (config.externalCallbackPort) {
     validatorArgs.push('--neuron.external-callback-port', config.externalCallbackPort);
+  }
+
+  // Add external IP if provided (needed when auto-detected outbound IP
+  // differs from the inbound-reachable public IP, e.g. some cloud GPU hosts)
+  if (config.externalIp) {
+    validatorArgs.push('--neuron.external-ip', config.externalIp);
   }
   
   if (heartbeatParam) {

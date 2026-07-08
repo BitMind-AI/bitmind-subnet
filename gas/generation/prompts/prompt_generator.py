@@ -40,7 +40,7 @@ import json
 import re
 from collections import deque
 from dataclasses import asdict
-from typing import Deque, Dict, List, Optional
+from typing import Callable, Deque, Dict, List, Optional
 
 import bittensor as bt
 import torch
@@ -355,6 +355,9 @@ class PromptGenerator:
         self,
         scenes: list[SceneDescription],
         specs: Optional[list[dict]] = None,
+        on_composed: Optional[
+            Callable[[int, Optional[SceneDescription], dict, dict[Modality, str]], None]
+        ] = None,
     ) -> list[dict[Modality, str]]:
         """LLM-only: compose (image, video) prompts from cached scenes.
 
@@ -367,6 +370,10 @@ class PromptGenerator:
                 mapping Modality -> PromptSpec for that scene. When omitted,
                 a spec is sampled per scene per modality (so direct callers
                 still get diversified output).
+            on_composed: Optional callback invoked as
+                ``on_composed(i, scene, scene_specs, result)`` immediately
+                after each scene is composed, so callers can persist prompts
+                incrementally instead of waiting for the full batch.
 
         Returns one dict per input scene, mapping Modality -> prompt.
         Positions with ``None`` scenes produce empty dicts.
@@ -407,6 +414,11 @@ class PromptGenerator:
                 result.get(Modality.VIDEO, ""),
             )
             results.append(result)
+            if on_composed is not None:
+                try:
+                    on_composed(i, scene, scene_specs, result)
+                except Exception as e:
+                    bt.logging.error(f"[PROMPT-GEN] on_composed callback failed: {e}")
         return results
 
     # ------------------------------------------------------------------
