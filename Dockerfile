@@ -71,31 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10-dev \
     build-essential \
     ffmpeg \
-    xvfb \
     wget \
-    gnupg2 \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Google Chrome (needed by data service Selenium scraper)
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" \
-        > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends google-chrome-stable && \
-    rm -rf /var/lib/apt/lists/*
 
 # Make python3.10 the default
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \

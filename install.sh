@@ -205,58 +205,6 @@ if [ "$SKIP_SYSTEM_DEPS" = false ]; then
         log_success "System dependencies already installed ✓"
     fi
 
-    log_info "Installing ChromeDriver dependencies..."
-    check_apt_get "Chrome, libnss3, libnspr4, and xvfb"
-    
-    # Install Chrome if not present
-    if ! check_command google-chrome; then
-        log_info "Installing Google Chrome dependencies..."
-        if ! sudo apt-get install -y wget gnupg2; then
-            log_error "Failed to install wget and gnupg2"
-            log_error "Please run: sudo apt-get install -y wget gnupg2"
-            exit 1
-        fi
-        
-        log_info "Adding Google Chrome repository..."
-        if ! wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -; then
-            log_error "Failed to add Google Chrome signing key"
-            exit 1
-        fi
-        
-        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-        
-        # Update package lists after adding the repository
-        log_info "Updating package lists to include Google Chrome repository..."
-        if ! sudo apt-get update; then
-            log_error "Failed to update package lists after adding Google Chrome repository"
-            exit 1
-        fi
-        
-        log_info "Installing Google Chrome..."
-        if ! sudo apt-get install -y google-chrome-stable; then
-            log_error "Failed to install Google Chrome"
-            exit 1
-        fi
-        
-        # Verify Chrome installation
-        if ! check_command google-chrome; then
-            log_error "Google Chrome installation verification failed"
-            exit 1
-        fi
-        
-        log_success "Google Chrome installed and verified ✓"
-    else
-        log_success "Google Chrome already installed ✓"
-    fi
-    
-    # Install ChromeDriver dependencies and Xvfb
-    log_info "Installing ChromeDriver dependencies and Xvfb..."
-    if ! sudo apt-get install -y libnss3 libnspr4 xvfb; then
-        log_error "Failed to install ChromeDriver dependencies and Xvfb"
-        exit 1
-    fi
-    log_success "ChromeDriver dependencies and Xvfb installed ✓"
-
     log_info "Checking for Node.js and npm..."
     if ! check_command node || ! check_command npm; then
         log_info "Installing Node.js and npm..."

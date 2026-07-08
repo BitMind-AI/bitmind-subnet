@@ -31,8 +31,7 @@ These are live bugs found by inspection. Each is a small, independently shippabl
 | 2 | SQL string interpolation of unvalidated `modality` and `LIMIT` (sibling method parameterizes correctly — one path is unsafe) | `gas/cache/db/media_store.py:374-377` |
 | 3 | Wrong-table DELETE: cleanup deletes from `prompts` using **media** UUIDs | `gas/cache/db/media_store.py:720` |
 | 4 | Mask retrieval always silently fails: `with_suffix("_mask.npy")` raises `ValueError` (needs leading dot), swallowed by outer except | `gas/cache/media_storage.py:338` |
-| 5 | Google scraper returns 1 image regardless of limit: `limit` positionally binds to `query_id` | `gas/scraping/google.py:212` vs `:229` |
-| 6 | `download_images(urls=...)` path raises `NameError` — `image_urls` only assigned when `urls is None` | `gas/scraping/base.py:174-183` |
+| 5 | ~~Google scraper limit bug~~ / ~~`download_images(urls=...)` NameError~~ — moot: `gas/scraping/` had zero importers and was **deleted** (with its selenium/stamina deps and Chrome install blocks) | done 2026-07-08 |
 | 7 | `on_block_interval` logs error on `None` interval then proceeds to `block % None` → `TypeError` (missing `return`) | `gas/utils/utils.py:52-56` |
 | 8 | C2PA trust via bidirectional substring matching — a cert subject containing "Google"/"Adobe" passes a security boundary | `gas/verification/c2pa_verification.py:761-768, 800-821` |
 | 9 | DB connection not closed on exception (`close()` not in `finally`) | `gas/cache/db/connection.py:19-36` |
@@ -84,6 +83,7 @@ Ordered by lines recovered per effort:
 7. **Misc**: duplicated model-style config entries (`flux`≈`flux.1-dev`, `sdxl`≈`stable-diffusion-xl`, `cogvideo`≈`cogvideox`, `hunyuan`≈`hunyuanvideo`), triple-copied upload block in `push_model.py:123-216`, duplicated reward computation per modality in `rewards.py:165-183`, copy-pasted `source_filter` in `media_store.py`.
 
 ### Dead code to delete outright
+- ✅ `gas/scraping/` (deleted 2026-07-08 — zero importers; took selenium+stamina deps, the Chrome apt blocks in `install.sh`/`Dockerfile`, and xvfb/libnss3 runtime packages with it; `source_type='scraper'` stays in the DB schema for historical rows)
 - `local_service.py` (345 lines, disabled in registry, imports torch/diffusers at module top anyway)
 - 8 of 13 `ModelPromptConfig` fields + the ~300 lines of `MODEL_STYLES` config that nothing reads (`model_prompt_styles.py`)
 - CLIP "consensus" machinery built for a list of exactly one model (~130 lines, `clip_utils.py:415-544`)
@@ -135,8 +135,7 @@ Config currently lives in: argparse (~60 args, with `--device` defined twice wit
 2. **Stop decoding media three times per submission.** Each callback writes the bytes to a temp file and fully decodes for corruption-check, again for perceptual hash, again for C2PA. Write once, decode once, pass frames/path through the pipeline.
 3. **`sample_frames` spawns one ffmpeg subprocess per frame** (up to 24, inside a 5-retry loop → up to 120 process spawns per clip). One ffmpeg invocation with a `select`/`fps` filter.
 4. **CLIP video scoring is unbatched** — per-video Python loop, re-opening the file and seeking frame-by-frame with `cap.set(POS_FRAMES)`. Batch frames across videos; read sequentially.
-5. **Scraper double-downloads every image** (`_check_image_size` fetches the full body, then `_download_single_image` fetches the same URL again). Download once, check size from bytes in hand.
-6. **No import-time side effects**: `rewards.py` makes a blocking HTTP call to OpenRouter at module import; `models.py` creates CUDA `torch.Generator`s at import (shared RNG state across all generations); `GenerativeChallengeManager.__init__` and `miner.py` construction both block on `checkip.amazonaws.com`. Make all of these lazy — the CI import-smoke test from 2.1 then guards this forever.
+5. **No import-time side effects**: `rewards.py` makes a blocking HTTP call to OpenRouter at module import; `models.py` creates CUDA `torch.Generator`s at import (shared RNG state across all generations); `GenerativeChallengeManager.__init__` and `miner.py` construction both block on `checkip.amazonaws.com`. Make all of these lazy — the CI import-smoke test from 2.1 then guards this forever.
 7. **In-batch duplicate check is O(n²)** (`verification_pipeline.py:309-315`) and DB dup-check is a linear scan of 1000 rows per submission; fine for now, but the docstring already says "consider LSH/FAISS" — do that when volume warrants.
 
 ---
