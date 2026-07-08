@@ -26,9 +26,13 @@ jobs:
         # mirror the pins in pyproject.toml — keep them in step.
         # The editable --no-deps install makes the gas/neurons packages
         # importable without dragging in the rest of the dependency tree.
+        # async-substrate-interface is pinned to the lockfile's version:
+        # newer releases moved to cyscale, which conflicts with the
+        # scalecodec package bittensor still depends on.
         run: |
           uv venv --python 3.10
-          uv pip install pytest "bittensor==9.9.0" "pillow==10.4.0" "numpy==2.0.1"
+          uv pip install pytest "bittensor==9.9.0" "pillow==10.4.0" "numpy==2.0.1" \
+            "async-substrate-interface==1.6.0"
           uv pip install -e . --no-deps
       - name: Run tests
         run: uv run --no-project pytest tests/ -q
