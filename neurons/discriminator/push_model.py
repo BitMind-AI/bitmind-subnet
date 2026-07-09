@@ -236,7 +236,9 @@ async def push_separate_models(
         model_hash = hashlib.sha256(
             f"{result['file_hash']}{wallet.hotkey.ss58_address}".encode()
         ).hexdigest()
-        hash_value = str(hash(model_hash))
+        # DiscriminatorModelId truncates to 16 chars; builtin hash() is
+        # process-salted and non-deterministic across runs
+        hash_value = model_hash[:16]
 
         model_id = ModelId(key=model_key, hash=hash_value)
         print_info(f"Registering {modality} model (ID: {model_id.key})...")

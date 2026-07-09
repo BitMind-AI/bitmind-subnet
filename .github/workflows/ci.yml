@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, refactor/4.9.0]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # Error-level rules only for now (syntax errors, undefined names,
+      # invalid prints/f-strings). Widen as the Phase 2 burndown lands.
+      - run: uvx ruff check --select E9,F63,F7,F82 gas neurons tests
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install locked dependencies (minus the GPU stack)
+        # Single source of truth: every version comes from uv.lock.
+        # The GPU stack (several GB of CUDA wheels) is skipped by NAME
+        # only — the current tests don't import torch. If a test ever
+        # needs it, drop the corresponding flag.
+        run: >
+          uv sync --frozen
+          --no-install-package torch
+          --no-install-package torchvision
+          --no-install-package torchaudio
+          --no-install-package torchcodec
+          --no-install-package triton
+          --no-install-package bitsandbytes
+          --no-install-package open-clip-torch
+          --no-install-package nvidia-cublas-cu12
+          --no-install-package nvidia-cuda-cupti-cu12
+          --no-install-package nvidia-cuda-nvrtc-cu12
+          --no-install-package nvidia-cuda-runtime-cu12
+          --no-install-package nvidia-cudnn-cu12
+          --no-install-package nvidia-cufft-cu12
+          --no-install-package nvidia-cufile-cu12
+          --no-install-package nvidia-curand-cu12
+          --no-install-package nvidia-cusolver-cu12
+          --no-install-package nvidia-cusparse-cu12
+          --no-install-package nvidia-cusparselt-cu12
+          --no-install-package nvidia-nccl-cu12
+          --no-install-package nvidia-nvjitlink-cu12
+          --no-install-package nvidia-nvtx-cu12
+      - name: Run tests
+        run: uv run --no-sync pytest tests/ -q

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from pathlib import Path
 from statistics import mean, median
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -150,7 +151,6 @@ def verify_media(
         video_prompts = []
         
         for entry, path, prompt in zip(valid_entries, media_paths, prompts):
-            from pathlib import Path
             if Path(path).suffix.lower() in [".mp4", ".avi", ".mov", ".mkv", ".webm"]:
                 video_entries.append(entry)
                 video_paths.append(path)
@@ -166,23 +166,21 @@ def verify_media(
 
         all_results = []
         
-        # Process images with large batch size (128)
         image_features = None
         if image_entries:
-            bt.logging.info(f"Processing {len(image_entries)} images (batch_size=128)")
+            bt.logging.info(f"Processing {len(image_entries)} images (batch_size={batch_size})")
             result = calculate_clip_alignment_consensus(
-                image_paths, image_prompts, batch_size=128, return_features=True
+                image_paths, image_prompts, batch_size=batch_size, return_features=True
             )
             if result is not None:
                 image_consensus, image_features = result
                 all_results.extend(zip(image_entries, image_prompts, image_consensus))
-        
-        # Process videos with small batch size (32)
+
         video_features = None
         if video_entries:
-            bt.logging.info(f"Processing {len(video_entries)} videos (batch_size=32)")
+            bt.logging.info(f"Processing {len(video_entries)} videos (batch_size={batch_size})")
             result = calculate_clip_alignment_consensus(
-                video_paths, video_prompts, batch_size=32, return_features=True
+                video_paths, video_prompts, batch_size=batch_size, return_features=True
             )
             if result is not None:
                 video_consensus, video_features = result

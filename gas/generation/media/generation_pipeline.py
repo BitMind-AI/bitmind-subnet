@@ -240,12 +240,11 @@ class GenerationPipeline:
 
         if task == "i2i" and image is None:
             raise ValueError(
-                "An image must be provided for image-to-image model {model_name}"
+                f"An image must be provided for image-to-image model {model_name}"
             )
 
         if not self._load_model(model_name):
             raise RuntimeError(f"Failed to load {model_name}")
-            return {}
 
         bt.logging.debug("Preparing generation arguments")
         gen_args = model_config.get("generation_args", {}).copy()

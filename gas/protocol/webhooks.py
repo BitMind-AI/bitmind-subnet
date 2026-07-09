@@ -109,6 +109,7 @@ class WebhookStatsTracker:
         self._stats_file = stats_file or os.path.expanduser("~/.bitmind/webhook_stats.json")
         self._stats: Dict[str, ValidatorStats] = {}
         self._file_lock = threading.Lock()
+        self._stats_lock = threading.RLock()
         self._dirty = False  # Track if stats have changed since last save
         self._last_save_time = 0.0
         self._last_summary_time = 0.0
@@ -194,7 +195,8 @@ class WebhookStatsTracker:
             bt.logging.info(f"Rotated webhook stats to {archive_file}")
 
             # Reset current stats
-            self._stats = {}
+            with self._stats_lock:
+                self._stats = {}
             self._do_save()
 
             # Clean up old archives (keep last 7 days)
@@ -233,11 +235,12 @@ class WebhookStatsTracker:
         """Actually save stats to file."""
         try:
             os.makedirs(os.path.dirname(self._stats_file), exist_ok=True)
-            with self._file_lock:
+            with self._stats_lock:
                 data = {
                     "last_updated": datetime.now().isoformat(),
                     "validators": {ip: stats.to_dict() for ip, stats in self._stats.items()},
                 }
+            with self._file_lock:
                 with open(self._stats_file, "w") as f:
                     json.dump(data, f, indent=2)
             self._dirty = False
@@ -271,18 +274,20 @@ class WebhookStatsTracker:
     def record_success(self, webhook_url: str):
         """Record a successful webhook delivery."""
         ip = self._extract_ip(webhook_url)
-        stats = self._get_stats(ip)
-        stats.successes += 1
-        stats.last_success = datetime.now().isoformat()
+        with self._stats_lock:
+            stats = self._get_stats(ip)
+            stats.successes += 1
+            stats.last_success = datetime.now().isoformat()
         self._save_stats()
 
     def record_failure(self, webhook_url: str, failure_type: str, reason: Optional[str] = None):
         """Record a failed webhook delivery."""
         ip = self._extract_ip(webhook_url)
-        stats = self._get_stats(ip)
-        stats.failures[failure_type] += 1
-        stats.last_failure = datetime.now().isoformat()
-        stats.last_failure_reason = reason
+        with self._stats_lock:
+            stats = self._get_stats(ip)
+            stats.failures[failure_type] += 1
+            stats.last_failure = datetime.now().isoformat()
+            stats.last_failure_reason = reason
         self._save_stats()
 
     @classmethod
@@ -321,12 +326,13 @@ class WebhookStatsTracker:
 
     def get_summary(self) -> Dict[str, Any]:
         """Get a summary of all stats."""
-        summary = {
-            "total_validators": len(self._stats),
-            "total_successes": sum(s.successes for s in self._stats.values()),
-            "total_failures": sum(sum(s.failures.values()) for s in self._stats.values()),
-            "validators": {ip: stats.to_dict() for ip, stats in self._stats.items()},
-        }
+        with self._stats_lock:
+            summary = {
+                "total_validators": len(self._stats),
+                "total_successes": sum(s.successes for s in self._stats.values()),
+                "total_failures": sum(sum(s.failures.values()) for s in self._stats.values()),
+                "validators": {ip: stats.to_dict() for ip, stats in self._stats.items()},
+            }
         return summary
 
     def print_summary(self):
@@ -444,7 +450,7 @@ def _send_webhook(
             bt.logging.error(f"Webhook attempt {attempt + 1} error for task {task.task_id}: {e}")
 
         if attempt < max_retries - 1:
-            time.sleep(retry_delay ** attempt)
+            time.sleep(retry_delay * (2 ** attempt))
 
     bt.logging.error(f"All webhook attempts failed for task {task.task_id}")
 

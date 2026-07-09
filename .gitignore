@@ -3,12 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-
-# Node.js (not used - Python only project)
-node_modules/
-package.json
-package-lock.json
-.Python
 build/
 develop-eggs/
 dist/
@@ -27,17 +21,26 @@ wheels/
 .coverage
 *.ipynb
 
+# Node.js
+node_modules/
+package.json
+package-lock.json
+
 # Virtual environments
 venv/
 env/
 ENV/
 .venv/
+.Python
 
-# IDE
+# IDE / editors
 .vscode/
 .idea/
 *.swp
 *.swo
+\#*\#
+.#*
+*~
 
 # OS
 .DS_Store
@@ -46,39 +49,26 @@ Thumbs.db
 # Logs
 *.log
 
-# Environment variables
+# Environment variables (catch-all; templates stay tracked)
 .env
-.env.local
-.env.development
-.env.test
-.env.production
+.env.*
+*.env
+!*.env.template
+!.env.*.template
 
 # Model files and cache
 *.pth
 *.pt
 *.ckpt
+*.onnx
 .cache/
+downloaded_models/*
 
 # Bittensor specific
 ~/.bittensor/
-*.wallet 
+*.wallet
 
-.env.validator
-.env.miner
-.env.generator
-.env.mock_miner
-
-*.onnx
-downloaded_models/*
-
-.env.gen_miner
 base_miner/test_output/*
-base_miner/.env.gen_miner
-*.onnx
-downloaded_models/*
-
 generated_content/*
-
 wandb/*
-
-sample-images/ 
+sample-images/

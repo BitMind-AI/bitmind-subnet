@@ -15,7 +15,6 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
 
 import bittensor as bt
-import torch
 from PIL import Image
 
 
@@ -245,6 +244,8 @@ def extract_scene_with_vlm(
     text = vlm_processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
+    import torch  # lazy: keeps scene parsing importable without the GPU stack
+
     inputs = vlm_processor(
         text=[text],
         images=[image],

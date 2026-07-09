@@ -52,6 +52,7 @@ def on_block_interval(interval_attr_name):
             interval = getattr(self.config, interval_attr_name)
             if interval is None:
                 bt.logging.error(f"No interval found for {interval_attr_name}")
+                return None
             if (
                 block == 0 or block % interval == 0
             ):  # Allow execution on block 0 for initialization

@@ -19,6 +19,7 @@ class ConnectionManager:
     @contextlib.contextmanager
     def connect(self, max_retries: int = 3, retry_delay: float = 1.0) -> Iterator[sqlite3.Connection]:
         """Context manager for database connections with retry logic."""
+        conn = None
         for attempt in range(max_retries):
             try:
                 conn = sqlite3.connect(
@@ -30,11 +31,11 @@ class ConnectionManager:
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA busy_timeout=30000")
                 conn.execute("PRAGMA foreign_keys=ON")
-
-                yield conn
-                conn.close()
-                return
+                break
             except sqlite3.OperationalError as e:
+                if conn is not None:
+                    conn.close()
+                    conn = None
                 if "unable to open database file" in str(e) or "database is locked" in str(e):
                     if attempt < max_retries - 1:
                         bt.logging.warning(
@@ -46,9 +47,11 @@ class ConnectionManager:
                     bt.logging.error(f"Failed to open database after {max_retries} attempts: {e}")
                     raise
                 raise
-            except Exception as e:
-                bt.logging.error(f"Database error: {e}")
-                raise
+
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
 def create_schema(conn: sqlite3.Connection) -> None:

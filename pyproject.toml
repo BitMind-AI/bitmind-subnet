@@ -52,8 +52,6 @@ dependencies = [
     "nest-asyncio==1.6.0",
     "python-dotenv==1.0.1",
     "accelerate==1.8.1",
-    "selenium==4.34.0",
-    "stamina==25.1.0",
     "click>=8.0.0",
     "datasets==4.0.0",
     "async-substrate-interface>=1.5.1",
@@ -67,6 +65,13 @@ dependencies = [
 
 [project.scripts]
 gascli = "gas.cli:cli"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.setuptools]
 packages = { find = { where = [
