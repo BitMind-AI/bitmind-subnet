@@ -63,7 +63,8 @@ def video_to_bytes(
     """
     # ------------- 0. validation / normalisation -------------------------------
     if video.dtype == np.float32:
-        assert video.max() <= 1.0, video.max()
+        if video.max() > 1.0:
+            raise ValueError(f"float32 video must be in [0, 1], got max {video.max()}")
         video = (video * 255).clip(0, 255).astype(np.uint8)
     elif video.dtype != np.uint8:
         raise ValueError(f"Unsupported dtype: {video.dtype}")
@@ -139,7 +140,9 @@ def video_to_bytes(
 
 
 def media_to_bytes(media, fps=30):
-    """Convert image or video array to bytes, using PNG encoding for both.
+    """Convert image or video array to bytes.
+
+    Images are JPEG-encoded, videos are MP4-encoded.
 
     Args:
         media (np.ndarray): Either:
@@ -150,7 +153,7 @@ def media_to_bytes(media, fps=30):
 
     Returns:
         bytes: Encoded media bytes
-        str: Content type (either 'image/png' or 'video/avi')
+        str: Content type (either 'image/jpeg' or 'video/mp4')
     """
     if len(media.shape) == 3:  # Image
         return image_to_bytes(media)

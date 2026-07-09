@@ -52,7 +52,6 @@ RUN uv pip install setuptools && \
     uv pip install -e . && \
     uv pip install --no-build-isolation \
         git+https://github.com/deepseek-ai/Janus.git \
-        git+https://github.com/huggingface/diffusers \
         git+https://github.com/openai/CLIP.git
 
 # ---------------------------------------------------------------------------
