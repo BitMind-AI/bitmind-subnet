@@ -154,6 +154,21 @@ def run_gascli_install(base_path: str, install_type: str = "py-deps", clear_venv
         return False
 
 
+def _find_repo_root():
+    """Walk up from this file to the first directory containing .git.
+
+    Returns None if no repository root is found.
+    """
+    path = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        if os.path.isdir(os.path.join(path, ".git")):
+            return path
+        parent = os.path.dirname(path)
+        if parent == path:
+            return None
+        path = parent
+
+
 def autoupdate(branch: str = "main", force=False, install_deps: bool = False, install_type: str = "py-deps", clear_venv: bool = True, nuke_cache: bool = False):
     """
     Automatically updates the codebase to the latest version available on the specified branch.
@@ -200,11 +215,26 @@ def autoupdate(branch: str = "main", force=False, install_deps: bool = False, in
 
         if latest_version > local_version or force:
             bt.logging.info(f"A newer version is available. Updating...")
-            base_path = os.path.abspath(__file__)
-            while os.path.basename(base_path) != "bitmind-subnet":
-                base_path = os.path.dirname(base_path)
+            base_path = _find_repo_root()
+            if base_path is None:
+                bt.logging.error(
+                    "Could not locate the repository root (no .git directory "
+                    "above this file). Manual update required."
+                )
+                return
 
-            os.system(f"cd {base_path} && git pull")
+            pull = subprocess.run(
+                ["git", "-C", base_path, "pull", "--ff-only"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if pull.returncode != 0:
+                bt.logging.error(
+                    f"git pull failed (exit {pull.returncode}): "
+                    f"{(pull.stderr or pull.stdout).strip()[:500]}. Manual update required."
+                )
+                return
 
             with open(os.path.join(base_path, "VERSION")) as f:
                 new_version = f.read().strip()
