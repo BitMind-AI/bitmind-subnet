@@ -1,5 +1,4 @@
 import asyncio
-import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -81,7 +80,7 @@ def get_dir_size(
                 total_size += subdir_size
                 file_count += subdir_count
     except (PermissionError, OSError) as e:
-        print(f"Error accessing {path}: {e}", file=sys.stderr)
+        bt.logging.warning(f"Error accessing {path}: {e}")
 
     return total_size, file_count
 
@@ -181,7 +180,7 @@ def analyze_directory(
         if log_func:
             log_func(error_msg)
         else:
-            print(error_msg, file=sys.stderr)
+            bt.logging.warning(error_msg)
 
     return result
 
@@ -215,7 +214,7 @@ def print_directory_tree(
     if log_func:
         log_func(tree_line)
     else:
-        print(tree_line)
+        print(tree_line)  # noqa: T201 - display fallback for interactive tree output
 
     num_subdirs = len(tree_data["subdirs"])
 

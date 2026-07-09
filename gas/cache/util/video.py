@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import bittensor as bt
 import ffmpeg
 import numpy as np
 from PIL import Image
@@ -53,7 +54,7 @@ def sample_frames(
                 height = int(video_info.get("height", 256))
                 reported_fps = float(video_info.get("fps", max_fps))
             except Exception as e:
-                print(f"Unable to extract video metadata from {str(video_path)}: {e}")
+                bt.logging.warning(f"Unable to extract video metadata from {str(video_path)}: {e}")
                 return None
 
             if (
@@ -61,7 +62,7 @@ def sample_frames(
                 or reported_fps <= 0
                 or not math.isfinite(reported_fps)
             ):
-                print(f"Unreasonable FPS ({reported_fps}) detected in {video_path}, capping at {max_fps}")
+                bt.logging.warning(f"Unreasonable FPS ({reported_fps}) detected in {video_path}, capping at {max_fps}")
                 frame_rate = max_fps
             else:
                 frame_rate = reported_fps
@@ -106,19 +107,19 @@ def sample_frames(
                         frame.load()  # Verify image can be loaded
                         frames.append(np.array(frame))
                     except Exception as e:
-                        print(f"Failed to process frame at {timestamp}s: {e}")
+                        bt.logging.warning(f"Failed to process frame at {timestamp}s: {e}")
                         continue
 
                 except ffmpeg.Error as e:
-                    print(f"FFmpeg error at {timestamp}s: {e.stderr.decode()}")
+                    bt.logging.warning(f"FFmpeg error at {timestamp}s: {e.stderr.decode()}")
                     continue
 
             if len(no_data) > 0:
                 tmin, tmax = min(no_data), max(no_data)
-                print(f"No data received for {len(no_data)} frames between {tmin} and {tmax}")
+                bt.logging.warning(f"No data received for {len(no_data)} frames between {tmin} and {tmax}")
 
             if not frames:
-                print(f"No frames successfully extracted from {video_path}")
+                bt.logging.warning(f"No frames successfully extracted from {video_path}")
                 return None
 
             frames = np.stack(frames, axis=0)
@@ -139,7 +140,7 @@ def sample_frames(
                     with open(metadata_path, "r") as f:
                         metadata = json.load(f)
                 except Exception as e:
-                    print(f"Error loading metadata for {video_path}: {e}")
+                    bt.logging.warning(f"Error loading metadata for {video_path}: {e}")
 
             result = {
                 "video": frames,
@@ -156,14 +157,14 @@ def sample_frames(
                 },
             }
 
-            print(f"Successfully sampled {actual_duration}s segment ({len(frames)} frames)")
+            bt.logging.debug(f"Successfully sampled {actual_duration}s segment ({len(frames)} frames)")
             return result
 
         except Exception as e:
-            print(f"Error sampling from {video_path}: {e}")
+            bt.logging.warning(f"Error sampling from {video_path}: {e}")
             continue
 
-    print("Failed to sample any video after multiple attempts")
+    bt.logging.error("Failed to sample any video after multiple attempts")
     return None 
 
 

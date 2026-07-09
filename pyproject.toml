@@ -73,6 +73,16 @@ dev = ["pytest>=8.0"]
 testpaths = ["tests"]
 pythonpath = ["."]
 
+[tool.ruff.lint.per-file-ignores]
+# T201 (print): allowed in genuine CLI presenters / tools / scripts, where
+# stdout is the intended output. Library code must use bt.logging.
+"gas/cache/util/miner_stats.py" = ["T201"]
+"gas/protocol/miner_requests.py" = ["T201"]
+"neurons/discriminator/push_model.py" = ["T201"]
+"neurons/generator/helper/verify_c2pa.py" = ["T201"]
+"scripts/**" = ["T201"]
+"tests/**" = ["T201"]
+
 [tool.setuptools]
 packages = { find = { where = [
     ".",
