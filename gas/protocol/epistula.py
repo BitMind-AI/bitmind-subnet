@@ -4,7 +4,6 @@ from uuid import uuid4
 from math import ceil
 from typing import Annotated, Any, Dict, Optional
 
-import traceback
 import bittensor as bt
 import time
 import httpx

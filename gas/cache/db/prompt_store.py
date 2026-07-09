@@ -3,7 +3,7 @@
 import re
 import time
 import uuid
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Optional
 
 import bittensor as bt
 

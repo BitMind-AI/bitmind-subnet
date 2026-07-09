@@ -2,12 +2,10 @@ import asyncio
 import inspect
 import os
 import requests
-import sys
 import time
 import traceback
 import threading
-import uuid
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from pathlib import Path
 
 import bittensor as bt
@@ -22,7 +20,7 @@ from gas.types import NeuronType, MinerType
 from gas.utils import print_info
 from gas.verification import detect_media_format
 from neurons.base import BaseNeuron
-from neurons.generator.task_manager import TaskManager, GenerationTask, TaskStatus
+from neurons.generator.task_manager import TaskManager, TaskStatus
 from neurons.generator.task_checkpoint_store import TaskCheckpointStore, resolve_state_dir
 from gas.protocol.webhooks import send_success_webhook, send_failure_webhook
 from neurons.generator.services.service_registry import ServiceRegistry

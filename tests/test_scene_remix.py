@@ -2,7 +2,6 @@
 
 import random
 
-import pytest
 
 from gas.generation.prompts.scene import SceneDescription
 from gas.generation.prompts.scene_remix import remix

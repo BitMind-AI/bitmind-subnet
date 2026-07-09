@@ -8,7 +8,7 @@ from typing import List, Dict, Optional, Tuple, Any
 
 import bittensor as bt
 
-from gas.cache.types import ChallengeOutcome, PromptEntry, MediaEntry
+from gas.cache.types import MediaEntry
 from gas.types import Modality, MediaType, SourceType, SOURCE_TYPE_TO_DB_NAME_FIELD
 from gas.cache.db.connection import ConnectionManager
 from gas.cache.db.prompt_store import PromptStore

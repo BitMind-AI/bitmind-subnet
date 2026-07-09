@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
 from gas.protocol.epistula import generate_header
-from gas.types import Modality, MediaType
+from gas.types import Modality
 
 
 async def get_miner_type(

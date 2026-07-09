@@ -13,7 +13,6 @@ import signal
 
 from gas import (
     __spec_version__,
-    __version__,
 )
 from gas.utils.metagraph import SubstrateConnectionManager
 from gas.types import NeuronType

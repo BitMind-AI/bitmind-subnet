@@ -8,7 +8,7 @@ from zipfile import BadZipFile, ZipFile
 import bittensor as bt
 import pyarrow.parquet as pq
 
-from gas.types import FileType, MediaType, Modality
+from gas.types import Modality
 
 
 def get_most_recent_update_time(directory: Path) -> float:

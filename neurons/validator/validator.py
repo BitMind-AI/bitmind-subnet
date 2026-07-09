@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import json
 import traceback
 import time
 from time import sleep
@@ -9,7 +8,6 @@ from threading import Thread
 import numpy as np
 from dotenv import load_dotenv
 import bittensor as bt
-import torch
 
 from gas import __spec_version__ as spec_version
 from gas.protocol.validator_requests import get_benchmark_results
@@ -19,7 +17,6 @@ from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
 from gas.types import (
     NeuronType,
-    MinerType,
 )
 
 from gas.utils import (

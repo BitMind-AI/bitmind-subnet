@@ -2,14 +2,12 @@ import os
 import io
 import tempfile
 from typing import Dict, Any, Optional
-from pathlib import Path
 
 import torch
 import bittensor as bt
-import numpy as np
 from PIL import Image
 from diffusers.utils import export_to_video
-from diffusers import StableDiffusionPipeline, AnimateDiffPipeline, DDIMScheduler, MotionAdapter, EulerDiscreteScheduler
+from diffusers import StableDiffusionPipeline, AnimateDiffPipeline, MotionAdapter, EulerDiscreteScheduler
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
             

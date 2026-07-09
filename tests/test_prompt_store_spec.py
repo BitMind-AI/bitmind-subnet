@@ -1,7 +1,6 @@
 """Tests for prompt spec persistence (schema migration + write path)."""
 
 import json
-import sqlite3
 
 import pytest
 

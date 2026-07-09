@@ -3,7 +3,7 @@ Dataset definitions from gasbench for the validator cache system
 """
 
 from typing import List
-from gas.types import DatasetConfig, MediaType, Modality
+from gas.types import DatasetConfig
 from gasbench.dataset.config import load_benchmark_datasets_from_yaml
  
 
