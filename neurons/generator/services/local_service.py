@@ -1,3 +1,16 @@
+# =============================================================================
+# ⚠️  NOT CURRENTLY SUPPORTED — DO NOT ENABLE  ⚠️
+#
+# This service is intentionally disabled (commented out of SERVICE_MAP in
+# service_registry.py). Validator verification currently requires C2PA-signed
+# content, and locally generated media has no C2PA provenance, so anything
+# produced here will fail verification and earn nothing.
+#
+# It is kept as a reference implementation for running open-source models
+# locally, in case local generation becomes verifiable again (e.g. local
+# C2PA signing or an alternative verification path).
+# =============================================================================
+
 import os
 import io
 import tempfile

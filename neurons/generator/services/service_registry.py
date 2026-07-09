@@ -14,7 +14,8 @@ SERVICE_MAP = {
     "openrouter": OpenRouterService,
     "stabilityai": StabilityAIService,
     "runway": RunwayService,
-    #"local": LocalService,
+    # "local": LocalService,  # disabled: local generation has no C2PA provenance,
+    # so it fails validator verification. See local_service.py header before enabling.
 }
 
 
