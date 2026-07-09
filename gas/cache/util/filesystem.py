@@ -214,7 +214,7 @@ def print_directory_tree(
     if log_func:
         log_func(tree_line)
     else:
-        print(tree_line)
+        print(tree_line)  # noqa: T201 - display fallback for interactive tree output
 
     num_subdirs = len(tree_data["subdirs"])
 
