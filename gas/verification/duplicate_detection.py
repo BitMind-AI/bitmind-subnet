@@ -436,38 +436,6 @@ def count_crop_segment_matches(
         return 0
 
 
-def is_duplicate(
-    hash1: str,
-    hash2: str,
-    threshold: int = DEFAULT_HAMMING_THRESHOLD,
-    crop_match_threshold: int = DEFAULT_CROP_RESISTANT_MATCH_THRESHOLD,
-) -> bool:
-    """
-    Check if two hashes represent duplicate/near-duplicate content.
-    Uses both pHash comparison and crop-resistant segment matching.
-
-    Args:
-        hash1: First perceptual hash (may include crop segments)
-        hash2: Second perceptual hash (may include crop segments)
-        threshold: Maximum Hamming distance for pHash duplicate
-        crop_match_threshold: Minimum matching crop segments for duplicate
-
-    Returns:
-        True if media are duplicates (by pHash OR crop segments), False otherwise
-    """
-    # Check primary pHash
-    distance = hamming_distance(hash1, hash2)
-    if distance >= 0 and distance <= threshold:
-        return True
-
-    # Check crop-resistant segments (catches cropped duplicates)
-    crop_matches = count_crop_segment_matches(hash1, hash2)
-    if crop_matches >= crop_match_threshold:
-        return True
-
-    return False
-
-
 def find_duplicates(
     new_hash: str,
     existing_hashes: List[Tuple[str, str]],  # List of (media_id, hash)

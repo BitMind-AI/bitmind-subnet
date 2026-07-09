@@ -608,24 +608,3 @@ class OpenRouterService(BaseGenerationService):
             kwargs["size"] = params["size"]
         
         return kwargs
-    
-    # ────────────────── Service Info ──────────────────
-    
-    def get_service_info(self) -> Dict[str, Any]:
-        """Return information about this service."""
-        return {
-            "name": "OpenRouter",
-            "type": "api",
-            "provider": "openrouter.ai",
-            "available": self.is_available(),
-            "supported_tasks": self.get_supported_tasks(),
-            "default_model": self.default_model,
-            "default_video_model": self.default_video_model,
-            "video_models": sorted(VIDEO_MODELS.keys()),
-            "base_url": self.base_url,
-            "video_base_url": self.video_base_url,
-            "config": {
-                "timeout": self.timeout,
-                "max_retries": self.max_retries,
-            }
-        }

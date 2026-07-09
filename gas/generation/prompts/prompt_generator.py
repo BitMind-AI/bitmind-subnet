@@ -40,7 +40,7 @@ import json
 import re
 from collections import deque
 from dataclasses import asdict
-from typing import Callable, Deque, Dict, List, Optional
+from typing import Callable, Deque, List, Optional
 
 import bittensor as bt
 from PIL import Image
@@ -428,49 +428,6 @@ class PromptGenerator:
                 except Exception as e:
                     bt.logging.error(f"[PROMPT-GEN] on_composed callback failed: {e}")
         return results
-
-    # ------------------------------------------------------------------
-    # Core API (legacy — still used externally; delegates to batch)
-    # ------------------------------------------------------------------
-
-    def generate_scene_from_image(self, image: Image.Image) -> SceneDescription:
-        """Single VLM forward pass that returns a structured SceneDescription."""
-        if self.vlm is None or self.vlm_processor is None:
-            self.load_vlm()
-        return extract_scene_with_vlm(image, self.vlm, self.vlm_processor)
-
-    def generate_prompts_from_image(
-        self, image: Image.Image, modalities: set = None
-    ) -> Dict[Modality, str]:
-        """Produce one canonical prompt per modality from one image.
-
-        Two-stage: VLM grounds perception, LLM composes prose. The VLM
-        runs once per image; the LLM runs once per requested modality.
-        Total per-image latency is ~6s on an 80GB card with both modalities.
-
-        Args:
-            image: Source image to analyze.
-            modalities: Set of Modality values to generate prompts for.
-                        Defaults to {Modality.IMAGE, Modality.VIDEO}.
-        """
-        if modalities is None:
-            modalities = {Modality.IMAGE, Modality.VIDEO}
-
-        scene = self.generate_scene_from_image(image)
-
-        if self.llm is None:
-            self.load_llm()
-
-        result = {}
-        if Modality.IMAGE in modalities:
-            result[Modality.IMAGE] = self._compose(scene, kind="image")
-        if Modality.VIDEO in modalities:
-            result[Modality.VIDEO] = self._compose(scene, kind="video")
-
-        image_prompt = result.get(Modality.IMAGE, "")
-        video_prompt = result.get(Modality.VIDEO, "")
-        self._log_generated_prompts(scene, image_prompt, video_prompt)
-        return result
 
     @staticmethod
     def _log_generated_prompts(

@@ -202,14 +202,3 @@ class StabilityAIService(BaseGenerationService):
         except Exception as e:
             bt.logging.error(f"StabilityAI image generation failed: {e}")
             raise
-
-    def get_service_info(self) -> Dict[str, Any]:
-        """Return information about this service."""
-        return {
-            "name": "StabilityAI",
-            "type": "api",
-            "provider": "api.stability.ai",
-            "available": self.is_available(),
-            "supported_tasks": self.get_supported_tasks(),
-            "default_model": self.default_model
-        }
