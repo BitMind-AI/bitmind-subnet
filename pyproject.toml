@@ -43,7 +43,9 @@ dependencies = [
     "accelerate==1.8.1",
     "click>=8.0.0",
     "datasets==4.0.0",
-    "async-substrate-interface>=1.5.1",
+    # <2: the 2.x line vendors cyscale, which shares a namespace with (and
+    # cannot coexist with) scalecodec, required by substrate-interface.
+    "async-substrate-interface>=1.5.1,<2",
     "ftfy==6.3.1",
     "huggingface_hub>=0.17.0",
     "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@v0.6.5",
