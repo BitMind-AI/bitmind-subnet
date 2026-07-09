@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 from typing import Callable, List
 import bittensor as bt
@@ -32,11 +33,6 @@ class BaseNeuron:
     """
     config: "bt.config"
     neuron_type: NeuronType
-    exit_context = ExitContext()
-    next_sync_block = None
-    block_callbacks: List[Callable] = []
-    substrate_manager: SubstrateConnectionManager = None
-    substrate_task = None
 
     def check_registered(self):
         if not self.subtensor.is_hotkey_registered(
@@ -47,7 +43,7 @@ class BaseNeuron:
                 f"Wallet: {self.wallet} is not registered on netuid {self.config.netuid}."
                 f" Please register the hotkey using `btcli subnets register` before trying again"
             )
-            exit()
+            sys.exit(1)
 
     @on_block_interval("epoch_length")
     async def maybe_sync_metagraph(self, block):
@@ -77,6 +73,12 @@ class BaseNeuron:
                 bt.logging.error(traceback.format_exc())
 
     def __init__(self, config=None):
+        self.exit_context = ExitContext()
+        self.next_sync_block = None
+        self.block_callbacks: List[Callable] = []
+        self.substrate_manager: SubstrateConnectionManager = None
+        self.substrate_task = None
+
         bt.logging.info(
             f"Bittensor Version: {bt.__version__} | SN34 Version {__spec_version__}"
         )

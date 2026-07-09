@@ -326,31 +326,32 @@ class Validator(BaseNeuron):
                 )
             return
 
-        extend_scores = max(list(rewards.keys())) - len(self.scores) + 1
-        if extend_scores > 0:
-            self.scores = np.append(self.scores, np.zeros(extend_scores))
+        async with self._state_lock:
+            extend_scores = max(list(rewards.keys())) - len(self.scores) + 1
+            if extend_scores > 0:
+                self.scores = np.append(self.scores, np.zeros(extend_scores))
 
-        reward_arr = np.array([rewards.get(i, 0) for i in range(len(self.scores))])
+            reward_arr = np.array([rewards.get(i, 0) for i in range(len(self.scores))])
 
-        # Alpha for generator score EMA - higher = faster decay, less reward persistence
-        # 0.5 = 50% new rewards, 50% historical (aggressive decay for inactive miners)
-        alpha = 0.5
-        self.scores = alpha * reward_arr + (1 - alpha) * self.scores
+            # Alpha for generator score EMA - higher = faster decay, less reward persistence
+            # 0.5 = 50% new rewards, 50% historical (aggressive decay for inactive miners)
+            alpha = 0.5
+            self.scores = alpha * reward_arr + (1 - alpha) * self.scores
 
-        # Hard cutoff: zero out scores for generators not active within liveness window.
-        # Checks the actual last_seen timestamp, not just dict membership.
-        if generator_liveness:
-            cutoff = time.time() - max_inactive_hours * 3600
-            inactive_count = 0
-            for uid in range(len(self.scores)):
-                if uid < len(self.metagraph.hotkeys) and self.scores[uid] > 0:
-                    hotkey = self.metagraph.hotkeys[uid]
-                    last_seen = generator_liveness.get(hotkey, 0)
-                    if last_seen < cutoff:
-                        self.scores[uid] = 0
-                        inactive_count += 1
-            if inactive_count > 0:
-                bt.logging.info(f"Zeroed scores for {inactive_count} inactive generators (not seen in {max_inactive_hours}h)")
+            # Hard cutoff: zero out scores for generators not active within liveness window.
+            # Checks the actual last_seen timestamp, not just dict membership.
+            if generator_liveness:
+                cutoff = time.time() - max_inactive_hours * 3600
+                inactive_count = 0
+                for uid in range(len(self.scores)):
+                    if uid < len(self.metagraph.hotkeys) and self.scores[uid] > 0:
+                        hotkey = self.metagraph.hotkeys[uid]
+                        last_seen = generator_liveness.get(hotkey, 0)
+                        if last_seen < cutoff:
+                            self.scores[uid] = 0
+                            inactive_count += 1
+                if inactive_count > 0:
+                    bt.logging.info(f"Zeroed scores for {inactive_count} inactive generators (not seen in {max_inactive_hours}h)")
 
         bt.logging.info(
             f"Updated scores for {len(rewards)} miners with EMA (alpha={alpha})"
