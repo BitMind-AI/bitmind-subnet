@@ -3,6 +3,7 @@ import uuid
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
+import bittensor as bt
 import cv2
 import numpy as np
 from diffusers.utils import export_to_video
@@ -107,7 +108,7 @@ class MediaStorage:
             return str(save_path), str(mask_path) if mask_path else None
 
         except Exception as e:
-            print(f"Error writing media: {e}")
+            bt.logging.error(f"Error writing media: {e}")
             return None, None
 
     def _write_image_content(self, media_data: "Media", save_path: Path) -> None:
@@ -162,12 +163,12 @@ class MediaStorage:
         """
         try:
             if not image_path.exists():
-                print(f"Image file not found: {image_path}")
+                bt.logging.warning(f"Image file not found: {image_path}")
                 return None
 
             image = cv2.imread(str(image_path))
             if image is None:
-                print(f"Failed to load image: {image_path}")
+                bt.logging.warning(f"Failed to load image: {image_path}")
                 return None
 
             if as_rgb:
@@ -182,7 +183,7 @@ class MediaStorage:
             return image
 
         except Exception as e:
-            print(f"Error reading image {image_path}: {e}")
+            bt.logging.error(f"Error reading image {image_path}: {e}")
             return None
 
     def read_mask(self, mask_path: Path) -> Optional[np.ndarray]:
@@ -195,13 +196,13 @@ class MediaStorage:
         """
         try:
             if not mask_path.exists():
-                print(f"Mask file not found: {mask_path}")
+                bt.logging.warning(f"Mask file not found: {mask_path}")
                 return None
 
             return np.load(mask_path)
 
         except Exception as e:
-            print(f"Error reading mask {mask_path}: {e}")
+            bt.logging.error(f"Error reading mask {mask_path}: {e}")
             return None
 
     def read_video_frames(
@@ -223,7 +224,7 @@ class MediaStorage:
         """
         try:
             if not video_path.exists():
-                print(f"Video file not found: {video_path}")
+                bt.logging.warning(f"Video file not found: {video_path}")
                 return None
 
             return sample_frames(
@@ -234,7 +235,7 @@ class MediaStorage:
             )
 
         except Exception as e:
-            print(f"Error reading video {video_path}: {e}")
+            bt.logging.error(f"Error reading video {video_path}: {e}")
             return None
 
     def list_media_files(
@@ -286,7 +287,7 @@ class MediaStorage:
             return True
 
         except Exception as e:
-            print(f"Error deleting media file {file_path}: {e}")
+            bt.logging.error(f"Error deleting media file {file_path}: {e}")
             return False
 
     def retrieve_media(
@@ -314,7 +315,7 @@ class MediaStorage:
         for media_entry in media_entries:
             file_path = Path(media_entry.file_path)
             if not file_path.exists():
-                print(f"Media file not found: {file_path}")
+                bt.logging.warning(f"Media file not found: {file_path}")
                 continue
 
             try:
@@ -335,7 +336,7 @@ class MediaStorage:
                         mask_path = file_path.parent / (file_path.stem + "_mask.npy")
                         mask = self.read_mask(mask_path)
                         if mask is None:
-                            print(f"Mask not found for {file_path}")
+                            bt.logging.warning(f"Mask not found for {file_path}")
                             continue
 
                     item = {
@@ -372,6 +373,6 @@ class MediaStorage:
                     sampled_items.append(item)
 
             except Exception as e:
-                print(f"Error processing {file_path}: {e}")
+                bt.logging.error(f"Error processing {file_path}: {e}")
 
         return {"count": len(sampled_items), "items": sampled_items}

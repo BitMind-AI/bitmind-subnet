@@ -1,6 +1,7 @@
 import numpy as np
 import PIL
 import os
+import bittensor as bt
 from PIL import Image, ImageDraw
 from typing import Tuple, Union, List
 
@@ -65,9 +66,9 @@ def save_images_to_disk(
             # if resize:
             #    image = resize_image(image, TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
             image.save(file_path, "JPEG")  # Save the image
-            print(f"Saved: {file_path}")
+            bt.logging.debug(f"Saved: {file_path}")
         except Exception as e:
-            print(f"Failed to save image {i}: {e}")
+            bt.logging.error(f"Failed to save image {i}: {e}")
 
 
 def ensure_mask_3d(mask: np.ndarray) -> np.ndarray:
