@@ -17,13 +17,11 @@ import uvicorn
 from bittensor.core.axon import FastAPIThreadedServer
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.responses import Response
-from pathlib import Path
 from PIL import Image
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
-from gas.cache.types import PromptEntry
 from gas.cache.content_manager import ContentManager
-from gas.protocol.epistula import generate_header, get_verifier
+from gas.protocol.epistula import get_verifier
 from gas.protocol.validator_requests import query_generative_miner
 from gas.types import MediaType, MinerType, Modality
 from gas.verification.c2pa_verification import verify_c2pa

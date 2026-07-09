@@ -4,8 +4,7 @@ import json
 import os
 import random
 import time
-from pathlib import Path
-from typing import Dict, Optional, Any, Union, List
+from typing import Optional, Union, List
 import traceback
 
 import bittensor as bt
@@ -14,7 +13,7 @@ import torch
 from PIL import Image
 import cv2
 
-from gas.types import ModelTask, Modality
+from gas.types import Modality
 from gas.generation.util.image import create_random_mask, is_black_output
 from gas.generation.util.prompt import truncate_prompt_if_too_long
 from gas.generation.media.model_registry import ModelRegistry

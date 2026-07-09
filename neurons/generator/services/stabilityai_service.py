@@ -3,9 +3,8 @@ import io
 import time
 import requests
 import bittensor as bt
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from PIL import Image
 import c2pa
 
 from .base_service import BaseGenerationService

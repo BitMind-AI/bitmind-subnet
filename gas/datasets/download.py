@@ -1,13 +1,9 @@
-import asyncio
 import base64
-import hashlib
-import json
 import random
 import os
 import traceback
 import tempfile
 import shutil
-from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Generator, Tuple
@@ -16,13 +12,12 @@ import tarfile
 from contextlib import closing
 
 import bittensor as bt
-import numpy as np
 import pyarrow.parquet as pq
 from PIL import Image
 
 
 import requests
-from gas.types import Modality, MediaType, DatasetConfig
+from gas.types import Modality, DatasetConfig
 
 
 IMAGE_FILE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".webp"}

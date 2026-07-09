@@ -1,8 +1,7 @@
 from dataclasses import dataclass, asdict
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import numpy as np
 import time
-import uuid
 
 from gas.types import Modality, MediaType, SourceType
 

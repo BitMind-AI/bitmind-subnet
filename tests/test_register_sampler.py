@@ -2,7 +2,6 @@
 
 from gas.generation.prompts.register_sampler import (
     REGISTERS,
-    PromptSpec,
     sample_spec,
 )
 

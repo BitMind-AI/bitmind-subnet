@@ -2,7 +2,6 @@ from typing import List
 import torch
 from diffusers import (
     StableDiffusionXLPipeline,
-    StableDiffusionInpaintPipeline,
     FluxPipeline,
     StableDiffusionPipeline,
     DEISMultistepScheduler,
@@ -18,7 +17,6 @@ from diffusers import (
     CogVideoXImageToVideoPipeline,
     WanPipeline,
     ChromaPipeline,
-    DiffusionPipeline,
     TextToVideoSDPipeline,
 )
 

@@ -5,7 +5,6 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import bittensor as bt
 import numpy as np
-import torch
 
 from gas.cache.content_manager import ContentManager
 from gas.cache.types import MediaEntry, VerificationResult

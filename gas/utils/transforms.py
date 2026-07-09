@@ -1,13 +1,8 @@
 import math
 import random
 from scipy import ndimage
-import torchvision.transforms as transforms
-import torchvision.transforms.functional as F
 import numpy as np
 import cv2
-import os
-from pathlib import Path
-import time
 
 from gas.generation.util.image import ensure_mask_3d
 

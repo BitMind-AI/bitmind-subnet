@@ -6,7 +6,6 @@ import traceback
 from pathlib import Path
 from threading import Thread, Event, Lock
 from typing import Optional
-from collections import deque
 import random
 import json
 

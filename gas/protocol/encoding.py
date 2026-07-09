@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 import ffmpeg
 import os
 import tempfile

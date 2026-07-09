@@ -4,7 +4,7 @@ import shutil
 import time
 import threading
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from urllib.parse import urlparse

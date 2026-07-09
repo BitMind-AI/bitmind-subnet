@@ -3,3 +3,9 @@ from .datasets import (
     get_image_datasets,
     get_video_datasets,
 )
+
+__all__ = [
+    "load_all_datasets",
+    "get_image_datasets",
+    "get_video_datasets",
+]
