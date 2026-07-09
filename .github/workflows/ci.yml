@@ -12,9 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       # Error-level rules plus T201 (no print() in library code — CLI
-      # presenters are exempted via per-file-ignores in pyproject).
-      # Widen further as the Phase 2 burndown lands.
-      - run: uvx ruff check --select E9,F63,F7,F82,T201 gas neurons tests
+      # presenters are exempted via per-file-ignores in pyproject) and
+      # E722 (no bare except). Widen further as the Phase 2 burndown lands.
+      - run: uvx ruff check --select E9,F63,F7,F82,T201,E722 gas neurons tests
 
   test:
     runs-on: ubuntu-latest

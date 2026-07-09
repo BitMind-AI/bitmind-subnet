@@ -240,8 +240,8 @@ class GeneratorService:
                     self._first_run_profiled = True
                     try:
                         self._save_profiles_to_cache()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        bt.logging.debug(f"Failed to save model profiles to cache: {e}")
 
                 if self._stop_requested.is_set():
                     break
@@ -341,8 +341,8 @@ class GeneratorService:
         self._model_profiles[model_name] = rec
         try:
             self._save_profiles_to_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            bt.logging.debug(f"Failed to save model profiles to cache: {e}")
 
     def _get_vram_gb(self):
         if torch.cuda.is_available():
@@ -818,8 +818,8 @@ class GeneratorService:
             try:
                 from gas.verification import clear_clip_models
                 clear_clip_models()
-            except:
-                pass
+            except Exception as cleanup_err:
+                bt.logging.debug(f"clear_clip_models failed during error cleanup: {cleanup_err}")
 
     def _cleanup(self):
         """Clean up resources."""
