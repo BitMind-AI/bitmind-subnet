@@ -1,0 +1,3 @@
+# Whitespace-only reformats — run: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# style: convert content_manager.py from tabs to 4-space indentation
+f5436f143f0db7f51267cac7e4066de293bd569c
