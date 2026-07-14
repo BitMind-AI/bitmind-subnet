@@ -48,7 +48,7 @@ dependencies = [
     "async-substrate-interface>=1.5.1,<2",
     "ftfy==6.3.1",
     "huggingface_hub>=0.17.0",
-    "gasbench[gpu] @ git+https://github.com/BitMind-AI/gasbench.git@v0.6.5",
+    "gasbench @ git+https://github.com/BitMind-AI/gasbench.git@dev",
     "imagehash>=4.3.1",
     "c2pa-python>=0.29.0",
     "runwayml>=4.13.0",
@@ -56,12 +56,6 @@ dependencies = [
 
 [project.scripts]
 gascli = "gas.cli:cli"
-
-[tool.uv]
-# torchaudio wheels declare no torch dependency, so the resolver can't see
-# that its version must match torch — without this constraint,
-# `uv lock --upgrade` floats it and the import breaks on torch ABI mismatch.
-constraint-dependencies = ["torchaudio==2.7.1"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "black>=26.3.1", "pre-commit>=4.2.0"]
