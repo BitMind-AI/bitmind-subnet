@@ -1,5 +1,6 @@
 """PromptStore — CRUD and sampling for the prompts table."""
 
+import sqlite3
 import re
 import time
 import uuid
@@ -170,7 +171,7 @@ class PromptStore:
             Minimum prompts to keep when *remove* is True.
         """
         with self.db.connect() as conn:
-            conn.row_factory = __import__("sqlite3").Row
+            conn.row_factory = sqlite3.Row
 
             if modality:
                 where_clause = "content_type = ? AND modality = ?"

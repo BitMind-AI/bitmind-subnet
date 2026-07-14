@@ -1,5 +1,6 @@
 """ChallengeStore — CRUD and reward stats for the generator_challenge_outcomes table."""
 
+import sqlite3
 import time
 from typing import List, Dict, Optional, Any
 
@@ -140,7 +141,7 @@ class ChallengeStore:
             if limit is None:
                 limit = 1000
             with self.db.connect() as conn:
-                conn.row_factory = __import__("sqlite3").Row
+                conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
                     """
                     SELECT * FROM generator_challenge_outcomes

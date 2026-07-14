@@ -67,9 +67,9 @@ class ChainModelMetadataStore:
         bt.logging.info(f"chain_str: {chain_str}")
         try:
             model_id = ModelId.from_compressed_str(chain_str)
-        except:
+        except Exception as e:
             bt.logging.trace(
-                f"Failed to parse the metadata on the chain for hotkey {hotkey}."
+                f"Failed to parse the metadata on the chain for hotkey {hotkey}: {e}"
             )
             return None
 

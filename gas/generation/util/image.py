@@ -1,7 +1,6 @@
 import numpy as np
 import PIL
 import os
-import bittensor as bt
 from PIL import Image, ImageDraw
 from typing import Tuple, Union, List
 
@@ -47,28 +46,6 @@ def resize_images_in_directory(directory, target_width, target_height):
                     img, max_width=target_width, max_height=target_height
                 )
                 resized_img.save(filepath)
-
-
-def save_images_to_disk(
-    image_dataset, start_index, num_images, save_directory, resize=True
-):
-    if not os.path.exists(save_directory):
-        os.makedirs(save_directory)
-
-    for i in range(start_index, start_index + num_images):
-        try:
-            image_data = image_dataset[i]  # Retrieve image using the __getitem__ method
-            image = image_data["image"]  # Extract the image
-            image_id = image_data["id"]  # Extract the image ID
-            file_path = os.path.join(
-                save_directory, f"{image_id}.jpg"
-            )  # Construct file path
-            # if resize:
-            #    image = resize_image(image, TARGET_IMAGE_SIZE[0], TARGET_IMAGE_SIZE[1])
-            image.save(file_path, "JPEG")  # Save the image
-            bt.logging.debug(f"Saved: {file_path}")
-        except Exception as e:
-            bt.logging.error(f"Failed to save image {i}: {e}")
 
 
 def ensure_mask_3d(mask: np.ndarray) -> np.ndarray:

@@ -15,7 +15,7 @@ from gas.utils.model_zips import calculate_sha256
 
 
 def get_current_time_split() -> str:
-    """
+    r"""
     Uses ISO week format for subset/config names: 2025W03, 2025W04, etc.
 
     This creates weekly dataset subsets/configs, not splits.
@@ -139,8 +139,10 @@ def upload_media_to_hf(
 
         try:
             create_repo(dataset_repo, repo_type="dataset", exist_ok=True, token=hf_token)
-        except:
-            pass
+        except Exception as e:
+            # exist_ok=True already covers the repo-exists case; anything else
+            # (auth, network) will surface again in create_commit below.
+            bt.logging.warning(f"create_repo failed for {dataset_repo}: {e}")
 
         archive_operations = []
         archive_temp_files = []
@@ -175,7 +177,7 @@ def upload_media_to_hf(
             for temp_file in all_temp_files:
                 try:
                     os.unlink(temp_file)
-                except:
+                except OSError:
                     pass
 
         return successfully_processed_ids
@@ -587,7 +589,7 @@ def create_image_archives(
         for temp_file in temp_files_to_cleanup:
             try:
                 os.unlink(temp_file)
-            except:
+            except OSError:
                 pass
         raise
 
@@ -666,7 +668,7 @@ def create_video_archives(
         for temp_file in temp_files_to_cleanup:
             try:
                 os.unlink(temp_file)
-            except:
+            except OSError:
                 pass
         raise
 
