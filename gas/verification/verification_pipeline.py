@@ -164,12 +164,17 @@ def verify_media(
         )
 
         all_results = []
-        
+
+        # Videos decode multiple frames each, so they need a much lower
+        # per-batch cap than images even at the same batch_size.
+        image_batch_size = min(batch_size, 128)
+        video_batch_size = min(batch_size, 32)
+
         image_features = None
         if image_entries:
-            bt.logging.info(f"Processing {len(image_entries)} images (batch_size={batch_size})")
+            bt.logging.info(f"Processing {len(image_entries)} images (batch_size={image_batch_size})")
             result = calculate_clip_alignment_consensus(
-                image_paths, image_prompts, batch_size=batch_size, return_features=True
+                image_paths, image_prompts, batch_size=image_batch_size, return_features=True
             )
             if result is not None:
                 image_consensus, image_features = result
@@ -177,9 +182,9 @@ def verify_media(
 
         video_features = None
         if video_entries:
-            bt.logging.info(f"Processing {len(video_entries)} videos (batch_size={batch_size})")
+            bt.logging.info(f"Processing {len(video_entries)} videos (batch_size={video_batch_size})")
             result = calculate_clip_alignment_consensus(
-                video_paths, video_prompts, batch_size=batch_size, return_features=True
+                video_paths, video_prompts, batch_size=video_batch_size, return_features=True
             )
             if result is not None:
                 video_consensus, video_features = result
