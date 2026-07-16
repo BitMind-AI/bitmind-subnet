@@ -21,7 +21,7 @@ dependencies = [
     "pandas==2.3.0",
     "torch==2.7.1",
     "torchvision==0.22.1",
-    #"flash-attn>=2.7.0",
+    "flash-attn>=2.7.0",
     "httpcore==1.0.9",  # >=1.0.9 required for h11 0.16 (CVE: malformed chunked-encoding)
     "httpx==0.28.1",
     "pyarrow==23.0.1",
@@ -59,6 +59,9 @@ gascli = "gas.cli:cli"
 
 [dependency-groups]
 dev = ["pytest>=8.0", "black>=26.3.1", "pre-commit>=4.2.0"]
+
+[tool.uv.extra-build-dependencies]
+flash-attn = ["torch==2.7.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
