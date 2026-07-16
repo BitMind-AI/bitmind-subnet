@@ -21,7 +21,8 @@ def run_verification(
     content_manager: ContentManager,
     batch_size: Optional[int] = 10,
     threshold: float = 0.25,
-    clip_batch_size: int = 32,
+    image_batch_size: int = 128,
+    video_batch_size: int = 32,
 ) -> List[VerificationResult]:
     """
     Run CLIP verification on unverified miner media.
@@ -30,10 +31,14 @@ def run_verification(
         content_manager: ContentManager instance
         batch_size: Number of media entries to process from database (None = process all)
         threshold: Verification threshold
-        clip_batch_size: Batch size for CLIP operations (adjust based on GPU memory)
+        image_batch_size: Images per CLIP forward pass (they're stacked into
+            one tensor, so this bounds peak VRAM directly)
+        video_batch_size: Videos per CLIP batch (each decodes multiple
+            frames, so this must be much lower than image_batch_size)
     """
     bt.logging.info(
-        f"Starting verification batch (batch_size={batch_size}, clip_batch_size={clip_batch_size})"
+        f"Starting verification batch (batch_size={batch_size}, "
+        f"image_batch_size={image_batch_size}, video_batch_size={video_batch_size})"
     )
 
     pending_media = content_manager.get_miner_media(verification_status="pending")
@@ -56,7 +61,8 @@ def run_verification(
         content_manager=content_manager,
         media_entries=batch,
         threshold=threshold,
-        batch_size=clip_batch_size,
+        image_batch_size=image_batch_size,
+        video_batch_size=video_batch_size,
     )
 
     bt.logging.info("Verification batch complete, updating database")
@@ -93,7 +99,8 @@ def verify_media(
     content_manager: ContentManager,
     media_entries: List[MediaEntry],
     threshold: float = 0.25,
-    batch_size: int = 32,
+    image_batch_size: int = 128,
+    video_batch_size: int = 32,
 ) -> List[VerificationResult]:
     """
     Verify a batch of miner media entries using CLIP consensus scoring.
@@ -102,7 +109,8 @@ def verify_media(
         content_manager: ContentManager instance
         media_entries: List of MediaEntry objects to verify
         threshold: Verification threshold
-        batch_size: Batch size for CLIP operations
+        image_batch_size: Images per CLIP forward pass
+        video_batch_size: Videos per CLIP batch
 
     Returns:
         List of VerificationResult objects
@@ -164,12 +172,12 @@ def verify_media(
         )
 
         all_results = []
-        
+
         image_features = None
         if image_entries:
-            bt.logging.info(f"Processing {len(image_entries)} images (batch_size={batch_size})")
+            bt.logging.info(f"Processing {len(image_entries)} images (batch_size={image_batch_size})")
             result = calculate_clip_alignment_consensus(
-                image_paths, image_prompts, batch_size=batch_size, return_features=True
+                image_paths, image_prompts, batch_size=image_batch_size, return_features=True
             )
             if result is not None:
                 image_consensus, image_features = result
@@ -177,9 +185,9 @@ def verify_media(
 
         video_features = None
         if video_entries:
-            bt.logging.info(f"Processing {len(video_entries)} videos (batch_size={batch_size})")
+            bt.logging.info(f"Processing {len(video_entries)} videos (batch_size={video_batch_size})")
             result = calculate_clip_alignment_consensus(
-                video_paths, video_prompts, batch_size=batch_size, return_features=True
+                video_paths, video_prompts, batch_size=video_batch_size, return_features=True
             )
             if result is not None:
                 video_consensus, video_features = result

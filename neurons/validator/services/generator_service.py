@@ -798,7 +798,6 @@ class GeneratorService:
                 content_manager=self.content_manager,
                 batch_size=self._verification_max_batch,
                 threshold=0.25,
-                clip_batch_size=512,
             )
 
             if results:
