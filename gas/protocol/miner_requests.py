@@ -19,7 +19,7 @@ def calculate_sha256(data: bytes) -> str:
 
 
 def generate_presigned_url(
-    wallet: bt.wallet, 
+    wallet: bt.Wallet, 
     upload_endpoint: str, 
     filename: str, 
     file_size: int, 
@@ -110,7 +110,7 @@ def upload_to_r2(presigned_url: str, file_content: bytes, content_type: str = 'a
         }
 
 
-def confirm_upload(wallet: bt.wallet, upload_endpoint: str, model_id: int, file_hash: str) -> dict:
+def confirm_upload(wallet: bt.Wallet, upload_endpoint: str, model_id: int, file_hash: str) -> dict:
     """Confirm file upload and finalize model record."""
     
     payload = {
@@ -153,7 +153,7 @@ def confirm_upload(wallet: bt.wallet, upload_endpoint: str, model_id: int, file_
 
 
 def upload_single_modality(
-    wallet: bt.wallet,
+    wallet: bt.Wallet,
     file_path: str,
     modality: str,
     upload_endpoint: str,
@@ -264,7 +264,7 @@ def upload_single_modality(
 
 
 def fetch_performance(
-    wallet: bt.wallet,
+    wallet: bt.Wallet,
     modality: Optional[str] = None,
     vertical: Optional[str] = None,
     api_url: Optional[str] = None,
@@ -301,7 +301,7 @@ def fetch_performance(
 
 
 def fetch_models(
-    wallet: bt.wallet,
+    wallet: bt.Wallet,
     modality: Optional[str] = None,
     api_url: Optional[str] = None,
 ) -> Dict:
@@ -337,7 +337,7 @@ def fetch_models(
 
 
 def fetch_generator_performance(
-    wallet: bt.wallet,
+    wallet: bt.Wallet,
     modality: Optional[str] = None,
     lookback_days: int = 7,
     api_url: Optional[str] = None,

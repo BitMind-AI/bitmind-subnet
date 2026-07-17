@@ -12,7 +12,7 @@ class ChainModelMetadataStore:
 
     def __init__(
         self,
-        subtensor: bt.subtensor,
+        subtensor: bt.Subtensor,
         netuid: int,
     ):
         self.subtensor = subtensor
@@ -30,7 +30,7 @@ class ChainModelMetadataStore:
         data = model_id.to_compressed_str()
 
         commit_partial = functools.partial(
-            self.subtensor.commit,
+            self.subtensor.set_commitment,
             wallet,
             self.netuid,
             data,
@@ -44,8 +44,7 @@ class ChainModelMetadataStore:
         """Retrieves model metadata on this subnet for specific hotkey"""
 
         metadata_partial = functools.partial(
-            bt.core.extrinsics.serving.get_metadata,
-            self.subtensor,
+            self.subtensor.get_commitment_metadata,
             self.netuid,
             hotkey,
         )

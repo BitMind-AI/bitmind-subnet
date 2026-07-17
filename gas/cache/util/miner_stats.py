@@ -309,10 +309,10 @@ def resolve_coldkeys(
 
         if endpoint:
             print(f"  {Colors.DIM}connecting to subtensor: {endpoint}{Colors.END}")
-            subtensor = bt.subtensor(chain_endpoint=endpoint)
+            subtensor = bt.Subtensor(chain_endpoint=endpoint)
         else:
             print(f"  {Colors.DIM}connecting to subtensor: finney{Colors.END}")
-            subtensor = bt.subtensor(network="finney")
+            subtensor = bt.Subtensor(network="finney")
 
         print(f"  {Colors.DIM}fetching metagraph for netuid {netuid}...{Colors.END}")
         metagraph = subtensor.metagraph(netuid=netuid, lite=True)

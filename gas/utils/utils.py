@@ -13,7 +13,7 @@ def print_info(metagraph, hotkey, block, isMiner=True):
     if isMiner:
         bt.logging.info(
             log
-            + f"Stake:{metagraph.S[uid]} | Trust:{metagraph.T[uid]} | Incentive:{metagraph.I[uid]} | Emission:{metagraph.E[uid]}"
+            + f"Stake:{metagraph.S[uid]} | Incentive:{metagraph.I[uid]} | Emission:{metagraph.E[uid]}"
         )
         return
     bt.logging.info(log + f"VTrust:{metagraph.Tv[uid]} | ")

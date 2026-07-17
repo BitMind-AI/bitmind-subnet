@@ -42,7 +42,7 @@ class GeneratorService:
 
         self._output_dir = Path(self.config.cache.base_dir)
 
-        self.validator_wallet = bt.wallet(config=self.config)
+        self.validator_wallet = bt.Wallet(config=self.config)
 
         self._service_running = False
         self._generation_running = False
@@ -73,7 +73,7 @@ class GeneratorService:
         self.tp_generators = {"nano_banana": nano_banana.generate_image}
 
         self._first_run_profiled = False
-        self._job_profiles = {}  
+        self._job_profiles = {}
         # job_name -> {"peak_vram_gb": float, "avg_duration_s": float, "count": int}
         # Per-model profiling: model_name -> {"max_peak_vram_gb": float, "avg_gen_s": float, "count": int, "last_gen_s": float}
         self._model_profiles = {}
@@ -222,9 +222,6 @@ class GeneratorService:
     def _generation_work_loop(self):
         """Main generation loop."""
         bt.logging.info("[GENERATOR-SERVICE] Starting generation work loop")
-
-        # Clear any pending verification backlog before the first generation cycle.
-        self._run_verification()
 
         while not self._stop_requested.is_set():
             try:
@@ -839,10 +836,10 @@ def main():
 
     add_args(parser)
     add_generation_service_args(parser)
-    bt.subtensor.add_args(parser)
-    bt.wallet.add_args(parser)
+    bt.Subtensor.add_args(parser)
+    bt.Wallet.add_args(parser)
     bt.logging.add_args(parser)
-    config = bt.config(parser)
+    config = bt.Config(parser)
 
     bt.logging(config=config, logging_dir=config.neuron.full_path)
     bt.logging.set_info()

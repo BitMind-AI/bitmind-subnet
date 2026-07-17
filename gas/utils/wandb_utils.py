@@ -9,7 +9,7 @@ from gas import __version__
 
 
 def init_wandb(
-    config: bt.config, process: str, uid: int, hotkey: bt.Keypair, wandb_dir: str = None
+    config: bt.Config, process: str, uid: int, hotkey: bt.Keypair, wandb_dir: str = None
 ) -> wandb.run:
     """
     Initialize a Weights & Biases run.

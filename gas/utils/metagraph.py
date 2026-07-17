@@ -10,7 +10,7 @@ from gas.utils import fail_with_none
 
 
 def get_miner_uids(
-    metagraph: "bt.metagraph", self_uid: int, vpermit_tao_limit: int
+    metagraph: "bt.Metagraph", self_uid: int, vpermit_tao_limit: int
 ) -> List[int]:
     available_uids = []
     for uid in range(int(metagraph.n.item())):
@@ -30,9 +30,9 @@ def get_miner_uids(
 def create_set_weights(version: int, netuid: int):
     @fail_with_none("Failed setting weights")
     def set_weights(
-        wallet: "bt.wallet",
-        metagraph: "bt.metagraph",
-        subtensor: "bt.subtensor",
+        wallet: "bt.Wallet",
+        metagraph: "bt.Metagraph",
+        subtensor: "bt.Subtensor",
         weights: Tuple[List[int], List[float]],
     ):
         uids, raw_weights = weights
@@ -63,7 +63,7 @@ def create_set_weights(version: int, netuid: int):
                 wait_for_finalization=False,
                 wait_for_inclusion=False,
                 version_key=version,
-                max_retries=1,
+                max_attempts=1,
             )
             if result is True:
                 bt.logging.success("set_weights on chain successfully!")

@@ -11,7 +11,8 @@ from typing import Optional
 from pathlib import Path
 
 import bittensor as bt
-from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
+from bittensor.core.settings import TYPE_REGISTRY
+from bittensor_wallet.utils import SS58_FORMAT
 
 from gas.cache import ContentManager
 from gas.config import add_args, add_data_service_args
@@ -77,7 +78,7 @@ class DataService:
         }
 
         try:
-            self.validator_wallet = bt.wallet(config=self.config)
+            self.validator_wallet = bt.Wallet(config=self.config)
         except Exception:
             self.validator_wallet = None
 
@@ -127,7 +128,7 @@ class DataService:
         if not self.validator_wallet:
             return None
         try:
-            subtensor = bt.subtensor(config=self.config)
+            subtensor = bt.Subtensor(config=self.config)
             metagraph = subtensor.metagraph(netuid=self.config.netuid)
             hotkey = self.validator_wallet.hotkey.ss58_address
             hotkeys_list = list(metagraph.hotkeys)
@@ -504,11 +505,11 @@ async def main():
 
     add_args(parser)
     add_data_service_args(parser)
-    bt.wallet.add_args(parser)
-    bt.subtensor.add_args(parser)
+    bt.Wallet.add_args(parser)
+    bt.Subtensor.add_args(parser)
     bt.logging.add_args(parser)
 
-    config = bt.config(parser)
+    config = bt.Config(parser)
 
     bt.logging(config=config, logging_dir=config.neuron.full_path)
     bt.logging.set_info()

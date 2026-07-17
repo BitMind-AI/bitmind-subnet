@@ -8,7 +8,8 @@ import inspect
 import traceback
 import asyncio
 
-from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
+from bittensor.core.settings import TYPE_REGISTRY
+from bittensor_wallet.utils import SS58_FORMAT
 import signal
 
 from gas import (
@@ -30,7 +31,7 @@ class BaseNeuron:
     Base neuron class with async substrate support and automatic reconnection.
     Provides clean async/await coordination throughout the application.
     """
-    config: "bt.config"
+    config: "bt.Config"
     neuron_type: NeuronType
 
     def check_registered(self):
@@ -83,19 +84,19 @@ class BaseNeuron:
         )
 
         parser = argparse.ArgumentParser()
-        bt.wallet.add_args(parser)
-        bt.subtensor.add_args(parser)
+        bt.Wallet.add_args(parser)
+        bt.Subtensor.add_args(parser)
         bt.logging.add_args(parser)
         add_args(parser)
 
         if self.neuron_type == NeuronType.VALIDATOR:
-            bt.axon.add_args(parser)
+            bt.Axon.add_args(parser)
             add_validator_args(parser)
         if self.neuron_type == NeuronType.MINER:
-            bt.axon.add_args(parser)
+            bt.Axon.add_args(parser)
             add_miner_args(parser)
 
-        self.config = bt.config(parser)
+        self.config = bt.Config(parser)
         if config:
             base_config = copy.deepcopy(config)
             self.config.merge(base_config)
@@ -119,8 +120,8 @@ class BaseNeuron:
 
         ## BITTENSOR INITIALIZATION
         bt.logging.success(self.config)
-        self.wallet = bt.wallet(config=self.config)
-        self.subtensor = bt.subtensor(
+        self.wallet = bt.Wallet(config=self.config)
+        self.subtensor = bt.Subtensor(
             config=self.config, network=self.config.subtensor.chain_endpoint
         )
         self.metagraph = self.subtensor.metagraph(self.config.netuid)

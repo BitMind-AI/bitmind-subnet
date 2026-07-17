@@ -13,10 +13,9 @@ license = { text = "" }
 urls = { homepage = "http://bitmind.ai" }
 
 dependencies = [
-    "bittensor==9.9.0",
-    "bittensor-cli==9.13.1",
+    "bittensor==10.3.0",
+    "bittensor-cli==9.21.0",
     "pillow==12.2.0",
-    "substrate-interface==1.7.11",
     "numpy==2.0.1",
     "pandas==2.3.0",
     "torch==2.7.1",
@@ -43,9 +42,7 @@ dependencies = [
     "accelerate==1.8.1",
     "click>=8.0.0",
     "datasets==4.0.0",
-    # <2: the 2.x line vendors cyscale, which shares a namespace with (and
-    # cannot coexist with) scalecodec, required by substrate-interface.
-    "async-substrate-interface>=1.5.1,<2",
+    "async-substrate-interface==2.0.2",
     "ftfy==6.3.1",
     "huggingface_hub>=0.17.0",
     "gasbench @ git+https://github.com/BitMind-AI/gasbench.git@dev",
