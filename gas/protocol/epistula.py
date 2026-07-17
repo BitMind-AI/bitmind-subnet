@@ -7,7 +7,7 @@ from typing import Annotated, Any, Dict, Optional
 import bittensor as bt
 import time
 import httpx
-from substrateinterface import Keypair
+from bittensor_wallet import Keypair
 from fastapi import Request, HTTPException
 
 

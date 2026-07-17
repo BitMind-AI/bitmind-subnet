@@ -182,7 +182,7 @@ class Validator(BaseNeuron):
             bt.logging.debug("set_weights() acquired state lock")
             try:
                 bt.logging.info(f"Setting weights at block {block}")
-                self.subtensor = bt.subtensor(
+                self.subtensor = bt.Subtensor(
                     config=self.config, network=self.config.subtensor.chain_endpoint
                 )
                 uids = list(range(self.metagraph.n))
@@ -200,25 +200,25 @@ class Validator(BaseNeuron):
                 audio_pct     = .04
                 generator_pct = .16
 
+                # Resolve escrow/burn UIDs at current chain head. `block` is an
+                # interval marker (0 at startup) and must not be used as a query
+                # block: a non-archive node has pruned old state and raises
+                # StateDiscardedError under async-substrate-interface 2.x.
                 burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["burn"],
                     netuid=self.config.netuid,
-                    block=block
                 )
                 video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["video_escrow"],
                     netuid=self.config.netuid,
-                    block=block
                 )
                 image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["image_escrow"],
                     netuid=self.config.netuid,
-                    block=block
                 )
                 audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
                     hotkey_ss58=active_ss58_addresses["audio_escrow"],
                     netuid=self.config.netuid,
-                    block=block
                 )
 
                 special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}

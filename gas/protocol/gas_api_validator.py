@@ -40,7 +40,7 @@ def _verification_stats_to_entries(
 
 
 def post_generator_verification_upload(
-    wallet: bt.wallet,
+    wallet: bt.Wallet,
     base_url: str,
     lookback_hours: float,
     verification_stats: Dict[str, Dict[str, Any]],

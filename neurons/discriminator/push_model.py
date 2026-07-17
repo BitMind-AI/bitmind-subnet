@@ -94,7 +94,7 @@ async def push_separate_models(
     image_model_path: Optional[str] = None,
     video_model_path: Optional[str] = None,
     audio_model_path: Optional[str] = None,
-    wallet: bt.wallet = None,
+    wallet: bt.Wallet = None,
     retry_delay_secs: int = 60,
     netuid: int = 34,
     chain_endpoint: Optional[str] = None,
@@ -222,7 +222,7 @@ async def push_separate_models(
         chain_endpoint = "finney" if netuid == 34 else "test"
 
     print_info(f"Connecting to subnet {netuid} via {chain_endpoint}")
-    subtensor = bt.subtensor(network=chain_endpoint)
+    subtensor = bt.Subtensor(network=chain_endpoint)
     metadata_store = ChainModelMetadataStore(subtensor, netuid)
 
     # Register each model separately on the blockchain
@@ -357,7 +357,7 @@ def main():
 
     # Initialize wallet
     try:
-        wallet = bt.wallet(name=args.wallet_name, hotkey=args.wallet_hotkey)
+        wallet = bt.Wallet(name=args.wallet_name, hotkey=args.wallet_hotkey)
         print_info(f"Hotkey: {wallet.hotkey.ss58_address}")
     except Exception as e:
         print_error(f"Failed to initialize wallet: {e}")
@@ -365,7 +365,7 @@ def main():
 
     # Check if hotkey is registered
     netuid = args.netuid
-    mg = bt.metagraph(netuid=netuid, network="finney" if netuid == 34 else "test")
+    mg = bt.Metagraph(netuid=netuid, network="finney" if netuid == 34 else "test")
     hotkey = wallet.hotkey.ss58_address
     if hotkey not in mg.hotkeys:
         print_warning(f"Hotkey {hotkey} not registered on netuid {netuid}")

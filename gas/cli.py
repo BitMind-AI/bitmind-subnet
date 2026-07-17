@@ -512,7 +512,7 @@ def perf(wallet_name, wallet_hotkey, modality, api_url):
     from gas.protocol.miner_requests import fetch_models
 
     try:
-        wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
+        wallet = bt.Wallet(name=wallet_name, hotkey=wallet_hotkey)
     except Exception as e:
         click.echo(f"Error loading wallet: {e}", err=True)
         sys.exit(1)
@@ -906,7 +906,7 @@ def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_js
     wh = wallet_hotkey or os.environ.get("BT_WALLET_HOTKEY", "default")
 
     try:
-        wallet = bt.wallet(name=wn, hotkey=wh)
+        wallet = bt.Wallet(name=wn, hotkey=wh)
     except Exception as e:
         click.echo(f"Error loading wallet: {e}", err=True)
         sys.exit(1)

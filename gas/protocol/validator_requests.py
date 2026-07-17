@@ -227,7 +227,7 @@ async def get_escrow_addresses(
 
 
 async def get_benchmark_results(
-    hotkey, metagraph: bt.metagraph, base_url: str = "https://gas.bitmind.ai",
+    hotkey, metagraph: bt.Metagraph, base_url: str = "https://gas.bitmind.ai",
     max_retries: int = 3,
 ):
     """
