@@ -55,7 +55,7 @@ def create_set_weights(version: int, netuid: int):
         #bt.logging.info("Setting Weights: " + str(processed_weights))
         #bt.logging.info("Weight Uids: " + str(processed_weight_uids))
         for _ in range(3):
-            result, message = subtensor.set_weights(
+            response = subtensor.set_weights(
                 wallet=wallet,
                 netuid=netuid,
                 uids=processed_weight_uids,  # type: ignore
@@ -65,14 +65,41 @@ def create_set_weights(version: int, netuid: int):
                 version_key=version,
                 max_attempts=1,
             )
-            if result is True:
+            success, message = response
+            if success is True:
                 bt.logging.success("set_weights on chain successfully!")
                 break
-            else:
-                bt.logging.error(f"set_weights failed {message}")
+
+            # set_weights returns success=False with no message when the weights
+            # rate limit hasn't elapsed; retrying can't clear it, so stop.
+            reason = message or getattr(response, "error", None)
+            if reason is None and _weights_rate_limited(subtensor, wallet, netuid):
+                bt.logging.info("Skipping set_weights: rate limit not elapsed (too early)")
+                break
+            bt.logging.error(f"set_weights failed: {reason or 'unknown error'}")
             time.sleep(15)
 
     return set_weights
+
+
+def _weights_rate_limited(
+    subtensor: "bt.Subtensor", wallet: "bt.Wallet", netuid: int
+) -> bool:
+    """Return True if the weights rate limit has not yet elapsed for this hotkey."""
+    try:
+        uid = subtensor.get_uid_for_hotkey_on_subnet(
+            wallet.hotkey.ss58_address, netuid
+        )
+        if uid is None:
+            return False
+        blocks_since = subtensor.blocks_since_last_update(netuid, uid)
+        rate_limit = subtensor.weights_rate_limit(netuid)
+        if blocks_since is None or rate_limit is None:
+            return False
+        return blocks_since <= rate_limit
+    except Exception as e:
+        bt.logging.debug(f"Could not check weights rate limit: {e}")
+        return False
 
 
 def create_async_subscription_handler(callback: Callable):

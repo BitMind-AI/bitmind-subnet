@@ -29,6 +29,7 @@ jobs:
         # needs it, drop the corresponding flag.
         run: >
           uv sync --frozen
+          --no-install-package flash-attn
           --no-install-package torch
           --no-install-package torchvision
           --no-install-package torchaudio
