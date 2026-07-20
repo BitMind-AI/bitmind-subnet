@@ -23,9 +23,9 @@ _TIER_RANK = {tier: rank for rank, tier in enumerate(TIER_ORDER)}
 # Weighted distribution for sampling the requested tier of a video challenge.
 # The knob for dataset resolution mix and how often top-tier capability is probed.
 CHALLENGE_TIER_WEIGHTS = {
-    "720p": 0.3,
-    "1080p": 0.4,
-    "4K": 0.3,
+    "720p": 0.35,
+    "1080p": 0.45,
+    "4K": 0.20,
 }
 
 # Classification thresholds on the *minimum* dimension so portrait and
