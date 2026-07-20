@@ -142,14 +142,12 @@ class GenerativeChallengeManager:
     async def send_generative_request(self, uid: int, prompt_entry, modality: Modality):
         """Scoring is handled by the callback in GeneratorEvaluator"""
 
-        # Video challenges request a resolution tier; rewards are priced at
-        # min(observed, requested) so overshooting never pays more and miners
-        # whose model can't reach the tier degrade to a lower price, not failure.
-        requested_resolution = None
-        parameters = None
-        if modality == Modality.VIDEO:
-            requested_resolution = sample_challenge_tier()
-            parameters = {"resolution": requested_resolution}
+        # Challenges request a resolution tier (video: 480p/720p/1080p,
+        # image: 1K/2K/4K); rewards are priced at min(observed, requested) so
+        # overshooting never pays more and miners whose model can't reach the
+        # tier degrade to a lower price, not failure.
+        requested_resolution = sample_challenge_tier(modality.value)
+        parameters = {"resolution": requested_resolution}
 
         async with aiohttp.ClientSession() as session:
             response_data = await query_generative_miner(

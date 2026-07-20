@@ -209,7 +209,7 @@ class ChallengeStore:
                     "image_verified": 0, "video_verified": 0,
                     "image_failed": 0, "video_failed": 0,
                     "image_model_names": [], "video_model_names": [],
-                    "video_generations": [],
+                    "image_generations": [], "video_generations": [],
                     "last_timestamp": outcome.updated_at,
                 }
             modality = (outcome.modality or "").lower()
@@ -219,6 +219,14 @@ class ChallengeStore:
                     miner_stats[hotkey]["image_verified"] += 1
                     if outcome.model_name:
                         miner_stats[hotkey]["image_model_names"].append(outcome.model_name)
+                    miner_stats[hotkey]["image_generations"].append({
+                        "model_name": outcome.model_name,
+                        "requested_resolution": outcome.requested_resolution,
+                        "observed_resolution": (
+                            list(outcome.observed_resolution)
+                            if outcome.observed_resolution else None
+                        ),
+                    })
                 elif modality == "video":
                     miner_stats[hotkey]["video_verified"] += 1
                     if outcome.model_name:
@@ -262,6 +270,7 @@ class ChallengeStore:
                 "image_failed": img_f,
                 "image_pass_rate": (img_v / img_t) if img_t > 0 else 0.0,
                 "image_model_names": stats.get("image_model_names", []),
+                "image_generations": stats.get("image_generations", []),
                 "video_verified": vid_v,
                 "video_failed": vid_f,
                 "video_pass_rate": (vid_v / vid_t) if vid_t > 0 else 0.0,
