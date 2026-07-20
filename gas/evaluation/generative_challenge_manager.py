@@ -21,6 +21,7 @@ from PIL import Image
 from typing import Dict, Optional
 
 from gas.cache.content_manager import ContentManager
+from gas.evaluation.resolution_tiers import sample_challenge_tier
 from gas.protocol.epistula import get_verifier
 from gas.protocol.validator_requests import query_generative_miner
 from gas.types import MediaType, MinerType, Modality
@@ -141,7 +142,14 @@ class GenerativeChallengeManager:
     async def send_generative_request(self, uid: int, prompt_entry, modality: Modality):
         """Scoring is handled by the callback in GeneratorEvaluator"""
 
-        #parameters = {"width": 1024, "height": 1024}
+        # Video challenges request a resolution tier; rewards are priced at
+        # min(observed, requested) so overshooting never pays more and miners
+        # whose model can't reach the tier degrade to a lower price, not failure.
+        requested_resolution = None
+        parameters = None
+        if modality == Modality.VIDEO:
+            requested_resolution = sample_challenge_tier()
+            parameters = {"resolution": requested_resolution}
 
         async with aiohttp.ClientSession() as session:
             response_data = await query_generative_miner(
@@ -152,7 +160,7 @@ class GenerativeChallengeManager:
                 prompt=prompt_entry.content,
                 modality=modality,
                 webhook_url=self.generative_callback_url,
-                parameters=None,
+                parameters=parameters,
                 total_timeout=self.config.neuron.miner_total_timeout,
             )
 
@@ -169,6 +177,7 @@ class GenerativeChallengeManager:
                     "media_type": MediaType.SYNTHETIC,
                     "status": "pending",
                     "sent_at": time.time(),
+                    "requested_resolution": requested_resolution,
                 }
             self.content_manager.record_challenge_outcome(
                 task_id=miner_task_id,
@@ -177,6 +186,7 @@ class GenerativeChallengeManager:
                 prompt_id=prompt_entry.id,
                 modality=modality.value,
                 status="pending",
+                requested_resolution=requested_resolution,
             )
             bt.logging.info(
                 f"Stored challenge task {miner_task_id} for UID {uid}. Total active tasks: {len(self.challenge_tasks)}"

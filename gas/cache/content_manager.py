@@ -216,6 +216,17 @@ class ContentManager:
                 return None
 
             resolution, file_size = extract_media_info(save_path, modality)
+
+            # Audio presence feeds resolution/audio-tiered reward pricing.
+            has_audio = None
+            if modality == Modality.VIDEO:
+                try:
+                    from gas.cache.util.video import get_video_metadata
+
+                    has_audio = bool(get_video_metadata(save_path).get("has_audio"))
+                except Exception as e:
+                    bt.logging.warning(f"Could not detect audio track in {save_path}: {e}")
+
             media_id = self.media.add_media_entry(
                 prompt_id=prompt_id,
                 file_path=save_path,
@@ -234,6 +245,7 @@ class ContentManager:
                 c2pa_verified=c2pa_verified,
                 c2pa_issuer=c2pa_issuer,
                 task_id=task_id,
+                has_audio=has_audio,
             )
             self.challenges.update_outcome(
                 task_id=task_id,
@@ -611,6 +623,7 @@ class ContentManager:
         failure_reason: Optional[str] = None,
         media_id: Optional[str] = None,
         created_at: Optional[float] = None,
+        requested_resolution: Optional[str] = None,
     ) -> bool:
         return self.challenges.record_outcome(
             task_id=task_id,
@@ -622,6 +635,7 @@ class ContentManager:
             failure_reason=failure_reason,
             media_id=media_id,
             created_at=created_at,
+            requested_resolution=requested_resolution,
         )
 
     def update_challenge_outcome(

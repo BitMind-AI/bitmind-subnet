@@ -61,6 +61,13 @@ MIGRATIONS = [
         ],
     ),
     (
+        "add_resolution_tier_columns",
+        [
+            "ALTER TABLE generator_challenge_outcomes ADD COLUMN requested_resolution TEXT",
+            "ALTER TABLE media ADD COLUMN has_audio BOOLEAN",
+        ],
+    ),
+    (
         "add_prompt_spec_columns",
         [
             "ALTER TABLE prompts ADD COLUMN register TEXT",

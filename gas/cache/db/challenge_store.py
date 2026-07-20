@@ -1,13 +1,25 @@
 """ChallengeStore — CRUD and reward stats for the generator_challenge_outcomes table."""
 
+import json
 import sqlite3
 import time
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 
 import bittensor as bt
 
 from gas.cache.types import ChallengeOutcome
 from gas.cache.db.connection import ConnectionManager
+
+
+def _parse_resolution(raw: Optional[str]) -> Optional[Tuple[int, int]]:
+    """Parse the media table's JSON-encoded (width, height) resolution."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return (int(data[0]), int(data[1]))
+    except (ValueError, TypeError, IndexError, json.JSONDecodeError):
+        return None
 
 
 class ChallengeStore:
@@ -31,6 +43,7 @@ class ChallengeStore:
         failure_reason: Optional[str] = None,
         media_id: Optional[str] = None,
         created_at: Optional[float] = None,
+        requested_resolution: Optional[str] = None,
     ) -> bool:
         """Insert or update a generation challenge outcome."""
         try:
@@ -41,9 +54,9 @@ class ChallengeStore:
                     """
                     INSERT INTO generator_challenge_outcomes (
                         task_id, uid, hotkey, prompt_id, modality, status,
-                        failure_reason, media_id, created_at, updated_at
+                        failure_reason, media_id, requested_resolution, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(task_id) DO UPDATE SET
                         uid = excluded.uid,
                         hotkey = excluded.hotkey,
@@ -52,9 +65,10 @@ class ChallengeStore:
                         status = excluded.status,
                         failure_reason = excluded.failure_reason,
                         media_id = COALESCE(excluded.media_id, generator_challenge_outcomes.media_id),
+                        requested_resolution = COALESCE(excluded.requested_resolution, generator_challenge_outcomes.requested_resolution),
                         updated_at = excluded.updated_at
                     """,
-                    (task_id, uid, hotkey, prompt_id, modality, status, failure_reason, media_id, created_at, now),
+                    (task_id, uid, hotkey, prompt_id, modality, status, failure_reason, media_id, requested_resolution, created_at, now),
                 )
                 conn.commit()
                 return True
@@ -144,9 +158,11 @@ class ChallengeStore:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
                     """
-                    SELECT * FROM generator_challenge_outcomes
-                    WHERE status IN ('verified', 'failed') AND updated_at >= ?
-                    ORDER BY updated_at DESC LIMIT ?
+                    SELECT o.*, m.resolution AS media_resolution, m.has_audio AS media_has_audio
+                    FROM generator_challenge_outcomes o
+                    LEFT JOIN media m ON o.media_id = m.id
+                    WHERE o.status IN ('verified', 'failed') AND o.updated_at >= ?
+                    ORDER BY o.updated_at DESC LIMIT ?
                     """,
                     (cutoff, int(limit)),
                 )
@@ -161,6 +177,13 @@ class ChallengeStore:
                         failure_reason=row["failure_reason"],
                         media_id=row["media_id"],
                         model_name=row["model_name"] if "model_name" in row.keys() else None,
+                        requested_resolution=(
+                            row["requested_resolution"] if "requested_resolution" in row.keys() else None
+                        ),
+                        observed_resolution=_parse_resolution(row["media_resolution"]),
+                        has_audio=(
+                            bool(row["media_has_audio"]) if row["media_has_audio"] is not None else None
+                        ),
                         created_at=row["created_at"],
                         updated_at=row["updated_at"],
                     )
@@ -186,6 +209,7 @@ class ChallengeStore:
                     "image_verified": 0, "video_verified": 0,
                     "image_failed": 0, "video_failed": 0,
                     "image_model_names": [], "video_model_names": [],
+                    "video_generations": [],
                     "last_timestamp": outcome.updated_at,
                 }
             modality = (outcome.modality or "").lower()
@@ -199,6 +223,15 @@ class ChallengeStore:
                     miner_stats[hotkey]["video_verified"] += 1
                     if outcome.model_name:
                         miner_stats[hotkey]["video_model_names"].append(outcome.model_name)
+                    miner_stats[hotkey]["video_generations"].append({
+                        "model_name": outcome.model_name,
+                        "requested_resolution": outcome.requested_resolution,
+                        "observed_resolution": (
+                            list(outcome.observed_resolution)
+                            if outcome.observed_resolution else None
+                        ),
+                        "has_audio": outcome.has_audio,
+                    })
                 if outcome.media_id:
                     miner_stats[hotkey]["verified_media_ids"].append(outcome.media_id)
             elif outcome.status == "failed":
@@ -233,6 +266,7 @@ class ChallengeStore:
                 "video_failed": vid_f,
                 "video_pass_rate": (vid_v / vid_t) if vid_t > 0 else 0.0,
                 "video_model_names": stats.get("video_model_names", []),
+                "video_generations": stats.get("video_generations", []),
                 "media_ids": stats["verified_media_ids"],
                 "last_timestamp": stats["last_timestamp"],
             }
