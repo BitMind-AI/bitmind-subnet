@@ -294,12 +294,10 @@ def _get_video_generation_price(generation: Dict[str, Any]) -> float:
     price = floor_table.get((tier, has_audio))
     if price is None:
         # Tier below the family's minimum output (Veo can't produce sub-720p,
-        # so a 480p-tier request still costs the miner a real 720p generation):
-        # price at the cheapest combo the floor variant CAN produce with the
-        # same audio state, not the baseline.
-        same_audio = [p for (t, a), p in floor_table.items() if a == has_audio]
-        candidates = same_audio or list(floor_table.values())
-        price = min(candidates) if candidates else _GENERATOR_BASELINE_PRICE
+        # so a 480p-tier request still costs the miner a real 720p
+        # generation): match Seedance fast's 480p rate so the bottom tier
+        # pays the same regardless of family.
+        price = NAMED_MODEL_TIER_PRICES["dreamina-seedance-2-0-fast"]["480p"]
     return max(price, _GENERATOR_BASELINE_PRICE)
 
 
