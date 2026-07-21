@@ -37,10 +37,10 @@ GENERATOR_MODEL_PRICES: Dict[str, float] = {
 }
 
 # Per-(resolution tier, audio) USD/s prices for models whose C2PA manifests
-# hide the variant (the Veo family).  A Veo video is priced at the cheapest
-# variant able to produce its observed (tier, audio) combination — a price
-# floor.  Since challenges request a tier and rewards use
-# min(observed, requested), overshooting a request never pays more.
+# hide the variant (the Veo family).  A Veo video is priced as the floor
+# variant (_VEO_FLOOR_MODEL) at its observed (tier, audio) combination.
+# Since challenges request a tier and rewards use min(observed, requested),
+# overshooting a request never pays more.
 #
 # Keys mirror OpenRouter pricing_skus: the un-suffixed duration_seconds SKU is
 # the 1080p default; _720p/_4k suffixes are explicit tiers.  Defaults below
@@ -68,6 +68,15 @@ MODEL_TIER_PRICES: Dict[str, Dict[Tuple[str, bool], float]] = {
 
 # Models priced via the tier floor when C2PA gives model_name=None.
 _TIER_FLOOR_FAMILY_PREFIX = "google/veo"
+
+# The variant a C2PA-blind Veo generation is priced as.  Google's manifests
+# hide the variant, so some assumption is unavoidable: flooring at lite
+# (cheapest) is maximally arbitrage-safe but credits every real fast/full
+# generation at lite rates; flooring at fast (the middle variant) bounds a
+# lite miner's overcredit at ~2x on price while Google-certified content —
+# cryptographic proof of real, paid generation — earns a fair mid-family
+# rate.  Volume is demand-limited, so this doesn't reorder model choice.
+_VEO_FLOOR_MODEL = "google/veo-3.1-fast"
 
 # Per-tier USD/s prices for named models (C2PA exposes model_name).
 # OpenRouter publishes no Seedance pricing SKUs, so these come from provider
@@ -246,11 +255,13 @@ def _get_video_generation_price(generation: Dict[str, Any]) -> float:
     challenge request never pays, and an unknown observed resolution earns
     only the baseline — no premium without a verifiable resolution.
 
-    Named models (Seedance et al. expose model_name via C2PA, and are
-    per-token priced upstream) use their 720p reference price scaled by the
-    delivered tier's pixel ratio (NAMED_MODEL_TIER_SCALE).  C2PA-blind
-    generations (model_name=None — the Veo family) are priced at the cheapest
-    Veo variant able to produce the video's (tier, audio) combination.
+    Named models (Seedance et al. expose model_name via C2PA) use their
+    per-tier quoted prices (NAMED_MODEL_TIER_PRICES), falling back to
+    pixel-ratio scaling of their flat 720p reference.  C2PA-blind
+    generations (model_name=None — the Veo family) are priced as the floor
+    variant (_VEO_FLOOR_MODEL) at the video's (tier, audio) combination;
+    tiers below the family's minimum output price at its cheapest
+    producible combo.
     """
     tier = effective_tier(
         generation.get("observed_resolution"),
@@ -279,14 +290,17 @@ def _get_video_generation_price(generation: Dict[str, Any]) -> float:
         return _GENERATOR_BASELINE_PRICE
 
     has_audio = bool(generation.get("has_audio"))
-    candidates = [
-        table[(tier, has_audio)]
-        for model, table in MODEL_TIER_PRICES.items()
-        if model.startswith(_TIER_FLOOR_FAMILY_PREFIX) and (tier, has_audio) in table
-    ]
-    # No variant offers this (tier, audio) — e.g. sub-720p output — so no
-    # premium can be justified.
-    return min(candidates) if candidates else _GENERATOR_BASELINE_PRICE
+    floor_table = MODEL_TIER_PRICES.get(_VEO_FLOOR_MODEL, {})
+    price = floor_table.get((tier, has_audio))
+    if price is None:
+        # Tier below the family's minimum output (Veo can't produce sub-720p,
+        # so a 480p-tier request still costs the miner a real 720p generation):
+        # price at the cheapest combo the floor variant CAN produce with the
+        # same audio state, not the baseline.
+        same_audio = [p for (t, a), p in floor_table.items() if a == has_audio]
+        candidates = same_audio or list(floor_table.values())
+        price = min(candidates) if candidates else _GENERATOR_BASELINE_PRICE
+    return max(price, _GENERATOR_BASELINE_PRICE)
 
 
 def _compute_video_generation_multiplier(generations: List[Dict[str, Any]]) -> float:
