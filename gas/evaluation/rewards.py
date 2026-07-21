@@ -15,9 +15,8 @@ from gas.evaluation.resolution_tiers import effective_tier
 #
 # C2PA blindness note: several providers do NOT expose the model variant in their
 # C2PA manifests.  All Veo (any provider) returns None.  All Runway proprietary
-# models share the same "RunwayML" softwareAgent.  Veo videos are priced at
-# Seedance fast's per-tier rates (see _VEO_PRICE_MODEL); other unknowns get
-# the baseline.
+# models share the same "RunwayML" softwareAgent.  Veo videos are priced
+# per delivered tier (see _VEO_TIER_PRICES); other unknowns get the baseline.
 GENERATOR_MODEL_PRICES: Dict[str, float] = {
     # Google Veo family (C2PA: no variant exposed — all return None → tier floor)
     "google/veo-3.1-lite":  0.03,   # cheapest Veo — used as baseline
@@ -43,7 +42,7 @@ GENERATOR_MODEL_PRICES: Dict[str, float] = {
 # 2026-07; live SKUs are merged on top at module load.
 #
 # NOTE: not currently consulted for pricing — C2PA-blind Veo is priced via
-# _VEO_PRICE_MODEL (Seedance-fast parity) instead.  Retained as the live
+# _VEO_TIER_PRICES instead.  Retained as the live
 # price reference, and it becomes the pricing source again if Veo variants
 # ever become distinguishable (manifest signal or a 4K capability probe).
 MODEL_TIER_PRICES: Dict[str, Dict[Tuple[str, bool], float]] = {
@@ -62,12 +61,17 @@ MODEL_TIER_PRICES: Dict[str, Dict[Tuple[str, bool], float]] = {
     },
 }
 
-# C2PA-blind Veo generations (model_name=None) are priced identically to
-# Seedance fast at each delivered tier: Google's manifests never expose the
-# variant, so rather than guess one, the same resolution earns the same
-# multiplier regardless of family (audio-independent, like the Seedance
-# quotes).  A tier above fast's table (1080p) pays its top priced tier.
-_VEO_PRICE_MODEL = "dreamina-seedance-2-0-fast"
+# Per-tier USD/s prices for C2PA-blind Veo generations (model_name=None).
+# Google's manifests never expose the variant, so pricing is by delivered
+# tier only (audio-independent): 480p/720p match Seedance fast's rates
+# (same resolution, same multiplier), and 1080p reflects that Veo's real
+# price rises with resolution — $0.40/s is the veo-3.1 standard 1080p rate
+# (also Seedance full's 720p rate), i.e. a 3.65x multiplier.
+_VEO_TIER_PRICES: Dict[str, float] = {
+    "480p": 0.07,
+    "720p": 0.152,
+    "1080p": 0.40,
+}
 
 # Per-tier USD/s prices for named models (C2PA exposes model_name).
 # OpenRouter publishes no Seedance pricing SKUs, so these come from provider
@@ -249,9 +253,8 @@ def _get_video_generation_price(generation: Dict[str, Any]) -> float:
     Named models (Seedance et al. expose model_name via C2PA) use their
     per-tier quoted prices (NAMED_MODEL_TIER_PRICES), falling back to
     pixel-ratio scaling of their flat 720p reference.  C2PA-blind
-    generations (model_name=None — the Veo family) are priced identically
-    to Seedance fast at the delivered tier (_VEO_PRICE_MODEL) — same
-    resolution, same multiplier, regardless of family.
+    generations (model_name=None — the Veo family) are priced per
+    delivered tier via _VEO_TIER_PRICES, audio-independent.
     """
     tier = effective_tier(
         generation.get("observed_resolution"),
@@ -279,8 +282,7 @@ def _get_video_generation_price(generation: Dict[str, Any]) -> float:
     if tier is None:
         return _GENERATOR_BASELINE_PRICE
 
-    table = NAMED_MODEL_TIER_PRICES[_VEO_PRICE_MODEL]
-    price = table.get(tier, max(table.values()))
+    price = _VEO_TIER_PRICES.get(tier, max(_VEO_TIER_PRICES.values()))
     return max(price, _GENERATOR_BASELINE_PRICE)
 
 
