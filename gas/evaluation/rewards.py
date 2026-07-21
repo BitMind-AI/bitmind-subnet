@@ -1,8 +1,10 @@
 import math
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import bittensor as bt
+
+from gas.evaluation.resolution_tiers import effective_tier
 
 # Model generation cost in USD per second of video (720p, no audio unless noted).
 # Used to compute reward multipliers: miner gets baseline_ratio * (model_price / baseline_price).
@@ -13,25 +15,123 @@ import bittensor as bt
 #
 # C2PA blindness note: several providers do NOT expose the model variant in their
 # C2PA manifests.  All Veo (any provider) returns None.  All Runway proprietary
-# models share the same "RunwayML" softwareAgent.  We conservatively use the
-# cheapest variant as baseline and accept the ambiguity in the reward multiplier.
+# models share the same "RunwayML" softwareAgent.  Veo videos are priced by a
+# resolution/audio floor (see MODEL_TIER_PRICES); other unknowns get the baseline.
 GENERATOR_MODEL_PRICES: Dict[str, float] = {
-    # Google Veo family (C2PA: no variant exposed — all return None → baseline)
+    # Google Veo family (C2PA: no variant exposed — all return None → tier floor)
     "google/veo-3.1-lite":  0.03,   # cheapest Veo — used as baseline
     "google/veo-3.1-fast":  0.08,
     "google/veo-3.1":       0.20,
     # ByteDance Seedance (C2PA: params.model_name — variant IS exposed)
-    # Pricing is per-token; figures are 720p-with-audio references (USD/s).
+    # 720p reference (USD/s); per-tier prices in NAMED_MODEL_TIER_PRICES take
+    # precedence — these flat values only serve the legacy model-name path.
     # Covers both OpenRouter (bytedance/*) and Runway (seedance2/seedance2_fast) —
     # both route through ByteDance's own C2PA signing (sig issuer: Byteplus Pte. Ltd.).
     # Confirmed via live test: seedance-1-5-pro has NO C2PA on OpenRouter and is
     # not offered on Runway — only the 2.0 variants are validator-eligible.
-    "dreamina-seedance-2-0-fast":  0.12,   # ~$0.121/s at 720p
-    "dreamina-seedance-2-0":       0.15,   # ~$0.151/s at 720p
+    "dreamina-seedance-2-0-fast":  0.152,  # $0.76 per 5s at 720p (provider quote, 2026-07)
+    "dreamina-seedance-2-0":       0.40,   # $2.00 per 5s at 720p (provider quote, 2026-07)
     # Runway gen4.5: C2PA manifest present but claimSignature.mismatch — validators
     # reject all gen4.5 content until Runway fixes their signing infra.
     # "RunwayML": 0.05,  # re-enable when gen4.5 signature is fixed
 }
+
+# Per-(resolution tier, audio) USD/s prices for models whose C2PA manifests
+# hide the variant (the Veo family).  A Veo video is priced as the floor
+# variant (_VEO_FLOOR_MODEL) at its observed (tier, audio) combination.
+# Since challenges request a tier and rewards use min(observed, requested),
+# overshooting a request never pays more.
+#
+# Keys mirror OpenRouter pricing_skus: the un-suffixed duration_seconds SKU is
+# the 1080p default; _720p/_4k suffixes are explicit tiers.  Defaults below
+# mirror live values as of 2026-07; live SKUs are merged on top at module load.
+#
+# 4K entries are inert for now: "4K" is not a video tier (never requested, and
+# 4K output classifies as 1080p — see resolution_tiers.py), so no lookup ever
+# reaches them.  They are kept because the live SKU merge re-adds them anyway,
+# and they become active again the moment 4K is added back to the video tiers.
+MODEL_TIER_PRICES: Dict[str, Dict[Tuple[str, bool], float]] = {
+    "google/veo-3.1-lite": {
+        ("720p", False): 0.03, ("720p", True): 0.05,
+        ("1080p", False): 0.05, ("1080p", True): 0.08,
+    },
+    "google/veo-3.1-fast": {
+        ("720p", False): 0.08, ("720p", True): 0.10,
+        ("1080p", False): 0.10, ("1080p", True): 0.12,
+        ("4K", False): 0.25, ("4K", True): 0.30,
+    },
+    "google/veo-3.1": {
+        ("1080p", False): 0.20, ("1080p", True): 0.40,
+        ("4K", False): 0.40, ("4K", True): 0.60,
+    },
+}
+
+# Models priced via the tier floor when C2PA gives model_name=None.
+_TIER_FLOOR_FAMILY_PREFIX = "google/veo"
+
+# The variant a C2PA-blind Veo generation is priced as.  Google's manifests
+# hide the variant, so some assumption is unavoidable: flooring at lite
+# (cheapest) is maximally arbitrage-safe but credits every real fast/full
+# generation at lite rates; flooring at fast (the middle variant) bounds a
+# lite miner's overcredit at ~2x on price while Google-certified content —
+# cryptographic proof of real, paid generation — earns a fair mid-family
+# rate.  Volume is demand-limited, so this doesn't reorder model choice.
+_VEO_FLOOR_MODEL = "google/veo-3.1-fast"
+
+# Per-tier USD/s prices for named models (C2PA exposes model_name).
+# OpenRouter publishes no Seedance pricing SKUs, so these come from provider
+# quotes (2026-07, per 5s video): seedance-2-0 $0.50 / $2.00 / $2.40 at
+# 480p / 720p / 1080p; seedance-2-0-fast $0.35 / $0.76 at 480p / 720p.
+# Note the spread is NOT pixel-proportional (full jumps ~4x from 480p to
+# 720p but only ~1.2x from 720p to 1080p), which is why these are explicit
+# tables rather than a shared scale.  Keys are matched against the C2PA
+# model_name the same way as GENERATOR_MODEL_PRICES (exact, then substring).
+NAMED_MODEL_TIER_PRICES: Dict[str, Dict[str, float]] = {
+    "dreamina-seedance-2-0-fast": {
+        "480p": 0.07,    # $0.35 / 5s
+        "720p": 0.152,   # $0.76 / 5s
+    },
+    "dreamina-seedance-2-0": {
+        "480p": 0.10,    # $0.50 / 5s
+        "720p": 0.40,    # $2.00 / 5s
+        "1080p": 0.48,   # $2.40 / 5s
+    },
+}
+
+# Fallback resolution scaling for named models with no NAMED_MODEL_TIER_PRICES
+# table: their flat 720p reference is scaled by the delivered tier's pixel
+# ratio (480p is ~0.44x the 720p pixel count, 1080p ~2.25x).
+NAMED_MODEL_TIER_SCALE: Dict[str, float] = {
+    "480p": 0.44,
+    "720p": 1.0,
+    "1080p": 2.25,
+}
+
+
+def _get_named_model_tier_table(model_name: str) -> Optional[Dict[str, float]]:
+    """Per-tier price table for a C2PA model name (exact, then substring match)."""
+    lower = model_name.lower()
+    for key, table in NAMED_MODEL_TIER_PRICES.items():
+        if key.lower() == lower:
+            return table
+    for key, table in NAMED_MODEL_TIER_PRICES.items():
+        if key.lower() in lower:
+            return table
+    return None
+
+# Relative per-image prices by resolution tier (1K is the image baseline).
+# Image C2PA manifests rarely expose a usable model variant and image APIs
+# price per image (often tiered by output size), so images are priced purely
+# by delivered resolution tier: min(observed, requested), same as video.
+# Ratios approximate the resolution-tier spreads of the trusted image APIs
+# (e.g. GPT Image 2 spans ~3x from 1K to 4K); tune here as providers change.
+IMAGE_TIER_PRICES: Dict[str, float] = {
+    "1K": 1.0,
+    "2K": 2.0,
+    "4K": 4.0,
+}
+
+_IMAGE_BASELINE_PRICE: float = min(IMAGE_TIER_PRICES.values())
 
 # Cheapest model price — all multipliers are relative to this.
 _GENERATOR_BASELINE_PRICE: float = min(GENERATOR_MODEL_PRICES.values())
@@ -41,13 +141,33 @@ _GENERATOR_BASELINE_PRICE: float = min(GENERATOR_MODEL_PRICES.values())
 _LIVE_PRICES_FETCHED = False
 
 
-def _fetch_openrouter_prices() -> Dict[str, float]:
+def _parse_duration_sku_key(key: str) -> Optional[Tuple[str, bool]]:
+    """Map a duration_seconds SKU key to a (tier, has_audio) pair.
+
+    "duration_seconds_with_audio" -> ("1080p", True)   # no suffix = 1080p default
+    "duration_seconds_without_audio_720p" -> ("720p", False)
+    "duration_seconds_with_audio_4k" -> ("4K", True)
+    """
+    if "duration_seconds" not in key:
+        return None
+    has_audio = "without_audio" not in key
+    if key.endswith("_720p"):
+        tier = "720p"
+    elif key.endswith("_4k"):
+        tier = "4K"
+    else:
+        tier = "1080p"
+    return tier, has_audio
+
+
+def _fetch_openrouter_prices() -> Tuple[Dict[str, float], Dict[str, Dict[Tuple[str, bool], float]]]:
     """Pull live video model prices from OpenRouter /videos/models (free, no auth).
 
-    Only runs once per process — result is cached at module level."""
+    Returns (flat_prices, tier_prices).  Only runs once per process — result is
+    cached at module level."""
     global _LIVE_PRICES_FETCHED
     if _LIVE_PRICES_FETCHED:
-        return {}
+        return {}, {}
 
     _LIVE_PRICES_FETCHED = True
     try:
@@ -57,35 +177,45 @@ def _fetch_openrouter_prices() -> Dict[str, float]:
             timeout=10,
         )
         if resp.status_code != 200:
-            return {}
+            return {}, {}
         models = resp.json().get("data", [])
         prices: Dict[str, float] = {}
+        tier_prices: Dict[str, Dict[Tuple[str, bool], float]] = {}
         for m in models:
             model_id = m.get("id", "")
             skus = m.get("pricing_skus", {}) or {}
             # Find the cheapest per-second price for text-to-video
             candidates = []
+            tier_table: Dict[Tuple[str, bool], float] = {}
             for key, val in skus.items():
                 if "text_to_video" not in key and "duration_seconds" not in key:
                     continue
                 try:
-                    candidates.append(float(val))
+                    price = float(val)
                 except (ValueError, TypeError):
-                    pass
+                    continue
+                candidates.append(price)
+                tier_key = _parse_duration_sku_key(key)
+                if tier_key:
+                    tier_table[tier_key] = price
             if candidates:
                 prices[model_id] = min(candidates)
+            if tier_table:
+                tier_prices[model_id] = tier_table
         bt.logging.info(f"Fetched {len(prices)} live OpenRouter video model prices")
-        return prices
+        return prices, tier_prices
     except Exception as e:
         bt.logging.debug(f"Could not fetch OpenRouter prices: {e}")
-        return {}
+        return {}, {}
 
 
 # Merge live prices on top of defaults (live wins over hardcoded for same key).
-_live = _fetch_openrouter_prices()
+_live, _live_tiers = _fetch_openrouter_prices()
 if _live:
     GENERATOR_MODEL_PRICES = {**GENERATOR_MODEL_PRICES, **_live}
     _GENERATOR_BASELINE_PRICE = min(GENERATOR_MODEL_PRICES.values())
+if _live_tiers:
+    MODEL_TIER_PRICES = {**MODEL_TIER_PRICES, **_live_tiers}
 
 
 def _get_model_price(model_name: str) -> float:
@@ -118,6 +248,105 @@ def _compute_average_model_multiplier(model_names: list[str]) -> float:
     return total / len(model_names)
 
 
+def _get_video_generation_price(generation: Dict[str, Any]) -> float:
+    """USD/s price for one verified video generation.
+
+    In both branches the tier is min(observed, requested) so overshooting a
+    challenge request never pays, and an unknown observed resolution earns
+    only the baseline — no premium without a verifiable resolution.
+
+    Named models (Seedance et al. expose model_name via C2PA) use their
+    per-tier quoted prices (NAMED_MODEL_TIER_PRICES), falling back to
+    pixel-ratio scaling of their flat 720p reference.  C2PA-blind
+    generations (model_name=None — the Veo family) are priced as the floor
+    variant (_VEO_FLOOR_MODEL) at the video's (tier, audio) combination;
+    tiers below the family's minimum output price at its cheapest
+    producible combo.
+    """
+    tier = effective_tier(
+        generation.get("observed_resolution"),
+        generation.get("requested_resolution"),
+    )
+    model_name = generation.get("model_name")
+    if model_name:
+        if tier is None:
+            return _GENERATOR_BASELINE_PRICE
+        table = _get_named_model_tier_table(model_name)
+        if table and tier in table:
+            price = table[tier]
+        elif table:
+            # Tier absent from the table (e.g. a fast variant somehow observed
+            # at 1080p): pay the highest tier the table does price — the model
+            # can't officially produce more, so no extrapolated premium.
+            price = max(table.values())
+        else:
+            price = _get_model_price(model_name) * NAMED_MODEL_TIER_SCALE.get(tier, 1.0)
+        # Baseline is the floor: a named model unknown to the price table
+        # resolves to the baseline price, and tier down-scaling must not push
+        # it (or any cheap model) below what an unpriceable generation earns.
+        return max(price, _GENERATOR_BASELINE_PRICE)
+
+    if tier is None:
+        return _GENERATOR_BASELINE_PRICE
+
+    has_audio = bool(generation.get("has_audio"))
+    floor_table = MODEL_TIER_PRICES.get(_VEO_FLOOR_MODEL, {})
+    price = floor_table.get((tier, has_audio))
+    if price is None:
+        # Tier below the family's minimum output (Veo can't produce sub-720p,
+        # so a 480p-tier request still costs the miner a real 720p
+        # generation): match Seedance fast's 480p rate so the bottom tier
+        # pays the same regardless of family.
+        price = NAMED_MODEL_TIER_PRICES["dreamina-seedance-2-0-fast"]["480p"]
+    return max(price, _GENERATOR_BASELINE_PRICE)
+
+
+def _compute_video_generation_multiplier(generations: List[Dict[str, Any]]) -> float:
+    """Average price multiplier across a miner's verified video generations.
+
+    Same sqrt taper as _compute_average_model_multiplier, but priced per
+    generation from (model_name, resolution tier, audio) instead of model
+    name alone.
+    """
+    if not generations:
+        return 1.0
+    total = 0.0
+    for generation in generations:
+        price = _get_video_generation_price(generation)
+        total += math.sqrt(price / _GENERATOR_BASELINE_PRICE)
+    return total / len(generations)
+
+
+def _get_image_generation_price(generation: Dict[str, Any]) -> float:
+    """Relative price for one verified image generation, by delivered tier.
+
+    Tier is min(observed, requested) so overshooting a challenge request never
+    pays more.  An unknown observed resolution earns only the 1K baseline.
+    """
+    tier = effective_tier(
+        generation.get("observed_resolution"),
+        generation.get("requested_resolution"),
+        modality="image",
+    )
+    if tier is None:
+        return _IMAGE_BASELINE_PRICE
+    return IMAGE_TIER_PRICES.get(tier, _IMAGE_BASELINE_PRICE)
+
+
+def _compute_image_generation_multiplier(generations: List[Dict[str, Any]]) -> float:
+    """Average resolution-tier multiplier across a miner's verified images.
+
+    Same sqrt taper as video: a tier 4x the baseline price earns 2x, not 4x.
+    """
+    if not generations:
+        return 1.0
+    total = 0.0
+    for generation in generations:
+        price = _get_image_generation_price(generation)
+        total += math.sqrt(price / _IMAGE_BASELINE_PRICE)
+    return total / len(generations)
+
+
 def get_generator_base_rewards(verification_stats):
     """
     Compute base rewards for generators based on their verification pass rates,
@@ -142,6 +371,8 @@ def get_generator_base_rewards(verification_stats):
                     "video_failed": int,
                     "video_pass_rate": float,
                     "video_model_names": list[str],
+                    "image_generations": list[dict],  # per-generation resolution tiers
+                    "video_generations": list[dict],  # per-generation model/resolution/audio
                     "media_ids": List[str]
                 }
             }
@@ -167,9 +398,16 @@ def get_generator_base_rewards(verification_stats):
             image_pass_rate = stats.get("image_pass_rate", 0.0)
             image_volume = min(image_verified, 10) + max(0.0, math.log2(max(1, image_verified - 9)))
             image_base = image_pass_rate * image_volume
-            image_model_mult = _compute_average_model_multiplier(
-                stats.get("image_model_names", [])
-            )
+            # Prefer per-generation resolution-tier pricing; fall back to model
+            # names for stats produced before tiered pricing (all baseline today,
+            # since no image models carry a flat price).
+            image_generations = stats.get("image_generations")
+            if image_generations:
+                image_model_mult = _compute_image_generation_multiplier(image_generations)
+            else:
+                image_model_mult = _compute_average_model_multiplier(
+                    stats.get("image_model_names", [])
+                )
             image_base *= image_model_mult
 
             # --- Video modality ---
@@ -177,9 +415,15 @@ def get_generator_base_rewards(verification_stats):
             video_pass_rate = stats.get("video_pass_rate", 0.0)
             video_volume = min(video_verified, 10) + max(0.0, math.log2(max(1, video_verified - 9)))
             video_base = video_pass_rate * video_volume
-            video_model_mult = _compute_average_model_multiplier(
-                stats.get("video_model_names", [])
-            )
+            # Prefer per-generation (model, resolution tier, audio) pricing;
+            # fall back to model names for stats produced before tiered pricing.
+            video_generations = stats.get("video_generations")
+            if video_generations:
+                video_model_mult = _compute_video_generation_multiplier(video_generations)
+            else:
+                video_model_mult = _compute_average_model_multiplier(
+                    stats.get("video_model_names", [])
+                )
             video_base *= video_model_mult
 
             uid_rewards[uid] = {"image": image_base, "video": video_base}

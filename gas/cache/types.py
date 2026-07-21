@@ -86,6 +86,9 @@ class MediaEntry:
     c2pa_verified: Optional[bool] = False  # C2PA validation passed
     c2pa_issuer: Optional[str] = None  # Issuer name if C2PA verified
 
+    # Video audio track presence (None = unknown / not applicable)
+    has_audio: Optional[bool] = None
+
     # Miner challenge tracking
     task_id: Optional[str] = None
 
@@ -141,6 +144,9 @@ class ChallengeOutcome:
     failure_reason: Optional[str] = None
     media_id: Optional[str] = None
     model_name: Optional[str] = None
+    requested_resolution: Optional[str] = None    # tier requested in the challenge (e.g. "1080p")
+    observed_resolution: Optional[tuple] = None   # (width, height) of the stored media
+    has_audio: Optional[bool] = None              # audio track present in the stored media
     created_at: float = None
     updated_at: float = None
 
