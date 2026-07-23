@@ -31,6 +31,13 @@ from gas.verification.duplicate_detection import (
     DEFAULT_HAMMING_THRESHOLD,
 )
 
+# Allowance for provider/validator clock disagreement when checking that a
+# C2PA manifest was signed after its challenge was issued. Providers sign
+# with their own infrastructure clocks; ten minutes absorbs realistic skew
+# without meaningfully weakening the freshness guarantee (challenges are
+# issued ~44 minutes apart).
+C2PA_MAX_CLOCK_SKEW_SECONDS = 600
+
 
 class GenerativeChallengeManager:
     def __init__(
@@ -145,7 +152,8 @@ class GenerativeChallengeManager:
         # Challenges request a resolution tier (video: 480p/720p/1080p,
         # image: 1K/2K/4K); rewards are priced at min(observed, requested) so
         # overshooting never pays more and miners whose model can't reach the
-        # tier degrade to a lower price, not failure.
+        # tier degrade to a lower (video: shortfall-discounted) price, not
+        # failure.
         requested_resolution = sample_challenge_tier(modality.value)
         parameters = {"resolution": requested_resolution}
 
@@ -474,6 +482,37 @@ class GenerativeChallengeManager:
                     f"C2PA verification error: {e}"
                 )
                 return _reject(f"C2PA verification error: {e}")
+
+            # Step 3b: Freshness - the manifest must have been signed after
+            # this challenge was issued. This proves the media was generated
+            # for this challenge, closing off replay of hoarded or scraped
+            # C2PA-signed content regardless of how far back dedup can see.
+            sent_at = task_info.get("sent_at")
+            if sent_at:
+                signing_time = c2pa_result.signing_time
+                if signing_time is None:
+                    bt.logging.warning(
+                        f"REJECTED from UID {generator_uid} task {task_id}: "
+                        f"C2PA manifest has no signing timestamp (issuer: {c2pa_issuer})"
+                    )
+                    return _reject("C2PA manifest has no signing timestamp")
+                signed_ts = signing_time.timestamp()
+                now = time.time()
+                if signed_ts < sent_at - C2PA_MAX_CLOCK_SKEW_SECONDS:
+                    age_min = (sent_at - signed_ts) / 60
+                    bt.logging.warning(
+                        f"REJECTED stale media from UID {generator_uid} task {task_id}: "
+                        f"C2PA signed {age_min:.1f} min before challenge was issued "
+                        f"(signed {signing_time.isoformat()}, issuer: {c2pa_issuer})"
+                    )
+                    return _reject("C2PA manifest signed before challenge was issued")
+                if signed_ts > now + C2PA_MAX_CLOCK_SKEW_SECONDS:
+                    bt.logging.warning(
+                        f"REJECTED from UID {generator_uid} task {task_id}: "
+                        f"C2PA signing timestamp is in the future "
+                        f"(signed {signing_time.isoformat()}, issuer: {c2pa_issuer})"
+                    )
+                    return _reject("C2PA signing timestamp is in the future")
 
             # Step 4: All checks passed - store the media
             filepath = self.content_manager.write_miner_media(

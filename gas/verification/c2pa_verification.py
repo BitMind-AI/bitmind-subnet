@@ -34,6 +34,7 @@ an OpenAI-side issue — no trust anchor can fix a non-CA self-signed cert.
 
 import json
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 
@@ -201,6 +202,7 @@ class C2PAVerificationResult:
         metadata_complete: bool = False,
         policy_warnings: Optional[List[str]] = None,
         error: Optional[str] = None,
+        signing_time: Optional[datetime] = None,
     ):
         self.verified = verified
         self.signature_valid = signature_valid
@@ -216,6 +218,7 @@ class C2PAVerificationResult:
         self.metadata_complete = metadata_complete
         self.policy_warnings = policy_warnings or []
         self.error = error
+        self.signing_time = signing_time
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -232,6 +235,7 @@ class C2PAVerificationResult:
             "policy_warnings": self.policy_warnings,
             "validation_errors": self.validation_errors,
             "error": self.error,
+            "signing_time": self.signing_time.isoformat() if self.signing_time else None,
         }
 
 
@@ -381,6 +385,7 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
 
         ai_generated = _check_ai_generated(manifest_data)
         model_name = _extract_model_name(manifest_data)
+        signing_time = _extract_signing_time(manifest_data)
         provider_audit = _classify_provider_profile(
             cert_subject=cert_subject,
             cert_issuer=cert_issuer,
@@ -413,6 +418,7 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
             provider_profile=provider_audit["provider_profile"],
             metadata_complete=provider_audit["metadata_complete"],
             policy_warnings=provider_audit["policy_warnings"],
+            signing_time=signing_time,
         )
 
     except Exception as e:
@@ -639,6 +645,63 @@ def _extract_certificate_info(manifest_data: Dict[str, Any]) -> Dict[str, Any]:
         bt.logging.debug(f"Error extracting certificate info: {e}")
 
     return result
+
+
+def _parse_c2pa_datetime(value: Any) -> Optional[datetime]:
+    """Parse an RFC3339 timestamp from a manifest into an aware UTC datetime."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _extract_signing_time(manifest_data: Dict[str, Any]) -> Optional[datetime]:
+    """
+    Extract when the active manifest was signed.
+
+    Prefers signature_info.time (the signing/RFC3161 timestamp the C2PA SDK
+    reports — present in Google and Black Forest Labs manifests). Falls back
+    to the latest `when` among c2pa.actions entries (ByteDance manifests omit
+    signature_info.time but stamp c2pa.created with a signed `when`). Both
+    fields live inside the signed manifest, so neither can be altered without
+    invalidating the claim signature.
+    """
+    try:
+        manifests = manifest_data.get("manifests", {})
+        active_manifest_id = manifest_data.get("active_manifest")
+
+        manifest = None
+        if active_manifest_id and active_manifest_id in manifests:
+            manifest = manifests[active_manifest_id]
+        elif manifests:
+            manifest = next(iter(manifests.values()))
+
+        if not manifest:
+            return None
+
+        signed_at = _parse_c2pa_datetime(
+            (manifest.get("signature_info") or {}).get("time")
+        )
+        if signed_at:
+            return signed_at
+
+        action_times = []
+        for assertion in manifest.get("assertions", []):
+            if not str(assertion.get("label", "")).startswith("c2pa.actions"):
+                continue
+            for action in (assertion.get("data") or {}).get("actions", []):
+                when = _parse_c2pa_datetime(action.get("when"))
+                if when:
+                    action_times.append(when)
+        return max(action_times) if action_times else None
+    except Exception as e:
+        bt.logging.debug(f"Error extracting signing time: {e}")
+        return None
 
 
 def _extract_claim_generator(manifest_data: Dict[str, Any]) -> Optional[str]:

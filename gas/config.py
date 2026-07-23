@@ -279,14 +279,14 @@ def add_validator_args(parser):
         "--scoring.image-weight",
         type=float,
         help="Weight for image modality scoring",
-        default=0.12,
+        default=0.30,
     )
 
     parser.add_argument(
         "--scoring.video-weight",
         type=float,
         help="Weight for video modality scoring",
-        default=0.88,
+        default=0.70,
     )
 
     parser.add_argument(
