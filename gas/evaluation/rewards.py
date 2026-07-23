@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import bittensor as bt
 
-from gas.evaluation.resolution_tiers import effective_tier
+from gas.evaluation.resolution_tiers import effective_tier, tier_shortfall
 
 # Model generation cost in USD per second of video (720p, no audio unless noted).
 # Used to compute reward multipliers: miner gets baseline_ratio * (model_price / baseline_price).
@@ -286,19 +286,39 @@ def _get_video_generation_price(generation: Dict[str, Any]) -> float:
     return max(price, _GENERATOR_BASELINE_PRICE)
 
 
+# Multiplier discount per tier of video undershoot (delivered below the
+# requested tier).  min(observed, requested) pricing alone lets miners serve
+# every challenge at the cheapest tier: under the sqrt taper, 480p Seedance
+# earns ~1.8x for $0.50/5s while 720p earns ~3.65x for $2.00/5s — better
+# reward-per-dollar at the bottom.  The discount keeps degrade-not-fail
+# semantics (undershooting still pays, unlike a hard failure) but makes
+# honoring the requested tier the highest-reward choice per challenge slot:
+# e.g. on a 1080p request, 1080p Seedance earns 4.0x, 720p 3.65*0.6=2.19x,
+# 480p 1.83*0.36=0.66x.  Declining instead of undershooting earns 0 and
+# costs a volume slot, so the discount is not dodgeable by refusal.
+VIDEO_UNDERSHOOT_TIER_DISCOUNT = 0.6
+
+
 def _compute_video_generation_multiplier(generations: List[Dict[str, Any]]) -> float:
     """Average price multiplier across a miner's verified video generations.
 
     Same sqrt taper as _compute_average_model_multiplier, but priced per
     generation from (model_name, resolution tier, audio) instead of model
-    name alone.
+    name alone.  Deliveries below the requested tier are discounted per tier
+    of shortfall (see VIDEO_UNDERSHOOT_TIER_DISCOUNT).
     """
     if not generations:
         return 1.0
     total = 0.0
     for generation in generations:
         price = _get_video_generation_price(generation)
-        total += math.sqrt(price / _GENERATOR_BASELINE_PRICE)
+        shortfall = tier_shortfall(
+            generation.get("observed_resolution"),
+            generation.get("requested_resolution"),
+        )
+        total += math.sqrt(price / _GENERATOR_BASELINE_PRICE) * (
+            VIDEO_UNDERSHOOT_TIER_DISCOUNT ** shortfall
+        )
     return total / len(generations)
 
 
