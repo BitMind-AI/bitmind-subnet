@@ -39,9 +39,9 @@ _TIER_RANK: Dict[str, Dict[str, int]] = {
 # probed (top tiers are the most expensive for miners to serve).
 CHALLENGE_TIER_WEIGHTS: Dict[str, Dict[str, float]] = {
     VIDEO_MODALITY: {
-        "480p": 0.20,
+        "480p": 0.40,
         "720p": 0.40,
-        "1080p": 0.40,
+        "1080p": 0.20,
     },
     IMAGE_MODALITY: {
         "1K": 0.40,
