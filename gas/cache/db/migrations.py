@@ -78,6 +78,13 @@ MIGRATIONS = [
             "CREATE INDEX IF NOT EXISTS idx_prompts_register ON prompts (register)",
         ],
     ),
+    (
+        "add_duration_columns",
+        [
+            "ALTER TABLE generator_challenge_outcomes ADD COLUMN requested_duration REAL",
+            "ALTER TABLE media ADD COLUMN duration_seconds REAL",
+        ],
+    ),
 ]
 
 

@@ -68,6 +68,7 @@ class MediaStore:
             c2pa_verified=bool(row["c2pa_verified"]) if "c2pa_verified" in row.keys() and row["c2pa_verified"] is not None else False,
             c2pa_issuer=row["c2pa_issuer"] if "c2pa_issuer" in row.keys() else None,
             has_audio=bool(row["has_audio"]) if "has_audio" in row.keys() and row["has_audio"] is not None else None,
+            duration_seconds=row["duration_seconds"] if "duration_seconds" in row.keys() else None,
         )
 
     # ------------------------------------------------------------------
@@ -127,6 +128,7 @@ class MediaStore:
         c2pa_issuer: Optional[str] = None,
         task_id: Optional[str] = None,
         has_audio: Optional[bool] = None,
+        duration_seconds: Optional[float] = None,
     ) -> str:
         """Add a media entry to the database. Returns the media id."""
         media_id = str(uuid.uuid4())
@@ -141,9 +143,10 @@ class MediaStore:
                     model_name, generation_args, uid, hotkey,
                     verified, failed_verification, rewarded,
                     created_at, mask_path, timestamp, resolution, file_size, format,
-                    perceptual_hash, c2pa_verified, c2pa_issuer, task_id, has_audio
+                    perceptual_hash, c2pa_verified, c2pa_issuer, task_id, has_audio,
+                    duration_seconds
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     media_id, prompt_id, file_path, modality.value, media_type.value, source_type.value,
@@ -158,6 +161,7 @@ class MediaStore:
                     c2pa_issuer,
                     task_id,
                     1 if has_audio else 0 if has_audio is not None else None,
+                    duration_seconds,
                 ),
             )
             conn.commit()

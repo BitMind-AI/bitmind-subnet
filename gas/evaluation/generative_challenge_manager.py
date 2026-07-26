@@ -21,7 +21,7 @@ from PIL import Image
 from typing import Dict, Optional
 
 from gas.cache.content_manager import ContentManager
-from gas.evaluation.resolution_tiers import sample_challenge_tier
+from gas.evaluation.resolution_tiers import sample_challenge_duration, sample_challenge_tier
 from gas.protocol.epistula import get_verifier
 from gas.protocol.validator_requests import query_generative_miner
 from gas.types import MediaType, MinerType, Modality
@@ -157,6 +157,14 @@ class GenerativeChallengeManager:
         requested_resolution = sample_challenge_tier(modality.value)
         parameters = {"resolution": requested_resolution}
 
+        # Video challenges also request a duration; reward pricing scales with
+        # min(delivered, requested) seconds so shorter deliveries earn less
+        # rather than failing (mirrors the resolution tier mechanism).
+        requested_duration = None
+        if modality == Modality.VIDEO:
+            requested_duration = sample_challenge_duration()
+            parameters["duration"] = requested_duration
+
         async with aiohttp.ClientSession() as session:
             response_data = await query_generative_miner(
                 uid=uid,
@@ -184,6 +192,7 @@ class GenerativeChallengeManager:
                     "status": "pending",
                     "sent_at": time.time(),
                     "requested_resolution": requested_resolution,
+                    "requested_duration": requested_duration,
                 }
             self.content_manager.record_challenge_outcome(
                 task_id=miner_task_id,
@@ -193,6 +202,7 @@ class GenerativeChallengeManager:
                 modality=modality.value,
                 status="pending",
                 requested_resolution=requested_resolution,
+                requested_duration=requested_duration,
             )
             bt.logging.info(
                 f"Stored challenge task {miner_task_id} for UID {uid}. Total active tasks: {len(self.challenge_tasks)}"
