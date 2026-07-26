@@ -298,6 +298,14 @@ def _get_video_generation_price(generation: Dict[str, Any]) -> float:
 # costs a volume slot, so the discount is not dodgeable by refusal.
 VIDEO_UNDERSHOOT_TIER_DISCOUNT = 0.6
 
+# Same mechanism for images.  Without it, image undershoot carries no penalty
+# beyond earning the lower tier's price — and providers with cheap low-tier
+# output (e.g. ~$0.04 1K vs ~$0.14 2K Google image pricing) make ignoring the
+# requested tier the better reward-per-dollar choice, the exact gradient the
+# video discount exists to flip: e.g. on a 2K request, 2K earns sqrt(2)=1.41x
+# while 1K earns 1.0*0.6=0.6x.
+IMAGE_UNDERSHOOT_TIER_DISCOUNT = 0.6
+
 
 def _compute_video_generation_multiplier(generations: List[Dict[str, Any]]) -> float:
     """Average price multiplier across a miner's verified video generations.
@@ -342,13 +350,22 @@ def _compute_image_generation_multiplier(generations: List[Dict[str, Any]]) -> f
     """Average resolution-tier multiplier across a miner's verified images.
 
     Same sqrt taper as video: a tier 4x the baseline price earns 2x, not 4x.
+    Deliveries below the requested tier are discounted per tier of shortfall
+    (see IMAGE_UNDERSHOOT_TIER_DISCOUNT).
     """
     if not generations:
         return 1.0
     total = 0.0
     for generation in generations:
         price = _get_image_generation_price(generation)
-        total += math.sqrt(price / _IMAGE_BASELINE_PRICE)
+        shortfall = tier_shortfall(
+            generation.get("observed_resolution"),
+            generation.get("requested_resolution"),
+            modality="image",
+        )
+        total += math.sqrt(price / _IMAGE_BASELINE_PRICE) * (
+            IMAGE_UNDERSHOOT_TIER_DISCOUNT ** shortfall
+        )
     return total / len(generations)
 
 

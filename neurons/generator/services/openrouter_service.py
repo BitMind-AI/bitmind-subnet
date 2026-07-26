@@ -177,9 +177,13 @@ class OpenRouterService(BaseGenerationService):
                 raise ValueError(f"OpenRouter async process() only supports images, got {modality}")
             
             model = parameters.get('model', self.default_model)
-            bt.logging.info(f"Generating image with OpenRouter model: {model}")
-            
-            api_result = await self._generate_image(prompt, model)
+            resolution = parameters.get('resolution')
+            bt.logging.info(
+                f"Generating image with OpenRouter model: {model}"
+                + (f" at {resolution}" if resolution else "")
+            )
+
+            api_result = await self._generate_image(prompt, model, resolution)
             
             if api_result is None:
                 bt.logging.error("OpenRouter API returned None")
@@ -236,19 +240,33 @@ class OpenRouterService(BaseGenerationService):
     
     # ────────────────── Image Generation ──────────────────
     
-    async def _generate_image(self, prompt: str, model: str) -> Optional[Dict[str, Any]]:
+    async def _generate_image(
+        self, prompt: str, model: str, resolution: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Generate an image using OpenRouter API.
-        
-        Based on the nano_banana.py implementation but adapted for async operation.
-        
+
+        When the challenge requests a resolution tier ("1K"/"2K"/"4K"), the
+        dedicated /api/v1/images endpoint is used — it accepts a `resolution`
+        field directly, which the chat completions path has no equivalent for.
+        Falls back to chat completions if the images endpoint fails.
+
         Args:
             prompt: The text prompt for image generation
             model: The model to use for generation
-            
+            resolution: Requested tier ("1K"/"2K"/"4K"), or None for default
+
         Returns:
             Dict with generation results or None on failure
         """
+        if resolution:
+            try:
+                return self._generate_image_at_resolution(prompt, model, resolution)
+            except Exception as e:
+                bt.logging.warning(
+                    f"OpenRouter images endpoint failed at {resolution} "
+                    f"({e}); falling back to chat completions (default size)"
+                )
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -377,7 +395,68 @@ class OpenRouterService(BaseGenerationService):
         except Exception as e:
             bt.logging.error(f"OpenRouter image processing failed: {e}")
             raise
-    
+
+    def _generate_image_at_resolution(
+        self, prompt: str, model: str, resolution: str
+    ) -> Dict[str, Any]:
+        """Generate via the dedicated /api/v1/images endpoint at a resolution tier.
+
+        The endpoint accepts `resolution` values "1K"/"2K"/"4K" — the same
+        tier names validators send in challenge parameters — and returns
+        base64 image bytes in data[0].b64_json with original C2PA intact.
+        """
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        api_url = "https://openrouter.ai/api/v1/images"
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "resolution": resolution,
+        }
+
+        start_time = time.time()
+        response = requests.post(api_url, headers=headers, json=payload, timeout=self.timeout)
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"OpenRouter images API returned {response.status_code}: {response.text[:500]}"
+            )
+
+        result = response.json()
+        data = result.get("data") or []
+        if not data or not data[0].get("b64_json"):
+            raise ValueError("OpenRouter images API response missing data[0].b64_json")
+
+        image_binary = base64.b64decode(data[0]["b64_json"])
+        media_type = data[0].get("media_type", "image/png")
+        image_format = media_type.split("/")[-1].upper().replace("JPG", "JPEG")
+
+        pil_image = Image.open(io.BytesIO(image_binary))
+        gen_time = time.time() - start_time
+        bt.logging.info(
+            f"OpenRouter images endpoint: {len(image_binary)} bytes, "
+            f"{pil_image.width}x{pil_image.height} (requested {resolution})"
+        )
+
+        return {
+            "image": pil_image,
+            "raw_binary": image_binary,  # Preserve original bytes with C2PA
+            "format": image_format,
+            "modality": "image",
+            "media_type": "synthetic",
+            "prompt": prompt,
+            "model_name": model,
+            "time": time.time(),
+            "gen_duration": gen_time,
+            "gen_args": {
+                "provider": "openrouter",
+                "model": model,
+                "resolution": resolution,
+                "api_url": api_url,
+            },
+        }
+
     # ────────────────── Video Generation ──────────────────
     
     def _generate_video(
