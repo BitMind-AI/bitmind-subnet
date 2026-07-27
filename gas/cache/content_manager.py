@@ -217,15 +217,19 @@ class ContentManager:
 
             resolution, file_size = extract_media_info(save_path, modality)
 
-            # Audio presence feeds resolution/audio-tiered reward pricing.
+            # Audio presence and duration feed the tiered reward pricing.
             has_audio = None
+            duration_seconds = None
             if modality == Modality.VIDEO:
                 try:
                     from gas.cache.util.video import get_video_metadata
 
-                    has_audio = bool(get_video_metadata(save_path).get("has_audio"))
+                    video_meta = get_video_metadata(save_path)
+                    has_audio = bool(video_meta.get("has_audio"))
+                    raw_duration = video_meta.get("duration")
+                    duration_seconds = float(raw_duration) if raw_duration else None
                 except Exception as e:
-                    bt.logging.warning(f"Could not detect audio track in {save_path}: {e}")
+                    bt.logging.warning(f"Could not probe video metadata in {save_path}: {e}")
 
             media_id = self.media.add_media_entry(
                 prompt_id=prompt_id,
@@ -246,6 +250,7 @@ class ContentManager:
                 c2pa_issuer=c2pa_issuer,
                 task_id=task_id,
                 has_audio=has_audio,
+                duration_seconds=duration_seconds,
             )
             self.challenges.update_outcome(
                 task_id=task_id,
@@ -624,6 +629,7 @@ class ContentManager:
         media_id: Optional[str] = None,
         created_at: Optional[float] = None,
         requested_resolution: Optional[str] = None,
+        requested_duration: Optional[float] = None,
     ) -> bool:
         return self.challenges.record_outcome(
             task_id=task_id,
@@ -636,6 +642,7 @@ class ContentManager:
             media_id=media_id,
             created_at=created_at,
             requested_resolution=requested_resolution,
+            requested_duration=requested_duration,
         )
 
     def update_challenge_outcome(

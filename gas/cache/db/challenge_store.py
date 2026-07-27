@@ -44,6 +44,7 @@ class ChallengeStore:
         media_id: Optional[str] = None,
         created_at: Optional[float] = None,
         requested_resolution: Optional[str] = None,
+        requested_duration: Optional[float] = None,
     ) -> bool:
         """Insert or update a generation challenge outcome."""
         try:
@@ -54,9 +55,10 @@ class ChallengeStore:
                     """
                     INSERT INTO generator_challenge_outcomes (
                         task_id, uid, hotkey, prompt_id, modality, status,
-                        failure_reason, media_id, requested_resolution, created_at, updated_at
+                        failure_reason, media_id, requested_resolution,
+                        requested_duration, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(task_id) DO UPDATE SET
                         uid = excluded.uid,
                         hotkey = excluded.hotkey,
@@ -66,9 +68,10 @@ class ChallengeStore:
                         failure_reason = excluded.failure_reason,
                         media_id = COALESCE(excluded.media_id, generator_challenge_outcomes.media_id),
                         requested_resolution = COALESCE(excluded.requested_resolution, generator_challenge_outcomes.requested_resolution),
+                        requested_duration = COALESCE(excluded.requested_duration, generator_challenge_outcomes.requested_duration),
                         updated_at = excluded.updated_at
                     """,
-                    (task_id, uid, hotkey, prompt_id, modality, status, failure_reason, media_id, requested_resolution, created_at, now),
+                    (task_id, uid, hotkey, prompt_id, modality, status, failure_reason, media_id, requested_resolution, requested_duration, created_at, now),
                 )
                 conn.commit()
                 return True
@@ -158,7 +161,8 @@ class ChallengeStore:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
                     """
-                    SELECT o.*, m.resolution AS media_resolution, m.has_audio AS media_has_audio
+                    SELECT o.*, m.resolution AS media_resolution, m.has_audio AS media_has_audio,
+                           m.duration_seconds AS media_duration
                     FROM generator_challenge_outcomes o
                     LEFT JOIN media m ON o.media_id = m.id
                     WHERE o.status IN ('verified', 'failed') AND o.updated_at >= ?
@@ -184,6 +188,10 @@ class ChallengeStore:
                         has_audio=(
                             bool(row["media_has_audio"]) if row["media_has_audio"] is not None else None
                         ),
+                        requested_duration=(
+                            row["requested_duration"] if "requested_duration" in row.keys() else None
+                        ),
+                        observed_duration=row["media_duration"],
                         created_at=row["created_at"],
                         updated_at=row["updated_at"],
                     )
@@ -239,6 +247,8 @@ class ChallengeStore:
                             if outcome.observed_resolution else None
                         ),
                         "has_audio": outcome.has_audio,
+                        "requested_duration": outcome.requested_duration,
+                        "observed_duration": outcome.observed_duration,
                     })
                 if outcome.media_id:
                     miner_stats[hotkey]["verified_media_ids"].append(outcome.media_id)

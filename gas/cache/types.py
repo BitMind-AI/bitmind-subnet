@@ -89,6 +89,9 @@ class MediaEntry:
     # Video audio track presence (None = unknown / not applicable)
     has_audio: Optional[bool] = None
 
+    # Video duration in seconds (None = unknown / not applicable)
+    duration_seconds: Optional[float] = None
+
     # Miner challenge tracking
     task_id: Optional[str] = None
 
@@ -147,6 +150,8 @@ class ChallengeOutcome:
     requested_resolution: Optional[str] = None    # tier requested in the challenge (e.g. "1080p")
     observed_resolution: Optional[tuple] = None   # (width, height) of the stored media
     has_audio: Optional[bool] = None              # audio track present in the stored media
+    requested_duration: Optional[float] = None    # video seconds requested in the challenge
+    observed_duration: Optional[float] = None     # seconds of the stored media (ffprobe)
     created_at: float = None
     updated_at: float = None
 

@@ -50,6 +50,27 @@ CHALLENGE_TIER_WEIGHTS: Dict[str, Dict[str, float]] = {
     },
 }
 
+# Weighted distribution for sampling the requested video duration (seconds).
+# All trusted video models accept 4/6/8 (Veo exactly these; Seedance 4-15).
+# Miners previously converged on the 4s provider minimum because duration was
+# never requested and rewards were duration-invariant; reward pricing now
+# scales with min(delivered, requested) seconds (see rewards), so requesting
+# longer durations probes real capability and diversifies the dataset.
+# Weighted toward 4s to bound miner cost (expected duration ~5.2s).
+CHALLENGE_DURATION_WEIGHTS: Dict[int, float] = {
+    4: 0.50,
+    6: 0.30,
+    8: 0.20,
+}
+
+
+def sample_challenge_duration(rng: random.Random = random) -> int:
+    """Sample a requested video duration (seconds) from the weight distribution."""
+    durations = list(CHALLENGE_DURATION_WEIGHTS.keys())
+    weights = list(CHALLENGE_DURATION_WEIGHTS.values())
+    return rng.choices(durations, weights=weights, k=1)[0]
+
+
 # Video classification thresholds on *total pixel count*, which is both
 # orientation-invariant and aspect-ratio-invariant. Min-dimension thresholds
 # were exploitable via square output: a 640x640 video has the pixel count
