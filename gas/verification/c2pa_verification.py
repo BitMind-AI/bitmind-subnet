@@ -86,27 +86,73 @@ _TRUST_ANCHORS_PEM: Optional[str] = _load_trust_anchors()
 _C2PA_HAS_CONTEXT_API: bool = hasattr(c2pa, "Settings") and hasattr(c2pa, "Context")
 
 
+class C2PATrustAnchorError(RuntimeError):
+    """Raised when certificate trust anchors cannot be enforced.
+
+    Verification MUST fail closed when this happens.  Without anchors,
+    c2pa performs no certificate chain validation, and the remaining checks
+    (cert subject/issuer names, claim generator) are all attacker-controlled
+    manifest strings: anyone can mint a CA named "DigiCert Inc", issue
+    themselves a cert named "Google LLC", and sign arbitrary content that
+    passes as genuine Veo output.  Verified locally against c2pa 0.27.1,
+    where a forged manifest was accepted with verified=True.
+    """
+
+
+def _trust_anchor_error() -> Optional[str]:
+    """Why trust anchors can't be enforced right now, or None if they can."""
+    if not _C2PA_HAS_CONTEXT_API:
+        version = getattr(c2pa, "__version__", None) or "unknown"
+        return (
+            f"installed c2pa-python ({version}) has no Settings/Context API; "
+            "certificate trust anchors cannot be enforced — "
+            "requires c2pa-python>=0.29.0"
+        )
+    if not _TRUST_ANCHORS_PEM:
+        return (
+            f"no trust anchor PEMs loaded from {TRUST_ANCHORS_DIR} — "
+            "certificate chains cannot be validated"
+        )
+    return None
+
+
 def _open_c2pa_reader(file_path: str):
     """
-    Return a c2pa.Reader context manager, optionally configured with custom
-    trust anchors when the Settings/Context API is available (>= 0.29.0).
+    Return a c2pa.Reader context manager configured with our trust anchors.
+
+    Raises C2PATrustAnchorError if anchors cannot be applied — callers must
+    treat that as a verification failure rather than reading without them.
 
     Usage::
 
         with _open_c2pa_reader(path) as reader:
             manifest_json = reader.json()
     """
-    if _C2PA_HAS_CONTEXT_API and _TRUST_ANCHORS_PEM:
-        try:
-            settings = c2pa.Settings.from_dict({
-                "verify": {"verify_cert_anchors": True},
-                "trust": {"user_anchors": _TRUST_ANCHORS_PEM},
-            })
-            ctx = c2pa.Context(settings)
-            return c2pa.Reader(file_path, context=ctx)
-        except Exception as e:
-            bt.logging.debug(f"Could not build c2pa Context with trust anchors: {e}; falling back")
-    return c2pa.Reader(file_path)
+    anchor_error = _trust_anchor_error()
+    if anchor_error:
+        raise C2PATrustAnchorError(anchor_error)
+    try:
+        settings = c2pa.Settings.from_dict({
+            "verify": {"verify_cert_anchors": True},
+            "trust": {"user_anchors": _TRUST_ANCHORS_PEM},
+        })
+        ctx = c2pa.Context(settings)
+    except Exception as e:
+        raise C2PATrustAnchorError(
+            f"could not build c2pa Context with trust anchors: {e}"
+        ) from e
+    return c2pa.Reader(file_path, context=ctx)
+
+
+# Surface a misconfigured environment at import time rather than letting every
+# verification fail one-by-one with the same cause.
+_STARTUP_ANCHOR_ERROR = _trust_anchor_error()
+if _STARTUP_ANCHOR_ERROR:
+    bt.logging.error(
+        f"C2PA trust anchors unavailable: {_STARTUP_ANCHOR_ERROR}. "
+        "All C2PA verification will fail closed until this is fixed "
+        "(pip install 'c2pa-python>=0.29.0')."
+    )
 
 
 TRUSTED_CERT_ISSUERS = {
@@ -303,6 +349,16 @@ def verify_c2pa(media_data: Union[bytes, str, Path]) -> C2PAVerificationResult:
         try:
             with _open_c2pa_reader(file_path) as reader:
                 manifest_json = reader.json()
+        except C2PATrustAnchorError as e:
+            # Validator-side misconfiguration, not a miner fault.  Fail closed:
+            # without anchor enforcement a forged chain would pass as genuine.
+            bt.logging.error(
+                f"C2PA verification failing closed — trust anchors unavailable: {e}"
+            )
+            return C2PAVerificationResult(
+                verified=False,
+                error=f"Validator C2PA trust anchors unavailable: {e}",
+            )
         except Exception as e:
             return C2PAVerificationResult(verified=False, error=f"No C2PA manifest found: {str(e)}")
 
