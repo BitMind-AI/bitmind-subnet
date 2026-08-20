@@ -15,7 +15,7 @@ from bittensor.core.settings import TYPE_REGISTRY
 from bittensor_wallet.utils import SS58_FORMAT
 
 from gas.cache import ContentManager
-from gas.config import add_args, add_data_service_args
+from gas.config import add_args, add_data_service_args, create_config
 from gas.datasets import load_all_datasets
 from gas.datasets.download import download_and_extract
 from gas.types import MediaType, Modality, SourceType
@@ -509,7 +509,7 @@ async def main():
     bt.Subtensor.add_args(parser)
     bt.logging.add_args(parser)
 
-    config = bt.Config(parser)
+    config = create_config(parser)
 
     bt.logging(config=config, logging_dir=config.neuron.full_path)
     bt.logging.set_info()

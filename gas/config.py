@@ -6,6 +6,25 @@ MAINNET_UID = 34
 TESTNET_UID = 379
 
 
+def create_config(parser):
+    """Build a config while retaining Bittensor's pre-10.4 CLI behavior.
+
+    Bittensor 10.4 disables argument parsing by default. That leaves defaults
+    registered by this project (for example ``neuron.name``) out of the config
+    tree entirely. Opt in when the operator has not explicitly selected a
+    value for ``BT_NO_PARSE_CLI_ARGS``.
+    """
+    no_parse_cli_args = "BT_NO_PARSE_CLI_ARGS"
+    if no_parse_cli_args in os.environ:
+        return bt.Config(parser)
+
+    os.environ[no_parse_cli_args] = "false"
+    try:
+        return bt.Config(parser)
+    finally:
+        del os.environ[no_parse_cli_args]
+
+
 def validate_config_and_neuron_path(config):
     r"""Checks/validates the config namespace object."""
     full_path = os.path.expanduser(
