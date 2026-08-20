@@ -203,7 +203,7 @@ def add_validator_args(parser):
         "--generator-challenge-interval",
         type=int,
         help="How often we send challenges to generative miners, measured in 12 second blocks.",
-        default=220,
+        default=110,
     )
 
     parser.add_argument(
