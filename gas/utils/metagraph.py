@@ -125,6 +125,13 @@ async def start_async_subscription(substrate, callback: Callable):
 class SubstrateConnectionManager:
     """Async substrate connection manager with auto-reconnection."""
 
+    # No block for this long means the connection is dead even if the
+    # subscribe coroutine is still "running" (e.g. a hung reconnect that
+    # never raises). Finney produces a block every ~12s; this also bounds
+    # time spent in a hung connect.
+    BLOCK_STALENESS_TIMEOUT = 120
+    RECONNECT_DELAY = 5
+
     def __init__(self, url: str, ss58_format: int, type_registry: dict):
         self.url = url
         self.ss58_format = ss58_format
@@ -132,29 +139,79 @@ class SubstrateConnectionManager:
         self.running = False
         self.task = None
 
+    async def _connect_and_subscribe(self, callback: Callable):
+        bt.logging.info(f"Connecting to async substrate: {self.url}")
+        substrate = AsyncSubstrateInterface(
+            url=self.url,
+            ss58_format=self.ss58_format,
+            type_registry=self.type_registry,
+        )
+        async with substrate:
+            bt.logging.info("Starting async block subscription")
+            await start_async_subscription(substrate, callback)
+
+    async def _watch_for_stale_subscription(self, block_received: asyncio.Event):
+        while True:
+            try:
+                await asyncio.wait_for(
+                    block_received.wait(), timeout=self.BLOCK_STALENESS_TIMEOUT
+                )
+            except asyncio.TimeoutError as e:
+                raise BlockSubscriptionStale(
+                    f"No block received for {self.BLOCK_STALENESS_TIMEOUT}s"
+                ) from e
+            block_received.clear()
+
+    async def _run_subscription_attempt(self, callback: Callable):
+        """Run one subscription attempt and always reap its child tasks."""
+        block_received = asyncio.Event()
+
+        async def tracked_callback(block):
+            block_received.set()
+            await callback(block)
+
+        subscription_task = asyncio.create_task(
+            self._connect_and_subscribe(tracked_callback)
+        )
+        watchdog_task = asyncio.create_task(
+            self._watch_for_stale_subscription(block_received)
+        )
+        tasks = (subscription_task, watchdog_task)
+
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                task.result()
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def start_subscription(self, callback: Callable):
-        """Start subscription with auto-reconnect."""
+        """Start subscription with auto-reconnect and block-staleness watchdog."""
         self.running = True
 
-        while self.running:
-            try:
-                bt.logging.info(f"Connecting to async substrate: {self.url}")
+        try:
+            while self.running:
+                try:
+                    await self._run_subscription_attempt(callback)
+                except BlockSubscriptionStale as e:
+                    bt.logging.error(
+                        f"{e} — substrate connection presumed dead, "
+                        "forcing reconnect"
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    bt.logging.error(f"Async substrate failed: {e}")
 
-                substrate = AsyncSubstrateInterface(
-                    url=self.url,
-                    ss58_format=self.ss58_format,
-                    type_registry=self.type_registry,
-                )
-
-                async with substrate:
-                    bt.logging.info("Starting async block subscription")
-                    await start_async_subscription(substrate, callback)
-
-            except Exception as e:
-                bt.logging.error(f"Async substrate failed: {e}")
                 if self.running:
-                    bt.logging.info("Reconnecting in 5 seconds...")
-                    await asyncio.sleep(5)
+                    bt.logging.info(
+                        f"Reconnecting in {self.RECONNECT_DELAY} seconds..."
+                    )
+                    await asyncio.sleep(self.RECONNECT_DELAY)
+        finally:
+            self.running = False
 
     def start_subscription_task(self, callback: Callable):
         """Start as background task."""
@@ -167,3 +224,6 @@ class SubstrateConnectionManager:
         if self.task:
             self.task.cancel()
 
+
+class BlockSubscriptionStale(RuntimeError):
+    """Raised when an active subscription stops delivering blocks."""
