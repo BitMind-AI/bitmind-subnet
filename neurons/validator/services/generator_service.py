@@ -15,7 +15,7 @@ import gc
 import numpy as np
 from PIL import Image
 
-from gas.config import add_args, add_generation_service_args
+from gas.config import add_args, add_generation_service_args, create_config
 from gas.generation.media.tps import nano_banana
 from gas.generation import (
     GenerationPipeline,
@@ -839,7 +839,7 @@ def main():
     bt.Subtensor.add_args(parser)
     bt.Wallet.add_args(parser)
     bt.logging.add_args(parser)
-    config = bt.Config(parser)
+    config = create_config(parser)
 
     bt.logging(config=config, logging_dir=config.neuron.full_path)
     bt.logging.set_info()

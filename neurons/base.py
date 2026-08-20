@@ -22,6 +22,7 @@ from gas.config import (
     add_args,
     add_miner_args,
     add_validator_args,
+    create_config,
     validate_config_and_neuron_path,
 )
 
@@ -96,7 +97,7 @@ class BaseNeuron:
             bt.Axon.add_args(parser)
             add_miner_args(parser)
 
-        self.config = bt.Config(parser)
+        self.config = create_config(parser)
         if config:
             base_config = copy.deepcopy(config)
             self.config.merge(base_config)
