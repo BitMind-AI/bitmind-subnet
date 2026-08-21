@@ -64,6 +64,10 @@ class MinerTypeTracker:
                         session,
                         self.wallet.hotkey,
                         self.config.neuron.miner_total_timeout,
+                        # Unreachable axons drop packets rather than refuse;
+                        # without a connect bound they hold the sweep open
+                        # until the total timeout.
+                        sock_connect_timeout=10,
                     )
                     for uid in miner_uids
                 ],

@@ -138,6 +138,7 @@ class SubstrateConnectionManager:
         self.type_registry = type_registry
         self.running = False
         self.task = None
+        self._callback_tasks = set()
 
     async def _connect_and_subscribe(self, callback: Callable):
         bt.logging.info(f"Connecting to async substrate: {self.url}")
@@ -166,9 +167,19 @@ class SubstrateConnectionManager:
         """Run one subscription attempt and always reap its child tasks."""
         block_received = asyncio.Event()
 
+        def _reap_callback_task(task):
+            self._callback_tasks.discard(task)
+            if not task.cancelled() and task.exception() is not None:
+                bt.logging.error(f"Block callback task failed: {task.exception()}")
+
         async def tracked_callback(block):
             block_received.set()
-            await callback(block)
+            # Detach callbacks from header processing: a slow callback (e.g.
+            # the miner-type sweep) must not stall the subscription and trip
+            # the staleness watchdog, which cancels this attempt's tasks.
+            task = asyncio.create_task(callback(block))
+            self._callback_tasks.add(task)
+            task.add_done_callback(_reap_callback_task)
 
         subscription_task = asyncio.create_task(
             self._connect_and_subscribe(tracked_callback)
