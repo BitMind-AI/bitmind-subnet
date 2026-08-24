@@ -2,8 +2,9 @@ import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
-from typing import Dict, Optional
+from typing import BinaryIO, Dict, Optional
 
 import bittensor as bt
 import httpx
@@ -16,6 +17,73 @@ GAS_API_BASE_URL = "https://gas.bitmind.ai"
 
 def calculate_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def calculate_file_sha256(file_path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """Hash a file incrementally without loading it into memory."""
+    digest = hashlib.sha256()
+    with file_path.open("rb") as file:
+        while chunk := file.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+class UploadProgressReader:
+    """File-like request body that reports upload progress and throughput."""
+
+    def __init__(self, file_path: Path, report_interval: float = 0.5):
+        self._file: BinaryIO = file_path.open("rb")
+        self._total = file_path.stat().st_size
+        self._uploaded = 0
+        self._started_at = time.monotonic()
+        self._last_report = 0.0
+        self._report_interval = report_interval
+
+    def __len__(self) -> int:
+        return self._total
+
+    def read(self, size: int = -1) -> bytes:
+        chunk = self._file.read(size)
+        self._uploaded += len(chunk)
+        now = time.monotonic()
+        if (
+            self._uploaded == self._total
+            or now - self._last_report >= self._report_interval
+        ):
+            self._report(now)
+        return chunk
+
+    def tell(self) -> int:
+        return self._file.tell()
+
+    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
+        position = self._file.seek(offset, whence)
+        self._uploaded = position
+        return position
+
+    def close(self) -> None:
+        self._file.close()
+
+    def __enter__(self) -> "UploadProgressReader":
+        return self
+
+    def __exit__(self, *_args) -> None:
+        self.close()
+
+    def _report(self, now: float) -> None:
+        elapsed = max(now - self._started_at, 1e-9)
+        rate = self._uploaded / elapsed
+        percent = 100.0 if not self._total else self._uploaded / self._total * 100
+        remaining = max(self._total - self._uploaded, 0)
+        eta = remaining / rate if rate else 0.0
+        print(
+            f"\r      {percent:5.1f}% "
+            f"({self._uploaded / 1024 / 1024:.1f}/{self._total / 1024 / 1024:.1f} MB) "
+            f"{rate / 1024 / 1024:.1f} MB/s ETA {eta:.0f}s",
+            end="",
+            flush=True,
+        )
+        self._last_report = now
 
 
 def generate_presigned_url(
@@ -76,15 +144,24 @@ def generate_presigned_url(
         }
 
 
-def upload_to_r2(presigned_url: str, file_content: bytes, content_type: str = 'application/octet-stream') -> dict:
-    """Upload file directly to R2 using presigned URL."""
+def upload_to_r2(
+    presigned_url: str,
+    file_path: Path,
+    content_type: str = 'application/octet-stream',
+) -> dict:
+    """Stream a file directly to R2 using a presigned URL."""
     try:
-        response = requests.put(
-            presigned_url,
-            data=file_content,
-            headers={'Content-Type': content_type},
-            timeout=300  # 5 minutes for large files
-        )
+        with UploadProgressReader(file_path) as upload:
+            response = requests.put(
+                presigned_url,
+                data=upload,
+                headers={
+                    'Content-Type': content_type,
+                    'Content-Length': str(len(upload)),
+                },
+                timeout=300,  # 5 minutes for large files
+            )
+        print()
         
         error_detail = None
         if response.status_code != 200:
@@ -103,6 +180,7 @@ def upload_to_r2(presigned_url: str, file_content: bytes, content_type: str = 'a
         }
         
     except requests.exceptions.RequestException as e:
+        print()
         return {
             "status_code": 0,
             "success": False,
@@ -164,11 +242,8 @@ def upload_single_modality(
     if not file_path_obj.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    with open(file_path_obj, 'rb') as f:
-        file_content = f.read()
-
-    file_hash = calculate_sha256(file_content)
-    file_size = len(file_content)
+    file_hash = calculate_file_sha256(file_path_obj)
+    file_size = file_path_obj.stat().st_size
     filename = file_path_obj.name
 
     print(f"  File: {filename} ({file_size / 1024 / 1024:.2f} MB)")
@@ -222,7 +297,11 @@ def upload_single_modality(
     submissions_max = presigned_data.get('submissions_max')
 
     print(f"  [2/3] Uploading to R2...", end=' ', flush=True)
-    upload_result = upload_to_r2(presigned_url, file_content, 'application/octet-stream')
+    upload_result = upload_to_r2(
+        presigned_url,
+        file_path_obj,
+        'application/octet-stream',
+    )
 
     if not upload_result['success']:
         print("FAILED")
