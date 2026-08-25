@@ -167,7 +167,7 @@ Before your model is ever scored on the network, it must pass an **entrance exam
 - Your model must achieve **≥ 80% accuracy** averaged across all submitted modalities to pass
 - The exam has a **maximum wall-clock timeout of 1 hour 25 minutes** (5,100 seconds); models that exceed this are treated as failed
 - The exam runs in an **isolated cloud sandbox** — your code has no network access and cannot interact with the host environment
-- ONNX models are additionally scanned for cheat patterns (embedded lookup tables or memorization artifacts) before the exam runs; detection results in an immediate block
+- Submissions are statically analyzed and executed in an isolated sandbox; prohibited code or imports result in rejection
 
 **Model status during the exam:**
 
