@@ -3,12 +3,12 @@
 ## Benchmark Runs
 Submitted discriminator miners are evaluated against a subset of the data sources listed below. Models are evaluated on cloud infrastructure -- miners do not need to host hardware for inference. A portion of the evaluation data comes from generative miners, who are rewarded based on their ability to submit data that both pass validator sanity checks (prompt alignment, etc.) and fool discriminators in benchmark runs.
 
-Each modality (image, video, audio) is scored independently using the `sn34_score` metric, which combines discrimination accuracy (MCC) with calibration quality (Brier score).
+Each modality (image, video, audio) is scored independently using the `sn34_score` metric, which combines classification performance (MCC) with probability calibration (Brier score). The active round selects binary or multiclass scoring per modality.
 
 <details>
 <summary><strong>Evaluation Datasets</strong></summary>
 
-Benchmark datasets are regularly expanded. Each modality includes a mix of real, synthetic, and semi-synthetic content from diverse sources (including continuously-updated [GAS-Station](https://huggingface.co/gasstation) data from generative miners).
+Benchmark datasets are regularly expanded. Image uses real, synthetic, and semisynthetic classes; video additionally includes rendered media; audio remains binary. The experimental visual taxonomy is defined in GASBench's [Classification Taxonomy and Scoring](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md). Datasets include continuously updated [GAS-Station](https://huggingface.co/gasstation) data from generative miners.
 
 **Public datasets** (available for training via gasbench):
 - **Image**: [`image_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/image_datasets.yaml)
@@ -111,21 +111,32 @@ This design incentivizes generators to:
 
 ### Scoring: `sn34_score`
 
-Each discriminator model is scored per modality using the `sn34_score`, which combines two metrics:
+Each discriminator model is scored per modality using two components:
 
-1. **Binary MCC (Matthews Correlation Coefficient)** -- measures how well the model discriminates between real and synthetic content. Ranges from -1 (worst) to +1 (perfect).
+1. **MCC** measures classification quality. Binary mode uses ordinary MCC after collapsing every non-real class into synthetic. Multiclass mode uses Gorodkin's $R_K$, the multiclass generalization of MCC.
+2. **Brier score** measures calibration. Binary mode uses the mean squared error of $p_{\text{not real}}$, whose constant-guess baseline is $0.25$. Multiclass mode uses the mean of $\sum_k(p_k-y_k)^2$, whose uniform-guess baseline for $K$ classes is $B_0=(K-1)/K$.
 
-2. **Brier Score** -- measures calibration quality (how well predicted probabilities match actual outcomes). Ranges from 0 (perfect) to 0.25 (random baseline).
+For the selected mode, let $M$ be MCC, $B$ be Brier score, and $B_0$ be the corresponding random baseline:
 
-These are combined as follows:
+$$M_{norm} = \operatorname{clip}\left(\frac{M+1}{2},0,1\right)^{1.2}$$
 
-$$MCC_{norm} = \left(\frac{MCC + 1}{2}\right)^{\alpha}$$
+$$B_{norm} = \max\left(0,\frac{B_0-B}{B_0}\right)^{1.8}$$
 
-$$Brier_{norm} = \left(\frac{0.25 - Brier}{0.25}\right)^{\beta}$$
+$$sn34_{score} = \sqrt{M_{norm} \cdot B_{norm}}$$
 
-$$sn34_{score} = \sqrt{MCC_{norm} \cdot Brier_{norm}}$$
+Image and video currently use multiclass scoring. Audio uses binary scoring; with two classes, the normalized multiclass calculation is mathematically identical. Every run also reports `binary_sn34_score` and `multiclass_sn34_score` so the two views can be compared.
 
-With default parameters $\alpha = 1.2$ and $\beta = 1.8$. The geometric mean penalizes models that are strong on one axis but weak on the other -- a model must be both accurate *and* well-calibrated to score highly.
+### Dataset composition and augmentation robustness
+
+The round configuration assigns target score shares to public, private holdout, and GAS-Station samples. Those shares are converted into per-sample weights and applied consistently to accuracy, MCC, Brier, cross-entropy, and the resulting SN34 score.
+
+When the robustness pass is enabled, the final score is:
+
+$$sn34_{final} = (1-w)\,sn34_{base} + w\,sn34_{aug}$$
+
+The benchmark records `base_sn34_score`, `aug_sn34_score`, and robustness diagnostics. Exact composition shares, augmentation sample counts, and $w$ are round configuration, so they may change between benchmark versions rather than being permanent protocol constants.
+
+The normative implementation details and complete metric field glossary live in GASBench's [Classification Taxonomy and Scoring](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md).
 
 ### Competition Rounds
 

@@ -20,9 +20,12 @@ This guide explains how to create ONNX models for discriminative mining using th
    - Gasbench handles preprocessing (shortest-edge resize, center crop, augmentations)
    - Your model wrapper should only normalize to [0, 1] and apply model-specific normalization
 
-3. **Output Format**: Return logits for 3 classes `[real, synthetic, semisynthetic]`
-   - Image models: `(batch_size, 3)`
-   - Video models: `(batch_size, 3)` after temporal aggregation
+3. **Output Format**: Historical ONNX artifacts must follow the same current class order as safetensors submissions:
+   - Image: 3 logits `[real, synthetic, semisynthetic]`
+   - Video: 4 logits `[real, synthetic, semisynthetic, rendered]` after temporal aggregation
+   - Audio: 2 logits `[real, synthetic]`
+
+This page is retained only for legacy artifact maintenance. New competition submissions must follow the [Safetensors Model Specification](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md).
 
 
 ## Example Scripts

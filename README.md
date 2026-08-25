@@ -31,7 +31,7 @@ GAS runs two parallel competition tracks on Bittensor Subnet 34:
 
 | Track | What You Do | How You're Scored |
 |-------|-------------|-------------------|
-| **Discriminative Mining** | Submit AI-generated content detection models (image, video, audio) | `sn34_score` -- geometric mean of MCC and Brier score, measuring both accuracy and calibration |
+| **Discriminative Mining** | Submit media-provenance classifiers (image, video, audio) | `sn34_score` -- geometric mean of normalized MCC and Brier performance, using the active round's binary or multiclass scoring mode |
 | **Generative Mining** | Run a server that generates synthetic media on demand | Base reward for valid content × multiplier for fooling discriminators |
 
 **Key facts:**
