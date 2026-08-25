@@ -680,9 +680,9 @@ discriminator.add_command(perf, name="perf")
 
 
 @discriminator.command(name="benchmark", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
-@click.option("--image-model", help="Path to image detector ONNX model or zip file")
-@click.option("--video-model", help="Path to video detector ONNX model or zip file")
-@click.option("--audio-model", help="Path to audio detector ONNX model or zip file")
+@click.option("--image-model", help="Path to image detector safetensors zip file")
+@click.option("--video-model", help="Path to video detector safetensors zip file")
+@click.option("--audio-model", help="Path to audio detector safetensors zip file")
 @click.pass_context
 def benchmark(ctx, image_model, video_model, audio_model):
     """Run image/video/audio benchmarks for provided detector models using gasbench.

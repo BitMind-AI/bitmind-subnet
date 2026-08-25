@@ -37,7 +37,7 @@ GAS runs two parallel competition tracks on Bittensor Subnet 34:
 **Key facts:**
 - **Three modalities**: Image, video, and audio detection are all scored independently
 - **Cloud-evaluated**: Discriminator models are benchmarked on cloud infrastructure -- no GPU hosting required
-- **Model format**: Safetensors only (ONNX is deprecated)
+- **Model format**: Safetensors only (ONNX submissions are not accepted)
 - **Datasets refresh weekly** with fresh GAS-Station data alongside static benchmarks
 - **One model per modality per hotkey** for discriminative miners
 
