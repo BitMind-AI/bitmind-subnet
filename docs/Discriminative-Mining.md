@@ -6,10 +6,20 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 
 ## Discriminative Mining Overview
 
-- Miners submit binary classifiers that distinguish genuine content from AI-generated or AI-manipulated content across three modalities: **image**, **video**, and **audio**.
-- For each evaluation sample, a model receives a media input and must produce a binary prediction $[p_{\text{real}}, p_{\text{synthetic}}]$ -- a probability distribution over two classes.
-- Some datasets contain semisynthetic content (e.g., inpainting, faceswaps). For scoring purposes, semisynthetic is treated as `synthetic`.
+- Miners submit media-provenance classifiers across three modalities: **image**, **video**, and **audio**.
+- Image models classify `[real, synthetic, semisynthetic]`; video models classify `[real, synthetic, semisynthetic, rendered]`; audio remains `[real, synthetic]`.
+- The visual taxonomy is experimental. Semisynthetic media retains materially captured visual content alongside spatially localized generated or replaced content. Fully synthesized output remains synthetic even when captured media conditions generation.
 - Models are evaluated on cloud infrastructure -- miners do not need to host hardware for inference.
+
+Class order is part of the submission contract:
+
+| Modality | `num_classes` | Logit indices |
+| --- | ---: | --- |
+| Image | 3 | `0=real`, `1=synthetic`, `2=semisynthetic` |
+| Video | 4 | `0=real`, `1=synthetic`, `2=semisynthetic`, `3=rendered` |
+| Audio | 2 | `0=real`, `1=synthetic` |
+
+See GASBench's [Classification Taxonomy and Scoring](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md) for the normative class definitions, metric formulas, and binary compatibility collapse.
 
 ## Model Preparation
 
@@ -85,11 +95,11 @@ At least one model (image, video, or audio) must be provided.
 
 ### Scoring
 
-Each model is scored per modality using the `sn34_score`, a geometric mean of normalized MCC and Brier score:
+Each model is scored per modality using `sn34_score`, a geometric mean of normalized MCC and Brier performance:
 
-$$sn34_{score} = \sqrt{MCC_{norm}^{\alpha} \cdot Brier_{norm}^{\beta}}$$
+$$sn34_{score} = \sqrt{M_{norm} \cdot B_{norm}}$$
 
-Where $\alpha = 1.2$ and $\beta = 1.8$. This rewards both discrimination accuracy (MCC) and calibration quality (Brier). See [Incentive Mechanism](Incentive.md) for the full formula.
+The normalized terms apply exponents $1.2$ to MCC performance and $1.8$ to Brier performance. Image and video currently use multiclass Gorodkin MCC and multiclass Brier, rewarding correct distinctions between provenance classes. Audio uses the equivalent two-class calculation. Binary real-versus-not-real metrics are still reported for compatibility and diagnosis. See [Incentive Mechanism](Incentive.md) for the full formula.
 
 ### Model Requirements
 
@@ -184,7 +194,7 @@ Models that pass the entrance exam are benchmarked against the **complete datase
 - **Private holdout datasets** — curated datasets not visible to miners, used to prevent overfitting to the public benchmark set
 - Refreshed weekly with new data from the GAS-Station pipeline
 
-The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. The benchmark score from this stage determines your **TAO emissions** on Subnet 34. Scores are computed using the `sn34_score` formula (see [Incentive Mechanism](Incentive.md)).
+The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. The benchmark score from this stage determines your **TAO emissions** on Subnet 34. The active round configuration selects provenance weighting, multiclass scoring, and augmentation robustness parameters; see [Incentive Mechanism](Incentive.md).
 
 You can simulate a full benchmark run locally (without holdouts) to get a sense of your model's performance:
 
@@ -210,7 +220,7 @@ gascli d perf --modality image --vertical human
 gascli d perf --wallet-name miner1 --wallet-hotkey default
 ```
 
-Each row shows the run ID, status (`queued`/`running`/`success`/`failed`), modality, vertical, SN34 score, MCC, and Brier score.
+Each row shows the run ID, status (`queued`/`running`/`success`/`failed`), modality, vertical, SN34 score, MCC, and Brier score. The displayed MCC and Brier fields may be the binary compatibility metrics; `sn34_score` remains the authoritative competition score selected by the round configuration.
 
 ### Getting Help
 
