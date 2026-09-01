@@ -645,8 +645,8 @@ def perf(wallet_name, wallet_hotkey, modality, api_url):
                     brier = r.get("brier")
                     base_sn34 = r.get("base_sn34_score")
                     aug_sn34 = r.get("aug_sn34_score")
-                    aug_mcc = r.get("aug_binary_mcc")
-                    aug_brier = r.get("aug_binary_brier")
+                    aug_mcc = r.get("aug_mcc")
+                    aug_brier = r.get("aug_brier")
 
                     bar_len = 20
                     filled = int(sn34 * bar_len)
