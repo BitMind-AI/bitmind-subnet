@@ -315,7 +315,7 @@ async def push_separate_models(
         print_success("All models registered successfully!")
     else:
         print_warning("Upload succeeded; one or more chain registrations did not complete.")
-    return True
+    return chain_ok
 
 
 def main():
