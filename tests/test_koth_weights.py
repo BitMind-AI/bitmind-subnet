@@ -1,6 +1,7 @@
 """Unit tests for KOTH validator weight vectors."""
 
 import numpy as np
+import pytest
 
 from gas.koth_weights import build_koth_weights, kings_by_modality
 
@@ -71,3 +72,15 @@ def test_api_down_empty_kings_burns_discriminator_shares():
     )
     assert abs(weights[0] - 0.84) < 1e-9
     assert abs(weights[1] - 0.16) < 1e-9
+
+
+def test_required_burn_fails_when_burn_uid_is_unavailable():
+    with pytest.raises(ValueError, match="burn UID is unavailable"):
+        build_koth_weights(
+            n=3,
+            scores=np.array([0.0, 1.0, 0.0]),
+            generator_uids=[1],
+            kings={},
+            uid_for_hotkey=lambda hk: None,
+            burn_uid=None,
+        )

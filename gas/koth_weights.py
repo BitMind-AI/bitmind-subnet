@@ -74,11 +74,11 @@ def build_koth_weights(
     else:
         burned += generator_pct
 
-    if (
-        burned > 0
-        and burn_uid is not None
-        and 0 <= burn_uid < n
-    ):
+    if burned > 0:
+        if burn_uid is None or not 0 <= burn_uid < n:
+            raise ValueError(
+                f"Cannot allocate {burned:.4f} burn weight: burn UID is unavailable"
+            )
         weights[burn_uid] += burned
 
     return weights
