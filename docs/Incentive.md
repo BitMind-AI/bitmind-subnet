@@ -138,19 +138,19 @@ The benchmark records `base_sn34_score`, `aug_sn34_score`, and robustness diagno
 
 The normative implementation details and complete metric field glossary live in GASBench's [Classification Taxonomy and Scoring](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md).
 
-### Competition Rounds
+### King of the Hill
 
-The discriminator competition is organized into **rounds**. Each round introduces new benchmark datasets and evaluates all submitted models. Winners are determined **per modality** (image, video, audio) independently.
+Discriminator emission is King of the Hill. Each modality has one reigning model. Validators set that lane's weight on the king's registered hotkey every tempo — not on an escrow wallet.
 
-#### How Rounds Work
+Current split:
 
-1. **New round begins**: Benchmark datasets are updated (new GAS-Station data, potentially new static datasets). All modalities share the same benchmark version number.
-2. **Models are benchmarked**: All submitted discriminator models are evaluated against the current round's datasets and scored using `sn34_score`.
-3. **Winner determined per modality**: The highest-scoring model for each modality wins that round.
-4. **Alpha reward**: The round winner for each modality receives an alpha reward.
+- Image king: 40%
+- Video king: 40%
+- Audio king: 4%
+- Generators: 16%
 
-#### Winner-Take-All Per Round
+A challenger takes the crown when it posts a higher `sn34_score` on the **same** `CURRENT_BENCHMARK_VERSION`. The same `file_hash` can refresh its stored score without resetting the reign.
 
-Each round is winner-take-all -- only the top-scoring discriminator for each modality receives the alpha reward for that round. This incentivizes miners to continuously improve their models and push the state of the art in AI-generated content detection.
+When a new benchmark version is released the current king keeps receiving weights. The throne is marked `defending` until that exact model completes a full re-eval on the new version. Dethroning is frozen during defense. If the re-eval fails or times out (48 hours), the crown goes to the best successful new-version model, or that lane's share burns until one exists.
 
-Rounds progress as benchmark versions are incremented, ensuring that models are always evaluated against fresh, evolving data.
+Alpha accrues on the king's hotkey while they hold the lane. There is no end-of-round escrow transfer and no pot.

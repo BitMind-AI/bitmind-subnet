@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 import bittensor as bt
 
 from gas import __spec_version__ as spec_version
-from gas.protocol.validator_requests import get_benchmark_results
-from gas.protocol.validator_requests import get_escrow_addresses  # noqa: F401  HOTFIX: temporarily unused
+from gas.protocol.validator_requests import get_benchmark_results, get_current_kings
+from gas.koth_weights import build_koth_weights, kings_by_modality
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
@@ -40,12 +40,33 @@ except Exception:
 
 
 MAINNET_UID = 34
-SS58_ADDRESSES = {
-    "burn": "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ",
-    "video_escrow": "5G6BJ1Z6LeDptRn5GTw74QSDmG1FP3eqVque5JhUb5zeEyQa",
-    "image_escrow": "5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",
-    "audio_escrow": "5F9Qo4jqurfx3qHsC2kQtvge7Si5aW1BfYKwpxnnpVxouPyF",
-}
+BURN_SS58 = "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ"
+
+
+class _KingsState:
+    """Persist last-known KOTH kings across validator restarts."""
+
+    def __init__(self):
+        self.payload = None
+
+    def save_state(self, save_dir: str, filename: str) -> None:
+        import json
+        import os
+
+        path = os.path.join(save_dir, filename)
+        with open(path, "w") as f:
+            json.dump(self.payload, f)
+
+    def load_state(self, save_dir: str, filename: str) -> bool:
+        import json
+        import os
+
+        path = os.path.join(save_dir, filename)
+        if not os.path.exists(path):
+            return False
+        with open(path) as f:
+            self.payload = json.load(f)
+        return True
 
 
 class Validator(BaseNeuron):
@@ -77,6 +98,7 @@ class Validator(BaseNeuron):
         ## Typesafety
         self.set_weights_fn = create_set_weights(spec_version, self.config.netuid)
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
+        self.kings_state = _KingsState()
         bt.logging.info(f"Initialized scores vector for {len(self.scores)} miners")
 
         if not self.config.wandb_off:
@@ -175,10 +197,24 @@ class Validator(BaseNeuron):
             generator_uids = []
             bt.logging.warning("No generator rewards available; using empty generator_uids")
 
-        # HOTFIX: API unstable; always use hardcoded escrow addresses.
-        bt.logging.info("HOTFIX: using hardcoded default escrow addresses")
-        active_ss58_addresses = SS58_ADDRESSES
-        
+        kings_payload = await get_current_kings(
+            self.wallet.hotkey, base_url=self.config.benchmark_api_url
+        )
+        if kings_payload is not None:
+            self.kings_state.payload = kings_payload
+        elif self.kings_state.payload is not None:
+            bt.logging.warning("current-kings API unavailable; using last known kings")
+            kings_payload = self.kings_state.payload
+        else:
+            bt.logging.warning(
+                "current-kings API unavailable and no cached kings; "
+                "discriminator shares will burn"
+            )
+            kings_payload = {"kings": []}
+
+        kings = kings_by_modality(kings_payload)
+        split = (kings_payload or {}).get("split")
+
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
             try:
@@ -194,64 +230,32 @@ class Validator(BaseNeuron):
                         "responses from miners, or a bug in your reward functions."
                     )
 
-                # Weight budget (must sum to 1.0)
-                burn_pct      = 0.
-                video_pct     = .4
-                image_pct     = .4
-                audio_pct     = .04
-                generator_pct = .16
+                def uid_for_hotkey(hotkey_ss58: str):
+                    try:
+                        return self.subtensor.get_uid_for_hotkey_on_subnet(
+                            hotkey_ss58=hotkey_ss58,
+                            netuid=self.config.netuid,
+                        )
+                    except Exception as e:
+                        bt.logging.warning(f"Could not resolve UID for {hotkey_ss58[:8]}...: {e}")
+                        return None
 
-                # Resolve escrow/burn UIDs at current chain head. `block` is an
-                # interval marker (0 at startup) and must not be used as a query
-                # block: a non-archive node has pruned old state and raises
-                # StateDiscardedError under async-substrate-interface 2.x.
-                burn_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["burn"],
-                    netuid=self.config.netuid,
-                )
-                video_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["video_escrow"],
-                    netuid=self.config.netuid,
-                )
-                image_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["image_escrow"],
-                    netuid=self.config.netuid,
-                )
-                audio_escrow_uid = self.subtensor.get_uid_for_hotkey_on_subnet(
-                    hotkey_ss58=active_ss58_addresses["audio_escrow"],
-                    netuid=self.config.netuid,
+                burn_uid = uid_for_hotkey(BURN_SS58)
+                normed_weights = build_koth_weights(
+                    n=int(self.metagraph.n),
+                    scores=self.scores,
+                    generator_uids=generator_uids,
+                    kings=kings,
+                    uid_for_hotkey=uid_for_hotkey,
+                    burn_uid=burn_uid,
+                    split=split,
                 )
 
-                special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
-
-                # Compute norm excluding specials
-                norm = np.ones_like(self.scores)
-                active_uids = [uid for uid in generator_uids if uid not in special_uids]
-                if active_uids:
-                    norm[active_uids] = np.linalg.norm(self.scores[active_uids], ord=1)
-
-                if np.any(norm == 0) or np.isnan(norm).any():
-                    norm = np.ones_like(norm)
-
-                normed_weights = self.scores / norm
-
-                active_uids_set = set(active_uids)
-                for uid in range(len(normed_weights)):
-                    if uid not in special_uids and uid not in active_uids_set:
-                        normed_weights[uid] = 0.0
-
-                active_mask = np.array([uid in active_uids_set for uid in range(len(normed_weights))])
-                normed_weights[active_mask] *= generator_pct
-
-                normed_weights[burn_uid]         = burn_pct
-                normed_weights[video_escrow_uid] = video_pct
-                normed_weights[image_escrow_uid] = image_pct
-                normed_weights[audio_escrow_uid] = audio_pct
-
-                # Verify allocations
-                total_weight = np.sum(normed_weights)
-                actual_burn_rate = normed_weights[burn_uid] / total_weight if total_weight > 0 else 0
-                bt.logging.info(f"Total weight sum: {total_weight:.4f}, Actual burn rate: {actual_burn_rate:.4f} (target: {burn_pct})")
+                total_weight = float(np.sum(normed_weights))
+                bt.logging.info(
+                    f"KOTH weights sum={total_weight:.4f} kings={list(kings.keys())} "
+                    f"generators={len(generator_uids)}"
+                )
 
                 self.set_weights_fn(
                     self.wallet, self.metagraph, self.subtensor, (uids, normed_weights)
@@ -392,7 +396,8 @@ class Validator(BaseNeuron):
             try:
                 state_data = {"scores.npy": self.scores}
                 state_objects = [
-                    (self.generative_challenge_manager, "challenge_tasks.pkl")
+                    (self.generative_challenge_manager, "challenge_tasks.pkl"),
+                    (self.kings_state, "kings.json"),
                 ]
 
                 success = save_validator_state(
@@ -418,7 +423,8 @@ class Validator(BaseNeuron):
         try:
             state_data_keys = ["scores.npy"]
             state_objects = [
-                (self.generative_challenge_manager, "challenge_tasks.pkl")
+                (self.generative_challenge_manager, "challenge_tasks.pkl"),
+                (self.kings_state, "kings.json"),
             ]
 
             loaded_state = load_validator_state(
