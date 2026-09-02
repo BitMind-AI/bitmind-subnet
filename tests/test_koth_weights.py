@@ -84,3 +84,23 @@ def test_required_burn_fails_when_burn_uid_is_unavailable():
             uid_for_hotkey=lambda hk: None,
             burn_uid=None,
         )
+
+
+@pytest.mark.parametrize(
+    "split",
+    [
+        {"image": 0.4, "video": 0.4, "audio": -0.01, "generator": 0.21},
+        {"image": 0.4, "video": 0.4, "audio": 0.04},
+    ],
+)
+def test_invalid_split_is_rejected(split):
+    with pytest.raises(ValueError, match="Invalid KOTH split"):
+        build_koth_weights(
+            n=1,
+            scores=np.zeros(1),
+            generator_uids=[],
+            kings={},
+            uid_for_hotkey=lambda hk: None,
+            burn_uid=0,
+            split=split,
+        )

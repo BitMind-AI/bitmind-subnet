@@ -39,7 +39,15 @@ def build_koth_weights(
     `uid_for_hotkey` must resolve at current chain head. Escrow addresses are
     never used.
     """
-    split = dict(split or KOTH_SPLIT)
+    split = dict(KOTH_SPLIT if split is None else split)
+    try:
+        split = {key: float(split[key]) for key in KOTH_SPLIT}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Invalid KOTH split") from exc
+    if any(
+        not np.isfinite(value) or value < 0 for value in split.values()
+    ) or not np.isclose(sum(split.values()), 1.0):
+        raise ValueError("Invalid KOTH split")
     weights = np.zeros(n, dtype=np.float64)
     if len(scores) < n:
         scores = np.append(scores, np.zeros(n - len(scores)))
@@ -49,7 +57,7 @@ def build_koth_weights(
     king_uids = set()
     burned = 0.0
     for modality in ("image", "video", "audio"):
-        pct = float(split.get(modality, 0.0))
+        pct = split[modality]
         hotkey = kings.get(modality)
         if not hotkey:
             burned += pct
@@ -61,7 +69,7 @@ def build_koth_weights(
         weights[uid] += pct
         king_uids.add(uid)
 
-    generator_pct = float(split.get("generator", 0.16))
+    generator_pct = split["generator"]
     active = [uid for uid in generator_uids if 0 <= uid < n and uid not in king_uids]
     if active and generator_pct > 0:
         gen_scores = np.array([max(float(scores[uid]), 0.0) for uid in active])
