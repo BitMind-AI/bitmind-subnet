@@ -54,6 +54,17 @@ from gas.protocol.miner_requests import upload_single_modality
 
 
 MODEL_UPLOAD_ENDPOINT = "https://upload.bitmind.ai/upload"
+DEFAULT_MAX_RETRIES = 3
+
+
+def should_retry_register(attempt: int, max_retries: int) -> bool:
+    """True if another chain-register try should run after this failed attempt.
+
+    attempt is 1-based. max_retries <= 0 keeps the old unlimited loop.
+    """
+    if max_retries <= 0:
+        return True
+    return attempt < max_retries
 
 
 def print_success(message: str):
@@ -90,6 +101,29 @@ def _print_submission_count(result: dict, modality: str, hotkey: str):
         print_info(f"{count_after}/{submissions_max} {modality} models submitted for {hotkey}")
 
 
+def _accept_already_uploaded(modality: str, result: dict, skip_chain: bool) -> bool:
+    """Handle a 409 / already-accepted hash. True means this modality is done."""
+    if result.get("already_uploaded"):
+        print_warning(
+            f"{modality.capitalize()} model already uploaded — server already has this hash."
+        )
+        if skip_chain:
+            print_success(
+                f"{modality.capitalize()} upload already accepted; nothing more to do (--skip-chain)."
+            )
+            return True
+        print_error(
+            f"Cannot retrieve r2_key for already-uploaded {modality} model. "
+            "Re-run with the original r2_key, or pass --skip-chain if you only needed the upload."
+        )
+        return False
+    print_error(f"{modality.capitalize()} model upload failed at step: {result.get('step', 'unknown')}")
+    print_error(f"Error: {result.get('error', 'Unknown error')}")
+    if result.get("response"):
+        print_error(f"Server response: {result['response']}")
+    return False
+
+
 async def push_separate_models(
     image_model_path: Optional[str] = None,
     video_model_path: Optional[str] = None,
@@ -99,6 +133,9 @@ async def push_separate_models(
     netuid: int = 34,
     chain_endpoint: Optional[str] = None,
     vertical: str = "general",
+    upload_endpoint: Optional[str] = None,
+    skip_chain: bool = False,
+    max_retries: int = DEFAULT_MAX_RETRIES,
 ):
     """Pushes separate image, video, and/or audio detector models and registers on the Bittensor blockchain.
     
@@ -114,6 +151,7 @@ async def push_separate_models(
     if audio_model_path and not os.path.exists(audio_model_path):
         raise FileNotFoundError(f"Audio model file not found: {audio_model_path}")
 
+    endpoint = upload_endpoint or MODEL_UPLOAD_ENDPOINT
     results = {}
     upload_count = 0
     total_uploads = (1 if image_model_path else 0) + \
@@ -129,26 +167,17 @@ async def push_separate_models(
                 wallet,
                 image_model_path,
                 'image',
-                MODEL_UPLOAD_ENDPOINT,
+                endpoint,
                 vertical=vertical,
             )
             results['image'] = image_result
             
             if not image_result['success']:
-                if image_result.get('already_uploaded'):
-                    print_warning("Image model already uploaded — skipping (model is already accepted by the server)")
-                    # Still need r2_key for blockchain registration; server returned 409 so we
-                    # don't have it here.  The miner must use the r2_key from the original upload.
-                    print_error("Cannot retrieve r2_key for already-uploaded image model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                if not _accept_already_uploaded('image', image_result, skip_chain):
                     return False
-                print_error(f"Image model upload failed at step: {image_result.get('step', 'unknown')}")
-                print_error(f"Error: {image_result.get('error', 'Unknown error')}")
-                if image_result.get('response'):
-                    print_error(f"Server response: {image_result['response']}")
-                return False
-            
-            print_success("Image model uploaded successfully!")
-            _print_submission_count(image_result, 'image', wallet.hotkey.ss58_address)
+            else:
+                print_success("Image model uploaded successfully!")
+                _print_submission_count(image_result, 'image', wallet.hotkey.ss58_address)
         except Exception as e:
             print_error(f"Image model upload failed with exception: {e}")
             return False
@@ -162,24 +191,17 @@ async def push_separate_models(
                 wallet,
                 video_model_path,
                 'video',
-                MODEL_UPLOAD_ENDPOINT,
+                endpoint,
                 vertical=vertical,
             )
             results['video'] = video_result
             
             if not video_result['success']:
-                if video_result.get('already_uploaded'):
-                    print_warning("Video model already uploaded — skipping (model is already accepted by the server)")
-                    print_error("Cannot retrieve r2_key for already-uploaded video model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                if not _accept_already_uploaded('video', video_result, skip_chain):
                     return False
-                print_error(f"Video model upload failed at step: {video_result.get('step', 'unknown')}")
-                print_error(f"Error: {video_result.get('error', 'Unknown error')}")
-                if video_result.get('response'):
-                    print_error(f"Server response: {video_result['response']}")
-                return False
-
-            print_success("Video model uploaded successfully!")
-            _print_submission_count(video_result, 'video', wallet.hotkey.ss58_address)
+            else:
+                print_success("Video model uploaded successfully!")
+                _print_submission_count(video_result, 'video', wallet.hotkey.ss58_address)
         except Exception as e:
             print_error(f"Video model upload failed with exception: {e}")
             return False
@@ -193,27 +215,25 @@ async def push_separate_models(
                 wallet,
                 audio_model_path,
                 'audio',
-                MODEL_UPLOAD_ENDPOINT,
+                endpoint,
                 vertical=vertical,
             )
             results['audio'] = audio_result
             
             if not audio_result['success']:
-                if audio_result.get('already_uploaded'):
-                    print_warning("Audio model already uploaded — skipping (model is already accepted by the server)")
-                    print_error("Cannot retrieve r2_key for already-uploaded audio model. Re-run with the original r2_key or wait for the current upload to be processed.")
+                if not _accept_already_uploaded('audio', audio_result, skip_chain):
                     return False
-                print_error(f"Audio model upload failed at step: {audio_result.get('step', 'unknown')}")
-                print_error(f"Error: {audio_result.get('error', 'Unknown error')}")
-                if audio_result.get('response'):
-                    print_error(f"Server response: {audio_result['response']}")
-                return False
-            
-            print_success("Audio model uploaded successfully!")
-            _print_submission_count(audio_result, 'audio', wallet.hotkey.ss58_address)
+            else:
+                print_success("Audio model uploaded successfully!")
+                _print_submission_count(audio_result, 'audio', wallet.hotkey.ss58_address)
         except Exception as e:
             print_error(f"Audio model upload failed with exception: {e}")
             return False
+
+    if skip_chain:
+        print()
+        print_success("Upload complete. Skipping blockchain registration (--skip-chain).")
+        return True
 
     print()
     print_step(upload_count + 1, total_uploads + 1, "Registering model metadata on blockchain...")
@@ -226,6 +246,7 @@ async def push_separate_models(
     metadata_store = ChainModelMetadataStore(subtensor, netuid)
 
     # Register each model separately on the blockchain
+    chain_ok = True
     for modality, result in results.items():
         model_key = result.get("r2_key", "")
         if not model_key:
@@ -243,7 +264,10 @@ async def push_separate_models(
         model_id = ModelId(key=model_key, hash=hash_value)
         print_info(f"Registering {modality} model (ID: {model_id.key})...")
 
+        attempt = 0
+        registered = False
         while True:
+            attempt += 1
             try:
                 await metadata_store.store_model_metadata(wallet, model_id)
                 
@@ -265,14 +289,32 @@ async def push_separate_models(
                     raise ValueError(f"{modality.capitalize()} metadata verification failed")
 
                 print_success(f"{modality.capitalize()} model registered on blockchain!")
-                break  # Success, move to next model
+                registered = True
+                break
 
             except Exception as e:
                 print_error(f"Failed to register {modality} model on blockchain: {e}")
-                print_warning(f"Retrying in {retry_delay_secs} seconds...")
-                time.sleep(retry_delay_secs)
+                if should_retry_register(attempt, max_retries):
+                    print_warning(
+                        f"Retrying in {retry_delay_secs} seconds "
+                        f"(attempt {attempt}/{max_retries if max_retries > 0 else 'unlimited'})..."
+                    )
+                    time.sleep(retry_delay_secs)
+                    continue
+                print_warning(
+                    f"Giving up chain registration after {attempt} attempt(s). "
+                    "The upload already succeeded and the model will still be examined."
+                )
+                chain_ok = False
+                break
 
-    print_success("All models registered successfully!")
+        if not registered:
+            chain_ok = False
+
+    if chain_ok:
+        print_success("All models registered successfully!")
+    else:
+        print_warning("Upload succeeded; one or more chain registrations did not complete.")
     return True
 
 
@@ -327,6 +369,25 @@ def main():
         choices=["general", "human"],
         help="Competition vertical (default: general)"
     )
+    parser.add_argument(
+        "--upload-endpoint",
+        default=MODEL_UPLOAD_ENDPOINT,
+        help=f"Model upload URL (default: {MODEL_UPLOAD_ENDPOINT})",
+    )
+    parser.add_argument(
+        "--skip-chain",
+        action="store_true",
+        help="Exit after a successful upload without writing on-chain metadata",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=DEFAULT_MAX_RETRIES,
+        help=(
+            "Max blockchain registration attempts per modality after a failed try "
+            f"(default: {DEFAULT_MAX_RETRIES}; 0 = retry forever)"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -351,6 +412,11 @@ def main():
     print(f"Subnet UID: {args.netuid}")
     print(f"Chain Endpoint: {args.chain_endpoint}")
     print(f"Vertical: {args.vertical}")
+    print(f"Upload endpoint: {args.upload_endpoint}")
+    if args.skip_chain:
+        print("Chain registration: skipped")
+    else:
+        print(f"Chain register retries: {args.max_retries}")
     print()
 
     print(f"{Fore.CYAN}{Style.BRIGHT}=== Starting Model Push ==={Style.RESET_ALL}")
@@ -363,14 +429,17 @@ def main():
         print_error(f"Failed to initialize wallet: {e}")
         sys.exit(1)
 
-    # Check if hotkey is registered
+    # Opening a Metagraph websocket keeps this process alive after success.
+    # Only do it when we are about to write on-chain metadata.
     netuid = args.netuid
-    mg = bt.Metagraph(netuid=netuid, network="finney" if netuid == 34 else "test")
-    hotkey = wallet.hotkey.ss58_address
-    if hotkey not in mg.hotkeys:
-        print_warning(f"Hotkey {hotkey} not registered on netuid {netuid}")
-        print_warning("This may cause issues with model registration")
+    if not args.skip_chain:
+        mg = bt.Metagraph(netuid=netuid, network="finney" if netuid == 34 else "test")
+        hotkey = wallet.hotkey.ss58_address
+        if hotkey not in mg.hotkeys:
+            print_warning(f"Hotkey {hotkey} not registered on netuid {netuid}")
+            print_warning("This may cause issues with model registration")
 
+    exit_code = 0
     try:
         success = asyncio.run(
             push_separate_models(
@@ -382,6 +451,9 @@ def main():
                 netuid=netuid,
                 chain_endpoint=args.chain_endpoint,
                 vertical=args.vertical,
+                upload_endpoint=args.upload_endpoint,
+                skip_chain=args.skip_chain,
+                max_retries=args.max_retries,
             )
         )
         
@@ -390,14 +462,17 @@ def main():
             print_success("🎉 Model push completed successfully!")
         else:
             print_error("💥 Model push failed!")
-            sys.exit(1)
+            exit_code = 1
 
     except Exception as e:
         print()
         print_error(f"💥 Model push failed with error: {e}")
         print_info("Full traceback:")
         print(traceback.format_exc())
-        sys.exit(1)
+        exit_code = 1
+
+    # Bittensor leaves non-daemon websocket threads; SystemExit will not end the process.
+    os._exit(exit_code)
 
 
 if __name__ == "__main__":
