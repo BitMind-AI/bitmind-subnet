@@ -11,7 +11,7 @@ import bittensor as bt
 
 from gas import __spec_version__ as spec_version
 from gas.protocol.validator_requests import get_benchmark_results, get_current_kings
-from gas.koth_weights import build_koth_weights, kings_by_modality
+from gas.koth_weights import build_koth_weights, chains_by_modality, kings_by_modality
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
@@ -213,6 +213,7 @@ class Validator(BaseNeuron):
             kings_payload = {"kings": []}
 
         kings = kings_by_modality(kings_payload)
+        chains = chains_by_modality(kings_payload)
         split = (kings_payload or {}).get("split")
 
         async with self._state_lock:
@@ -249,11 +250,13 @@ class Validator(BaseNeuron):
                     uid_for_hotkey=uid_for_hotkey,
                     burn_uid=burn_uid,
                     split=split,
+                    chains=chains,
                 )
 
                 total_weight = float(np.sum(normed_weights))
                 bt.logging.info(
                     f"KOTH weights sum={total_weight:.4f} kings={list(kings.keys())} "
+                    f"chain={ {mod: [m.get('role') for m in members] for mod, members in chains.items()} } "
                     f"generators={len(generator_uids)}"
                 )
 

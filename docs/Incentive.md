@@ -140,17 +140,19 @@ The normative implementation details and complete metric field glossary live in 
 
 ### King of the Hill
 
-Discriminator emission is King of the Hill. Each modality has one reigning model. Validators set that lane's weight on the king's registered hotkey every tempo — not on an escrow wallet.
+Discriminator emission is King of the Hill. Each modality has one reigning model. Validators set that lane's weight on registered hotkeys every tempo — not on an escrow wallet.
 
 Current split:
 
-- Image king: 40%
-- Video king: 40%
-- Audio king: 4%
+- Image lane: 40%
+- Video lane: 40%
+- Audio lane: 4%
 - Generators: 16%
 
-A challenger takes the crown when it posts a higher `sn34_score` on the **same** `CURRENT_BENCHMARK_VERSION`. The same `file_hash` can refresh its stored score without resetting the reign.
+Each discriminator lane is split **85 / 10 / 5** across the current king and the previous two **distinct** crowned hotkeys. If a lane has no previous king, that residual rolls up to the current king (a first king receives the full lane). An unresolvable current king burns its share; an unresolvable previous king rolls to the current king when that UID is registered.
 
-When a new benchmark version is released the current king keeps receiving weights. The throne is marked `defending` until that exact model completes a full re-eval on the new version. Dethroning is frozen during defense. If the re-eval fails or times out (48 hours), the crown goes to the best successful new-version model, or that lane's share burns until one exists.
+A challenger takes the crown when it posts an `sn34_score` at least **0.01** higher than the sitting king on the **same** `CURRENT_BENCHMARK_VERSION`. Empty-lane seeding and failed-defense replacement do not use the margin. The same `file_hash` can refresh its stored score without resetting the reign.
 
-Alpha accrues on the king's hotkey while they hold the lane. There is no end-of-round escrow transfer and no pot.
+When a new benchmark version is released the current king keeps receiving weights. The throne is marked `defending` until that exact model completes a full re-eval on the new version. Dethroning is frozen during defense. After a successful defense, deferred challengers still need the 0.01 margin. If the re-eval fails or times out (48 hours), the crown goes to the best successful new-version model, or that lane's share burns until one exists.
+
+Alpha accrues on the chain hotkeys while they hold those residual shares. There is no end-of-round escrow transfer and no pot.

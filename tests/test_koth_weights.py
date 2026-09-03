@@ -3,7 +3,12 @@
 import numpy as np
 import pytest
 
-from gas.koth_weights import build_koth_weights, kings_by_modality
+from gas.koth_weights import (
+    assign_residual_shares,
+    build_koth_weights,
+    chains_by_modality,
+    kings_by_modality,
+)
 
 ESCROW = {
     "image": "5EUJFyH4ZSSiD3C8sM698nsVE26Tq98LoBwkmopmWZqaZqCA",
@@ -104,3 +109,63 @@ def test_invalid_split_is_rejected(split):
             burn_uid=0,
             split=split,
         )
+
+
+def test_residual_rolls_unused_slots_to_current():
+    assert assign_residual_shares(["5A"]) == [
+        {"ss58_address": "5A", "share": 1.0, "role": "current"}
+    ]
+    assert assign_residual_shares(["5A", "5B"]) == [
+        {"ss58_address": "5A", "share": 0.90, "role": "current"},
+        {"ss58_address": "5B", "share": 0.10, "role": "previous"},
+    ]
+
+
+def test_chains_by_modality_recomputes_shares_and_falls_back():
+    payload = {
+        "kings": [{"modality": "audio", "ss58_address": "5Aud"}],
+        "chain": {
+            "image": [
+                {"ss58_address": "5Img", "share": 0.5, "role": "current"},
+                {"ss58_address": "5Prev", "share": 0.5, "role": "previous"},
+            ]
+        },
+    }
+    chains = chains_by_modality(payload)
+    assert [member["share"] for member in chains["image"]] == [0.90, 0.10]
+    assert chains["audio"][0]["ss58_address"] == "5Aud"
+    assert chains["audio"][0]["share"] == 1.0
+
+
+def test_lane_residual_splits_across_last_three_kings():
+    hotkeys = {"5Img": 1, "5Prev": 2, "5Two": 3, "5Burn": 0}
+    weights = build_koth_weights(
+        n=5,
+        scores=np.zeros(5),
+        generator_uids=[],
+        kings={"image": "5Img"},
+        uid_for_hotkey=hotkeys.get,
+        burn_uid=0,
+        chains={
+            "image": assign_residual_shares(["5Img", "5Prev", "5Two"]),
+        },
+    )
+    assert abs(weights[1] - 0.40 * 0.85) < 1e-9
+    assert abs(weights[2] - 0.40 * 0.10) < 1e-9
+    assert abs(weights[3] - 0.40 * 0.05) < 1e-9
+    assert abs(weights[0] - 0.60) < 1e-9  # video + audio + generator
+
+
+def test_unresolvable_previous_king_rolls_to_current():
+    hotkeys = {"5Img": 1, "5Burn": 0}
+    weights = build_koth_weights(
+        n=3,
+        scores=np.zeros(3),
+        generator_uids=[],
+        kings={"image": "5Img"},
+        uid_for_hotkey=hotkeys.get,
+        burn_uid=0,
+        chains={"image": assign_residual_shares(["5Img", "5Gone"])},
+    )
+    assert abs(weights[1] - 0.40) < 1e-9
+    assert abs(weights[0] - 0.60) < 1e-9
