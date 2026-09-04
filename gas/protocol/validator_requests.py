@@ -179,6 +179,35 @@ async def query_generative_miner(
     return response
 
 
+async def get_current_kings(
+    hotkey,
+    base_url: str = "https://gas.bitmind.ai",
+) -> Optional[Dict[str, Any]]:
+    """Fetch current KOTH kings from gas-api /validator/current-kings."""
+    try:
+        bt.logging.info(f"Fetching current kings from {base_url}/api/v1/validator/current-kings")
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            url = f"{base_url}/api/v1/validator/current-kings"
+            epistula_headers = generate_header(hotkey, b"", None)
+            async with session.get(url, headers=epistula_headers) as response:
+                if response.status == 200:
+                    payload = await response.json()
+                    bt.logging.info(
+                        f"Fetched {len(payload.get('kings') or [])} current king(s)"
+                    )
+                    return payload
+                error_text = await response.text()
+                bt.logging.warning(
+                    f"Failed to fetch current kings: HTTP {response.status}, response: {error_text}"
+                )
+                return None
+    except Exception as e:
+        bt.logging.error(f"Error fetching current kings from API: {e}")
+        bt.logging.error(traceback.format_exc())
+        return None
+
+
 async def get_escrow_addresses(
     hotkey,
     base_url: str = "https://gas.bitmind.ai",

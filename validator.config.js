@@ -72,8 +72,13 @@ const config = {
   startData: process.env.START_DATA !== 'false',
 };
 
-// Determine netuid
-const netuid = getNetworkSettings(config.chainEndpoint);
+// Determine netuid. NETUID wins so testnet 169 is not forced to 379.
+const netuid = process.env.NETUID
+  ? parseInt(process.env.NETUID, 10)
+  : getNetworkSettings(config.chainEndpoint);
+if (!netuid) {
+  throw new Error('NETUID is required (set NETUID or a known CHAIN_ENDPOINT)');
+}
 
 // Build command parameters
 const logParam = getLogParam(config.loglevel);
@@ -131,6 +136,9 @@ if (config.startValidator) {
     logParam,
     autoUpdateParam,
   ];
+  if (process.env.EPOCH_LENGTH) {
+    validatorArgs.push('--epoch-length', process.env.EPOCH_LENGTH);
+  }
   
   // Add external callback port if provided
   if (config.externalCallbackPort) {

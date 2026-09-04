@@ -454,8 +454,11 @@ cli.add_command(discriminator, name="d")
 @click.option("--chain-endpoint", help="Subtensor network endpoint")
 @click.option("--retry-delay", default=60, help="Retry delay in seconds")
 @click.option("--vertical", type=click.Choice(["general", "human"]), default="general", help="Competition vertical (default: general)")
+@click.option("--upload-endpoint", default=None, help="Model upload URL (default: production https://upload.bitmind.ai/upload)")
+@click.option("--skip-chain", is_flag=True, help="Exit after a successful upload without writing on-chain metadata")
+@click.option("--max-retries", default=3, type=int, help="Max blockchain registration attempts per modality (0 = retry forever)")
 def push_discriminator(
-    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay, vertical
+    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay, vertical, upload_endpoint, skip_chain, max_retries
 ):
     """Push discriminator model(s) and register on blockchain. At least one model zip file (image, video, or audio) must be provided."""
     if not image_model and not video_model and not audio_model:
@@ -488,14 +491,19 @@ def push_discriminator(
 
     cmd.extend(["--retry-delay", str(retry_delay)])
     cmd.extend(["--vertical", vertical])
+    cmd.extend(["--max-retries", str(max_retries)])
+    if upload_endpoint:
+        cmd.extend(["--upload-endpoint", upload_endpoint])
+    if skip_chain:
+        cmd.append("--skip-chain")
 
-    # Execute the push_model script
+    # Execute the push_model script. Always propagate its exit code so a
+    # successful upload does not leave this click process hanging.
     try:
-        result = subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        sys.exit(e.returncode)
-    except Exception as e:
+        result = subprocess.run(cmd)
+    except Exception:
         sys.exit(1)
+    sys.exit(result.returncode)
 
 
 discriminator.add_command(push_discriminator, name="push")
