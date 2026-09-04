@@ -17,7 +17,7 @@ KOTH_CHAIN_ROLES = ("current", "previous", "two_back")
 
 
 def kings_by_modality(payload: Optional[dict]) -> Dict[str, str]:
-    """Map modality -> hotkey from a /current-kings response."""
+    """Map modality -> hotkey from a /kings response."""
     out: Dict[str, str] = {}
     if not payload:
         return out

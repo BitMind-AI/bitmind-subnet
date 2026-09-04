@@ -203,11 +203,11 @@ class Validator(BaseNeuron):
         if kings_payload is not None:
             self.kings_state.payload = kings_payload
         elif self.kings_state.payload is not None:
-            bt.logging.warning("current-kings API unavailable; using last known kings")
+            bt.logging.warning("kings API unavailable; using last known kings")
             kings_payload = self.kings_state.payload
         else:
             bt.logging.warning(
-                "current-kings API unavailable and no cached kings; "
+                "kings API unavailable and no cached kings; "
                 "discriminator shares will burn"
             )
             kings_payload = {"kings": []}

@@ -70,17 +70,10 @@ gascli validator start
 # Miners: Start or restart generative miner
 gascli generator start
 
-# Miners: Push discriminator models (all three modalities at once)
-gascli d push \
-  --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
+# Miners: Push one discriminator model per hotkey
+gascli d push --image-model image_detector.zip \
   --wallet-name default --wallet-hotkey default
-
-# Or push one model at a time
-gascli d push --image-model image_detector.zip
-gascli d push --video-model video_detector.zip
-gascli d push --audio-model audio_detector.zip
+# Video or audio: use --video-model or --audio-model on a different hotkey
 
 # Miners: Check your benchmark performance (epistula-authenticated)
 gascli d perf --wallet-name default --wallet-hotkey default
@@ -103,12 +96,10 @@ pm2 start validator.config.js
 # Miners: Start or restart generative miner
 pm2 start gen_miner.config.js
 
-# Miners: Push discriminator models
+# Miners: Push one discriminator model per hotkey
 source .venv/bin/activate
 python neurons/discriminator/push_model.py \
   --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
   --wallet-name default --wallet-hotkey default
 ```
 For detailed installation and usage instructions, see [Installation Guide](docs/Installation.md).

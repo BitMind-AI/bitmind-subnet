@@ -183,12 +183,12 @@ async def get_current_kings(
     hotkey,
     base_url: str = "https://gas.bitmind.ai",
 ) -> Optional[Dict[str, Any]]:
-    """Fetch current KOTH kings from gas-api /validator/current-kings."""
+    """Fetch current KOTH kings from gas-api /validator/kings."""
     try:
-        bt.logging.info(f"Fetching current kings from {base_url}/api/v1/validator/current-kings")
+        bt.logging.info(f"Fetching current kings from {base_url}/api/v1/validator/kings")
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            url = f"{base_url}/api/v1/validator/current-kings"
+            url = f"{base_url}/api/v1/validator/kings"
             epistula_headers = generate_header(hotkey, b"", None)
             async with session.get(url, headers=epistula_headers) as response:
                 if response.status == 200:

@@ -31,10 +31,12 @@ Discriminative miners must submit models in **safetensors format**:
 
 **📖 [Safetensors Model Specification](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md)** - Requirements for model submission
 
-You can submit models for any combination of modalities:
+Each hotkey can submit **one** model, in one of these modalities:
 - `image_detector.zip` - Image classification model
-- `video_detector.zip` - Video classification model  
+- `video_detector.zip` - Video classification model
 - `audio_detector.zip` - Audio classification model
+
+A second modality needs a second registered hotkey.
 
 ## Pushing Your Model
 
@@ -43,22 +45,17 @@ First, activate the virtual environment:
 source .venv/bin/activate
 ```
 
-Push your models to the network using the `push` command:
+Push one model per hotkey using the `push` command:
 
 ```bash
-# Upload all three models
 gascli d push \
   --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name
 
-# Or upload individual models
-gascli d push \
-  --image-model image_detector.zip \
-  --wallet-name your_wallet_name \
-  --wallet-hotkey your_hotkey_name
+# Video or audio on a different hotkey:
+# gascli d push --video-model video_detector.zip --wallet-hotkey video_key
+# gascli d push --audio-model audio_detector.zip --wallet-hotkey audio_key
 ```
 
 ### Command Options
@@ -68,8 +65,6 @@ The `push` command accepts several parameters:
 ```bash
 gascli d push \
   --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name \
   --netuid 34 \
@@ -87,7 +82,7 @@ gascli d push \
 - `--chain-endpoint`: Subtensor network endpoint (default: "wss://entrypoint-finney.opentensor.ai:443/")
 - `--retry-delay`: Retry delay in seconds (default: 60)
 
-At least one model (image, video, or audio) must be provided.
+Provide exactly one of `--image-model`, `--video-model`, or `--audio-model`. A second model needs a different hotkey.
 
 ## Submission Limits
 
