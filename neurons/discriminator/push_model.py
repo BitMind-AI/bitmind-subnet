@@ -107,16 +107,10 @@ def _accept_already_uploaded(modality: str, result: dict, skip_chain: bool) -> b
         print_warning(
             f"{modality.capitalize()} model already uploaded — server already has this hash."
         )
-        if skip_chain:
-            print_success(
-                f"{modality.capitalize()} upload already accepted; nothing more to do (--skip-chain)."
-            )
-            return True
-        print_error(
-            f"Cannot retrieve r2_key for already-uploaded {modality} model. "
-            "Re-run with the original r2_key, or pass --skip-chain if you only needed the upload."
+        print_success(
+            f"{modality.capitalize()} upload already accepted; exam will still run."
         )
-        return False
+        return True
     print_error(f"{modality.capitalize()} model upload failed at step: {result.get('step', 'unknown')}")
     print_error(f"Error: {result.get('error', 'Unknown error')}")
     if result.get("response"):
@@ -250,8 +244,12 @@ async def push_separate_models(
     for modality, result in results.items():
         model_key = result.get("r2_key", "")
         if not model_key:
-            print_error(f"{modality.capitalize()} model key not provided in upload response")
-            return False
+            print_warning(
+                f"Skipping {modality} chain registration — no r2_key in the upload "
+                "response. The upload already succeeded and the model will still be examined."
+            )
+            chain_ok = False
+            continue
 
         # Create hash for this specific model
         model_hash = hashlib.sha256(
@@ -303,7 +301,8 @@ async def push_separate_models(
                     continue
                 print_warning(
                     f"Giving up chain registration after {attempt} attempt(s). "
-                    "The upload already succeeded and the model will still be examined."
+                    "The upload already succeeded and the model will still be examined. "
+                    f"r2_key={model_key}"
                 )
                 chain_ok = False
                 break
@@ -315,7 +314,7 @@ async def push_separate_models(
         print_success("All models registered successfully!")
     else:
         print_warning("Upload succeeded; one or more chain registrations did not complete.")
-    return chain_ok
+    return True
 
 
 def main():
