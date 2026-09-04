@@ -39,7 +39,7 @@ GAS runs two parallel competition tracks on Bittensor Subnet 34:
 - **Cloud-evaluated**: Discriminator models are benchmarked on cloud infrastructure -- no GPU hosting required
 - **Model format**: Safetensors only (ONNX submissions are not accepted)
 - **Datasets refresh weekly** with fresh GAS-Station data alongside static benchmarks
-- **One model per modality per hotkey** for discriminative miners
+- **One model per hotkey** for discriminative miners
 
 See [Incentive Mechanism](docs/Incentive.md) for full scoring details.
 

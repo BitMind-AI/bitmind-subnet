@@ -91,12 +91,12 @@ At least one model (image, video, or audio) must be provided.
 
 ## Submission Limits
 
-Each registered hotkey gets **one counted submission per modality** (one image, one video, and one audio).
+Each registered hotkey gets **one counted submission** (image, video, or audio — not one of each).
 
 - Exam failures and incomplete uploads do not consume the slot. You can retry on the same key until a model is successfully uploaded and not later marked exam-failed.
-- A confirmed or superseded model **does** consume the slot for the life of that hotkey.
+- A confirmed or superseded model **does** consume the slot for the life of that hotkey, for every modality.
 - A new benchmark version does **not** refill the slot.
-- To submit another model for the same modality, register a new miner hotkey.
+- To submit another model, register a new miner hotkey.
 
 ---
 
@@ -113,7 +113,7 @@ The normalized terms apply exponents $1.2$ to MCC performance and $1.8$ to Brier
 ### Model Requirements
 
 - **Format**: Safetensors only (ONNX is no longer accepted)
-- **Submission cap**: one counted model per modality per hotkey (see [Submission Limits](#submission-limits))
+- **Submission cap**: one counted model per hotkey (see [Submission Limits](#submission-limits))
 
 ### Sandbox and Import Restrictions
 
