@@ -36,10 +36,9 @@ GAS runs two parallel competition tracks on Bittensor Subnet 34:
 
 **Key facts:**
 - **Three modalities**: Image, video, and audio detection are all scored independently
-- **Cloud-evaluated**: Discriminator models are benchmarked on cloud infrastructure -- no GPU hosting required
 - **Model format**: Safetensors only (ONNX submissions are not accepted)
 - **Datasets refresh weekly** with fresh GAS-Station data alongside static benchmarks
-- **One model per modality per hotkey** for discriminative miners
+- **One model per hotkey** for discriminative miners
 
 See [Incentive Mechanism](docs/Incentive.md) for full scoring details.
 
@@ -120,7 +119,7 @@ For detailed installation and usage instructions, see [Installation Guide](docs/
 > This documentation assumes basic familiarity with [Bittensor concepts](https://docs.bittensor.com/learn/bittensor-building-blocks). 
 
 #### Discriminative Miners [[docs](docs/Discriminative-Mining.md)]
-Discriminative miners submit detection models for evaluation against a wide variety of real and synthetic media across **image, video, and audio** modalities. Models are evaluated on cloud infrastructure and rewarded based on their accuracy and calibration. This significantly reduces the capital required to mine compared to previous versions that required GPU hosting, and allows the subnet to more reliably identify unique models and reward novel contributions proportionally to their accuracy.
+Discriminative miners submit detection models for evaluation against a wide variety of real and synthetic media across **image, video, and audio** modalities. Models are rewarded based on their accuracy and calibration. This significantly reduces the capital required to mine compared to previous versions that required GPU hosting, and allows the subnet to more reliably identify unique models and reward novel contributions proportionally to their accuracy.
 
 #### Generative Miners [[docs](docs/Generative-Mining.md)]
 

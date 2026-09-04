@@ -9,7 +9,7 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 - Miners submit media-provenance classifiers across three modalities: **image**, **video**, and **audio**.
 - Image models classify `[real, synthetic, semisynthetic]`; video models classify `[real, synthetic, semisynthetic, rendered]`; audio remains `[real, synthetic]`.
 - The visual taxonomy is experimental. Semisynthetic media retains materially captured visual content alongside spatially localized generated or replaced content. Fully synthesized output remains synthetic even when captured media conditions generation.
-- Models are evaluated on cloud infrastructure -- miners do not need to host hardware for inference.
+- Miners do not need to host hardware for inference.
 
 Class order is part of the submission contract:
 
@@ -91,12 +91,12 @@ At least one model (image, video, or audio) must be provided.
 
 ## Submission Limits
 
-Each registered hotkey gets **one counted submission per modality** (one image, one video, and one audio).
+Each registered hotkey gets **one counted submission** (image, video, or audio — not one of each).
 
 - Exam failures and incomplete uploads do not consume the slot. You can retry on the same key until a model is successfully uploaded and not later marked exam-failed.
-- A confirmed or superseded model **does** consume the slot for the life of that hotkey.
+- A confirmed or superseded model **does** consume the slot for the life of that hotkey, for every modality.
 - A new benchmark version does **not** refill the slot.
-- To submit another model for the same modality, register a new miner hotkey.
+- To submit another model, register a new miner hotkey.
 
 ---
 
@@ -113,7 +113,7 @@ The normalized terms apply exponents $1.2$ to MCC performance and $1.8$ to Brier
 ### Model Requirements
 
 - **Format**: Safetensors only (ONNX is no longer accepted)
-- **Submission cap**: one counted model per modality per hotkey (see [Submission Limits](#submission-limits))
+- **Submission cap**: one counted model per hotkey (see [Submission Limits](#submission-limits))
 
 ### Sandbox and Import Restrictions
 
@@ -123,7 +123,6 @@ For the complete list of allowed and blocked imports, see the [Safetensors Model
 
 ### Evaluation
 
-- Models are benchmarked on cloud infrastructure (not miner hardware)
 - Evaluation runs against a diverse dataset of image samples, video samples, and audio samples per benchmark cycle
 - Datasets are refreshed weekly with new GAS-Station data alongside static benchmark datasets
 
@@ -158,7 +157,7 @@ gascli d push --image-model my_detector.zip
 ### What Happens During Push
 
 1. **Model Validation**: The system checks that the zip files are present and valid
-2. **Model Upload**: Your model zip files are uploaded to the cloud inference system
+2. **Model Upload**: Your model zip files are uploaded for evaluation
 3. **Blockchain Registration**: Model metadata is registered on the Bittensor blockchain
 4. **Verification**: The system verifies the registration was successful
 
@@ -175,7 +174,7 @@ Before your model is ever scored on the network, it must pass an **entrance exam
 - Internally this runs `gasbench run --small`, which downloads one archive per dataset and evaluates roughly 100 samples per dataset
 - Your model must achieve **≥ 80% accuracy** averaged across all submitted modalities to pass
 - The exam has a **maximum wall-clock timeout of 1 hour 25 minutes** (5,100 seconds); models that exceed this are treated as failed
-- The exam runs in an **isolated cloud sandbox** — your code has no network access and cannot interact with the host environment
+- The exam runs in an **isolated sandbox** — your code has no network access and cannot interact with the host environment
 - Submissions are statically analyzed and executed in an isolated sandbox; prohibited code or imports result in rejection
 
 **Model status during the exam:**
