@@ -195,11 +195,11 @@ class Validator(BaseNeuron):
                     )
 
                 # Weight budget (must sum to 1.0)
-                burn_pct      = 0.
-                video_pct     = .4
-                image_pct     = .4
-                audio_pct     = .04
-                generator_pct = .16
+                burn_pct      = 0.84
+                video_pct     = 0. #.4
+                image_pct     = 0. #.4
+                audio_pct     = 0. #.04
+                generator_pct = 0.16
 
                 # Resolve escrow/burn UIDs at current chain head. `block` is an
                 # interval marker (0 at startup) and must not be used as a query
