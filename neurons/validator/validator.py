@@ -11,7 +11,13 @@ import bittensor as bt
 
 from gas import __spec_version__ as spec_version
 from gas.protocol.validator_requests import get_benchmark_results, get_current_kings
-from gas.koth_weights import build_koth_weights, chains_by_modality, kings_by_modality
+from gas.koth_weights import (
+    KOTH_SPLIT,
+    build_koth_weights,
+    chains_by_modality,
+    kings_by_modality,
+    validate_koth_payload,
+)
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
 from gas.utils.metagraph import create_set_weights
@@ -41,6 +47,7 @@ except Exception:
 
 MAINNET_UID = 34
 BURN_SS58 = "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ"
+KINGS_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
 class _KingsState:
@@ -48,6 +55,30 @@ class _KingsState:
 
     def __init__(self):
         self.payload = None
+        self.fetched_at = None
+
+    def update(self, payload: dict, now: float = None) -> None:
+        self.payload = payload
+        self.fetched_at = time.time() if now is None else now
+
+    def fresh_payload(self, now: float = None):
+        if self.payload is None or isinstance(self.fetched_at, bool):
+            return None
+        try:
+            age = (time.time() if now is None else now) - float(self.fetched_at)
+        except (TypeError, ValueError):
+            return None
+        if 0 <= age <= KINGS_CACHE_TTL_SECONDS:
+            return self.payload
+        return None
+
+    def age_seconds(self, now: float = None):
+        if self.payload is None or isinstance(self.fetched_at, bool):
+            return None
+        try:
+            return (time.time() if now is None else now) - float(self.fetched_at)
+        except (TypeError, ValueError):
+            return None
 
     def save_state(self, save_dir: str, filename: str) -> None:
         import json
@@ -55,7 +86,9 @@ class _KingsState:
 
         path = os.path.join(save_dir, filename)
         with open(path, "w") as f:
-            json.dump(self.payload, f)
+            json.dump(
+                {"payload": self.payload, "fetched_at": self.fetched_at}, f
+            )
 
     def load_state(self, save_dir: str, filename: str) -> bool:
         import json
@@ -65,7 +98,14 @@ class _KingsState:
         if not os.path.exists(path):
             return False
         with open(path) as f:
-            self.payload = json.load(f)
+            state = json.load(f)
+        if isinstance(state, dict) and "payload" in state:
+            self.payload = state.get("payload")
+            self.fetched_at = state.get("fetched_at")
+        else:
+            # Legacy caches have no trustworthy age and are therefore stale.
+            self.payload = state
+            self.fetched_at = None
         return True
 
 
@@ -201,16 +241,45 @@ class Validator(BaseNeuron):
             self.wallet.hotkey, base_url=self.config.benchmark_api_url
         )
         if kings_payload is not None:
-            self.kings_state.payload = kings_payload
-        elif self.kings_state.payload is not None:
-            bt.logging.warning("current-kings API unavailable; using last known kings")
-            kings_payload = self.kings_state.payload
-        else:
+            try:
+                kings_payload = validate_koth_payload(kings_payload)
+                self.kings_state.update(kings_payload)
+            except ValueError as e:
+                bt.logging.error(f"Rejected current-kings API response: {e}")
+                kings_payload = None
+
+        if kings_payload is None:
+            cached_payload = self.kings_state.fresh_payload()
+            if cached_payload is not None:
+                try:
+                    kings_payload = validate_koth_payload(cached_payload)
+                    age = self.kings_state.age_seconds()
+                    bt.logging.warning(
+                        "current-kings API unavailable or invalid; using "
+                        f"last known good response ({age / 3600:.1f}h old)"
+                    )
+                except ValueError as e:
+                    bt.logging.error(f"Rejected cached current-kings response: {e}")
+                    kings_payload = None
+
+        if kings_payload is None:
+            cache_age = self.kings_state.age_seconds()
+            if cache_age is not None:
+                bt.logging.warning(
+                    "current-kings cache expired; discriminator shares will burn"
+                )
+            else:
+                bt.logging.warning(
+                    "No valid current-kings cache; discriminator shares will burn"
+                )
             bt.logging.warning(
-                "current-kings API unavailable and no cached kings; "
-                "discriminator shares will burn"
+                "Using the local default KOTH split with no current kings"
             )
-            kings_payload = {"kings": []}
+            kings_payload = {
+                "kings": [],
+                "chain": {},
+                "split": dict(KOTH_SPLIT),
+            }
 
         kings = kings_by_modality(kings_payload)
         chains = chains_by_modality(kings_payload)

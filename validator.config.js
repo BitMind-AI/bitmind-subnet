@@ -132,7 +132,7 @@ if (config.startValidator) {
     '--subtensor.chain_endpoint', config.chainEndpoint,
     '--neuron.callback_port', config.callbackPort,
     '--cache.base-dir', config.cacheDir,
-    '--benchmark.api-url', config.benchmarkApiUrl,
+    '--benchmark-api-url', config.benchmarkApiUrl,
     logParam,
     autoUpdateParam,
   ];

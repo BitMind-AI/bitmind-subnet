@@ -4,10 +4,13 @@ import numpy as np
 import pytest
 
 from gas.koth_weights import (
+    KOTH_SPLIT,
     assign_residual_shares,
     build_koth_weights,
     chains_by_modality,
     kings_by_modality,
+    resolve_koth_split,
+    validate_koth_payload,
 )
 
 ESCROW = {
@@ -80,7 +83,7 @@ def test_api_down_empty_kings_burns_discriminator_shares():
 
 
 def test_required_burn_fails_when_burn_uid_is_unavailable():
-    with pytest.raises(ValueError, match="burn UID is unavailable"):
+    with pytest.raises(ValueError, match="Owner/burn UID is unavailable"):
         build_koth_weights(
             n=3,
             scores=np.array([0.0, 1.0, 0.0]),
@@ -95,7 +98,10 @@ def test_required_burn_fails_when_burn_uid_is_unavailable():
     "split",
     [
         {"image": 0.4, "video": 0.4, "audio": -0.01, "generator": 0.21},
-        {"image": 0.4, "video": 0.4, "audio": 0.04},
+        {"image": 0.9},
+        {"image": float("nan")},
+        {"image": float("inf")},
+        {"image": "0.4"},
     ],
 )
 def test_invalid_split_is_rejected(split):
@@ -108,6 +114,88 @@ def test_invalid_split_is_rejected(split):
             uid_for_hotkey=lambda hk: None,
             burn_uid=0,
             split=split,
+        )
+
+
+def test_partial_split_uses_protocol_defaults():
+    split = resolve_koth_split({"image": 0.50, "video": 0.30})
+    assert split == {
+        "image": 0.50,
+        "video": 0.30,
+        "audio": KOTH_SPLIT["audio"],
+        "generator": KOTH_SPLIT["generator"],
+    }
+
+
+def test_payload_validation_normalizes_kings_chain_and_split():
+    payload = validate_koth_payload(
+        {
+            "kings": [
+                {"modality": "image", "ss58_address": ESCROW["image"]},
+                {"modality": "video", "ss58_address": ESCROW["video"]},
+            ],
+            "chain": {
+                "image": [
+                    {"ss58_address": ESCROW["image"], "share": 0.1},
+                    ESCROW["audio"],
+                ]
+            },
+            "split": {"image": 0.50, "video": 0.30},
+            "ignored": "server metadata",
+        }
+    )
+
+    assert payload["kings"] == [
+        {"modality": "image", "ss58_address": ESCROW["image"]},
+        {"modality": "video", "ss58_address": ESCROW["video"]},
+    ]
+    assert payload["chain"]["image"] == [
+        {"ss58_address": ESCROW["image"]},
+        {"ss58_address": ESCROW["audio"]},
+    ]
+    assert payload["split"] == {
+        "image": 0.50,
+        "video": 0.30,
+        "audio": 0.04,
+        "generator": 0.16,
+    }
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        {"kings": "not-a-list"},
+        {"kings": [{"modality": "text", "ss58_address": ESCROW["image"]}]},
+        {
+            "kings": [
+                {"modality": "image", "ss58_address": ESCROW["image"]},
+                {"modality": "image", "ss58_address": ESCROW["video"]},
+            ]
+        },
+        {"kings": [{"modality": "image", "ss58_address": "not-ss58"}]},
+        {
+            "kings": [
+                {"modality": "image", "ss58_address": ESCROW["image"]}
+            ],
+            "chain": {"image": [ESCROW["video"]]},
+        },
+    ],
+)
+def test_invalid_payload_is_rejected(payload):
+    with pytest.raises(ValueError, match="Invalid current-kings payload"):
+        validate_koth_payload(payload)
+
+
+def test_burn_uid_is_required_even_when_no_weight_would_burn():
+    with pytest.raises(ValueError, match="Owner/burn UID is unavailable"):
+        build_koth_weights(
+            n=5,
+            scores=np.array([0.0, 0.0, 0.0, 0.0, 1.0]),
+            generator_uids=[4],
+            kings={"image": "5Img", "video": "5Vid", "audio": "5Aud"},
+            uid_for_hotkey={"5Img": 1, "5Vid": 2, "5Aud": 3}.get,
+            burn_uid=None,
         )
 
 
