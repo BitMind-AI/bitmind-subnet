@@ -20,17 +20,13 @@ def test_zero_retries_is_unlimited():
     assert should_retry_register(99, 0) is True
 
 
-def test_already_uploaded_is_success_when_skipping_chain():
+def test_already_uploaded_is_success():
     result = {"already_uploaded": True, "success": False}
+    assert _accept_already_uploaded("image", result, skip_chain=False) is True
     assert _accept_already_uploaded("image", result, skip_chain=True) is True
 
 
-def test_already_uploaded_fails_when_chain_register_needs_r2_key():
-    result = {"already_uploaded": True, "success": False}
-    assert _accept_already_uploaded("image", result, skip_chain=False) is False
-
-
-def test_chain_registration_failure_is_reported(monkeypatch, tmp_path):
+def test_chain_registration_failure_does_not_fail_push(monkeypatch, tmp_path):
     model_path = tmp_path / "model.zip"
     model_path.touch()
     wallet = SimpleNamespace(hotkey=SimpleNamespace(ss58_address="5Miner"))
@@ -65,4 +61,37 @@ def test_chain_registration_failure_is_reported(monkeypatch, tmp_path):
         )
     )
 
-    assert success is False
+    assert success is True
+
+
+def test_already_uploaded_without_r2_key_still_succeeds(monkeypatch, tmp_path):
+    model_path = tmp_path / "model.zip"
+    model_path.touch()
+    wallet = SimpleNamespace(hotkey=SimpleNamespace(ss58_address="5Miner"))
+
+    monkeypatch.setattr(
+        push_model,
+        "upload_single_modality",
+        lambda *args, **kwargs: {
+            "success": False,
+            "already_uploaded": True,
+            "file_hash": "file-hash",
+        },
+    )
+    monkeypatch.setattr(push_model.bt, "Subtensor", lambda **kwargs: object())
+    monkeypatch.setattr(
+        push_model,
+        "ChainModelMetadataStore",
+        lambda subtensor, netuid: object(),
+    )
+
+    success = asyncio.run(
+        push_separate_models(
+            image_model_path=str(model_path),
+            wallet=wallet,
+            retry_delay_secs=0,
+            max_retries=1,
+        )
+    )
+
+    assert success is True

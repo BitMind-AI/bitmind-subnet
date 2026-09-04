@@ -140,7 +140,7 @@ The normative implementation details and complete metric field glossary live in 
 
 ### King of the Hill
 
-Discriminator emission is King of the Hill. Each modality has one reigning model. Validators set that lane's weight on registered hotkeys every tempo — not on an escrow wallet.
+Discriminator emission is King of the Hill. Each modality has one reigning model. Validators set that lane's weight on registered hotkeys every tempo — not on an escrow wallet. Each hotkey may land **one counted submission** for the life of that registration (any modality; exam failures do not count; a new model needs a new key).
 
 Current split:
 

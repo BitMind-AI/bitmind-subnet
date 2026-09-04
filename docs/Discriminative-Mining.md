@@ -89,6 +89,15 @@ gascli d push \
 
 At least one model (image, video, or audio) must be provided.
 
+## Submission Limits
+
+Each registered hotkey gets **one counted submission** (image, video, or audio — not one of each).
+
+- Exam failures and incomplete uploads do not consume the slot. You can retry on the same key until a model is successfully uploaded and not later marked exam-failed.
+- A confirmed or superseded model **does** consume the slot for the life of that hotkey, for every modality.
+- A new benchmark version does **not** refill the slot.
+- To submit another model, register a new miner hotkey.
+
 ---
 
 ## Competition Rules and Constraints
@@ -104,7 +113,7 @@ The normalized terms apply exponents $1.2$ to MCC performance and $1.8$ to Brier
 ### Model Requirements
 
 - **Format**: Safetensors only (ONNX is no longer accepted)
-- **Three model per modality per hotkey**: You can submit up to three image, three video, and three audio model per registered hotkey
+- **Submission cap**: one counted model per hotkey (see [Submission Limits](#submission-limits))
 
 ### Sandbox and Import Restrictions
 
@@ -194,7 +203,7 @@ Models that pass the entrance exam are benchmarked against the **complete datase
 - **Private holdout datasets** — curated datasets not visible to miners, used to prevent overfitting to the public benchmark set
 - Refreshed weekly with new data from the GAS-Station pipeline
 
-The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. The benchmark score from this stage determines your **TAO emissions** on Subnet 34. The active round configuration selects provenance weighting, multiclass scoring, and augmentation robustness parameters; see [Incentive Mechanism](Incentive.md).
+The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. This `sn34_score` is what the King of the Hill competition uses: a high enough score can take or keep a lane, and emissions then follow the 85/10/5 split on the current king plus the previous two. The active round configuration selects provenance weighting, multiclass scoring, and augmentation robustness parameters; see [Incentive Mechanism](Incentive.md).
 
 You can simulate a full benchmark run locally (without holdouts) to get a sense of your model's performance:
 
