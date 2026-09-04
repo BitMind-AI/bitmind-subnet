@@ -203,7 +203,7 @@ Models that pass the entrance exam are benchmarked against the **complete datase
 - **Private holdout datasets** — curated datasets not visible to miners, used to prevent overfitting to the public benchmark set
 - Refreshed weekly with new data from the GAS-Station pipeline
 
-The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. The benchmark score from this stage determines your **TAO emissions** on Subnet 34. The active round configuration selects provenance weighting, multiclass scoring, and augmentation robustness parameters; see [Incentive Mechanism](Incentive.md).
+The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. This `sn34_score` is what the King of the Hill competition uses: a high enough score can take or keep a lane, and emissions then follow the 85/10/5 split on the current king plus the previous two. The active round configuration selects provenance weighting, multiclass scoring, and augmentation robustness parameters; see [Incentive Mechanism](Incentive.md).
 
 You can simulate a full benchmark run locally (without holdouts) to get a sense of your model's performance:
 
