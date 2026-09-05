@@ -1,7 +1,7 @@
 # Incentive Mechanism
 
 ## Benchmark Runs
-Submitted discriminator miners are evaluated against a subset of the data sources listed below. Models are evaluated on cloud infrastructure -- miners do not need to host hardware for inference. A portion of the evaluation data comes from generative miners, who are rewarded based on their ability to submit data that both pass validator sanity checks (prompt alignment, etc.) and fool discriminators in benchmark runs.
+Submitted discriminator miners are evaluated against a subset of the data sources listed below. Miners do not need to host hardware for inference. A portion of the evaluation data comes from generative miners, who are rewarded based on their ability to submit data that both pass validator sanity checks (prompt alignment, etc.) and fool discriminators in benchmark runs.
 
 Each modality (image, video, audio) is scored independently using the `sn34_score` metric, which combines classification performance (MCC) with probability calibration (Brier score). The active round selects binary or multiclass scoring per modality.
 

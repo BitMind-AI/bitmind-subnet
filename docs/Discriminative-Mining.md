@@ -9,7 +9,7 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 - Miners submit media-provenance classifiers across three modalities: **image**, **video**, and **audio**.
 - Image models classify `[real, synthetic, semisynthetic]`; video models classify `[real, synthetic, semisynthetic, rendered]`; audio remains `[real, synthetic]`.
 - The visual taxonomy is experimental. Semisynthetic media retains materially captured visual content alongside spatially localized generated or replaced content. Fully synthesized output remains synthetic even when captured media conditions generation.
-- Models are evaluated on cloud infrastructure -- miners do not need to host hardware for inference.
+- Miners do not need to host hardware for inference.
 
 Class order is part of the submission contract:
 
@@ -31,10 +31,12 @@ Discriminative miners must submit models in **safetensors format**:
 
 **📖 [Safetensors Model Specification](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md)** - Requirements for model submission
 
-You can submit models for any combination of modalities:
+Each hotkey can submit **one** model, in one of these modalities:
 - `image_detector.zip` - Image classification model
-- `video_detector.zip` - Video classification model  
+- `video_detector.zip` - Video classification model
 - `audio_detector.zip` - Audio classification model
+
+A second modality needs a second registered hotkey.
 
 ## Pushing Your Model
 
@@ -43,22 +45,17 @@ First, activate the virtual environment:
 source .venv/bin/activate
 ```
 
-Push your models to the network using the `push` command:
+Push one model per hotkey using the `push` command:
 
 ```bash
-# Upload all three models
 gascli d push \
   --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name
 
-# Or upload individual models
-gascli d push \
-  --image-model image_detector.zip \
-  --wallet-name your_wallet_name \
-  --wallet-hotkey your_hotkey_name
+# Video or audio on a different hotkey:
+# gascli d push --video-model video_detector.zip --wallet-hotkey video_key
+# gascli d push --audio-model audio_detector.zip --wallet-hotkey audio_key
 ```
 
 ### Command Options
@@ -68,8 +65,6 @@ The `push` command accepts several parameters:
 ```bash
 gascli d push \
   --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name \
   --netuid 34 \
@@ -87,7 +82,7 @@ gascli d push \
 - `--chain-endpoint`: Subtensor network endpoint (default: "wss://entrypoint-finney.opentensor.ai:443/")
 - `--retry-delay`: Retry delay in seconds (default: 60)
 
-At least one model (image, video, or audio) must be provided.
+Provide exactly one of `--image-model`, `--video-model`, or `--audio-model`. A second model needs a different hotkey.
 
 ## Submission Limits
 
@@ -123,7 +118,6 @@ For the complete list of allowed and blocked imports, see the [Safetensors Model
 
 ### Evaluation
 
-- Models are benchmarked on cloud infrastructure (not miner hardware)
 - Evaluation runs against a diverse dataset of image samples, video samples, and audio samples per benchmark cycle
 - Datasets are refreshed weekly with new GAS-Station data alongside static benchmark datasets
 
@@ -158,7 +152,7 @@ gascli d push --image-model my_detector.zip
 ### What Happens During Push
 
 1. **Model Validation**: The system checks that the zip files are present and valid
-2. **Model Upload**: Your model zip files are uploaded to the cloud inference system
+2. **Model Upload**: Your model zip files are uploaded for evaluation
 3. **Blockchain Registration**: Model metadata is registered on the Bittensor blockchain
 4. **Verification**: The system verifies the registration was successful
 
@@ -175,7 +169,7 @@ Before your model is ever scored on the network, it must pass an **entrance exam
 - Internally this runs `gasbench run --small`, which downloads one archive per dataset and evaluates roughly 100 samples per dataset
 - Your model must achieve **≥ 80% accuracy** averaged across all submitted modalities to pass
 - The exam has a **maximum wall-clock timeout of 1 hour 25 minutes** (5,100 seconds); models that exceed this are treated as failed
-- The exam runs in an **isolated cloud sandbox** — your code has no network access and cannot interact with the host environment
+- The exam runs in an **isolated sandbox** — your code has no network access and cannot interact with the host environment
 - Submissions are statically analyzed and executed in an isolated sandbox; prohibited code or imports result in rejection
 
 **Model status during the exam:**

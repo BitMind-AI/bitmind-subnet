@@ -36,7 +36,6 @@ GAS runs two parallel competition tracks on Bittensor Subnet 34:
 
 **Key facts:**
 - **Three modalities**: Image, video, and audio detection are all scored independently
-- **Cloud-evaluated**: Discriminator models are benchmarked on cloud infrastructure -- no GPU hosting required
 - **Model format**: Safetensors only (ONNX submissions are not accepted)
 - **Datasets refresh weekly** with fresh GAS-Station data alongside static benchmarks
 - **One model per hotkey** for discriminative miners
@@ -71,17 +70,10 @@ gascli validator start
 # Miners: Start or restart generative miner
 gascli generator start
 
-# Miners: Push discriminator models (all three modalities at once)
-gascli d push \
-  --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
+# Miners: Push one discriminator model per hotkey
+gascli d push --image-model image_detector.zip \
   --wallet-name default --wallet-hotkey default
-
-# Or push one model at a time
-gascli d push --image-model image_detector.zip
-gascli d push --video-model video_detector.zip
-gascli d push --audio-model audio_detector.zip
+# Video or audio: use --video-model or --audio-model on a different hotkey
 
 # Miners: Check your benchmark performance (epistula-authenticated)
 gascli d perf --wallet-name default --wallet-hotkey default
@@ -104,12 +96,10 @@ pm2 start validator.config.js
 # Miners: Start or restart generative miner
 pm2 start gen_miner.config.js
 
-# Miners: Push discriminator models
+# Miners: Push one discriminator model per hotkey
 source .venv/bin/activate
 python neurons/discriminator/push_model.py \
   --image-model image_detector.zip \
-  --video-model video_detector.zip \
-  --audio-model audio_detector.zip \
   --wallet-name default --wallet-hotkey default
 ```
 For detailed installation and usage instructions, see [Installation Guide](docs/Installation.md).
@@ -120,7 +110,7 @@ For detailed installation and usage instructions, see [Installation Guide](docs/
 > This documentation assumes basic familiarity with [Bittensor concepts](https://docs.bittensor.com/learn/bittensor-building-blocks). 
 
 #### Discriminative Miners [[docs](docs/Discriminative-Mining.md)]
-Discriminative miners submit detection models for evaluation against a wide variety of real and synthetic media across **image, video, and audio** modalities. Models are evaluated on cloud infrastructure and rewarded based on their accuracy and calibration. This significantly reduces the capital required to mine compared to previous versions that required GPU hosting, and allows the subnet to more reliably identify unique models and reward novel contributions proportionally to their accuracy.
+Discriminative miners submit detection models for evaluation against a wide variety of real and synthetic media across **image, video, and audio** modalities. Models are rewarded based on their accuracy and calibration. This significantly reduces the capital required to mine compared to previous versions that required GPU hosting, and allows the subnet to more reliably identify unique models and reward novel contributions proportionally to their accuracy.
 
 #### Generative Miners [[docs](docs/Generative-Mining.md)]
 
