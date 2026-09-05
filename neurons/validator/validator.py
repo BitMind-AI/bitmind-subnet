@@ -222,7 +222,13 @@ class Validator(BaseNeuron):
                     netuid=self.config.netuid,
                 )
 
-                special_uids = {burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid}
+                # Escrow hotkeys can be unregistered (uid=None). Do not index
+                # numpy with None — that broadcasts and zeros the whole vector.
+                special_uids = {
+                    uid
+                    for uid in (burn_uid, image_escrow_uid, video_escrow_uid, audio_escrow_uid)
+                    if uid is not None
+                }
 
                 # Compute norm excluding specials
                 norm = np.ones_like(self.scores)
@@ -243,10 +249,13 @@ class Validator(BaseNeuron):
                 active_mask = np.array([uid in active_uids_set for uid in range(len(normed_weights))])
                 normed_weights[active_mask] *= generator_pct
 
-                normed_weights[burn_uid]         = burn_pct
-                normed_weights[video_escrow_uid] = video_pct
-                normed_weights[image_escrow_uid] = image_pct
-                normed_weights[audio_escrow_uid] = audio_pct
+                normed_weights[burn_uid] = burn_pct
+                if video_escrow_uid is not None:
+                    normed_weights[video_escrow_uid] = video_pct
+                if image_escrow_uid is not None:
+                    normed_weights[image_escrow_uid] = image_pct
+                if audio_escrow_uid is not None:
+                    normed_weights[audio_escrow_uid] = audio_pct
 
                 # Verify allocations
                 total_weight = np.sum(normed_weights)
