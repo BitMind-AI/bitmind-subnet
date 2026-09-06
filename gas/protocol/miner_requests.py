@@ -279,6 +279,7 @@ def upload_single_modality(
                 "error": extract_error(presigned_result),
                 "response": presigned_result['response'],
                 "already_uploaded": True,
+                "file_hash": file_hash,
             }
         return {
             "success": False,
