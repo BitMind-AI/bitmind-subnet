@@ -1,5 +1,6 @@
 """Build on-chain weights for King-of-the-Hill discriminator lanes."""
 
+from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional
 
 import numpy as np
@@ -14,6 +15,28 @@ KOTH_SPLIT = {
 # Unused slots (no prior distinct king) roll up to the current king.
 KOTH_LANE_RESIDUAL = (0.85, 0.10, 0.05)
 KOTH_CHAIN_ROLES = ("current", "previous", "two_back")
+
+
+def discriminator_emissions_enabled(
+    payload: Optional[dict], now: Optional[datetime] = None
+) -> bool:
+    """Require explicit GAS activation and an elapsed, timezone-aware boundary.
+
+    A cached warm-up response stays disabled after the boundary. GAS must first
+    publish an enabled response; the validator never starts its own timer.
+    """
+    if not isinstance(payload, dict) or payload.get("emissions_enabled") is not True:
+        return False
+    raw_start = payload.get("emissions_start_at")
+    if not isinstance(raw_start, str):
+        return False
+    try:
+        start = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if start.tzinfo is None:
+        return False
+    return start <= (now or datetime.now(timezone.utc))
 
 
 def kings_by_modality(payload: Optional[dict]) -> Dict[str, str]:
@@ -86,6 +109,7 @@ def build_koth_weights(
     burn_uid: Optional[int] = None,
     split: Optional[Dict[str, float]] = None,
     chains: Optional[Dict[str, List[Dict[str, object]]]] = None,
+    emissions_enabled: bool = True,
 ) -> np.ndarray:
     """Return a length-n weight vector. Missing kings go to burn_uid.
 
@@ -93,7 +117,8 @@ def build_koth_weights(
     never used. Each discriminator lane is 85/10/5 across the current king and
     the previous two distinct kings. Unused residual slots roll to the current
     king. An unresolvable current king burns its share; unresolvable previous
-    kings roll to the current king when that UID resolved.
+    kings roll to the current king when that UID resolved. When emissions are
+    disabled, all discriminator lanes burn; generator rewards are unchanged.
     """
     split = dict(KOTH_SPLIT if split is None else split)
     try:
@@ -114,6 +139,9 @@ def build_koth_weights(
     burned = 0.0
     for modality in ("image", "video", "audio"):
         pct = split[modality]
+        if not emissions_enabled:
+            burned += pct
+            continue
         members = list((chains or {}).get(modality) or [])
         if not members:
             hotkey = kings.get(modality)
