@@ -101,7 +101,7 @@ def _print_submission_count(result: dict, modality: str, hotkey: str):
         print_info(f"{count_after}/{submissions_max} {modality} models submitted for {hotkey}")
 
 
-def _accept_already_uploaded(modality: str, result: dict, skip_chain: bool) -> bool:
+def _accept_already_uploaded(modality: str, result: dict) -> bool:
     """Handle a 409 / already-accepted hash. True means this modality is done."""
     if result.get("already_uploaded"):
         print_warning(
@@ -167,7 +167,7 @@ async def push_separate_models(
             results['image'] = image_result
             
             if not image_result['success']:
-                if not _accept_already_uploaded('image', image_result, skip_chain):
+                if not _accept_already_uploaded('image', image_result):
                     return False
             else:
                 print_success("Image model uploaded successfully!")
@@ -191,7 +191,7 @@ async def push_separate_models(
             results['video'] = video_result
             
             if not video_result['success']:
-                if not _accept_already_uploaded('video', video_result, skip_chain):
+                if not _accept_already_uploaded('video', video_result):
                     return False
             else:
                 print_success("Video model uploaded successfully!")
@@ -215,7 +215,7 @@ async def push_separate_models(
             results['audio'] = audio_result
             
             if not audio_result['success']:
-                if not _accept_already_uploaded('audio', audio_result, skip_chain):
+                if not _accept_already_uploaded('audio', audio_result):
                     return False
             else:
                 print_success("Audio model uploaded successfully!")

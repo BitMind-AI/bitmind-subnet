@@ -22,8 +22,7 @@ def test_zero_retries_is_unlimited():
 
 def test_already_uploaded_is_success():
     result = {"already_uploaded": True, "success": False}
-    assert _accept_already_uploaded("image", result, skip_chain=False) is True
-    assert _accept_already_uploaded("image", result, skip_chain=True) is True
+    assert _accept_already_uploaded("image", result) is True
 
 
 def test_chain_registration_failure_does_not_fail_push(monkeypatch, tmp_path):
