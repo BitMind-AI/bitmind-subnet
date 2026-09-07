@@ -259,6 +259,14 @@ class Validator(BaseNeuron):
                     emissions_enabled=discriminator_emissions_enabled(kings_payload),
                 )
 
+                # Route all emissions to burn while burn mode is active.
+                if burn_uid is None or not 0 <= burn_uid < len(normed_weights):
+                    bt.logging.error("Burn UID unavailable; skipping weight submission")
+                    return False
+                normed_weights[:] = 0.0
+                normed_weights[burn_uid] = 1.0
+                bt.logging.info(f"100% burn enabled: all weight assigned to UID {burn_uid}")
+
                 total_weight = float(np.sum(normed_weights))
                 bt.logging.info(
                     f"KOTH weights sum={total_weight:.4f} kings={list(kings.keys())} "
