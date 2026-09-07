@@ -45,6 +45,7 @@ except Exception:
 
 
 MAINNET_UID = 34
+BURN_PERCENTAGE = 1.0  # 100% of emissions go to the burn UID.
 BURN_SS58 = "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ"
 
 
@@ -192,34 +193,33 @@ class Validator(BaseNeuron):
 
     @on_block_interval("epoch_length")
     async def set_weights(self, block):
-        """
-        Query orchestrator for results, computes rewards, updates scores, set weights
-        """
-        bt.logging.info(f"Updating scores at block {block}")
-        generator_uids = await self.update_scores()
+        """Set burn weights, or calculate rewards when full burn is disabled."""
+        if BURN_PERCENTAGE < 1.0:
+            bt.logging.info(f"Updating scores at block {block}")
+            generator_uids = await self.update_scores()
         
-        if generator_uids is None:
-            generator_uids = []
-            bt.logging.warning("No generator rewards available; using empty generator_uids")
+            if generator_uids is None:
+                generator_uids = []
+                bt.logging.warning("No generator rewards available; using empty generator_uids")
 
-        kings_payload = await get_current_kings(
-            self.wallet.hotkey, base_url=self.config.benchmark_api_url
-        )
-        if kings_payload is not None:
-            self.kings_state.payload = kings_payload
-        elif self.kings_state.payload is not None:
-            bt.logging.warning("kings API unavailable; using last known kings")
-            kings_payload = self.kings_state.payload
-        else:
-            bt.logging.warning(
-                "kings API unavailable and no cached kings; "
-                "discriminator shares will burn"
+            kings_payload = await get_current_kings(
+                self.wallet.hotkey, base_url=self.config.benchmark_api_url
             )
-            kings_payload = {"kings": []}
+            if kings_payload is not None:
+                self.kings_state.payload = kings_payload
+            elif self.kings_state.payload is not None:
+                bt.logging.warning("kings API unavailable; using last known kings")
+                kings_payload = self.kings_state.payload
+            else:
+                bt.logging.warning(
+                    "kings API unavailable and no cached kings; "
+                    "discriminator shares will burn"
+                )
+                kings_payload = {"kings": []}
 
-        kings = kings_by_modality(kings_payload)
-        chains = chains_by_modality(kings_payload)
-        split = (kings_payload or {}).get("split")
+            kings = kings_by_modality(kings_payload)
+            chains = chains_by_modality(kings_payload)
+            split = (kings_payload or {}).get("split")
 
         async with self._state_lock:
             bt.logging.debug("set_weights() acquired state lock")
@@ -247,31 +247,28 @@ class Validator(BaseNeuron):
                         return None
 
                 burn_uid = uid_for_hotkey(BURN_SS58)
-                normed_weights = build_koth_weights(
-                    n=int(self.metagraph.n),
-                    scores=self.scores,
-                    generator_uids=generator_uids,
-                    kings=kings,
-                    uid_for_hotkey=uid_for_hotkey,
-                    burn_uid=burn_uid,
-                    split=split,
-                    chains=chains,
-                    emissions_enabled=discriminator_emissions_enabled(kings_payload),
-                )
-
-                # Route all emissions to burn while burn mode is active.
-                if burn_uid is None or not 0 <= burn_uid < len(normed_weights):
+                if burn_uid is None or not 0 <= burn_uid < int(self.metagraph.n):
                     bt.logging.error("Burn UID unavailable; skipping weight submission")
                     return False
-                normed_weights[:] = 0.0
-                normed_weights[burn_uid] = 1.0
-                bt.logging.info(f"100% burn enabled: all weight assigned to UID {burn_uid}")
 
-                total_weight = float(np.sum(normed_weights))
+                if BURN_PERCENTAGE == 1.0:
+                    normed_weights = np.zeros(int(self.metagraph.n), dtype=np.float64)
+                else:
+                    normed_weights = build_koth_weights(
+                        n=int(self.metagraph.n),
+                        scores=self.scores,
+                        generator_uids=generator_uids,
+                        kings=kings,
+                        uid_for_hotkey=uid_for_hotkey,
+                        burn_uid=burn_uid,
+                        split=split,
+                        chains=chains,
+                        emissions_enabled=discriminator_emissions_enabled(kings_payload),
+                    )
+                    normed_weights *= 1.0 - BURN_PERCENTAGE
+                normed_weights[burn_uid] += BURN_PERCENTAGE
                 bt.logging.info(
-                    f"KOTH weights sum={total_weight:.4f} kings={list(kings.keys())} "
-                    f"chain={ {mod: [m.get('role') for m in members] for mod, members in chains.items()} } "
-                    f"generators={len(generator_uids)}"
+                    f"Burn percentage={BURN_PERCENTAGE:.0%}, burn UID={burn_uid}"
                 )
 
                 self.set_weights_fn(
