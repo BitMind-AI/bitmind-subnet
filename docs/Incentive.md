@@ -149,8 +149,6 @@ Current split:
 - Audio lane: 4%
 - Generators: 16%
 
-Validators currently set `BURN_PERCENTAGE` to 80%, so each bucket is paid at one-fifth of those shares (8% image, 8% video, 0.8% audio, 3.2% generators). Empty-lane burns add on top of that 80%.
-
 Each discriminator lane is split **85 / 10 / 5** across the current king and the previous two **distinct** crowned hotkeys. If a lane has no previous king, that residual rolls up to the current king (a first king receives the full lane). An unresolvable current king burns its share; an unresolvable previous king rolls to the current king when that UID is registered.
 
 A challenger takes the crown when it posts an `sn34_score` at least **0.01** higher than the sitting king on the **same** `CURRENT_BENCHMARK_VERSION`. Empty-lane seeding and failed-defense replacement do not use the margin. The same `file_hash` can refresh its stored score without resetting the reign.
