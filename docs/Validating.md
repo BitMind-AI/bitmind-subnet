@@ -4,6 +4,16 @@ Run the SN34 validator (validator + generator + data services). Two ways: **PM2*
 
 Prerequisites: [Installation Guide](Installation.md), Bittensor wallet, GPU for generation.
 
+## GAS API authorization
+
+Before starting, contact the BitMind team with the **public SS58 address of your validator hotkey** and request GAS API whitelist access. Subnet registration alone does not grant access. Use the hotkey selected by `WALLET_NAME` and `WALLET_HOTKEY` in `.env.validator`; those variables name local wallet files, while the whitelist stores the public address.
+
+The team adds the address through a PR to [`Settings.AUTHORIZED_VALIDATORS` in bmcore](https://github.com/BitMind-AI/bmcore/blob/main/src/apps/gas_api/config.py). The change must be merged and the Modal `gas_api` app deployed to production before access takes effect. Request authorization again when switching to a new hotkey.
+
+Authenticated validator requests use Epistula signatures. The current-kings endpoint used for discriminator weight setting also requires the hotkey to be whitelisted. Other endpoints may enforce additional stake or recent gasstation activity requirements; whitelist membership does not bypass those checks.
+
+If requests return `401 Unauthorized validator`, `Not eligible for current kings`, or `Not eligible for escrow addresses`, confirm that the configured hotkey's public address is in the deployed production whitelist. Hugging Face `gasstation` organization access is separate from GAS API authorization.
+
 ---
 
 ## Quick start: PM2
