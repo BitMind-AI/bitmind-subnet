@@ -45,7 +45,7 @@ except Exception:
 
 
 MAINNET_UID = 34
-BURN_PERCENTAGE = 0.80  # 80% of emissions go to the burn UID.
+BURN_PERCENTAGE = 0.0  # Pay the full 40/40/4/16 split.
 BURN_SS58 = "5HjBSeeoz52CLfvDWDkzupqrYLHz1oToDPHjdmJjc4TF68LQ"
 
 
