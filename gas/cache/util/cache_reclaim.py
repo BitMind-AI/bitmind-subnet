@@ -46,8 +46,6 @@ def _log(level: str, msg: str) -> None:
     logger = getattr(bt, "logging", None) if bt is not None else None
     if logger is not None and hasattr(logger, level):
         getattr(logger, level)(msg)
-    else:
-        print(msg, flush=True)
 
 
 def cgroup_memory_limit_bytes() -> Optional[int]:
