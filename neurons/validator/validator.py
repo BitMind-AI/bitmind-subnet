@@ -19,6 +19,7 @@ from gas.koth_weights import (
 )
 from gas.utils.autoupdater import autoupdate
 from gas.cache import ContentManager
+from gas.cache.util.cache_reclaim import start_cache_reclaim
 from gas.utils.metagraph import create_set_weights
 from gas.types import (
     NeuronType,
@@ -100,6 +101,7 @@ class Validator(BaseNeuron):
         self._state_lock = asyncio.Lock()
 
         self.content_manager = ContentManager(self.config.cache.base_dir)
+        start_cache_reclaim(self.config.cache.base_dir)
 
         ## Typesafety
         self.set_weights_fn = create_set_weights(spec_version, self.config.netuid)
