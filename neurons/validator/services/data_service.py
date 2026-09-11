@@ -15,6 +15,7 @@ from bittensor.core.settings import TYPE_REGISTRY
 from bittensor_wallet.utils import SS58_FORMAT
 
 from gas.cache import ContentManager
+from gas.cache.util.cache_reclaim import start_cache_reclaim
 from gas.config import add_args, add_data_service_args, create_config
 from gas.datasets import load_all_datasets
 from gas.datasets.download import download_and_extract
@@ -65,6 +66,7 @@ class DataService:
             remove_on_sample=self.config.remove_on_sample,
             min_source_threshold=self.config.min_source_threshold,
         )
+        start_cache_reclaim(self.config.cache.base_dir)
 
         self.hf_token = os.environ.get("HUGGINGFACE_HUB_TOKEN") or os.environ.get("HUGGING_FACE_TOKEN")
         if not self.hf_token:
