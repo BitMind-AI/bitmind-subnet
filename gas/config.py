@@ -40,6 +40,20 @@ def validate_config_and_neuron_path(config):
     config.neuron.full_path = os.path.expanduser(full_path)
     if not os.path.exists(config.neuron.full_path):
         os.makedirs(config.neuron.full_path, exist_ok=True)
+
+    neuron = getattr(config, "neuron", None)
+    if neuron is not None and hasattr(neuron, "qualified_slots"):
+        slot_total = (
+            int(neuron.qualified_slots)
+            + int(neuron.onboarding_slots)
+            + int(neuron.probe_slots)
+        )
+        sample_size = int(neuron.sample_size)
+        if slot_total != sample_size:
+            raise ValueError(
+                "neuron.qualified_slots + onboarding_slots + probe_slots "
+                f"({slot_total}) must equal neuron.sample_size ({sample_size})"
+            )
     return config
 
 
@@ -292,6 +306,27 @@ def add_validator_args(parser):
         type=int,
         help="Number of miners to query per challenge",
         default=50,
+    )
+
+    parser.add_argument(
+        "--neuron.qualified-slots",
+        type=int,
+        help="Challenge slots reserved for generators over the fool-rate bar in that modality",
+        default=36,
+    )
+
+    parser.add_argument(
+        "--neuron.onboarding-slots",
+        type=int,
+        help="Challenge slots reserved for generators with fewer than min-fool-samples in that modality",
+        default=8,
+    )
+
+    parser.add_argument(
+        "--neuron.probe-slots",
+        type=int,
+        help="Challenge slots reserved for generators under the fool-rate bar (n >= min-fool-samples)",
+        default=6,
     )
 
     parser.add_argument(

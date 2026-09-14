@@ -312,10 +312,16 @@ class Validator(BaseNeuron):
                 video_fool_cutoff=self.config.scoring.video_fool_cutoff,
                 min_fool_samples=self.config.scoring.min_fool_samples,
             )
+            if hasattr(self, "generative_challenge_manager") and self.generative_challenge_manager:
+                self.generative_challenge_manager.set_qualification(
+                    self.generator_qualification, fresh=True
+                )
         else:
             bt.logging.warning(
                 "No generator-results this epoch; using cached qualification for pay"
             )
+            if hasattr(self, "generative_challenge_manager") and self.generative_challenge_manager:
+                self.generative_challenge_manager.set_qualification(None, fresh=False)
 
         # Pay only in modalities that cleared the 7-day fool-rate gate.
         # Image and video contributions are weighted independently via config.
