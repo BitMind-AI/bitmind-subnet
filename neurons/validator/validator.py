@@ -34,8 +34,9 @@ from neurons.base import BaseNeuron
 from gas.evaluation import (
     GenerativeChallengeManager,
     MinerTypeTracker,
+    combine_generator_rewards,
     get_generator_base_rewards,
-    get_generator_fool_bonuses,
+    get_generator_qualification,
 )
 
 try:
@@ -104,6 +105,7 @@ class Validator(BaseNeuron):
         self.set_weights_fn = create_set_weights(spec_version, self.config.netuid)
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
         self.kings_state = _KingsState()
+        self.generator_qualification = {}
         bt.logging.info(f"Initialized scores vector for {len(self.scores)} miners")
 
         if not self.config.wandb_off:
@@ -282,7 +284,7 @@ class Validator(BaseNeuron):
         Update self.scores with exponential moving average of rewards.
         """
         # Verification stats from last 24h (all verified, rewarded or not) for base rewards.
-        # Matches the fool-bonus liveness horizon (max_inactive_hours=24). At the current
+        # Matches the liveness horizon (max_inactive_hours=24). At the current
         # challenge rate a 4h window held only ~2 verified gens per modality per miner,
         # so pass rates and volume were dominated by challenge-scheduling luck.
         verification_stats = self.content_manager.get_verification_stats_last_n_hours(
@@ -301,29 +303,33 @@ class Validator(BaseNeuron):
             generator_liveness = self.generative_challenge_manager.get_all_generator_last_seen()
             if generator_liveness:
                 bt.logging.debug(f"Using liveness data for {len(generator_liveness)} generators")
-        
-        fool_bonuses = get_generator_fool_bonuses(
-            generator_results, 
-            self.metagraph,
-            generator_liveness=generator_liveness,
-            max_inactive_hours=max_inactive_hours,
-        )
-        all_generator_uids = set(generator_base_rewards.keys()) | set(fool_bonuses.keys())
 
-        # Combine per-modality base rewards with fool-rate bonus (1 + bonus).
-        # Base rewards always count; fool rate adds a bonus on top.
+        if generator_results:
+            self.generator_qualification = get_generator_qualification(
+                generator_results,
+                self.metagraph,
+                image_fool_cutoff=self.config.scoring.image_fool_cutoff,
+                video_fool_cutoff=self.config.scoring.video_fool_cutoff,
+                min_fool_samples=self.config.scoring.min_fool_samples,
+            )
+        else:
+            bt.logging.warning(
+                "No generator-results this epoch; using cached qualification for pay"
+            )
+
+        # Pay only in modalities that cleared the 7-day fool-rate gate.
         # Image and video contributions are weighted independently via config.
         image_weight = self.config.scoring.image_weight
         video_weight = self.config.scoring.video_weight
-        rewards = {}
-        for uid in all_generator_uids:
-            base = generator_base_rewards.get(uid, {"image": 0, "video": 0})
-            bonus = fool_bonuses.get(uid, 0.0)
-            rewards[uid] = (
-                image_weight * base["image"] + video_weight * base["video"]
-            ) * (1.0 + bonus)
+        rewards = combine_generator_rewards(
+            generator_base_rewards,
+            self.generator_qualification,
+            image_weight=image_weight,
+            video_weight=video_weight,
+        )
         bt.logging.debug(
-            f"Image weight: {image_weight}, Video weight: {video_weight}"
+            f"Image weight: {image_weight}, Video weight: {video_weight}; "
+            f"{len(rewards)} generators earned R > 0"
         )
 
         if len(rewards) == 0:
@@ -375,7 +381,7 @@ class Validator(BaseNeuron):
             else:
                 bt.logging.warning("Failed to mark media as rewarded")
 
-        return list(all_generator_uids)
+        return list(rewards.keys())
 
     async def log_on_block(self, block):
         """

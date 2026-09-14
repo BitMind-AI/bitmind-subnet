@@ -309,6 +309,27 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--scoring.image-fool-cutoff",
+        type=float,
+        help="Minimum 7-day sample-weighted image fool rate to earn image generator rewards (exclusive)",
+        default=0.02,
+    )
+
+    parser.add_argument(
+        "--scoring.video-fool-cutoff",
+        type=float,
+        help="Minimum 7-day sample-weighted video fool rate to earn video generator rewards (exclusive)",
+        default=0.01,
+    )
+
+    parser.add_argument(
+        "--scoring.min-fool-samples",
+        type=int,
+        help="Minimum benchmark evals (fooled + not_fooled) before a modality can qualify",
+        default=20,
+    )
+
+    parser.add_argument(
         "--benchmark-api-url",
         type=str,
         help="Base URL for the benchmark API",

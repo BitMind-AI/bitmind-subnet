@@ -1,5 +1,5 @@
 import math
-import time
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import bittensor as bt
@@ -446,125 +446,150 @@ def get_generator_base_rewards(verification_stats):
         return {}, []
 
 
-def get_generator_fool_bonuses(
-    generator_results, 
+@dataclass
+class GeneratorQualification:
+    """Per-UID 7-day sample-weighted fool-rate gate for image and video."""
+
+    image_n: int = 0
+    image_fooled: int = 0
+    video_n: int = 0
+    video_fooled: int = 0
+    qualified_image: bool = False
+    qualified_video: bool = False
+
+    @property
+    def image_rate(self) -> Optional[float]:
+        if self.image_n <= 0:
+            return None
+        return self.image_fooled / self.image_n
+
+    @property
+    def video_rate(self) -> Optional[float]:
+        if self.video_n <= 0:
+            return None
+        return self.video_fooled / self.video_n
+
+
+def _as_nonneg_int(value: Any) -> int:
+    try:
+        parsed = int(value) if value is not None else 0
+    except (ValueError, TypeError):
+        return 0
+    return max(0, parsed)
+
+
+def get_generator_qualification(
+    generator_results,
     metagraph,
-    generator_liveness: Optional[Dict[str, float]] = None,
-    max_inactive_hours: int = 24,
-):
+    image_fool_cutoff: float = 0.02,
+    video_fool_cutoff: float = 0.01,
+    min_fool_samples: int = 20,
+) -> Dict[int, GeneratorQualification]:
+    """Qualify generators on last-week sample-weighted fool rate, per modality.
+
+    A modality clears when (fooled + not_fooled) >= min_fool_samples and
+    fooled / n is strictly greater than that modality's cutoff. Counts come
+    from benchmark evals (generator_result_benchmark), not answered challenges.
+    Unknown or unregistered hotkeys are omitted; callers treat missing UIDs
+    as onboarding.
     """
-    Compute fool-rate bonuses for generators.  Returns a bonus in [0, 2] that
-    is applied as (1 + bonus) to base verification rewards, so miners with zero
-    fool rate still receive their base rewards and fooling detectors adds extra.
-
-    Optionally filters out inactive generators based on liveness tracking.
-
-    Args:
-        generator_results: List of GeneratorResult objects from API
-        metagraph: Bittensor metagraph for SS58 to UID mapping
-        generator_liveness: Optional dict mapping hotkey to last activity timestamp.
-                           If provided, generators not seen within max_inactive_hours are excluded.
-        max_inactive_hours: Maximum hours of inactivity (default: 24)
-
-    Returns:
-        dict: Mapping of UID to fool-rate bonus (0.0–2.0)
-    """    
-    rewards = {}
-    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
-
     if not generator_results:
         bt.logging.warning("No generator results data provided")
         return {}
 
-    # Build set of active generators if liveness data provided
-    active_generators = None
-    inactive_count = 0
-    if generator_liveness:
-        current_time = time.time()
-        max_inactive_seconds = max_inactive_hours * 3600
-        active_generators = {
-            hotkey for hotkey, last_seen in generator_liveness.items()
-            if (current_time - last_seen) <= max_inactive_seconds
-        }
-        bt.logging.info(f"Liveness filter: {len(active_generators)} active generators (within {max_inactive_hours}h)")
-
-    # Aggregate fool counts by generator (ss58_address)
-    generator_fooled_counts = {}
-    generator_not_fooled_counts = {}
+    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
+    tallies: Dict[int, Dict[str, int]] = {}
 
     try:
         for result in generator_results:
             if not isinstance(result, dict):
                 bt.logging.warning(f"Invalid result format: {type(result)}")
-                continue                
+                continue
+
             ss58_address = result.get("ss58_address")
             if not ss58_address or ss58_address not in ss58_to_uid:
                 continue
 
-            # Skip inactive generators if liveness filter is enabled
-            if active_generators is not None and ss58_address not in active_generators:
-                inactive_count += 1
-                bt.logging.debug(f"Skipping inactive generator {ss58_address[:16]}...")
+            modality = str(result.get("modality") or "").strip().lower()
+            if modality not in ("image", "video"):
                 continue
 
-            fooled_count = result.get("fooled_count", 0)
-            not_fooled_count = result.get("not_fooled_count", 0)
-            
-            try:
-                fooled_count = int(fooled_count) if fooled_count is not None else 0
-                not_fooled_count = int(not_fooled_count) if not_fooled_count is not None else 0
-            except (ValueError, TypeError):
-                bt.logging.warning(f"Invalid counts for {ss58_address}: fooled={fooled_count}, not_fooled={not_fooled_count}")
-                fooled_count = 0
-                not_fooled_count = 0
+            fooled = _as_nonneg_int(result.get("fooled_count", 0))
+            not_fooled = _as_nonneg_int(result.get("not_fooled_count", 0))
+            uid = ss58_to_uid[ss58_address]
+            row = tallies.setdefault(
+                uid, {"image_fooled": 0, "image_n": 0, "video_fooled": 0, "video_n": 0}
+            )
+            row[f"{modality}_fooled"] += fooled
+            row[f"{modality}_n"] += fooled + not_fooled
 
-            if ss58_address not in generator_fooled_counts:
-                generator_fooled_counts[ss58_address] = 0
-                generator_not_fooled_counts[ss58_address] = 0
+        qualifications: Dict[int, GeneratorQualification] = {}
+        n_image = n_video = 0
+        for uid, row in tallies.items():
+            image_n = row["image_n"]
+            video_n = row["video_n"]
+            image_fooled = row["image_fooled"]
+            video_fooled = row["video_fooled"]
+            image_rate = (image_fooled / image_n) if image_n else None
+            video_rate = (video_fooled / video_n) if video_n else None
+            qualified_image = (
+                image_n >= min_fool_samples
+                and image_rate is not None
+                and image_rate > image_fool_cutoff
+            )
+            qualified_video = (
+                video_n >= min_fool_samples
+                and video_rate is not None
+                and video_rate > video_fool_cutoff
+            )
+            qualifications[uid] = GeneratorQualification(
+                image_n=image_n,
+                image_fooled=image_fooled,
+                video_n=video_n,
+                video_fooled=video_fooled,
+                qualified_image=qualified_image,
+                qualified_video=qualified_video,
+            )
+            n_image += int(qualified_image)
+            n_video += int(qualified_video)
 
-            generator_fooled_counts[ss58_address] += fooled_count
-            generator_not_fooled_counts[ss58_address] += not_fooled_count
-
-        # Calculate fool rate for each generator from accumulated counts with sample size bonus
-        for ss58_address in generator_fooled_counts:
-            if ss58_address in ss58_to_uid:
-                uid = ss58_to_uid[ss58_address]
-                total_fooled = generator_fooled_counts[ss58_address]
-                total_not_fooled = generator_not_fooled_counts[ss58_address]
-                total_count = total_fooled + total_not_fooled
-
-                if total_count > 0:
-                    # Base fool rate
-                    fool_rate = total_fooled / total_count
-
-                    # Sample size multiplier: rewards higher sample sizes
-                    # Uses logarithmic scaling to provide diminishing returns
-                    # Reference count of 20 gives multiplier of 1.0, higher counts get bonus
-                    reference_count = 20
-                    max_multiplier = 2.0  # Cap the maximum multiplier
-
-                    if total_count >= reference_count:
-                        sample_size_multiplier = min(max_multiplier, 1.0 + math.log(total_count / reference_count))
-                    else:
-                        # Penalize very small sample sizes
-                        sample_size_multiplier = max(0.5, total_count / reference_count)
-
-                    # Fool-rate bonus — added on top of base rewards as (1 + bonus)
-                    fool_bonus = fool_rate * sample_size_multiplier
-                    rewards[uid] = max(0.0, min(2.0, fool_bonus))
-
-                    bt.logging.debug(f"Generator {ss58_address[:8]}... UID {uid}: fool_rate={fool_rate:.3f}, "
-                                   f"sample_size={total_count}, sample_size_multiplier={sample_size_multiplier:.3f}, "
-                                   f"fool_bonus={rewards[uid]:.3f}")
-                else:
-                    bt.logging.warning(f"Zero total count for generator {ss58_address}")
-
-        inactive_msg = f", skipped {inactive_count} inactive" if inactive_count > 0 else ""
-        bt.logging.info(f"Processed {len(generator_results)} generator results, computed rewards for {len(rewards)} generators{inactive_msg}")
-
+        bt.logging.info(
+            f"Qualified {n_image} image and {n_video} video generators "
+            f"from {len(generator_results)} result rows "
+            f"(cutoffs image>{image_fool_cutoff:.3f} video>{video_fool_cutoff:.3f}, "
+            f"n>={min_fool_samples})"
+        )
+        return qualifications
     except Exception as e:
-        bt.logging.error(f"Error processing generator rewards: {e}")
+        bt.logging.error(f"Error processing generator qualification: {e}")
         import traceback
-        bt.logging.error(traceback.format_exc())
 
+        bt.logging.error(traceback.format_exc())
+        return {}
+
+
+def combine_generator_rewards(
+    base_rewards: Dict[int, Dict[str, float]],
+    qualification: Dict[int, GeneratorQualification],
+    image_weight: float = 0.30,
+    video_weight: float = 0.70,
+) -> Dict[int, float]:
+    """Pay only in modalities that cleared the fool-rate gate.
+
+    R = 0.30 * R_image * I_image + 0.70 * R_video * I_video
+    I_* is 1 if that modality is qualified, else 0. UIDs with R == 0 are omitted
+    so they do not share the generator pot.
+    """
+    rewards: Dict[int, float] = {}
+    for uid, base in base_rewards.items():
+        q = qualification.get(uid)
+        image_term = float(base.get("image", 0.0) or 0.0)
+        video_term = float(base.get("video", 0.0) or 0.0)
+        if q is None or not q.qualified_image:
+            image_term = 0.0
+        if q is None or not q.qualified_video:
+            video_term = 0.0
+        reward = image_weight * image_term + video_weight * video_term
+        if reward > 0:
+            rewards[int(uid)] = reward
     return rewards
