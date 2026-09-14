@@ -4,7 +4,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from gas.evaluation.rewards import GeneratorQualification
+from .rewards import GeneratorQualification
 
 Bucket = str  # "qualified" | "onboarding" | "probe"
 
