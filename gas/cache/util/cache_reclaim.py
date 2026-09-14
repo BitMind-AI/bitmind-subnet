@@ -23,7 +23,8 @@ try:
 except Exception:  # pragma: no cover
     bt = None
 
-_POLL_SECONDS = 1.0
+_POLL_SECONDS = 0.5
+_REPO_ENV = Path(__file__).resolve().parents[3] / ".env.validator"
 _POSIX_FADV_DONTNEED = 4
 _MODEL_SUFFIXES = (
     ".safetensors",
@@ -78,7 +79,7 @@ def cache_reclaim_enabled() -> bool:
     try:
         from dotenv import load_dotenv
 
-        load_dotenv(".env.validator")
+        load_dotenv(_REPO_ENV)
     except Exception:
         pass
     flag = os.environ.get("SN34_CACHE_RECLAIM", "0").strip().lower()
@@ -100,6 +101,14 @@ def _advise_dontneed(path: str) -> bool:
 def _is_model_weight(path: str) -> bool:
     lower = path.lower()
     return any(lower.endswith(suffix) for suffix in _MODEL_SUFFIXES)
+
+
+def _keep_resident(path: str) -> bool:
+    """Leave loaded HF model shards in cache; evict SN34 media and datasets."""
+    normalized = path.replace("\\", "/")
+    if "/huggingface/" not in normalized and "/hub/" not in normalized:
+        return False
+    return _is_model_weight(path)
 
 
 def _watch_prefixes(cache_dir: Optional[str]) -> tuple[str, ...]:
@@ -144,20 +153,13 @@ def _reclaim_loop(prefixes: tuple[str, ...]) -> None:
     while True:
         current = _open_watched_files(prefixes)
         for path in prev - current:
-            _advise_dontneed(path)
-        # Under pressure, also drop open media (not in-use model weights).
-        limit = cgroup_memory_limit_bytes()
-        if limit is not None:
-            try:
-                usage = int(
-                    Path("/sys/fs/cgroup/memory/memory.usage_in_bytes").read_text()
-                )
-            except (OSError, ValueError):
-                usage = 0
-            if usage >= 0.7 * limit:
-                for path in current:
-                    if not _is_model_weight(path):
-                        _advise_dontneed(path)
+            if not _keep_resident(path):
+                _advise_dontneed(path)
+        # Drop open media/dataset pages every tick. Waiting until 70% of a
+        # 109 GiB cgroup is too late: videos stay open for the whole decode.
+        for path in current:
+            if not _keep_resident(path):
+                _advise_dontneed(path)
         prev = current
         time.sleep(_POLL_SECONDS)
 
