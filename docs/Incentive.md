@@ -59,51 +59,47 @@ The following models are run by validators to produce a continual, fresh stream 
 
 ## Generator Rewards
 
-The generator incentive mechanism combines two components: a base reward for passing data validation checks, and a multiplier based on adversarial performance against discriminators.
+The 16% generator pot is split among UIDs with $R > 0$ this tempo (`score_i / \sum score`). A miner earns only in modalities that clear a 7-day fool-rate gate. There is no fool-rate bonus on top of base rewards.
 
-### Base Reward (Data Validation)
+### Base reward (per modality)
 
-Generators receive a base reward based on their data verification pass rate:
+Over the last 24 hours of verified submissions on this validator:
 
-$$R_{\text{base}} = p \cdot \min(n, 10)$$
+$$R_{\text{image}} = p_{\text{image}} \cdot v(n_{\text{image}}) \cdot m_{\text{image}}$$
 
-Where:
-- $p$ = pass rate (proportion of generated content that passes validation)
-- $n$ = number of verified samples (`min(n, 10)` creates a rampup of incentive for the first 10 samples)
+and likewise for video. $p$ is the verification pass rate. Volume $v(n)$ ramps linearly through the first 10 verified samples, then $\log_2$. $m$ is the mean $\sqrt{\text{price}/\text{baseline}}$ model (and resolution-tier) multiplier; see [Model Pricing](Generative-Mining.md#model-pricing-and-rewards).
 
-### Fool Rate Multiplier (Adversarial Performance)
+### Qualification gate
 
-Generators earn additional rewards by successfully fooling discriminators. The multiplier is calculated as:
+Fool rate is sample-weighted over the last 7 days of **benchmark evals** (`fooled + not_fooled` from `generator_result_benchmark`), not challenges answered. A modality qualifies when $n \ge 20$ and the rate is strictly above the cutoff:
 
-$$M = \max(0, \min(2.0, f \cdot s))$$
+- Image: fool rate $> 2\%$
+- Video: fool rate $> 1\%$
 
-Where:
-- $f$ = fool rate = $\frac{N_{\text{fooled}}}{N_{\text{fooled}} + N_{\text{not fooled}}}$
-- $s$ = sample size multiplier
+A miner can qualify in one modality, both, or neither. Pay only in the cleared modality:
 
-The sample size multiplier encourages generators to be evaluated on more samples, similar to the sample size ramp used in the base reward.
+$$R = 0.30 \cdot R_{\text{image}} \cdot I_{\text{image}} + 0.70 \cdot R_{\text{video}} \cdot I_{\text{video}}$$
 
-$$s = \begin{cases}
-\max(0.5, \frac{c}{20}) & \text{if } c < 20 \\
-\min(2.0, 1.0 + \ln(\frac{c}{20})) & \text{if } c \geq 20
-\end{cases}$$
+$I=1$ if that modality is qualified, else $0$. If both are $0$, the miner gets none of the 16%. Scores are still zeroed after 24 hours of inactivity.
 
-Where:
-- $c$ = total evaluation count (fooled + not fooled)
-- Reference count of 20 gives multiplier of 1.0
-- Sample sizes below 20 are penalized
-- Sample sizes above 20 receive logarithmic bonus up to 2.0x
+If the generator-results API is down, validators keep the last successful qualification map for pay so a transient outage does not burn the pot.
 
-### Final Generator Reward
+### Challenge slots
 
-The total generator reward combines both components:
+Each validator still sends `--neuron.sample-size` (default 50) requests per round — one UID, one modality, no replacement. Slots are filled from three buckets **for the chosen modality**:
 
-$$R_{\text{total}} = R_{\text{base}} \cdot M$$
+| Bucket | Who | Default slots |
+|---|---|---|
+| Qualified | Over the bar for that modality | 36 |
+| Onboarding | $n < 20$ or no fool-rate row | 8 |
+| Probe | $n \ge 20$ but under the bar | 6 |
+
+Onboarding and probe miners still receive prompts; they do not earn until they clear. If the onboarding set is empty, the unused 8 slots split 4+4 (40 qualified / 10 probe). Leftover slots overflow qualified → probe → qualified, then any remaining live generator, so the round never goes out under-filled when miners exist. A missing or stale generator-results cache treats everyone as onboarding so sampling does not freeze on the last qualified set.
 
 This design incentivizes generators to:
-1. Produce high-quality, valid content (base reward)
-2. Create adversarially robust content that can fool discriminators (multiplier)
-3. Participate in more evaluations for sample size bonuses
+1. Produce valid, C2PA-signed content (base reward)
+2. Clear the fool-rate bar instead of farming extra UIDs (qualification)
+3. Use models whose price and quality justify the 30/70 image/video split
 
 
 
