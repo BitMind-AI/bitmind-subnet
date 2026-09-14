@@ -82,7 +82,7 @@ $$R = 0.30 \cdot R_{\text{image}} \cdot I_{\text{image}} + 0.70 \cdot R_{\text{v
 
 $I=1$ if that modality is qualified, else $0$. If both are $0$, the miner gets none of the 16%. Scores are still zeroed after 24 hours of inactivity.
 
-If the generator-results API is down, validators keep the last successful qualification map for pay so a transient outage does not burn the pot.
+If the generator-results API is down or the payload has no usable rows, validators keep the last successful qualification map for pay so a transient outage does not burn the pot.
 
 ### Challenge slots
 

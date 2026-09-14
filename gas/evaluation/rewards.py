@@ -484,7 +484,7 @@ def get_generator_qualification(
     image_fool_cutoff: float = 0.02,
     video_fool_cutoff: float = 0.01,
     min_fool_samples: int = 20,
-) -> Dict[int, GeneratorQualification]:
+) -> Optional[Dict[int, GeneratorQualification]]:
     """Qualify generators on last-week sample-weighted fool rate, per modality.
 
     A modality clears when (fooled + not_fooled) >= min_fool_samples and
@@ -492,10 +492,14 @@ def get_generator_qualification(
     from benchmark evals (generator_result_benchmark), not answered challenges.
     Unknown or unregistered hotkeys are omitted; callers treat missing UIDs
     as onboarding.
+
+    Returns None when the payload is missing, unusable, or fails to parse so
+    callers can keep the last good map instead of treating that as "nobody
+    qualified."
     """
-    if not generator_results:
+    if not generator_results or not isinstance(generator_results, list):
         bt.logging.warning("No generator results data provided")
-        return {}
+        return None
 
     ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
     tallies: Dict[int, Dict[str, int]] = {}
@@ -522,6 +526,13 @@ def get_generator_qualification(
             )
             row[f"{modality}_fooled"] += fooled
             row[f"{modality}_n"] += fooled + not_fooled
+
+        if not tallies:
+            bt.logging.warning(
+                "No usable generator-result rows for registered hotkeys; "
+                "keeping prior qualification"
+            )
+            return None
 
         qualifications: Dict[int, GeneratorQualification] = {}
         n_image = n_video = 0
@@ -565,7 +576,7 @@ def get_generator_qualification(
         import traceback
 
         bt.logging.error(traceback.format_exc())
-        return {}
+        return None
 
 
 def combine_generator_rewards(

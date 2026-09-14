@@ -304,21 +304,22 @@ class Validator(BaseNeuron):
             if generator_liveness:
                 bt.logging.debug(f"Using liveness data for {len(generator_liveness)} generators")
 
-        if generator_results:
-            self.generator_qualification = get_generator_qualification(
-                generator_results,
-                self.metagraph,
-                image_fool_cutoff=self.config.scoring.image_fool_cutoff,
-                video_fool_cutoff=self.config.scoring.video_fool_cutoff,
-                min_fool_samples=self.config.scoring.min_fool_samples,
-            )
+        parsed_qualification = get_generator_qualification(
+            generator_results,
+            self.metagraph,
+            image_fool_cutoff=self.config.scoring.image_fool_cutoff,
+            video_fool_cutoff=self.config.scoring.video_fool_cutoff,
+            min_fool_samples=self.config.scoring.min_fool_samples,
+        )
+        if parsed_qualification is not None:
+            self.generator_qualification = parsed_qualification
             if hasattr(self, "generative_challenge_manager") and self.generative_challenge_manager:
                 self.generative_challenge_manager.set_qualification(
-                    self.generator_qualification, fresh=True
+                    parsed_qualification, fresh=True
                 )
         else:
             bt.logging.warning(
-                "No generator-results this epoch; using cached qualification for pay"
+                "Unusable generator-results this epoch; using cached qualification for pay"
             )
             if hasattr(self, "generative_challenge_manager") and self.generative_challenge_manager:
                 self.generative_challenge_manager.set_qualification(None, fresh=False)

@@ -79,11 +79,23 @@ def test_skips_unknown_hotkeys_and_modalities():
     assert q[0].video_n == 0
 
 
-def test_empty_or_invalid_results_return_empty():
-    assert get_generator_qualification([], _metagraph("5A")) == {}
-    assert get_generator_qualification(None, _metagraph("5A")) == {}
-    q = get_generator_qualification(["not-a-dict"], _metagraph("5A"))
-    assert q == {}
+def test_empty_or_invalid_results_return_none():
+    assert get_generator_qualification([], _metagraph("5A")) is None
+    assert get_generator_qualification(None, _metagraph("5A")) is None
+    assert get_generator_qualification({"data": []}, _metagraph("5A")) is None
+    assert get_generator_qualification(["not-a-dict"], _metagraph("5A")) is None
+    assert get_generator_qualification(
+        [_row("5Unknown", "image", 10, 10)], _metagraph("5A")
+    ) is None
+
+
+def test_all_unqualified_rows_still_replace_cache():
+    q = get_generator_qualification(
+        [_row("5A", "image", 0, 50)], _metagraph("5A")
+    )
+    assert q is not None
+    assert q[0].qualified_image is False
+    assert q[0].image_n == 50
 
 
 def test_combine_pays_only_cleared_modality():
