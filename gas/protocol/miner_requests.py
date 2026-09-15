@@ -285,6 +285,7 @@ def upload_single_modality(
             BurnEvidence,
             clear_burn_receipt,
             is_credit_used,
+            is_duplicate_upload,
             is_submission_limit,
             load_burn_receipt,
             save_burn_receipt,
@@ -332,12 +333,9 @@ def upload_single_modality(
                     if not presigned_result['success']:
                         print("FAILED")
         if not presigned_result['success']:
-            # 409 duplicate-hash means this file is already in R2.
-            # A used burn credit is a different 409 and needs a new burn, not skip.
-            if (
-                presigned_result.get('status_code') == 409
-                and not is_credit_used(presigned_result)
-            ):
+            # Registration, reservation, and burn-credit conflicts also use
+            # 409. Only an explicit duplicate-file response can skip upload.
+            if is_duplicate_upload(presigned_result):
                 return {
                     "success": False,
                     "modality": modality,

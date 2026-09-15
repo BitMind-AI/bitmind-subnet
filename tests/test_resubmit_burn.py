@@ -11,6 +11,7 @@ from gas.protocol.resubmit_burn import (
     evidence_from_response,
     execute_resubmit_burn,
     is_credit_used,
+    is_duplicate_upload,
     is_submission_limit,
     load_burn_receipt,
     min_alpha_rao_for_fee,
@@ -38,6 +39,62 @@ def test_detects_free_slot_used():
         {"status_code": 403, "response": {"detail": "Hotkey is not registered"}}
     )
     assert not is_submission_limit({"status_code": 409, "response": {"detail": "already used"}})
+
+
+@pytest.mark.parametrize("status,detail,duplicate", [
+    (409, "File with this hash already exists", True),
+    (400, "File with this hash already exists", False),
+    (409, "This burn already belongs to another registration", False),
+    (409, "This burn does not match the current registration", False),
+    (409, "This burn has already been used", False),
+    (409, "Registration changed; please retry with a fresh registration lookup", False),
+    (409, "A submission is already in progress for this registration", False),
+    (409, "Upload reservation expired; please retry", False),
+    (409, "Unrecognized conflict", False),
+    (409, "", False),
+])
+def test_only_explicit_duplicate_response_can_skip_upload(status, detail, duplicate):
+    assert is_duplicate_upload({"status_code": status, "response": {"detail": detail}}) is duplicate
+
+
+@pytest.mark.parametrize("saved_receipt", [False, True])
+@pytest.mark.parametrize("detail,duplicate", [
+    ("File with this hash already exists", True),
+    ("This burn already belongs to another registration", False),
+    ("This burn does not match the current registration", False),
+    ("Registration changed; please retry with a fresh registration lookup", False),
+    ("A submission is already in progress for this registration", False),
+    ("Upload reservation expired; please retry", False),
+    ("Unrecognized conflict", False),
+])
+def test_upload_conflicts_fail_closed_before_or_after_receipt_retry(
+    tmp_path, monkeypatch, saved_receipt, detail, duplicate,
+):
+    monkeypatch.setenv("GAS_HOME", str(tmp_path))
+    model = tmp_path / "model.zip"
+    model.write_bytes(b"zip")
+    evidence = BurnEvidence(tx_hash="a" * 64, block_number=123)
+    responses = []
+    if saved_receipt:
+        save_burn_receipt("5Miner", 34, evidence)
+        responses.append({
+            "success": False, "status_code": 403,
+            "response": {"detail": "This registration has already used its free submission"},
+        })
+    responses.append({"success": False, "status_code": 409, "response": {"detail": detail}})
+    iterator = iter(responses)
+    monkeypatch.setattr("gas.protocol.miner_requests.generate_presigned_url", lambda *a, **kw: next(iterator))
+    monkeypatch.setattr("gas.protocol.miner_requests.upload_to_r2", lambda *a, **kw: pytest.fail("must not upload"))
+    monkeypatch.setattr("gas.protocol.miner_requests.confirm_upload", lambda *a, **kw: pytest.fail("must not confirm"))
+    wallet = SimpleNamespace(hotkey=SimpleNamespace(ss58_address="5Miner"))
+    result = upload_single_modality(
+        wallet, str(model), "image", "https://upload.example/upload",
+        resubmit=lambda: pytest.fail("conflict must not trigger another burn"),
+    )
+    assert result["success"] is False
+    assert result.get("already_uploaded", False) is duplicate
+    assert result["error"] == f"HTTP 409: {detail}"
+    assert load_burn_receipt("5Miner", 34) == (evidence if saved_receipt else None)
 
 
 def test_alpha_amount_includes_price_slack():
