@@ -237,6 +237,20 @@ def confirm_upload(wallet: bt.Wallet, upload_endpoint: str, model_id: int, file_
 
 
 def upload_single_modality(
+    wallet, file_path: str, modality: str, upload_endpoint: str,
+    vertical: str = "general", resubmit=None, netuid: int = 34, chain_endpoint=None,
+) -> dict:
+    from gas.protocol.burn_journal import burn_lock
+    from gas.protocol.resubmit_burn import recover_saved_burn
+
+    with burn_lock(wallet.hotkey.ss58_address, netuid):
+        recover_saved_burn(wallet, netuid, chain_endpoint)
+        return _upload_single_modality(
+            wallet, file_path, modality, upload_endpoint, vertical, resubmit, netuid,
+        )
+
+
+def _upload_single_modality(
     wallet: bt.Wallet,
     file_path: str,
     modality: str,

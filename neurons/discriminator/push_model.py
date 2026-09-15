@@ -25,6 +25,7 @@ import os
 import sys
 import traceback
 import time
+from pathlib import Path
 from typing import Optional
 
 import bittensor as bt
@@ -50,7 +51,7 @@ except ImportError:
 
 from gas.types import DiscriminatorModelId as ModelId
 from gas.utils.chain_model_metadata_store import ChainModelMetadataStore
-from gas.protocol.miner_requests import upload_single_modality
+from gas.protocol.miner_requests import upload_single_modality, calculate_file_sha256
 
 
 MODEL_UPLOAD_ENDPOINT = "https://upload.bitmind.ai/upload"
@@ -147,11 +148,15 @@ async def push_separate_models(
 
     endpoint = upload_endpoint or MODEL_UPLOAD_ENDPOINT
 
-    def resubmit():
+    def resubmit(modality, model_path):
         from gas.protocol.resubmit_burn import ResubmitBurnError, offer_resubmit_burn
 
         try:
-            return offer_resubmit_burn(wallet, netuid, chain_endpoint)
+            return offer_resubmit_burn(
+                wallet, netuid, chain_endpoint,
+                submission={"modality": modality, "file_hash": calculate_file_sha256(Path(model_path)),
+                            "vertical": vertical, "upload_endpoint": endpoint},
+            )
         except ResubmitBurnError as exc:
             print_error(str(exc))
             return None
@@ -173,8 +178,9 @@ async def push_separate_models(
                 'image',
                 endpoint,
                 vertical=vertical,
-                resubmit=resubmit,
+                resubmit=lambda: resubmit('image', image_model_path),
                 netuid=netuid,
+                chain_endpoint=chain_endpoint,
             )
             results['image'] = image_result
             
@@ -199,8 +205,9 @@ async def push_separate_models(
                 'video',
                 endpoint,
                 vertical=vertical,
-                resubmit=resubmit,
+                resubmit=lambda: resubmit('video', video_model_path),
                 netuid=netuid,
+                chain_endpoint=chain_endpoint,
             )
             results['video'] = video_result
             
@@ -225,8 +232,9 @@ async def push_separate_models(
                 'audio',
                 endpoint,
                 vertical=vertical,
-                resubmit=resubmit,
+                resubmit=lambda: resubmit('audio', audio_model_path),
                 netuid=netuid,
+                chain_endpoint=chain_endpoint,
             )
             results['audio'] = audio_result
             

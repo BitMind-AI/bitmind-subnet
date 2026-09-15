@@ -144,13 +144,16 @@ def test_receipt_round_trip(tmp_path, monkeypatch):
 def test_low_alpha_uses_add_stake_burn(tmp_path, monkeypatch):
     monkeypatch.setenv("GAS_HOME", str(tmp_path))
     monkeypatch.setattr("gas.protocol.resubmit_burn.sys.stdin.isatty", lambda: True)
-    burned = SimpleNamespace(
-        success=True,
-        extrinsic_receipt=SimpleNamespace(
-            extrinsic_hash="0x" + "ab" * 32, block_number=88
-        ),
-    )
     calls = []
+    evidence_expected = BurnEvidence(tx_hash="ab" * 32, block_number=88)
+
+    def submit(sub, wallet, netuid, call, amount, kind, submission):
+        assert kind == "add_stake_burn"
+        assert amount == 500_000_000
+        save_burn_receipt("5Hot", netuid, evidence_expected)
+        return evidence_expected
+
+    monkeypatch.setattr("gas.protocol.resubmit_burn._submit_durable_burn", submit)
 
     class Subtensor:
         def get_subnet_price(self, netuid):
@@ -162,12 +165,11 @@ def test_low_alpha_uses_add_stake_burn(tmp_path, monkeypatch):
         def get_balance(self, coldkey):
             return SimpleNamespace(tao=2.0)
 
-        def add_stake_burn(self, wallet, netuid, hotkey, amount, **kwargs):
-            calls.append((netuid, hotkey, amount))
-            return burned
-
-        def compose_call(self, *args, **kwargs):
-            raise AssertionError("should use add_stake_burn, not burn_alpha")
+        def compose_call(self, module, function, params):
+            assert module == "SubtensorModule"
+            assert function == "add_stake_burn"
+            calls.append(params)
+            return "call"
 
     wallet = SimpleNamespace(
         hotkey=SimpleNamespace(ss58_address="5Hot"),
@@ -180,22 +182,18 @@ def test_low_alpha_uses_add_stake_burn(tmp_path, monkeypatch):
         confirm_fn=lambda prompt: "y",
     )
     assert evidence.block_number == 88
-    assert calls[0][0] == 34
-    assert calls[0][1] == "5Hot"
-    assert calls[0][2].tao == 0.5
+    assert calls == [{"netuid": 34, "hotkey": "5Hot", "amount": 500_000_000, "limit": None}]
     assert load_burn_receipt("5Hot", 34) == evidence
 
 
 def test_exact_fee_alpha_burns_without_slack_padding(tmp_path, monkeypatch):
     monkeypatch.setenv("GAS_HOME", str(tmp_path))
     monkeypatch.setattr("gas.protocol.resubmit_burn.sys.stdin.isatty", lambda: True)
-    burned = SimpleNamespace(
-        success=True,
-        extrinsic_receipt=SimpleNamespace(
-            extrinsic_hash="0x" + "cd" * 32, block_number=12
-        ),
-    )
     amounts = []
+    monkeypatch.setattr(
+        "gas.protocol.resubmit_burn._submit_durable_burn",
+        lambda *a: BurnEvidence(tx_hash="cd" * 32, block_number=12),
+    )
 
     class Subtensor:
         def get_subnet_price(self, netuid):
@@ -210,9 +208,6 @@ def test_exact_fee_alpha_burns_without_slack_padding(tmp_path, monkeypatch):
         def compose_call(self, module, function, params):
             amounts.append(params["amount"])
             return "call"
-
-        def sign_and_send_extrinsic(self, call, wallet, **kwargs):
-            return burned
 
         def add_stake_burn(self, *args, **kwargs):
             raise AssertionError("should burn_alpha, not add_stake_burn")
