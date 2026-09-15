@@ -82,7 +82,7 @@ $$R = 0.30 \cdot R_{\text{image}} \cdot I_{\text{image}} + 0.70 \cdot R_{\text{v
 
 $I=1$ if that modality is qualified, else $0$. If both are $0$, the miner gets none of the 16%. Scores are still zeroed after 24 hours of inactivity.
 
-If the generator-results API is down or the payload has no usable rows, validators keep the last successful qualification map for pay so a transient outage does not burn the pot.
+If the generator-results API is down or the payload has no usable rows, validators keep the last successful qualification map for pay so a transient outage does not burn the pot. This map is saved alongside modality EMA histories and restored after a restart. Restored qualification is payout fallback only: challenge sampling remains all-onboarding until a successful API fetch. Older snapshots without a qualification map need one successful fetch before this fallback is available.
 
 Qualification is cached by hotkey and resolved against current UID registrations for rewards and challenge sampling. A replacement hotkey cannot inherit the previous owner's eligibility at the same UID.
 
