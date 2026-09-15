@@ -58,6 +58,14 @@ def is_credit_used(result: dict) -> bool:
     return "already been used" in _detail_text(result).lower()
 
 
+def is_duplicate_upload(result: dict) -> bool:
+    """Only the API's explicit duplicate-file response permits skipping upload."""
+    return (
+        result.get("status_code") == 409
+        and _detail_text(result).strip().lower() == "file with this hash already exists"
+    )
+
+
 def receipt_dir() -> Path:
     root = os.environ.get("GAS_HOME") or str(Path.home() / ".gas")
     return Path(root) / "resubmit_burns"
