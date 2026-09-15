@@ -303,16 +303,17 @@ def upload_single_modality(
                     evidence.block_number,
                     label="Requesting presigned URL with saved burn credit",
                 )
-                if presigned_result['success']:
-                    clear_burn_receipt(hotkey, netuid)
-                else:
+                if not presigned_result['success']:
                     print("FAILED")
                     if is_credit_used(presigned_result):
                         clear_burn_receipt(hotkey, netuid)
             if (
                 not presigned_result['success']
-                and is_submission_limit(presigned_result)
                 and resubmit is not None
+                and (
+                    is_submission_limit(presigned_result)
+                    or is_credit_used(presigned_result)
+                )
             ):
                 evidence = resubmit()
                 tx_hash = getattr(evidence, "tx_hash", None) if evidence is not None else None
@@ -328,14 +329,15 @@ def upload_single_modality(
                         block_number,
                         label="Requesting presigned URL with burn credit",
                     )
-                    if presigned_result['success']:
-                        clear_burn_receipt(hotkey, netuid)
-                    else:
+                    if not presigned_result['success']:
                         print("FAILED")
         if not presigned_result['success']:
-            # 409 means this hash was already accepted — the file is already in R2.
-            # Return a soft error so the caller can decide whether to skip or abort.
-            if presigned_result.get('status_code') == 409:
+            # 409 duplicate-hash means this file is already in R2.
+            # A used burn credit is a different 409 and needs a new burn, not skip.
+            if (
+                presigned_result.get('status_code') == 409
+                and not is_credit_used(presigned_result)
+            ):
                 return {
                     "success": False,
                     "modality": modality,
@@ -396,6 +398,9 @@ def upload_single_modality(
             "response": confirm_result['response']
         }
     print("done")
+    from gas.protocol.resubmit_burn import clear_burn_receipt
+
+    clear_burn_receipt(wallet.hotkey.ss58_address, netuid)
 
     return {
         "success": True,

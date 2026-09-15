@@ -96,6 +96,12 @@ def clear_burn_receipt(hotkey: str, netuid: int) -> None:
         pass
 
 
+def min_alpha_rao_for_fee(tao_per_alpha: float) -> int:
+    if tao_per_alpha <= 0:
+        raise ResubmitBurnError("Could not read the SN34 alpha price")
+    return int((RESUBMIT_FEE_TAO / tao_per_alpha) * RAO)
+
+
 def alpha_rao_for_fee(tao_per_alpha: float) -> int:
     if tao_per_alpha <= 0:
         raise ResubmitBurnError("Could not read the SN34 alpha price")
@@ -178,6 +184,7 @@ def execute_resubmit_burn(
     sub = subtensor or bt.Subtensor(network=network)
     price = sub.get_subnet_price(netuid)
     tao_per_alpha = float(getattr(price, "tao", 0) or 0)
+    min_rao = min_alpha_rao_for_fee(tao_per_alpha)
     amount_rao = alpha_rao_for_fee(tao_per_alpha)
     amount_alpha = amount_rao / RAO
     hotkey = wallet.hotkey.ss58_address
@@ -189,7 +196,8 @@ def execute_resubmit_burn(
         f"(~{amount_alpha:.4f} α at the current pool price)."
     )
     print(f"  Alpha staked to this hotkey: {stake_rao / RAO:.4f} α")
-    if stake_rao >= amount_rao:
+    if stake_rao >= min_rao:
+        amount_rao = min(stake_rao, amount_rao)
         if not _confirm(
             "  Burn that alpha now? This cannot be undone. [y/N] ",
             confirm_fn,
