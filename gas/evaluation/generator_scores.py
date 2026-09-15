@@ -2,6 +2,7 @@
 
 import json
 import math
+from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Dict, Optional, Sequence
 
@@ -9,10 +10,11 @@ from .rewards import GeneratorQualification
 
 
 class GeneratorScoreState:
-    """Persist unweighted image/video EMAs; never seed from legacy scalar scores."""
+    """Persist modality EMAs and their hotkey qualification fallback together."""
 
     def __init__(self):
         self.by_hotkey: Dict[str, Dict[str, float]] = {}
+        self.qualification: Dict[str, GeneratorQualification] = {}
 
     def update(
         self,
@@ -56,11 +58,16 @@ class GeneratorScoreState:
     def save_state(self, save_dir: str, filename: str) -> None:
         # StateManager writes this into its temporary snapshot before swapping.
         with (Path(save_dir) / filename).open("w") as stream:
-            json.dump({"version": 1, "by_hotkey": self.by_hotkey}, stream, allow_nan=False)
+            json.dump({
+                "version": 1,
+                "by_hotkey": self.by_hotkey,
+                "qualification": {hotkey: asdict(q) for hotkey, q in self.qualification.items()},
+            }, stream, allow_nan=False)
 
     def load_state(self, save_dir: str, filename: str) -> bool:
         # Missing/invalid new-format state must never reuse legacy scalar EMA.
         self.by_hotkey = {}
+        self.qualification = {}
         path = Path(save_dir) / filename
         if not path.exists():
             return False
@@ -77,7 +84,28 @@ class GeneratorScoreState:
                 if any(not math.isfinite(value) or value < 0 for value in values.values()):
                     return False
                 restored[hotkey] = values
+            # Older EMA snapshots have no qualification cache. Keep them
+            # readable, but do not invent eligibility from historical scores.
+            cached = payload.get("qualification", {})
+            if not isinstance(cached, dict):
+                return False
+            qualification = {}
+            expected_fields = {field.name for field in fields(GeneratorQualification)}
+            for hotkey, row in cached.items():
+                if not isinstance(hotkey, str) or not hotkey or not isinstance(row, dict):
+                    return False
+                if set(row) != expected_fields:
+                    return False
+                for modality in ("image", "video"):
+                    n, fooled = row[f"{modality}_n"], row[f"{modality}_fooled"]
+                    qualified = row[f"qualified_{modality}"]
+                    if type(n) is not int or type(fooled) is not int or type(qualified) is not bool:
+                        return False
+                    if not 0 <= fooled <= n or (qualified and n == 0):
+                        return False
+                qualification[hotkey] = GeneratorQualification(**row)
             self.by_hotkey = restored
+            self.qualification = qualification
             return True
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             return False

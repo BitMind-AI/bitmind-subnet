@@ -417,6 +417,7 @@ class Validator(BaseNeuron):
         async with self._state_lock:
             bt.logging.debug("save_state() acquired state lock")
             try:
+                self.generator_score_state.qualification = self.generator_qualification
                 state_data = {"scores.npy": self.scores}
                 state_objects = [
                     (self.generative_challenge_manager, "challenge_tasks.pkl"),
@@ -445,6 +446,10 @@ class Validator(BaseNeuron):
         Load validator state, falling back to backup if needed.
         """
         try:
+            self.generator_qualification = {}
+            # Disk cache is fallback for pay only; challenge sampling becomes
+            # fresh only after a successful API fetch in this process.
+            self.generative_challenge_manager.set_qualification(None, fresh=False)
             state_data_keys = ["scores.npy"]
             state_objects = [
                 (self.generative_challenge_manager, "challenge_tasks.pkl"),
@@ -460,10 +465,11 @@ class Validator(BaseNeuron):
             )
 
             if loaded_state is not None and "scores.npy" in loaded_state:
+                self.generator_qualification = self.generator_score_state.qualification
                 # scores.npy is retained for snapshot compatibility, not as EMA
                 # input: legacy scalars cannot be split by modality or hotkey.
-                # Rebuild the payout vector after fresh qualification/liveness
-                # checks in update_scores; new-format lane histories persist.
+                # Rebuild the payout vector after qualification/liveness checks
+                # in update_scores; a restored gate is fallback during outages.
                 self.scores = np.zeros(len(self.metagraph.hotkeys), dtype=np.float64)
                 bt.logging.info(
                     f"Loaded modality EMA histories for {len(self.generator_score_state.by_hotkey)} hotkeys; "

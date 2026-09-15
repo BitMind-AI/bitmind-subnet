@@ -2,6 +2,8 @@
 
 import ast
 import asyncio
+from dataclasses import asdict
+import json
 from pathlib import Path
 import time
 import traceback
@@ -227,3 +229,127 @@ def test_missing_new_state_clears_history(tmp_path):
     state.by_hotkey = {"A": {"image": 100, "video": 100}}
     assert not state.load_state(tmp_path, "missing.json")
     assert state.by_hotkey == {}
+
+
+def _restart(validator):
+    validator.generator_qualification = {}
+    validator.generator_score_state = GeneratorScoreState()
+    validator.scores = np.zeros(len(validator.metagraph.hotkeys))
+    validator.generative_challenge_manager.reset_mock()
+    assert asyncio.run(validator.load_state())
+    validator.generative_challenge_manager.set_qualification.assert_called_once_with(None, fresh=False)
+
+
+@pytest.mark.parametrize("outage", [None, [], {"data": []}])
+def test_restart_outage_restores_pay_and_ema_but_not_fresh_challenge_cache(validator, outage):
+    asyncio.run(validator.update_scores())
+    expected = dict(validator.generator_qualification)
+    asyncio.run(validator.save_state())
+    _restart(validator)
+    assert validator.generator_qualification == expected
+    validator.api.return_value = outage
+    assert asyncio.run(validator.update_scores()) == [0]
+    assert validator.scores.tolist() == [7.5]
+    assert validator.generator_score_state.by_hotkey == {"A": {"image": 7.5, "video": 7.5}}
+    validator.generative_challenge_manager.set_qualification.assert_called_with(None, fresh=False)
+
+
+def test_restart_outage_does_not_transfer_eligibility_or_ema_to_replacement(validator):
+    asyncio.run(validator.update_scores())
+    asyncio.run(validator.save_state())
+    validator.metagraph.hotkeys = ["replacement", "A"]
+    validator.content_manager.get_verification_stats_last_n_hours.return_value[1] = {"image": 10, "video": 10}
+    _restart(validator)
+    validator.api.return_value = None
+    assert asyncio.run(validator.update_scores()) == [1]
+    assert validator.scores.tolist() == [0, 7.5]
+    assert set(validator.generator_score_state.by_hotkey) == {"A"}
+
+
+def test_successful_fetch_replaces_restored_gate_and_refreshes_challenges(validator):
+    asyncio.run(validator.update_scores())
+    asyncio.run(validator.save_state())
+    _restart(validator)
+    for row in validator.api.return_value:
+        row["fooled_count"] = 0
+    assert asyncio.run(validator.update_scores()) == []
+    assert validator.scores.tolist() == [0]
+    assert validator.generator_score_state.by_hotkey == {}
+    assert not validator.generator_qualification["A"].qualified_image
+    assert not validator.generator_qualification["A"].qualified_video
+    validator.generative_challenge_manager.set_qualification.assert_called_with(
+        validator.generator_qualification, fresh=True,
+    )
+
+
+def test_restored_unqualified_hotkeys_stay_unpaid_during_outage(validator):
+    for row in validator.api.return_value:
+        row["fooled_count"] = 0
+    asyncio.run(validator.update_scores())
+    asyncio.run(validator.save_state())
+    _restart(validator)
+    assert "A" in validator.generator_qualification
+    validator.api.return_value = None
+    assert asyncio.run(validator.update_scores()) == []
+    assert validator.scores.tolist() == [0]
+
+
+def test_older_ema_snapshot_without_gate_does_not_invent_eligibility(validator, tmp_path):
+    asyncio.run(validator.update_scores())
+    asyncio.run(validator.save_state())
+    path = tmp_path / "state_current" / "generator_scores.json"
+    payload = json.loads(path.read_text())
+    del payload["qualification"]
+    path.write_text(json.dumps(payload))
+    _restart(validator)
+    assert validator.generator_score_state.by_hotkey == {"A": {"image": 5, "video": 5}}
+    assert validator.generator_qualification == {}
+    validator.api.return_value = None
+    assert asyncio.run(validator.update_scores()) == []
+    assert validator.scores.tolist() == [0]
+
+
+def test_backup_snapshot_restores_matching_ema_and_gate(validator, tmp_path):
+    asyncio.run(validator.update_scores())
+    asyncio.run(validator.save_state())
+    for row in validator.api.return_value:
+        row["fooled_count"] = 0
+    asyncio.run(validator.update_scores())
+    asyncio.run(validator.save_state())
+    # Simulate an incomplete current snapshot; the previous one qualified A.
+    (tmp_path / "state_current" / "complete").unlink()
+    _restart(validator)
+    validator.api.return_value = None
+    assert asyncio.run(validator.update_scores()) == [0]
+    assert validator.scores.tolist() == [7.5]
+
+
+@pytest.mark.parametrize("bad_cache", [None, [], {"A": {}}, {"A": {
+    "image_n": 20, "image_fooled": 10, "video_n": 20, "video_fooled": 10,
+    "qualified_image": "false", "qualified_video": True,
+}}, {"A": {
+    "image_n": 20, "image_fooled": 21, "video_n": 20, "video_fooled": 10,
+    "qualified_image": True, "qualified_video": True,
+}}])
+def test_invalid_persisted_gate_fails_closed_without_partial_restore(tmp_path, bad_cache):
+    state = GeneratorScoreState()
+    state.by_hotkey = {"A": {"image": 5, "video": 5}}
+    state.qualification = {"A": _qualified()}
+    (tmp_path / "ema.json").write_text(json.dumps({
+        "version": 1, "by_hotkey": state.by_hotkey, "qualification": bad_cache,
+    }))
+    assert not state.load_state(tmp_path, "ema.json")
+    assert state.by_hotkey == {}
+    assert state.qualification == {}
+
+
+def test_qualification_roundtrip_preserves_all_counts_and_flags(tmp_path):
+    state = GeneratorScoreState()
+    state.qualification = {"A": GeneratorQualification(
+        image_n=100, image_fooled=10, video_n=40, video_fooled=0,
+        qualified_image=True, qualified_video=False,
+    )}
+    state.save_state(tmp_path, "ema.json")
+    restored = GeneratorScoreState()
+    assert restored.load_state(tmp_path, "ema.json")
+    assert asdict(restored.qualification["A"]) == asdict(state.qualification["A"])
