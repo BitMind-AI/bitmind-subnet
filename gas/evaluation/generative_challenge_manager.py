@@ -21,7 +21,7 @@ from typing import Dict, Optional
 from gas.cache.content_manager import ContentManager
 from gas.evaluation.challenge_allocation import allocate_challenge_slots
 from gas.evaluation.resolution_tiers import sample_challenge_tier
-from gas.evaluation.rewards import GeneratorQualification
+from gas.evaluation.rewards import GeneratorQualification, resolve_generator_qualification
 from gas.protocol.epistula import get_verifier
 from gas.protocol.validator_requests import query_generative_miner
 from gas.types import MediaType, MinerType, Modality
@@ -69,7 +69,7 @@ class GenerativeChallengeManager:
         # qualification_fresh is False until update_scores writes a live map; a
         # missing/stale map treats every UID as onboarding so sampling does not
         # freeze on the last qualified set.
-        self.qualification: Optional[Dict[int, GeneratorQualification]] = None
+        self.qualification: Optional[Dict[str, GeneratorQualification]] = None
         self.qualification_fresh: bool = False
 
         self.external_port = (
@@ -92,10 +92,10 @@ class GenerativeChallengeManager:
 
     def set_qualification(
         self,
-        qualification: Optional[Dict[int, GeneratorQualification]],
+        qualification: Optional[Dict[str, GeneratorQualification]],
         fresh: bool = True,
     ) -> None:
-        """Cache the latest fool-rate map for challenge slot allocation."""
+        """Cache fool-rate qualification by hotkey, never by reusable UID."""
         self.qualification = qualification
         self.qualification_fresh = bool(fresh and qualification is not None)
 
@@ -134,7 +134,12 @@ class GenerativeChallengeManager:
             return
 
         available_names = [mod.value for mod in prompt_pools]
-        qualification = self.qualification if self.qualification_fresh else None
+        # Registrations can change between score updates. Resolve identities
+        # for each round so replacements enter onboarding, even with fresh data.
+        qualification = (
+            resolve_generator_qualification(self.qualification, self.metagraph)
+            if self.qualification_fresh and self.qualification is not None else None
+        )
         assignments, pool_stats = allocate_challenge_slots(
             miner_uids,
             available_names,

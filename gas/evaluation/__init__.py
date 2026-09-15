@@ -8,6 +8,7 @@ from .rewards import (
     combine_generator_rewards,
     get_generator_base_rewards,
     get_generator_qualification,
+    resolve_generator_qualification,
 )
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "combine_generator_rewards",
     "get_generator_base_rewards",
     "get_generator_qualification",
+    "resolve_generator_qualification",
 ]
 
 

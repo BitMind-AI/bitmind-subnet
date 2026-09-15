@@ -11,7 +11,11 @@ from gas.evaluation.challenge_allocation import (
     classify_modality_bucket,
     summarize_assignment_buckets,
 )
-from gas.evaluation.rewards import GeneratorQualification
+from gas.evaluation.rewards import (
+    GeneratorQualification,
+    get_generator_qualification,
+    resolve_generator_qualification,
+)
 
 
 def _q(**kwargs):
@@ -203,3 +207,31 @@ def test_slot_counts_must_sum_to_sample_size(tmp_path):
     )
     with pytest.raises(ValueError, match="must equal neuron.sample_size"):
         validate_config_and_neuron_path(config)
+
+
+def test_fresh_cache_does_not_give_replacement_qualified_challenge_slots():
+    metagraph = SimpleNamespace(hotkeys=["old-owner", "unchanged"])
+    cached = get_generator_qualification([
+        {"ss58_address": hotkey, "modality": "image", "fooled_count": 2, "not_fooled_count": 18}
+        for hotkey in metagraph.hotkeys
+    ], metagraph)
+    before = resolve_generator_qualification(cached, metagraph)
+    assert classify_modality_bucket(before[0], "image") == "qualified"
+
+    # No new score update or API failure is required: registrations can change
+    # while the challenge manager still considers the last fetch fresh.
+    metagraph.hotkeys[0] = "replacement"
+    current = resolve_generator_qualification(cached, metagraph)
+    assignments, stats = allocate_challenge_slots(
+        [0, 1], ["image"], current,
+        sample_size=2, qualified_slots=1, onboarding_slots=1, probe_slots=0,
+        rng=np.random.default_rng(446),
+    )
+    assert dict(assignments) == {0: "image", 1: "image"}
+    assert classify_modality_bucket(current.get(0), "image") == "onboarding"
+    assert classify_modality_bucket(current.get(1), "image") == "qualified"
+    assert stats["image_qualified"] == 1
+    assert stats["onboarding"] == 1
+    assert summarize_assignment_buckets(assignments, current) == {
+        "qualified": 1, "onboarding": 1, "probe": 0,
+    }

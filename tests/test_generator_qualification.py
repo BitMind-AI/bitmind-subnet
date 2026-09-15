@@ -6,6 +6,7 @@ from gas.evaluation.rewards import (
     GeneratorQualification,
     combine_generator_rewards,
     get_generator_qualification,
+    resolve_generator_qualification,
 )
 
 
@@ -34,6 +35,8 @@ def test_qualifies_image_and_video_independently():
     ]
 
     q = get_generator_qualification(results, _metagraph(hk_a, hk_b, hk_c))
+    assert set(q) == {hk_a, hk_b, hk_c}
+    q = resolve_generator_qualification(q, _metagraph(hk_a, hk_b, hk_c))
 
     assert q[0].qualified_image is True
     assert q[0].qualified_video is False
@@ -58,6 +61,7 @@ def test_cutoff_is_exclusive_and_rows_sum_by_modality():
         _row(hk, "video", 1, 99),  # 1% is not > 1%
     ]
     q = get_generator_qualification(results, _metagraph(hk))
+    q = resolve_generator_qualification(q, _metagraph(hk))
     assert q[0].image_n == 50
     assert q[0].image_rate == 0.02
     assert q[0].qualified_image is False
@@ -73,6 +77,7 @@ def test_skips_unknown_hotkeys_and_modalities():
         _row("5A", "image", 5, 15),
     ]
     q = get_generator_qualification(results, _metagraph("5A"))
+    q = resolve_generator_qualification(q, _metagraph("5A"))
     assert set(q) == {0}
     assert q[0].image_n == 20
     assert q[0].qualified_image is True
@@ -94,6 +99,7 @@ def test_all_unqualified_rows_still_replace_cache():
         [_row("5A", "image", 0, 50)], _metagraph("5A")
     )
     assert q is not None
+    q = resolve_generator_qualification(q, _metagraph("5A"))
     assert q[0].qualified_image is False
     assert q[0].image_n == 50
 
@@ -119,3 +125,48 @@ def test_combine_omits_zero_total():
     base = {0: {"image": 1.0, "video": 1.0}}
     rewards = combine_generator_rewards(base, {})
     assert rewards == {}
+
+
+def test_replacement_cannot_inherit_pay_during_api_outage():
+    metagraph = _metagraph("old-owner", "unchanged")
+    cached = get_generator_qualification(
+        [_row("old-owner", "image", 2, 18), _row("unchanged", "image", 2, 18)],
+        metagraph,
+    )
+    metagraph.hotkeys[0] = "replacement"
+    # A failed fetch leaves the last successful hotkey cache in use for pay.
+    assert get_generator_qualification(None, metagraph) is None
+    current = resolve_generator_qualification(cached, metagraph)
+    rewards = combine_generator_rewards(
+        {0: {"image": 10.0}, 1: {"image": 10.0}}, current,
+    )
+    assert 0 not in rewards
+    assert rewards == {1: 3.0}
+    assert set(cached) == {"old-owner", "unchanged"}
+
+
+def test_qualification_follows_hotkey_when_uids_move():
+    metagraph = _metagraph("image-miner", "video-miner")
+    cached = get_generator_qualification(
+        [_row("image-miner", "image", 2, 18), _row("video-miner", "video", 2, 18)],
+        metagraph,
+    )
+    metagraph.hotkeys[:] = ["replacement", "video-miner", "image-miner"]
+    current = resolve_generator_qualification(cached, metagraph)
+    rewards = combine_generator_rewards(
+        {uid: {"image": 10.0, "video": 10.0} for uid in range(3)}, current,
+    )
+    assert rewards == {1: 7.0, 2: 3.0}
+
+
+def test_replacement_must_qualify_with_its_own_results():
+    metagraph = _metagraph("replacement")
+    # The previous owner's API rows must not count toward this UID's gate.
+    rows = [_row("old-owner", "image", 20, 0), _row("replacement", "image", 0, 20)]
+    fresh = get_generator_qualification(rows, metagraph)
+    assert set(fresh) == {"replacement"}
+    base = {0: {"image": 10.0}}
+    assert combine_generator_rewards(base, resolve_generator_qualification(fresh, metagraph)) == {}
+    rows.append(_row("replacement", "image", 2, 18))
+    fresh = get_generator_qualification(rows, metagraph)
+    assert combine_generator_rewards(base, resolve_generator_qualification(fresh, metagraph)) == {0: 3.0}

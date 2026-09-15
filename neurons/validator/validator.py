@@ -37,6 +37,7 @@ from gas.evaluation import (
     combine_generator_rewards,
     get_generator_base_rewards,
     get_generator_qualification,
+    resolve_generator_qualification,
 )
 
 try:
@@ -105,7 +106,7 @@ class Validator(BaseNeuron):
         self.set_weights_fn = create_set_weights(spec_version, self.config.netuid)
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
         self.kings_state = _KingsState()
-        self.generator_qualification = {}
+        self.generator_qualification = {}  # Hotkey-keyed; UIDs can be reassigned.
         bt.logging.info(f"Initialized scores vector for {len(self.scores)} miners")
 
         if not self.config.wandb_off:
@@ -330,7 +331,7 @@ class Validator(BaseNeuron):
         video_weight = self.config.scoring.video_weight
         rewards = combine_generator_rewards(
             generator_base_rewards,
-            self.generator_qualification,
+            resolve_generator_qualification(self.generator_qualification, self.metagraph),
             image_weight=image_weight,
             video_weight=video_weight,
         )
