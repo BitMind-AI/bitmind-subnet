@@ -8,6 +8,7 @@ from gas.protocol.resubmit_burn import (
     ResubmitBurnError,
     alpha_rao_for_fee,
     evidence_from_response,
+    execute_resubmit_burn,
     is_submission_limit,
     offer_resubmit_burn,
 )
@@ -63,6 +64,49 @@ def test_offer_requires_a_terminal(monkeypatch):
             34,
             execute_fn=lambda *args, **kwargs: pytest.fail("should not burn"),
         )
+
+
+def test_low_alpha_uses_add_stake_burn(monkeypatch):
+    monkeypatch.setattr("gas.protocol.resubmit_burn.sys.stdin.isatty", lambda: True)
+    burned = SimpleNamespace(
+        success=True,
+        extrinsic_receipt=SimpleNamespace(
+            extrinsic_hash="0x" + "ab" * 32, block_number=88
+        ),
+    )
+    calls = []
+
+    class Subtensor:
+        def get_subnet_price(self, netuid):
+            return SimpleNamespace(tao=0.5)
+
+        def get_stake(self, coldkey, hotkey, netuid):
+            return SimpleNamespace(rao=0)
+
+        def get_balance(self, coldkey):
+            return SimpleNamespace(tao=2.0)
+
+        def add_stake_burn(self, wallet, netuid, hotkey, amount, **kwargs):
+            calls.append((netuid, hotkey, amount))
+            return burned
+
+        def compose_call(self, *args, **kwargs):
+            raise AssertionError("should use add_stake_burn, not burn_alpha")
+
+    wallet = SimpleNamespace(
+        hotkey=SimpleNamespace(ss58_address="5Hot"),
+        coldkeypub=SimpleNamespace(ss58_address="5Cold"),
+    )
+    evidence = execute_resubmit_burn(
+        wallet,
+        34,
+        subtensor=Subtensor(),
+        confirm_fn=lambda prompt: "y",
+    )
+    assert evidence.block_number == 88
+    assert calls[0][0] == 34
+    assert calls[0][1] == "5Hot"
+    assert calls[0][2].tao == 0.5
 
 
 def test_offer_always_starts_the_burn_walkthrough(monkeypatch):

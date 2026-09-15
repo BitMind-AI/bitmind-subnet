@@ -142,26 +142,43 @@ def execute_resubmit_burn(
         f"(~{amount_alpha:.4f} α at the current pool price)."
     )
     print(f"  Alpha staked to this hotkey: {stake_rao / RAO:.4f} α")
-    if stake_rao < amount_rao:
-        tao_free = sub.get_balance(coldkey)
-        tao_available = float(getattr(tao_free, "tao", 0) or 0)
-        print(
-            f"  Not enough alpha. Free TAO on this coldkey: {tao_available:.4f}. "
-            "We can stake 0.5 TAO to this hotkey and then burn that alpha."
-        )
-        if tao_available < RESUBMIT_FEE_TAO:
-            raise ResubmitBurnError(
-                "Need 0.5 TAO of SN34 alpha (or 0.5 free TAO to stake first)."
-            )
+    if stake_rao >= amount_rao:
         if not _confirm(
-            "  Stake 0.5 TAO to this hotkey, then burn the resulting alpha? [y/N] ",
+            "  Burn that alpha now? This cannot be undone. [y/N] ",
             confirm_fn,
         ):
             raise ResubmitBurnError(
                 "Cannot submit another model without burning 0.5 TAO of SN34 alpha."
             )
-        print("  Unlock the coldkey if prompted, then wait for the stake to land...")
-        staked = sub.add_stake(
+        print("  Unlock the coldkey if prompted, then wait for the burn to land...")
+        call = _compose_burn(sub, hotkey, netuid, amount_rao)
+        burned = sub.sign_and_send_extrinsic(
+            call,
+            wallet,
+            sign_with="coldkey",
+            wait_for_inclusion=True,
+            wait_for_finalization=True,
+        )
+    else:
+        tao_free = sub.get_balance(coldkey)
+        tao_available = float(getattr(tao_free, "tao", 0) or 0)
+        print(
+            f"  Not enough alpha. Free TAO on this coldkey: {tao_available:.4f}. "
+            "We can spend 0.5 TAO in one add_stake_burn (buy α and burn it)."
+        )
+        if tao_available < RESUBMIT_FEE_TAO:
+            raise ResubmitBurnError(
+                "Need 0.5 TAO of SN34 alpha, or 0.5 free TAO for add_stake_burn."
+            )
+        if not _confirm(
+            "  Spend 0.5 TAO via add_stake_burn now? This cannot be undone. [y/N] ",
+            confirm_fn,
+        ):
+            raise ResubmitBurnError(
+                "Cannot submit another model without burning 0.5 TAO of SN34 alpha."
+            )
+        print("  Unlock the coldkey if prompted, then wait for add_stake_burn to land...")
+        burned = sub.add_stake_burn(
             wallet,
             netuid,
             hotkey,
@@ -169,33 +186,6 @@ def execute_resubmit_burn(
             wait_for_inclusion=True,
             wait_for_finalization=True,
         )
-        if not getattr(staked, "success", False):
-            raise ResubmitBurnError(
-                f"Could not stake 0.5 TAO: {getattr(staked, 'message', None) or staked}"
-            )
-        stake = sub.get_stake(coldkey, hotkey, netuid)
-        stake_rao = int(getattr(stake, "rao", 0) or 0)
-        if stake_rao < amount_rao:
-            raise ResubmitBurnError(
-                "Stake landed but this hotkey still does not have 0.5 TAO of alpha."
-            )
-    elif not _confirm(
-        "  Burn that alpha now? This cannot be undone. [y/N] ",
-        confirm_fn,
-    ):
-        raise ResubmitBurnError(
-            "Cannot submit another model without burning 0.5 TAO of SN34 alpha."
-        )
-
-    print("  Unlock the coldkey if prompted, then wait for the burn to land...")
-    call = _compose_burn(sub, hotkey, netuid, amount_rao)
-    burned = sub.sign_and_send_extrinsic(
-        call,
-        wallet,
-        sign_with="coldkey",
-        wait_for_inclusion=True,
-        wait_for_finalization=True,
-    )
     evidence = evidence_from_response(burned, sub)
     print(f"  Burn included in block {evidence.block_number} ({evidence.tx_hash[:12]}…).")
     return evidence
