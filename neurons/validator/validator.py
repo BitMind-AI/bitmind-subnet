@@ -32,6 +32,7 @@ from gas.utils import (
 from gas.utils.state_manager import load_validator_state, save_validator_state
 from gas.utils.wandb_utils import init_wandb, clean_wandb_cache
 from neurons.base import BaseNeuron
+from gas.evaluation.generator_scores import GeneratorScoreState
 from gas.evaluation import (
     GenerativeChallengeManager,
     MinerTypeTracker,
@@ -110,6 +111,7 @@ class Validator(BaseNeuron):
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
         self.kings_state = _KingsState()
         self.generator_qualification = {}  # Hotkey-keyed; UIDs can be reassigned.
+        self.generator_score_state = GeneratorScoreState()
         bt.logging.info(f"Initialized scores vector for {len(self.scores)} miners")
 
         if not self.config.wandb_off:
@@ -356,40 +358,31 @@ class Validator(BaseNeuron):
                 bt.logging.trace(
                     "No generator rewards: no base rewards or multipliers available."
                 )
-            return
 
         async with self._state_lock:
-            extend_scores = max(list(rewards.keys())) - len(self.scores) + 1
-            if extend_scores > 0:
-                self.scores = np.append(self.scores, np.zeros(extend_scores))
-
-            reward_arr = np.array([rewards.get(i, 0) for i in range(len(self.scores))])
-
-            # Alpha for generator score EMA - higher = faster decay, less reward persistence
-            # 0.5 = 50% new rewards, 50% historical (aggressive decay for inactive miners)
+            # Gate each modality's history before combining, even if no miner
+            # earns this epoch. A scalar EMA would retain disqualified pay.
             alpha = 0.5
-            self.scores = alpha * reward_arr + (1 - alpha) * self.scores
-
-            # Hard cutoff: zero out scores for generators not active within liveness window.
-            # Checks the actual last_seen timestamp, not just dict membership.
-            if generator_liveness:
-                cutoff = time.time() - max_inactive_hours * 3600
-                inactive_count = 0
-                for uid in range(len(self.scores)):
-                    if uid < len(self.metagraph.hotkeys) and self.scores[uid] > 0:
-                        hotkey = self.metagraph.hotkeys[uid]
-                        last_seen = generator_liveness.get(hotkey, 0)
-                        if last_seen < cutoff:
-                            self.scores[uid] = 0
-                            inactive_count += 1
-                if inactive_count > 0:
-                    bt.logging.info(f"Zeroed scores for {inactive_count} inactive generators (not seen in {max_inactive_hours}h)")
+            hotkeys = list(self.metagraph.hotkeys)
+            scores = self.generator_score_state.update(
+                generator_base_rewards,
+                self.generator_qualification,
+                hotkeys,
+                image_weight=image_weight,
+                video_weight=video_weight,
+                alpha=alpha,
+                last_seen=generator_liveness,
+                inactive_cutoff=time.time() - max_inactive_hours * 3600,
+            )
+            self.scores = np.zeros(len(hotkeys), dtype=np.float64)
+            for uid, score in scores.items():
+                self.scores[uid] = score
 
         bt.logging.info(
             f"Updated scores for {len(rewards)} miners with EMA (alpha={alpha})"
         )
 
-        if media_ids:
+        if media_ids and rewards:
             success = self.content_manager.mark_media_rewarded(media_ids)
             if success:
                 bt.logging.info(f"Marked {len(media_ids)} media entries as rewarded")
@@ -428,6 +421,7 @@ class Validator(BaseNeuron):
                 state_objects = [
                     (self.generative_challenge_manager, "challenge_tasks.pkl"),
                     (self.kings_state, "kings.json"),
+                    (self.generator_score_state, "generator_scores.json"),
                 ]
 
                 success = save_validator_state(
@@ -455,6 +449,7 @@ class Validator(BaseNeuron):
             state_objects = [
                 (self.generative_challenge_manager, "challenge_tasks.pkl"),
                 (self.kings_state, "kings.json"),
+                (self.generator_score_state, "generator_scores.json"),
             ]
 
             loaded_state = load_validator_state(
@@ -465,8 +460,15 @@ class Validator(BaseNeuron):
             )
 
             if loaded_state is not None and "scores.npy" in loaded_state:
-                self.scores = loaded_state["scores.npy"]
-                bt.logging.info(f"Loaded scores vector for {len(self.scores)} miners")
+                # scores.npy is retained for snapshot compatibility, not as EMA
+                # input: legacy scalars cannot be split by modality or hotkey.
+                # Rebuild the payout vector after fresh qualification/liveness
+                # checks in update_scores; new-format lane histories persist.
+                self.scores = np.zeros(len(self.metagraph.hotkeys), dtype=np.float64)
+                bt.logging.info(
+                    f"Loaded modality EMA histories for {len(self.generator_score_state.by_hotkey)} hotkeys; "
+                    "legacy scalar scores are not reused"
+                )
                 return True
             else:
                 bt.logging.warning("No valid state found")

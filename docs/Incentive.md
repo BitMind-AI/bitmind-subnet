@@ -86,6 +86,8 @@ If the generator-results API is down or the payload has no usable rows, validato
 
 Qualification is cached by hotkey and resolved against current UID registrations for rewards and challenge sampling. A replacement hotkey cannot inherit the previous owner's eligibility at the same UID.
 
+Scores use separate image and video exponential moving averages (50% current reward, 50% history), combined with the same 30/70 weights. Losing qualification immediately clears that modality's history, including epochs where nobody earns; regaining qualification starts that lane from zero. The histories are stored by hotkey across restarts and cleared on inactivity or deregistration. On upgrade, legacy combined scores reset because their modality contributions cannot be recovered. A UID still needs positive current gated base rewards to share the generator pot.
+
 ### Challenge slots
 
 Each validator still sends `--neuron.sample-size` (default 50) requests per round — one UID, one modality, no replacement. Slots are filled from three buckets **for the chosen modality**:
