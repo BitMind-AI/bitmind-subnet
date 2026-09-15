@@ -53,7 +53,7 @@ gascli d push \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name
 
-# Video or audio on a different hotkey:
+# Video or audio (same or another hotkey):
 # gascli d push --video-model video_detector.zip --wallet-hotkey video_key
 # gascli d push --audio-model audio_detector.zip --wallet-hotkey audio_key
 ```
@@ -82,16 +82,17 @@ gascli d push \
 - `--chain-endpoint`: Subtensor network endpoint (default: "wss://entrypoint-finney.opentensor.ai:443/")
 - `--retry-delay`: Retry delay in seconds (default: 60)
 
-Provide exactly one of `--image-model`, `--video-model`, or `--audio-model`. A second model needs a different hotkey.
+Provide exactly one of `--image-model`, `--video-model`, or `--audio-model`.
 
 ## Submission Limits
 
-Each registered hotkey gets **one counted submission** (image, video, or audio — not one of each).
+Each registered hotkey gets **one free counted submission** (image, video, or audio — not one of each).
 
 - Exam failures and incomplete uploads do not consume the slot. You can retry on the same key until a model is successfully uploaded and not later marked exam-failed.
-- A confirmed or superseded model **does** consume the slot for the life of that hotkey, for every modality.
+- A confirmed or superseded model **does** consume the free slot for the life of that registration, for every modality.
 - A new benchmark version does **not** refill the slot.
-- To submit another model, register a new miner hotkey.
+- To submit another model from the **same** hotkey, run `gascli d push` again. The CLI walks you through burning **0.5 TAO of SN34 alpha**: `burn_alpha` if this hotkey already has enough α, otherwise one `add_stake_burn` of 0.5 TAO. Recycle does not count. There is no second counted model without that burn.
+- The burn is spent only when the new model is confirmed. If upload or the entrance exam fails, the next `gascli d push` reuses the same burn. The CLI also keeps the last burn receipt locally so a crash after the extrinsic lands does not ask you to burn again.
 
 ---
 

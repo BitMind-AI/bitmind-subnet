@@ -146,6 +146,16 @@ async def push_separate_models(
         raise FileNotFoundError(f"Audio model file not found: {audio_model_path}")
 
     endpoint = upload_endpoint or MODEL_UPLOAD_ENDPOINT
+
+    def resubmit():
+        from gas.protocol.resubmit_burn import ResubmitBurnError, offer_resubmit_burn
+
+        try:
+            return offer_resubmit_burn(wallet, netuid, chain_endpoint)
+        except ResubmitBurnError as exc:
+            print_error(str(exc))
+            return None
+
     results = {}
     upload_count = 0
     total_uploads = (1 if image_model_path else 0) + \
@@ -163,6 +173,8 @@ async def push_separate_models(
                 'image',
                 endpoint,
                 vertical=vertical,
+                resubmit=resubmit,
+                netuid=netuid,
             )
             results['image'] = image_result
             
@@ -187,6 +199,8 @@ async def push_separate_models(
                 'video',
                 endpoint,
                 vertical=vertical,
+                resubmit=resubmit,
+                netuid=netuid,
             )
             results['video'] = video_result
             
@@ -211,6 +225,8 @@ async def push_separate_models(
                 'audio',
                 endpoint,
                 vertical=vertical,
+                resubmit=resubmit,
+                netuid=netuid,
             )
             results['audio'] = audio_result
             
