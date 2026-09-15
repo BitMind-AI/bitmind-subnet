@@ -130,6 +130,8 @@ async def push_separate_models(
     upload_endpoint: Optional[str] = None,
     skip_chain: bool = False,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    auto_confirm_burn: bool = False,
+    offer_burn: bool = True,
 ):
     """Pushes separate image, video, and/or audio detector models and registers on the Bittensor blockchain.
     
@@ -146,6 +148,22 @@ async def push_separate_models(
         raise FileNotFoundError(f"Audio model file not found: {audio_model_path}")
 
     endpoint = upload_endpoint or MODEL_UPLOAD_ENDPOINT
+
+    def resubmit():
+        from gas.protocol.resubmit_burn import ResubmitBurnError, offer_resubmit_burn
+
+        try:
+            return offer_resubmit_burn(
+                wallet,
+                netuid,
+                chain_endpoint,
+                enabled=offer_burn,
+                auto_confirm=auto_confirm_burn,
+            )
+        except ResubmitBurnError as exc:
+            print_error(str(exc))
+            return None
+
     results = {}
     upload_count = 0
     total_uploads = (1 if image_model_path else 0) + \
@@ -163,6 +181,7 @@ async def push_separate_models(
                 'image',
                 endpoint,
                 vertical=vertical,
+                resubmit=resubmit,
             )
             results['image'] = image_result
             
@@ -187,6 +206,7 @@ async def push_separate_models(
                 'video',
                 endpoint,
                 vertical=vertical,
+                resubmit=resubmit,
             )
             results['video'] = video_result
             
@@ -211,6 +231,7 @@ async def push_separate_models(
                 'audio',
                 endpoint,
                 vertical=vertical,
+                resubmit=resubmit,
             )
             results['audio'] = audio_result
             
@@ -387,6 +408,16 @@ def main():
             f"(default: {DEFAULT_MAX_RETRIES}; 0 = retry forever)"
         ),
     )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="If this hotkey already submitted, burn 0.5 TAO of SN34 alpha without asking",
+    )
+    parser.add_argument(
+        "--no-burn",
+        action="store_true",
+        help="Do not offer the 0.5 TAO resubmit burn when the free slot is used",
+    )
 
     args = parser.parse_args()
 
@@ -453,6 +484,8 @@ def main():
                 upload_endpoint=args.upload_endpoint,
                 skip_chain=args.skip_chain,
                 max_retries=args.max_retries,
+                auto_confirm_burn=args.yes,
+                offer_burn=not args.no_burn,
             )
         )
         

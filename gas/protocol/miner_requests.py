@@ -4,7 +4,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import BinaryIO, Dict, Optional
+from typing import BinaryIO, Callable, Dict, Optional
 
 import bittensor as bt
 import httpx
@@ -94,7 +94,9 @@ def generate_presigned_url(
     file_hash: str, 
     content_type: Optional[str] = None,
     modality: Optional[str] = None,
-    vertical: Optional[str] = None
+    vertical: Optional[str] = None,
+    burn_tx_hash: Optional[str] = None,
+    burn_block: Optional[int] = None,
 ) -> dict:
     """Generate presigned upload URL from the API with modality and vertical parameters."""
     
@@ -109,6 +111,10 @@ def generate_presigned_url(
         payload['modality'] = modality
     if vertical:
         payload['vertical'] = vertical
+    if burn_tx_hash:
+        payload['burn_tx_hash'] = burn_tx_hash
+    if burn_block:
+        payload['burn_block'] = burn_block
     
     payload_json = json.dumps(payload, separators=(',', ':'))
     payload_bytes = payload_json.encode('utf-8')
@@ -235,7 +241,8 @@ def upload_single_modality(
     file_path: str,
     modality: str,
     upload_endpoint: str,
-    vertical: str = "general"
+    vertical: str = "general",
+    resubmit: Optional[Callable[[], Optional[object]]] = None,
 ) -> dict:
     """Upload a single modality file (image or video model)."""
     file_path_obj = Path(file_path)
@@ -268,26 +275,51 @@ def upload_single_modality(
     )
 
     if not presigned_result['success']:
+        from gas.protocol.resubmit_burn import is_submission_limit
+
         print("FAILED")
-        # 409 means this hash was already accepted — the file is already in R2.
-        # Return a soft error so the caller can decide whether to skip or abort.
-        if presigned_result.get('status_code') == 409:
+        if is_submission_limit(presigned_result) and resubmit is not None:
+            evidence = resubmit()
+            tx_hash = getattr(evidence, "tx_hash", None) if evidence is not None else None
+            block_number = getattr(evidence, "block_number", None) if evidence is not None else None
+            if tx_hash and block_number:
+                print(f"  [1/3] Requesting presigned URL with burn credit...", end=' ', flush=True)
+                presigned_result = generate_presigned_url(
+                    wallet,
+                    upload_endpoint,
+                    filename,
+                    file_size,
+                    file_hash,
+                    'application/octet-stream',
+                    modality,
+                    vertical,
+                    burn_tx_hash=tx_hash,
+                    burn_block=block_number,
+                )
+                if not presigned_result['success']:
+                    print("FAILED")
+        if not presigned_result['success']:
+            # 409 means this hash was already accepted — the file is already in R2.
+            # Return a soft error so the caller can decide whether to skip or abort.
+            if presigned_result.get('status_code') == 409:
+                return {
+                    "success": False,
+                    "modality": modality,
+                    "step": "presigned_url_generation",
+                    "error": extract_error(presigned_result),
+                    "response": presigned_result['response'],
+                    "already_uploaded": True,
+                    "file_hash": file_hash,
+                }
+            limit = is_submission_limit(presigned_result)
             return {
                 "success": False,
                 "modality": modality,
                 "step": "presigned_url_generation",
                 "error": extract_error(presigned_result),
                 "response": presigned_result['response'],
-                "already_uploaded": True,
-                "file_hash": file_hash,
+                "submission_limit": limit,
             }
-        return {
-            "success": False,
-            "modality": modality,
-            "step": "presigned_url_generation",
-            "error": extract_error(presigned_result),
-            "response": presigned_result['response']
-        }
     print("done")
 
     presigned_data = presigned_result['response']['data']
