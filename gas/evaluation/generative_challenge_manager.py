@@ -4,7 +4,6 @@ import io
 import json
 import os
 import pickle
-import random
 import tempfile
 import threading
 import time
@@ -13,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor
 import aiohttp
 import bittensor as bt
 import cv2
-import numpy as np
 import requests
 import uvicorn
 from bittensor.core.axon import FastAPIThreadedServer
@@ -23,7 +21,9 @@ from PIL import Image
 from typing import Dict, Optional
 
 from gas.cache.content_manager import ContentManager
+from gas.evaluation.challenge_allocation import allocate_challenge_slots
 from gas.evaluation.resolution_tiers import sample_challenge_tier
+from gas.evaluation.rewards import GeneratorQualification, resolve_generator_qualification
 from gas.protocol.epistula import get_verifier
 from gas.protocol.validator_requests import query_generative_miner
 from gas.types import MediaType, MinerType, Modality
@@ -67,6 +67,13 @@ class GenerativeChallengeManager:
         # Updated when a generator successfully responds to a challenge
         self.generator_last_seen: Dict[str, float] = {}
 
+        # Fool-rate qualification from the last successful generator-results fetch.
+        # qualification_fresh is False until update_scores writes a live map; a
+        # missing/stale map treats every UID as onboarding so sampling does not
+        # freeze on the last qualified set.
+        self.qualification: Optional[Dict[str, GeneratorQualification]] = None
+        self.qualification_fresh: bool = False
+
         # Keep expensive OpenCV/C2PA work off the callback event loop, but
         # bound concurrency so a burst of video uploads cannot create dozens
         # of memory-heavy decoder/verifier jobs at once.
@@ -95,24 +102,23 @@ class GenerativeChallengeManager:
 
         self.init_fastapi()
 
+    def set_qualification(
+        self,
+        qualification: Optional[Dict[str, GeneratorQualification]],
+        fresh: bool = True,
+    ) -> None:
+        """Cache fool-rate qualification by hotkey, never by reusable UID."""
+        self.qualification = qualification
+        self.qualification_fresh = bool(fresh and qualification is not None)
+
     async def issue_generative_challenge(self):
         await self.miner_type_tracker.update_miner_types()
         miner_uids = self.miner_type_tracker.get_miners_by_type(MinerType.GENERATOR)
-
-        if len(miner_uids) > self.config.neuron.sample_size:
-            miner_uids = np.random.choice(
-                miner_uids,
-                size=self.config.neuron.sample_size,
-                replace=False,
-            ).tolist()
 
         if not miner_uids:
             bt.logging.trace("No generative miners found to challenge.")
             return
 
-        bt.logging.info(f"Issuing generative challenge to UIDs: {miner_uids}")
-
-        # Sample prompts per modality, then assign random modality per miner.
         raw = getattr(self.config, 'prompt_modalities', 'video')
         available = []
         for item in raw.split(','):
@@ -124,37 +130,63 @@ class GenerativeChallengeManager:
         if not available:
             available = [Modality.VIDEO]
 
-        # Pre-sample prompts for each modality
+        sample_size = int(self.config.neuron.sample_size)
         prompt_pools = {}
-        n_needed = len(miner_uids)
         for mod in available:
             entries = self.content_manager.sample_prompts(
-                k=n_needed, modality=mod.value, remove=False, strategy="least_used",
+                k=sample_size, modality=mod.value, remove=False, strategy="least_used",
             )
-            prompt_pools[mod] = entries
+            if entries:
+                prompt_pools[mod] = entries
 
-        # Check at least one pool has prompts
-        total_prompts = sum(len(v) for v in prompt_pools.values())
-        if total_prompts == 0:
+        if not prompt_pools:
             bt.logging.info(
                 "Waiting for prompt cache to be populated. Skipping generative challenge."
             )
             return
 
-        # Assign random modality per miner, cycling prompts within each pool.
-        # Only modalities with non-empty pools are eligible — avoids silently
-        # skipping miners when one modality has no cached prompts.
+        available_names = [mod.value for mod in prompt_pools]
+        # Registrations can change between score updates. Resolve identities
+        # for each round so replacements enter onboarding, even with fresh data.
+        qualification = (
+            resolve_generator_qualification(self.qualification, self.metagraph)
+            if self.qualification_fresh and self.qualification is not None else None
+        )
+        assignments, pool_stats = allocate_challenge_slots(
+            miner_uids,
+            available_names,
+            qualification,
+            sample_size=sample_size,
+            qualified_slots=int(getattr(self.config.neuron, "qualified_slots", 36)),
+            onboarding_slots=int(getattr(self.config.neuron, "onboarding_slots", 8)),
+            probe_slots=int(getattr(self.config.neuron, "probe_slots", 6)),
+            min_fool_samples=int(
+                getattr(getattr(self.config, "scoring", None), "min_fool_samples", 20)
+            ),
+        )
+
+        if not assignments:
+            bt.logging.trace("No generative miners found to challenge.")
+            return
+
+        bt.logging.info(
+            f"Challenge pools: image_qualified={pool_stats['image_qualified']} "
+            f"video_qualified={pool_stats['video_qualified']} "
+            f"onboarding={pool_stats['onboarding']} probe={pool_stats['probe']} "
+            f"rolled_onboarding={pool_stats['rolled_onboarding']}"
+        )
+        bt.logging.info(f"Issuing generative challenge to UIDs: {[uid for uid, _ in assignments]}")
+
+        modality_for = {Modality.IMAGE.value: Modality.IMAGE, Modality.VIDEO.value: Modality.VIDEO}
         tasks = []
-        modality_counters = {m: 0 for m in available}
-        for uid in miner_uids:
-            mods_with_prompts = [m for m in available if prompt_pools[m]]
-            if not mods_with_prompts:
-                break
-            mod = random.choice(mods_with_prompts)
-            pool = prompt_pools[mod]
-            ix = modality_counters[mod] % len(pool)
-            modality_counters[mod] += 1
-            tasks.append(self.send_generative_request(uid, pool[ix], mod))
+        modality_counters = {name: 0 for name in available_names}
+        for uid, mod_name in assignments:
+            pool = prompt_pools[modality_for[mod_name]]
+            ix = modality_counters[mod_name] % len(pool)
+            modality_counters[mod_name] += 1
+            tasks.append(
+                self.send_generative_request(uid, pool[ix], modality_for[mod_name])
+            )
 
         await asyncio.gather(*tasks)
 
