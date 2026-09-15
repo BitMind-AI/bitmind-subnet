@@ -448,7 +448,7 @@ def get_generator_base_rewards(verification_stats):
 
 @dataclass
 class GeneratorQualification:
-    """Per-UID 7-day sample-weighted fool-rate gate for image and video."""
+    """Per-hotkey 7-day sample-weighted fool-rate gate for image and video."""
 
     image_n: int = 0
     image_fooled: int = 0
@@ -484,14 +484,15 @@ def get_generator_qualification(
     image_fool_cutoff: float = 0.02,
     video_fool_cutoff: float = 0.01,
     min_fool_samples: int = 20,
-) -> Optional[Dict[int, GeneratorQualification]]:
+) -> Optional[Dict[str, GeneratorQualification]]:
     """Qualify generators on last-week sample-weighted fool rate, per modality.
 
     A modality clears when (fooled + not_fooled) >= min_fool_samples and
     fooled / n is strictly greater than that modality's cutoff. Counts come
     from benchmark evals (generator_result_benchmark), not answered challenges.
-    Unknown or unregistered hotkeys are omitted; callers treat missing UIDs
-    as onboarding.
+    Results are keyed by hotkey so cached eligibility cannot transfer when a
+    UID is reassigned. Unknown or unregistered hotkeys are omitted; callers
+    treat missing hotkeys as onboarding.
 
     Returns None when the payload is missing, unusable, or fails to parse so
     callers can keep the last good map instead of treating that as "nobody
@@ -501,8 +502,8 @@ def get_generator_qualification(
         bt.logging.warning("No generator results data provided")
         return None
 
-    ss58_to_uid = {hotkey: uid for uid, hotkey in enumerate(metagraph.hotkeys)}
-    tallies: Dict[int, Dict[str, int]] = {}
+    registered_hotkeys = set(metagraph.hotkeys)
+    tallies: Dict[str, Dict[str, int]] = {}
 
     try:
         for result in generator_results:
@@ -511,7 +512,7 @@ def get_generator_qualification(
                 continue
 
             ss58_address = result.get("ss58_address")
-            if not ss58_address or ss58_address not in ss58_to_uid:
+            if not ss58_address or ss58_address not in registered_hotkeys:
                 continue
 
             modality = str(result.get("modality") or "").strip().lower()
@@ -520,9 +521,8 @@ def get_generator_qualification(
 
             fooled = _as_nonneg_int(result.get("fooled_count", 0))
             not_fooled = _as_nonneg_int(result.get("not_fooled_count", 0))
-            uid = ss58_to_uid[ss58_address]
             row = tallies.setdefault(
-                uid, {"image_fooled": 0, "image_n": 0, "video_fooled": 0, "video_n": 0}
+                ss58_address, {"image_fooled": 0, "image_n": 0, "video_fooled": 0, "video_n": 0}
             )
             row[f"{modality}_fooled"] += fooled
             row[f"{modality}_n"] += fooled + not_fooled
@@ -534,9 +534,9 @@ def get_generator_qualification(
             )
             return None
 
-        qualifications: Dict[int, GeneratorQualification] = {}
+        qualifications: Dict[str, GeneratorQualification] = {}
         n_image = n_video = 0
-        for uid, row in tallies.items():
+        for hotkey, row in tallies.items():
             image_n = row["image_n"]
             video_n = row["video_n"]
             image_fooled = row["image_fooled"]
@@ -553,7 +553,7 @@ def get_generator_qualification(
                 and video_rate is not None
                 and video_rate > video_fool_cutoff
             )
-            qualifications[uid] = GeneratorQualification(
+            qualifications[hotkey] = GeneratorQualification(
                 image_n=image_n,
                 image_fooled=image_fooled,
                 video_n=video_n,
@@ -577,6 +577,22 @@ def get_generator_qualification(
 
         bt.logging.error(traceback.format_exc())
         return None
+
+
+def resolve_generator_qualification(
+    qualification: Dict[str, GeneratorQualification],
+    metagraph,
+) -> Dict[int, GeneratorQualification]:
+    """Resolve a hotkey cache against current registrations immediately before use.
+
+    This UID view must not be cached: a replacement hotkey has no eligibility
+    until its own benchmark results qualify it.
+    """
+    return {
+        uid: qualification[hotkey]
+        for uid, hotkey in enumerate(list(metagraph.hotkeys))
+        if hotkey in qualification
+    }
 
 
 def combine_generator_rewards(

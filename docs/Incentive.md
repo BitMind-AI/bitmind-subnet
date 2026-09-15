@@ -84,6 +84,8 @@ $I=1$ if that modality is qualified, else $0$. If both are $0$, the miner gets n
 
 If the generator-results API is down or the payload has no usable rows, validators keep the last successful qualification map for pay so a transient outage does not burn the pot.
 
+Qualification is cached by hotkey and resolved against current UID registrations for rewards and challenge sampling. A replacement hotkey cannot inherit the previous owner's eligibility at the same UID.
+
 ### Challenge slots
 
 Each validator still sends `--neuron.sample-size` (default 50) requests per round — one UID, one modality, no replacement. Slots are filled from three buckets **for the chosen modality**:
