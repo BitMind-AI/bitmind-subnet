@@ -91,8 +91,7 @@ Each registered hotkey gets **one free counted submission** (image, video, or au
 - Exam failures and incomplete uploads do not consume the slot. You can retry on the same key until a model is successfully uploaded and not later marked exam-failed.
 - A confirmed or superseded model **does** consume the free slot for the life of that registration, for every modality.
 - A new benchmark version does **not** refill the slot.
-- To submit another model from the **same** hotkey, run `gascli d push` again. The CLI walks you through burning **0.5 TAO of SN34 alpha** (`burn_alpha`; it will stake 0.5 TAO first if this hotkey does not have enough alpha). Recycle does not count. Then it retries the upload. Use `--yes` to skip the prompts, or `--no-burn` to refuse the offer.
-- You can still register a new miner hotkey instead of burning.
+- To submit another model from the **same** hotkey, run `gascli d push` again. The CLI walks you through burning **0.5 TAO of SN34 alpha** (`burn_alpha`; it will stake 0.5 TAO first if this hotkey does not have enough alpha). Recycle does not count. There is no upload without that burn.
 
 ---
 

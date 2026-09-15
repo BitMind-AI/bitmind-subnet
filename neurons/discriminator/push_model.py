@@ -130,8 +130,6 @@ async def push_separate_models(
     upload_endpoint: Optional[str] = None,
     skip_chain: bool = False,
     max_retries: int = DEFAULT_MAX_RETRIES,
-    auto_confirm_burn: bool = False,
-    offer_burn: bool = True,
 ):
     """Pushes separate image, video, and/or audio detector models and registers on the Bittensor blockchain.
     
@@ -153,13 +151,7 @@ async def push_separate_models(
         from gas.protocol.resubmit_burn import ResubmitBurnError, offer_resubmit_burn
 
         try:
-            return offer_resubmit_burn(
-                wallet,
-                netuid,
-                chain_endpoint,
-                enabled=offer_burn,
-                auto_confirm=auto_confirm_burn,
-            )
+            return offer_resubmit_burn(wallet, netuid, chain_endpoint)
         except ResubmitBurnError as exc:
             print_error(str(exc))
             return None
@@ -408,16 +400,6 @@ def main():
             f"(default: {DEFAULT_MAX_RETRIES}; 0 = retry forever)"
         ),
     )
-    parser.add_argument(
-        "--yes",
-        action="store_true",
-        help="If this hotkey already submitted, burn 0.5 TAO of SN34 alpha without asking",
-    )
-    parser.add_argument(
-        "--no-burn",
-        action="store_true",
-        help="Do not offer the 0.5 TAO resubmit burn when the free slot is used",
-    )
 
     args = parser.parse_args()
 
@@ -484,8 +466,6 @@ def main():
                 upload_endpoint=args.upload_endpoint,
                 skip_chain=args.skip_chain,
                 max_retries=args.max_retries,
-                auto_confirm_burn=args.yes,
-                offer_burn=not args.no_burn,
             )
         )
         

@@ -457,10 +457,8 @@ cli.add_command(discriminator, name="d")
 @click.option("--upload-endpoint", default=None, help="Model upload URL (default: production https://upload.bitmind.ai/upload)")
 @click.option("--skip-chain", is_flag=True, help="Exit after a successful upload without writing on-chain metadata")
 @click.option("--max-retries", default=3, type=int, help="Max blockchain registration attempts per modality (0 = retry forever)")
-@click.option("--yes", is_flag=True, help="If this hotkey already submitted, burn 0.5 TAO of SN34 alpha without asking")
-@click.option("--no-burn", is_flag=True, help="Do not offer the 0.5 TAO resubmit burn when the free slot is used")
 def push_discriminator(
-    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay, vertical, upload_endpoint, skip_chain, max_retries, yes, no_burn
+    image_model, video_model, audio_model, wallet_name, wallet_hotkey, netuid, chain_endpoint, retry_delay, vertical, upload_endpoint, skip_chain, max_retries
 ):
     """Push discriminator model(s) and register on blockchain. At least one model zip file (image, video, or audio) must be provided."""
     if not image_model and not video_model and not audio_model:
@@ -498,10 +496,6 @@ def push_discriminator(
         cmd.extend(["--upload-endpoint", upload_endpoint])
     if skip_chain:
         cmd.append("--skip-chain")
-    if yes:
-        cmd.append("--yes")
-    if no_burn:
-        cmd.append("--no-burn")
 
     # Execute the push_model script. Always propagate its exit code so a
     # successful upload does not leave this click process hanging.

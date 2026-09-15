@@ -55,35 +55,25 @@ def test_evidence_from_successful_receipt():
         evidence_from_response(SimpleNamespace(success=False, message="no stake"))
 
 
-def test_offer_declines_without_burning():
-    answers = iter(["n"])
-    evidence = offer_resubmit_burn(
-        SimpleNamespace(),
-        34,
-        enabled=True,
-        auto_confirm=False,
-        confirm_fn=lambda prompt: next(answers),
-        execute_fn=lambda *args, **kwargs: pytest.fail("should not burn"),
-    )
-    assert evidence is None
+def test_offer_requires_a_terminal(monkeypatch):
+    monkeypatch.setattr("gas.protocol.resubmit_burn.sys.stdin.isatty", lambda: False)
+    with pytest.raises(ResubmitBurnError, match="interactive"):
+        offer_resubmit_burn(
+            SimpleNamespace(),
+            34,
+            execute_fn=lambda *args, **kwargs: pytest.fail("should not burn"),
+        )
 
 
-def test_offer_walks_through_when_confirmed(monkeypatch):
+def test_offer_always_starts_the_burn_walkthrough(monkeypatch):
     monkeypatch.setattr("gas.protocol.resubmit_burn.sys.stdin.isatty", lambda: True)
-    called = {}
-
-    def execute(*args, **kwargs):
-        called["ok"] = True
-        return BurnEvidence(tx_hash="cd" * 32, block_number=7)
-
     evidence = offer_resubmit_burn(
         SimpleNamespace(),
         34,
-        auto_confirm=False,
-        confirm_fn=lambda prompt: "yes",
-        execute_fn=execute,
+        execute_fn=lambda *args, **kwargs: BurnEvidence(
+            tx_hash="cd" * 32, block_number=7
+        ),
     )
-    assert called["ok"] is True
     assert evidence.block_number == 7
 
 

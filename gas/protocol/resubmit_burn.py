@@ -91,11 +91,7 @@ def evidence_from_response(response: Any, subtensor: Any = None) -> BurnEvidence
     return BurnEvidence(tx_hash=tx_hash, block_number=block_number)
 
 
-def _confirm(prompt: str, confirm_fn: Callable[[str], str], auto_confirm: bool) -> bool:
-    if auto_confirm:
-        print(prompt)
-        print("  Continuing because --yes was passed.")
-        return True
+def _confirm(prompt: str, confirm_fn: Callable[[str], str]) -> bool:
     if not sys.stdin.isatty():
         return False
     answer = confirm_fn(prompt).strip().lower()
@@ -128,7 +124,6 @@ def execute_resubmit_burn(
     *,
     subtensor=None,
     confirm_fn: Callable[[str], str] = input,
-    auto_confirm: bool = False,
 ) -> BurnEvidence:
     import bittensor as bt
 
@@ -161,9 +156,10 @@ def execute_resubmit_burn(
         if not _confirm(
             "  Stake 0.5 TAO to this hotkey, then burn the resulting alpha? [y/N] ",
             confirm_fn,
-            auto_confirm,
         ):
-            raise ResubmitBurnError("Burn cancelled")
+            raise ResubmitBurnError(
+                "Cannot submit another model without burning 0.5 TAO of SN34 alpha."
+            )
         print("  Unlock the coldkey if prompted, then wait for the stake to land...")
         staked = sub.add_stake(
             wallet,
@@ -186,9 +182,10 @@ def execute_resubmit_burn(
     elif not _confirm(
         "  Burn that alpha now? This cannot be undone. [y/N] ",
         confirm_fn,
-        auto_confirm,
     ):
-        raise ResubmitBurnError("Burn cancelled")
+        raise ResubmitBurnError(
+            "Cannot submit another model without burning 0.5 TAO of SN34 alpha."
+        )
 
     print("  Unlock the coldkey if prompted, then wait for the burn to land...")
     call = _compose_burn(sub, hotkey, netuid, amount_rao)
@@ -209,34 +206,24 @@ def offer_resubmit_burn(
     netuid: int,
     chain_endpoint: Optional[str] = None,
     *,
-    enabled: bool = True,
-    auto_confirm: bool = False,
     confirm_fn: Callable[[str], str] = input,
     execute_fn=execute_resubmit_burn,
-) -> Optional[BurnEvidence]:
+) -> BurnEvidence:
     print()
     print("  This hotkey already used its free submission.")
     print(
-        f"  You can submit another model from the same key by burning "
+        f"  Another model on this key requires burning "
         f"{RESUBMIT_FEE_TAO:g} TAO of SN34 alpha."
     )
-    print("  Recycle does not count. The CLI will submit the burn and retry the upload.")
-    if not enabled:
-        return None
-    if not auto_confirm and not sys.stdin.isatty():
-        print("  Re-run `gascli d push` in a terminal to walk through the burn.")
-        return None
-    if not _confirm(
-        "  Walk through the 0.5 TAO burn now? [y/N] ",
-        confirm_fn,
-        auto_confirm,
-    ):
-        print("  Skipping the burn. Register a new hotkey, or re-run push when you are ready.")
-        return None
+    print("  Recycle does not count. The CLI will submit the burn, then retry the upload.")
+    if not sys.stdin.isatty():
+        raise ResubmitBurnError(
+            "A second submission needs an interactive 0.5 TAO SN34 alpha burn. "
+            "Re-run `gascli d push` in a terminal."
+        )
     return execute_fn(
         wallet,
         netuid,
         chain_endpoint,
         confirm_fn=confirm_fn,
-        auto_confirm=auto_confirm,
     )
