@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 RESUBMIT_FEE_TAO = 0.5
@@ -47,6 +50,50 @@ def is_submission_limit(result: dict) -> bool:
             "already used",
         )
     )
+
+
+def is_credit_used(result: dict) -> bool:
+    if result.get("status_code") != 409:
+        return False
+    return "already been used" in _detail_text(result).lower()
+
+
+def receipt_dir() -> Path:
+    root = os.environ.get("GAS_HOME") or str(Path.home() / ".gas")
+    return Path(root) / "resubmit_burns"
+
+
+def receipt_path(hotkey: str, netuid: int) -> Path:
+    return receipt_dir() / f"{int(netuid)}-{hotkey}.json"
+
+
+def load_burn_receipt(hotkey: str, netuid: int) -> Optional[BurnEvidence]:
+    path = receipt_path(hotkey, netuid)
+    try:
+        data = json.loads(path.read_text())
+        return BurnEvidence(
+            tx_hash=normalize_tx_hash(data.get("tx_hash")),
+            block_number=int(data["block_number"]),
+        )
+    except (OSError, KeyError, TypeError, ValueError, ResubmitBurnError):
+        return None
+
+
+def save_burn_receipt(hotkey: str, netuid: int, evidence: BurnEvidence) -> None:
+    path = receipt_path(hotkey, netuid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {"tx_hash": evidence.tx_hash, "block_number": evidence.block_number}
+        )
+    )
+
+
+def clear_burn_receipt(hotkey: str, netuid: int) -> None:
+    try:
+        receipt_path(hotkey, netuid).unlink()
+    except FileNotFoundError:
+        pass
 
 
 def alpha_rao_for_fee(tao_per_alpha: float) -> int:
@@ -187,6 +234,10 @@ def execute_resubmit_burn(
             wait_for_finalization=True,
         )
     evidence = evidence_from_response(burned, sub)
+    try:
+        save_burn_receipt(hotkey, netuid, evidence)
+    except OSError:
+        pass
     print(f"  Burn included in block {evidence.block_number} ({evidence.tx_hash[:12]}…).")
     return evidence
 

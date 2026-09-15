@@ -243,6 +243,7 @@ def upload_single_modality(
     upload_endpoint: str,
     vertical: str = "general",
     resubmit: Optional[Callable[[], Optional[object]]] = None,
+    netuid: int = 34,
 ) -> dict:
     """Upload a single modality file (image or video model)."""
     file_path_obj = Path(file_path)
@@ -262,42 +263,75 @@ def upload_single_modality(
         status = result.get('status_code', 0)
         return f"HTTP {status}: {msg}" if status else str(msg)
 
-    print(f"  [1/3] Requesting presigned URL...", end=' ', flush=True)
-    presigned_result = generate_presigned_url(
-        wallet,
-        upload_endpoint,
-        filename,
-        file_size,
-        file_hash,
-        'application/octet-stream',
-        modality,
-        vertical
-    )
+    def request_presign(burn_tx_hash=None, burn_block=None, label="Requesting presigned URL"):
+        print(f"  [1/3] {label}...", end=' ', flush=True)
+        return generate_presigned_url(
+            wallet,
+            upload_endpoint,
+            filename,
+            file_size,
+            file_hash,
+            'application/octet-stream',
+            modality,
+            vertical,
+            burn_tx_hash=burn_tx_hash,
+            burn_block=burn_block,
+        )
+
+    presigned_result = request_presign()
 
     if not presigned_result['success']:
-        from gas.protocol.resubmit_burn import is_submission_limit
+        from gas.protocol.resubmit_burn import (
+            BurnEvidence,
+            clear_burn_receipt,
+            is_credit_used,
+            is_submission_limit,
+            load_burn_receipt,
+            save_burn_receipt,
+        )
 
         print("FAILED")
-        if is_submission_limit(presigned_result) and resubmit is not None:
-            evidence = resubmit()
-            tx_hash = getattr(evidence, "tx_hash", None) if evidence is not None else None
-            block_number = getattr(evidence, "block_number", None) if evidence is not None else None
-            if tx_hash and block_number:
-                print(f"  [1/3] Requesting presigned URL with burn credit...", end=' ', flush=True)
-                presigned_result = generate_presigned_url(
-                    wallet,
-                    upload_endpoint,
-                    filename,
-                    file_size,
-                    file_hash,
-                    'application/octet-stream',
-                    modality,
-                    vertical,
-                    burn_tx_hash=tx_hash,
-                    burn_block=block_number,
+        hotkey = wallet.hotkey.ss58_address
+        if is_submission_limit(presigned_result):
+            evidence = load_burn_receipt(hotkey, netuid)
+            if evidence is not None:
+                print(
+                    f"  Reusing burn {evidence.tx_hash[:12]}… from a previous attempt."
                 )
-                if not presigned_result['success']:
+                presigned_result = request_presign(
+                    evidence.tx_hash,
+                    evidence.block_number,
+                    label="Requesting presigned URL with saved burn credit",
+                )
+                if presigned_result['success']:
+                    clear_burn_receipt(hotkey, netuid)
+                else:
                     print("FAILED")
+                    if is_credit_used(presigned_result):
+                        clear_burn_receipt(hotkey, netuid)
+            if (
+                not presigned_result['success']
+                and is_submission_limit(presigned_result)
+                and resubmit is not None
+            ):
+                evidence = resubmit()
+                tx_hash = getattr(evidence, "tx_hash", None) if evidence is not None else None
+                block_number = getattr(evidence, "block_number", None) if evidence is not None else None
+                if tx_hash and block_number:
+                    save_burn_receipt(
+                        hotkey,
+                        netuid,
+                        BurnEvidence(tx_hash=tx_hash, block_number=int(block_number)),
+                    )
+                    presigned_result = request_presign(
+                        tx_hash,
+                        block_number,
+                        label="Requesting presigned URL with burn credit",
+                    )
+                    if presigned_result['success']:
+                        clear_burn_receipt(hotkey, netuid)
+                    else:
+                        print("FAILED")
         if not presigned_result['success']:
             # 409 means this hash was already accepted — the file is already in R2.
             # Return a soft error so the caller can decide whether to skip or abort.

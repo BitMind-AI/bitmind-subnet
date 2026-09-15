@@ -7,10 +7,14 @@ from gas.protocol.resubmit_burn import (
     BurnEvidence,
     ResubmitBurnError,
     alpha_rao_for_fee,
+    clear_burn_receipt,
     evidence_from_response,
     execute_resubmit_burn,
+    is_credit_used,
     is_submission_limit,
+    load_burn_receipt,
     offer_resubmit_burn,
+    save_burn_receipt,
 )
 
 
@@ -66,7 +70,20 @@ def test_offer_requires_a_terminal(monkeypatch):
         )
 
 
-def test_low_alpha_uses_add_stake_burn(monkeypatch):
+def test_receipt_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("GAS_HOME", str(tmp_path))
+    evidence = BurnEvidence(tx_hash="ab" * 32, block_number=11)
+    save_burn_receipt("5Hot", 34, evidence)
+    assert load_burn_receipt("5Hot", 34) == evidence
+    clear_burn_receipt("5Hot", 34)
+    assert load_burn_receipt("5Hot", 34) is None
+    assert is_credit_used(
+        {"status_code": 409, "response": {"detail": "This burn has already been used"}}
+    )
+
+
+def test_low_alpha_uses_add_stake_burn(tmp_path, monkeypatch):
+    monkeypatch.setenv("GAS_HOME", str(tmp_path))
     monkeypatch.setattr("gas.protocol.resubmit_burn.sys.stdin.isatty", lambda: True)
     burned = SimpleNamespace(
         success=True,
@@ -107,6 +124,7 @@ def test_low_alpha_uses_add_stake_burn(monkeypatch):
     assert calls[0][0] == 34
     assert calls[0][1] == "5Hot"
     assert calls[0][2].tao == 0.5
+    assert load_burn_receipt("5Hot", 34) == evidence
 
 
 def test_offer_always_starts_the_burn_walkthrough(monkeypatch):
@@ -155,6 +173,7 @@ def test_presigned_payload_includes_burn_proof(monkeypatch):
 
 
 def test_upload_retries_after_interactive_burn(tmp_path, monkeypatch):
+    monkeypatch.setenv("GAS_HOME", str(tmp_path))
     model = tmp_path / "model.zip"
     model.write_bytes(b"zip")
     calls = []
@@ -199,3 +218,53 @@ def test_upload_retries_after_interactive_burn(tmp_path, monkeypatch):
     assert result["success"] is True
     assert calls[1]["burn_tx_hash"] == "e" * 64
     assert calls[1]["burn_block"] == 42
+    assert load_burn_receipt("5Miner", 34) is None
+
+
+def test_upload_reuses_saved_receipt_before_burning(tmp_path, monkeypatch):
+    monkeypatch.setenv("GAS_HOME", str(tmp_path))
+    model = tmp_path / "model.zip"
+    model.write_bytes(b"zip")
+    save_burn_receipt("5Miner", 34, BurnEvidence(tx_hash="f" * 64, block_number=9))
+    calls = []
+
+    def presign(*args, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("burn_tx_hash") == "f" * 64:
+            return {
+                "success": True,
+                "status_code": 200,
+                "response": {
+                    "data": {
+                        "model_id": 3,
+                        "presigned_url": "https://r2.example/put",
+                        "r2_key": "miner/key",
+                    }
+                },
+            }
+        return {
+            "success": False,
+            "status_code": 403,
+            "response": {"detail": "already used its free submission. Burn 0.5 TAO"},
+        }
+
+    monkeypatch.setattr("gas.protocol.miner_requests.generate_presigned_url", presign)
+    monkeypatch.setattr(
+        "gas.protocol.miner_requests.upload_to_r2",
+        lambda *args, **kwargs: {"success": True, "response": {}},
+    )
+    monkeypatch.setattr(
+        "gas.protocol.miner_requests.confirm_upload",
+        lambda *args, **kwargs: {"success": True, "response": {"data": {}}},
+    )
+    wallet = SimpleNamespace(hotkey=SimpleNamespace(ss58_address="5Miner"))
+    result = upload_single_modality(
+        wallet,
+        str(model),
+        "image",
+        "https://upload.example/upload",
+        resubmit=lambda: pytest.fail("should not burn again"),
+    )
+    assert result["success"] is True
+    assert calls[1]["burn_tx_hash"] == "f" * 64
+    assert load_burn_receipt("5Miner", 34) is None

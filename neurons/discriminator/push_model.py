@@ -174,6 +174,7 @@ async def push_separate_models(
                 endpoint,
                 vertical=vertical,
                 resubmit=resubmit,
+                netuid=netuid,
             )
             results['image'] = image_result
             
@@ -199,6 +200,7 @@ async def push_separate_models(
                 endpoint,
                 vertical=vertical,
                 resubmit=resubmit,
+                netuid=netuid,
             )
             results['video'] = video_result
             
@@ -224,6 +226,7 @@ async def push_separate_models(
                 endpoint,
                 vertical=vertical,
                 resubmit=resubmit,
+                netuid=netuid,
             )
             results['audio'] = audio_result
             
