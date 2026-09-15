@@ -39,33 +39,33 @@ const config = {
   // Wallet
   walletName: process.env.WALLET_NAME || 'default',
   walletHotkey: process.env.WALLET_HOTKEY || 'default',
-  
+
   // Network
   chainEndpoint: process.env.CHAIN_ENDPOINT || '',
   callbackPort: process.env.CALLBACK_PORT || '10525',
   externalCallbackPort: process.env.EXTERNAL_CALLBACK_PORT || null,
   externalIp: process.env.EXTERNAL_IP || null,
-  
+
   // Cache
   cacheDir: process.env.SN34_CACHE_DIR || path.join(os.homedir(), '.cache', 'sn34'),
-  
+
   // Device
   device: process.env.DEVICE || 'cuda',
-  
+
   // Logging
   loglevel: process.env.LOGLEVEL || 'info',
-  
+
   // Features
   autoUpdate: process.env.AUTO_UPDATE || 'false',
   heartbeat: process.env.HEARTBEAT || 'false',
   storeFailedMedia: process.env.STORE_FAILED_MEDIA === 'true',
-  
+
   // Service intervals
   datasetInterval: process.env.DATASET_INTERVAL || '1800',
-  
+
   // API configuration
   benchmarkApiUrl: process.env.BENCHMARK_API_URL || 'https://gas.bitmind.ai',
-  
+
   // Service selection
   startValidator: process.env.START_VALIDATOR !== 'false',
   startGenerator: process.env.START_GENERATOR !== 'false',
@@ -139,7 +139,7 @@ if (config.startValidator) {
   if (process.env.EPOCH_LENGTH) {
     validatorArgs.push('--epoch-length', process.env.EPOCH_LENGTH);
   }
-  
+
   // Add external callback port if provided
   if (config.externalCallbackPort) {
     validatorArgs.push('--neuron.external-callback-port', config.externalCallbackPort);
@@ -150,7 +150,7 @@ if (config.startValidator) {
   if (config.externalIp) {
     validatorArgs.push('--neuron.external-ip', config.externalIp);
   }
-  
+
   if (heartbeatParam) {
     validatorArgs.push(heartbeatParam);
   }
@@ -158,7 +158,7 @@ if (config.startValidator) {
   if (config.storeFailedMedia) {
     validatorArgs.push('--store-failed-media');
   }
-  
+
   apps.push({
     name: 'sn34-validator',
     script: validatorScript,
@@ -166,12 +166,14 @@ if (config.startValidator) {
     args: validatorArgs.join(' '),
     env: {
       WANDB_API_KEY: process.env.WANDB_API_KEY,
+      SN34_CACHE_RECLAIM: process.env.SN34_CACHE_RECLAIM || '0',
       ...HF_ENV,
       ...TORCH_ENV,
     },
     watch: false,
     instances: 1,
     autorestart: true,
+    max_size: '200M',
   });
 }
 
@@ -187,14 +189,17 @@ if (config.startGenerator) {
       '--cache.base-dir', config.cacheDir,
       '--device', config.device,
       '--log-level', config.loglevel,
+      '--prompt-batch-size', process.env.GENERATION_BATCH_SIZE || '3',
     ].join(' '),
     env: {
+      SN34_CACHE_RECLAIM: process.env.SN34_CACHE_RECLAIM || '0',
       ...HF_ENV,
       ...TORCH_ENV,
     },
     watch: false,
     instances: 1,
     autorestart: true,
+    max_size: '200M',
   });
 }
 
@@ -215,6 +220,7 @@ if (config.startData) {
       logParam,
     ].join(' '),
     env: {
+      SN34_CACHE_RECLAIM: process.env.SN34_CACHE_RECLAIM || '0',
       ...HF_ENV,
       TMPDIR: path.join(config.cacheDir, 'tmp'),
       TEMP: path.join(config.cacheDir, 'tmp'),
@@ -223,6 +229,7 @@ if (config.startData) {
     watch: false,
     instances: 1,
     autorestart: true,
+    max_size: '200M',
   });
 }
 
