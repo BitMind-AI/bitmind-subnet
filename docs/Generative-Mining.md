@@ -8,11 +8,11 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 
 Generative miners create synthetic media (images and videos) according to prompts from validators. Miners are rewarded based on:
 1. **Data validation pass rate** -- content must pass C2PA signature checks and prompt alignment validation
-2. **Adversarial performance** -- synthetic media that fools discriminative miners earns a multiplier bonus
-3. **Sample volume** -- processing more evaluations provides a logarithmic bonus up to 2x
+2. **Fool-rate qualification** -- a modality pays only after its last-7-day benchmark fool rate clears the bar (image $>2\%$, video $>1\%$, $n \ge 20$ evals)
+3. **Sample volume** -- verified volume ramps through the first 10 samples, then logarithmically
 4. **Model choice** -- more expensive generation models earn higher per-unit rewards (see [Model Pricing](#model-pricing-and-rewards) below)
 
-See [Incentive Mechanism](Incentive.md) for the full reward formula.
+Validators still challenge onboarding and under-bar miners (8 + 6 of 50 slots) so new UIDs can build a fool-rate sample. Those slots do not pay until the miner qualifies. See [Incentive Mechanism](Incentive.md) for the full reward formula.
 
 Generative miners operate as FastAPI servers that receive generation requests from validators and respond asynchronously via webhooks.
 
@@ -147,7 +147,7 @@ Both will be re-added when their C2PA issues are resolved.
 - **Seedance 2.0 Fast** costs 4× more than baseline but earns 2× multiplier — a strong
   quality/efficiency tradeoff.
 - **Veo 3.1** (full) costs ~7× more than baseline and earns 2.58× multiplier.  Useful if your
-  content quality advantage translates to a higher pass rate or fool rate.
+  content quality advantage translates to a higher pass rate or a fool rate that stays over the pay gate.
 - Running multiple models is supported — your effective multiplier is averaged across all
   verified samples, weighted by how many each model contributed.
 

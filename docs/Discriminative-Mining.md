@@ -53,7 +53,7 @@ gascli d push \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name
 
-# Video or audio on a different hotkey:
+# Video or audio (same or another hotkey):
 # gascli d push --video-model video_detector.zip --wallet-hotkey video_key
 # gascli d push --audio-model audio_detector.zip --wallet-hotkey audio_key
 ```
@@ -82,16 +82,21 @@ gascli d push \
 - `--chain-endpoint`: Subtensor network endpoint (default: "wss://entrypoint-finney.opentensor.ai:443/")
 - `--retry-delay`: Retry delay in seconds (default: 60)
 
-Provide exactly one of `--image-model`, `--video-model`, or `--audio-model`. A second model needs a different hotkey.
+Provide exactly one of `--image-model`, `--video-model`, or `--audio-model`.
 
 ## Submission Limits
 
-Each registered hotkey gets **one counted submission** (image, video, or audio — not one of each).
+Each registered hotkey gets **one free counted submission** (image, video, or audio — not one of each).
 
 - Exam failures and incomplete uploads do not consume the slot. You can retry on the same key until a model is successfully uploaded and not later marked exam-failed.
-- A confirmed or superseded model **does** consume the slot for the life of that hotkey, for every modality.
+- A confirmed or superseded model **does** consume the free slot for the life of that registration, for every modality.
 - A new benchmark version does **not** refill the slot.
-- To submit another model, register a new miner hotkey.
+- To submit another model from the **same** hotkey, run `gascli d push` again. The CLI walks you through burning **0.5 TAO of SN34 alpha**: `burn_alpha` if this hotkey already has enough α, otherwise one `add_stake_burn` of 0.5 TAO. Recycle does not count. There is no second counted model without that burn.
+- The on-chain burn is irreversible. Its **submission credit** is consumed only when the new model counts; unused credits are reused on upload/exam retries.
+- Before confirmation, the CLI shows the exact alpha amount and quoted TAO value, including up to **2% price padding** for `burn_alpha` (about 0.51 TAO worth). `add_stake_burn` spends 0.5 TAO. Transaction fees are additional in both cases.
+- Before broadcasting, the CLI atomically saves the signed transaction, hash, chain identity, amount, and intended submission in `$GAS_HOME/resubmit_burns` (default `~/.gas/resubmit_burns`). No private keys are stored. A local lock prevents overlapping pushes for the same hotkey/subnet using that state directory.
+- After a crash or timeout, rerun the same command on the same machine with the same `GAS_HOME`. The CLI checks finalized chain history and reuses a successful burn. Malformed state, unavailable history, or an unresolved saved transaction blocks a fresh burn; a saved transaction not found even after expiry requires investigation, not automatic repayment. A confirmed on-chain failure permits a newly confirmed attempt on the next run.
+- Preserve the journal and receipt. Deleting state, changing `GAS_HOME`, or using another machine bypasses local protection; this is not a cross-machine exactly-once guarantee. If recovery remains blocked, use the printed transaction hash and saved journal to investigate with the operator before retrying elsewhere. Historical burns made before journaling was introduced cannot be recovered automatically without their saved receipt.
 
 ---
 
