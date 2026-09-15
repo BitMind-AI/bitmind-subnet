@@ -179,64 +179,108 @@ def _common_metadata(dataset: DatasetConfig, source_path: Path) -> Dict[str, Any
     }
 
 
+def _media_column(column_names, modality: Modality) -> Optional[str]:
+    names = list(column_names)
+    if modality == Modality.IMAGE:
+        return (
+            next((c for c in names if c.lower() == "image"), None)
+            or next(
+                (
+                    c
+                    for c in names
+                    if "image" in c.lower()
+                    and "_id" not in c.lower()
+                    and "width" not in c.lower()
+                    and "height" not in c.lower()
+                ),
+                None,
+            )
+            or next((c for c in names if "image" in c.lower()), None)
+        )
+    candidates = ["video", "bytes", "content", "data"]
+    return (
+        next((c for c in names if c.lower() in candidates), None)
+        or next(
+            (
+                c
+                for c in names
+                if any(k in c.lower() for k in candidates) and "_id" not in c.lower()
+            ),
+            None,
+        )
+        or next((c for c in names if any(k in c.lower() for k in candidates)), None)
+    )
+
+
+def _row_media_payload(media_data):
+    if media_data is None or isinstance(media_data, (int, float)):
+        return None
+    if isinstance(media_data, dict):
+        key = next(
+            (
+                k
+                for k in media_data
+                if any(s in k.lower() for s in ["bytes", "image", "video", "data", "content"])
+            ),
+            None,
+        )
+        if key is None:
+            return None
+        media_data = media_data[key]
+    return media_data
+
+
 def _process_parquet(source_path: Path, dataset: DatasetConfig, num_items: int):
-    table = pq.read_table(source_path)
-    df = table.to_pandas()
-    sample_df = df.sample(n=min(num_items, len(df)))
-
-    if dataset.modality == Modality.IMAGE:
-        media_col = (
-            next((c for c in sample_df.columns if c.lower() == "image"), None)
-            or next((c for c in sample_df.columns if "image" in c.lower() and "_id" not in c.lower() and "width" not in c.lower() and "height" not in c.lower()), None)
-            or next((c for c in sample_df.columns if "image" in c.lower()), None)
-        )
-    else:
-        candidates = ["video", "bytes", "content", "data"]
-        media_col = (
-            next((c for c in sample_df.columns if c.lower() in candidates), None)
-            or next((c for c in sample_df.columns if any(k in c.lower() for k in candidates) and "_id" not in c.lower()), None)
-            or next((c for c in sample_df.columns if any(k in c.lower() for k in candidates)), None)
-        )
-
+    # Schema-only first. Loading the full table+pandas copy of a multi-GB
+    # parquet (e.g. conceptual_captions_* ) blows a 109 GiB cgroup even when
+    # the file has no media column and we immediately return.
+    pf = pq.ParquetFile(source_path)
+    media_col = _media_column(pf.schema_arrow.names, dataset.modality)
     if not media_col:
-        bt.logging.warning(f"No media column found in {source_path} for modality {dataset.modality}")
+        bt.logging.warning(
+            f"No media column found in {source_path} for modality {dataset.modality}"
+        )
         return
 
     bt.logging.debug(f"Selected media column '{media_col}' from {source_path}")
 
-    for _, row in sample_df.iterrows():
-        try:
-            media_data = row[media_col]
-            
-            if media_data is None or isinstance(media_data, (int, float)):
-                continue
-            
-            if isinstance(media_data, dict):
-                key = next(
-                    (
-                        k for k in media_data 
-                        if any(s in k.lower() 
-                        for s in ["bytes", "image", "video", "data", "content"])
-                    ), None
-                )
-                media_data = media_data[key]
-
-            if dataset.modality == Modality.IMAGE:
+    taken = 0
+    row_groups = list(range(pf.num_row_groups))
+    random.shuffle(row_groups)
+    batch_size = max(1, min(16, num_items))
+    for rg in row_groups:
+        if taken >= num_items:
+            break
+        for batch in pf.iter_batches(
+            batch_size=batch_size, columns=[media_col], row_groups=[rg]
+        ):
+            if taken >= num_items:
+                break
+            column = batch.column(0)
+            indices = list(range(len(column)))
+            random.shuffle(indices)
+            for i in indices:
+                if taken >= num_items:
+                    break
                 try:
-                    img = Image.open(BytesIO(media_data))
-                except Exception:
-                    media_data = base64.b64decode(media_data)
-                    img = Image.open(BytesIO(media_data))
-                yield img, _common_metadata(dataset, source_path)
-            else:
-                if media_data is None or isinstance(media_data, (int, float)):
+                    media_data = _row_media_payload(column[i].as_py())
+                    if media_data is None:
+                        continue
+                    if dataset.modality == Modality.IMAGE:
+                        try:
+                            img = Image.open(BytesIO(media_data))
+                        except Exception:
+                            media_data = base64.b64decode(media_data)
+                            img = Image.open(BytesIO(media_data))
+                        yield img, _common_metadata(dataset, source_path)
+                    else:
+                        if not isinstance(media_data, (bytes, bytearray)):
+                            media_data = base64.b64decode(media_data)
+                        yield bytes(media_data), _common_metadata(dataset, source_path)
+                    taken += 1
+                except Exception as e:
+                    bt.logging.warning(f"Failed to extract row from {source_path}: {e}")
                     continue
-                if not isinstance(media_data, (bytes, bytearray)):
-                    media_data = base64.b64decode(media_data)
-                yield bytes(media_data), _common_metadata(dataset, source_path)
-        except Exception as e:
-            bt.logging.warning(f"Failed to extract row from {source_path}: {e}")
-            continue
 
 
 def _process_zip_or_tar(source_path: Path, dataset: DatasetConfig, num_items: int):

@@ -23,6 +23,7 @@ from gas.generation import (
     PromptGenerator,
 )
 from gas.cache.content_manager import ContentManager
+from gas.cache.util.cache_reclaim import start_cache_reclaim
 from gas.types import Modality, MediaType
 
 
@@ -58,6 +59,7 @@ class GeneratorService:
             remove_on_sample=self.config.remove_on_sample,
             min_source_threshold=self.config.min_source_threshold,
         )
+        start_cache_reclaim(self.config.cache.base_dir)
         self.generation_pipeline: Optional[GenerationPipeline] = None
         self.prompt_generator: Optional[PromptGenerator] = None
         self.model_registry = None
