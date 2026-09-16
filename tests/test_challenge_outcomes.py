@@ -116,6 +116,40 @@ class ChallengeOutcomeStatsTest(unittest.TestCase):
             self.assertEqual(response["hotkey-2"]["video"]["answered"], 1)
             self.assertEqual(response["hotkey-2"]["video"]["no_answer"], 0)
 
+    def test_no_answer_rows_do_not_consume_reward_stats_limit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "prompts.db"
+            conn = ConnectionManager(db_path)
+            with conn.connect() as c:
+                create_schema(c)
+
+            prompts = PromptStore(conn)
+            challenges = ChallengeStore(conn)
+            prompt_id = prompts.add_prompt_entry("a test prompt", modality="image")
+            challenges.record_outcome(
+                task_id="task-verified",
+                uid=1,
+                hotkey="hotkey-1",
+                prompt_id=prompt_id,
+                modality="image",
+                status="verified",
+            )
+            for i in range(5):
+                challenges.record_outcome(
+                    task_id=f"task-no-answer-{i}",
+                    uid=1,
+                    hotkey="hotkey-1",
+                    prompt_id=prompt_id,
+                    modality="image",
+                    status="failed",
+                    failure_reason="no_answer",
+                )
+
+            stats = challenges.get_outcome_stats_last_n_hours(lookback_hours=1, limit=1)
+            self.assertEqual(stats["hotkey-1"]["total_verified"], 1)
+            self.assertEqual(stats["hotkey-1"]["total_failed"], 0)
+            self.assertEqual(stats["hotkey-1"]["pass_rate"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

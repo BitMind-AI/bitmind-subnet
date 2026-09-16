@@ -161,7 +161,9 @@ class ChallengeStore:
                     SELECT o.*, m.resolution AS media_resolution, m.has_audio AS media_has_audio
                     FROM generator_challenge_outcomes o
                     LEFT JOIN media m ON o.media_id = m.id
-                    WHERE o.status IN ('verified', 'failed') AND o.updated_at >= ?
+                    WHERE o.status IN ('verified', 'failed')
+                      AND o.updated_at >= ?
+                      AND COALESCE(o.failure_reason, '') != 'no_answer'
                     ORDER BY o.updated_at DESC LIMIT ?
                     """,
                     (cutoff, int(limit)),
