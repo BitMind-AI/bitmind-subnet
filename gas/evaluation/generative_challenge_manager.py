@@ -22,7 +22,10 @@ from PIL import Image
 from typing import Dict, Optional
 
 from gas.cache.content_manager import ContentManager
-from gas.evaluation.challenge_allocation import allocate_challenge_slots
+from gas.evaluation.challenge_allocation import (
+    allocate_challenge_slots,
+    resolve_challenge_response_stats,
+)
 from gas.evaluation.resolution_tiers import sample_challenge_tier
 from gas.evaluation.rewards import GeneratorQualification, resolve_generator_qualification
 from gas.protocol.epistula import get_verifier
@@ -155,8 +158,11 @@ class GenerativeChallengeManager:
         )
         scoring = getattr(self.config, "scoring", None)
         lookback_hours = float(getattr(scoring, "no_answer_lookback_hours", 24.0))
-        response_stats = self.content_manager.get_challenge_response_stats(
-            lookback_hours=lookback_hours
+        response_stats = resolve_challenge_response_stats(
+            self.content_manager.get_challenge_response_stats(
+                lookback_hours=lookback_hours
+            ),
+            self.metagraph,
         )
         assignments, pool_stats = allocate_challenge_slots(
             miner_uids,

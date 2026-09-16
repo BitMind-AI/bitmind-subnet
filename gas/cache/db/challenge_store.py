@@ -200,6 +200,9 @@ class ChallengeStore:
         outcomes = self.get_outcomes_last_n_hours(lookback_hours, limit)
         miner_stats: Dict[str, Dict[str, Any]] = {}
         for outcome in outcomes:
+            if outcome.status == "failed" and (outcome.failure_reason or "") == "no_answer":
+                # Refused POSTs are sampling signal, not a verification miss.
+                continue
             hotkey = outcome.hotkey
             if hotkey not in miner_stats:
                 miner_stats[hotkey] = {
@@ -283,8 +286,12 @@ class ChallengeStore:
 
     def get_challenge_response_stats(
         self, lookback_hours: float = 24.0
-    ) -> Dict[int, Dict[str, Dict[str, int]]]:
-        """Count answers vs no-answers per UID and modality.
+    ) -> Dict[str, Dict[str, Dict[str, int]]]:
+        """Count answers vs no-answers per hotkey and modality.
+
+        Keyed by hotkey so a replacement at a recycled UID does not inherit
+        the previous occupant's totals. Callers resolve against the current
+        metagraph the same way qualification does.
 
         An answer is stored/verified media, or a failed attempt that still
         engaged (miner-reported failure, C2PA, CLIP, etc.). ``no_answer`` is
@@ -297,7 +304,7 @@ class ChallengeStore:
             with self.db.connect() as conn:
                 cursor = conn.execute(
                     """
-                    SELECT uid, modality,
+                    SELECT hotkey, modality,
                         SUM(
                             CASE
                                 WHEN status IN ('stored', 'verified') THEN 1
@@ -318,16 +325,18 @@ class ChallengeStore:
                         ) AS no_answer
                     FROM generator_challenge_outcomes
                     WHERE created_at >= ?
-                    GROUP BY uid, modality
+                    GROUP BY hotkey, modality
                     """,
                     (cutoff,),
                 )
-                stats: Dict[int, Dict[str, Dict[str, int]]] = {}
-                for uid, modality, answered, no_answer in cursor.fetchall():
+                stats: Dict[str, Dict[str, Dict[str, int]]] = {}
+                for hotkey, modality, answered, no_answer in cursor.fetchall():
+                    if not hotkey:
+                        continue
                     mod = str(modality or "").strip().lower()
                     if mod not in ("image", "video"):
                         continue
-                    row = stats.setdefault(int(uid), {})
+                    row = stats.setdefault(str(hotkey), {})
                     row[mod] = {
                         "answered": int(answered or 0),
                         "no_answer": int(no_answer or 0),

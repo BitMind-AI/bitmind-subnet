@@ -69,6 +69,19 @@ class ChallengeOutcomeStatsTest(unittest.TestCase):
             self.assertEqual(stats["hotkey-1"]["video_model_names"], [])
 
             challenges.record_outcome(
+                task_id="task-no-answer-hk1",
+                uid=1,
+                hotkey="hotkey-1",
+                prompt_id=prompt_id,
+                modality="image",
+                status="failed",
+                failure_reason="no_answer",
+            )
+            stats_after = challenges.get_outcome_stats_last_n_hours(lookback_hours=1)
+            self.assertEqual(stats_after["hotkey-1"]["total_failed"], 1)
+            self.assertEqual(stats_after["hotkey-1"]["pass_rate"], 0.5)
+
+            challenges.record_outcome(
                 task_id="task-no-answer",
                 uid=2,
                 hotkey="hotkey-2",
@@ -96,12 +109,12 @@ class ChallengeOutcomeStatsTest(unittest.TestCase):
                 media_id=media_id,
             )
             response = challenges.get_challenge_response_stats(lookback_hours=1)
-            self.assertEqual(response[1]["image"]["answered"], 2)
-            self.assertEqual(response[1]["image"]["no_answer"], 0)
-            self.assertEqual(response[2]["image"]["answered"], 0)
-            self.assertEqual(response[2]["image"]["no_answer"], 2)
-            self.assertEqual(response[2]["video"]["answered"], 1)
-            self.assertEqual(response[2]["video"]["no_answer"], 0)
+            self.assertEqual(response["hotkey-1"]["image"]["answered"], 2)
+            self.assertEqual(response["hotkey-1"]["image"]["no_answer"], 1)
+            self.assertEqual(response["hotkey-2"]["image"]["answered"], 0)
+            self.assertEqual(response["hotkey-2"]["image"]["no_answer"], 2)
+            self.assertEqual(response["hotkey-2"]["video"]["answered"], 1)
+            self.assertEqual(response["hotkey-2"]["video"]["no_answer"], 0)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from gas.config import validate_config_and_neuron_path
 from gas.evaluation.challenge_allocation import (
     allocate_challenge_slots,
     classify_modality_bucket,
+    resolve_challenge_response_stats,
     summarize_assignment_buckets,
 )
 from gas.evaluation.rewards import (
@@ -295,3 +296,17 @@ def test_unresponsive_still_applies_when_qualification_is_missing():
     assert stats["image_unresponsive"] == 1
     assert stats["onboarding"] == 1
     assert dict(assignments) == {1: "image"}
+
+
+def test_response_stats_do_not_follow_recycled_uid():
+    metagraph = SimpleNamespace(hotkeys=["replacement", "unchanged"])
+    by_hotkey = {
+        "old-owner": {"image": {"answered": 0, "no_answer": 9}},
+        "unchanged": {"image": {"answered": 3, "no_answer": 0}},
+    }
+    resolved = resolve_challenge_response_stats(by_hotkey, metagraph)
+    assert 0 not in resolved
+    assert resolved[1]["image"]["answered"] == 3
+    assert classify_modality_bucket(
+        None, "image", response_stats=resolved.get(0)
+    ) == "onboarding"

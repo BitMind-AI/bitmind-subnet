@@ -60,6 +60,24 @@ def classify_modality_bucket(
     return "probe"
 
 
+def resolve_challenge_response_stats(
+    response_stats: Optional[Dict[str, ModalityResponseStats]],
+    metagraph,
+) -> Optional[Dict[int, ModalityResponseStats]]:
+    """Map hotkey-keyed no-answer counts onto current UIDs.
+
+    A replacement at a recycled UID starts at zero; the prior occupant's
+    totals stay on the old hotkey and do not transfer.
+    """
+    if not response_stats:
+        return None
+    return {
+        uid: response_stats[hotkey]
+        for uid, hotkey in enumerate(list(metagraph.hotkeys))
+        if hotkey in response_stats
+    }
+
+
 def _slot_targets(
     qualified_slots: int,
     onboarding_slots: int,

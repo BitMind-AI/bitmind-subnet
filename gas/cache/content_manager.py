@@ -654,8 +654,8 @@ class ContentManager:
 
     def get_challenge_response_stats(
         self, lookback_hours: float = 24.0
-    ) -> Dict[int, Dict[str, Dict[str, int]]]:
-        """Per-UID answer / no-answer counts for challenge slot allocation."""
+    ) -> Dict[str, Dict[str, Dict[str, int]]]:
+        """Per-hotkey answer / no-answer counts for challenge slot allocation."""
         return self.challenges.get_challenge_response_stats(lookback_hours=lookback_hours)
 
     def store_clip_embedding(self, media_id: str, embedding_blob: bytes) -> bool:
