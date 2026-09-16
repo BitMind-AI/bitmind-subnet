@@ -9,6 +9,7 @@ from gas.config import validate_config_and_neuron_path
 from gas.evaluation.challenge_allocation import (
     allocate_challenge_slots,
     classify_modality_bucket,
+    resolve_challenge_response_stats,
     summarize_assignment_buckets,
 )
 from gas.evaluation.rewards import (
@@ -233,5 +234,79 @@ def test_fresh_cache_does_not_give_replacement_qualified_challenge_slots():
     assert stats["image_qualified"] == 1
     assert stats["onboarding"] == 1
     assert summarize_assignment_buckets(assignments, current) == {
-        "qualified": 1, "onboarding": 1, "probe": 0,
+        "qualified": 1, "onboarding": 1, "probe": 0, "unresponsive": 0,
     }
+
+
+def test_no_answers_are_unresponsive_not_onboarding():
+    q = _q(video_n=40, qualified_video=False)
+    stats = {"image": {"answered": 0, "no_answer": 5}, "video": {"answered": 8, "no_answer": 0}}
+    assert classify_modality_bucket(q, "image", response_stats=stats) == "unresponsive"
+    assert classify_modality_bucket(q, "video", response_stats=stats) == "probe"
+    assert classify_modality_bucket(q, "image") == "onboarding"
+    few = {"image": {"answered": 0, "no_answer": 4}}
+    assert classify_modality_bucket(q, "image", response_stats=few) == "onboarding"
+    answered = {"image": {"answered": 1, "no_answer": 20}}
+    assert classify_modality_bucket(q, "image", response_stats=answered) == "onboarding"
+
+
+def test_video_specialist_who_ignores_image_is_not_assigned_image():
+    qualification = {
+        0: _q(video_n=40, qualified_video=False),
+    }
+    for uid in range(1, 40):
+        qualification[uid] = _q(
+            image_n=40, qualified_image=True, video_n=40, qualified_video=True
+        )
+    response_stats = {
+        0: {
+            "image": {"answered": 0, "no_answer": 5},
+            "video": {"answered": 12, "no_answer": 0},
+        }
+    }
+    video_hits = 0
+    for seed in range(40):
+        assignments, stats = allocate_challenge_slots(
+            list(qualification),
+            ["image", "video"],
+            qualification,
+            response_stats=response_stats,
+            rng=np.random.default_rng(seed),
+        )
+        assert stats["image_unresponsive"] == 1
+        assert 0 not in {uid for uid, _ in assignments if _ == "image"}
+        if (0, "video") in assignments:
+            video_hits += 1
+    assert video_hits > 0
+
+
+def test_unresponsive_still_applies_when_qualification_is_missing():
+    response_stats = {0: {"image": {"answered": 0, "no_answer": 5}}}
+    assignments, stats = allocate_challenge_slots(
+        [0, 1],
+        ["image"],
+        None,
+        sample_size=2,
+        qualified_slots=1,
+        onboarding_slots=1,
+        probe_slots=0,
+        response_stats=response_stats,
+        rng=np.random.default_rng(8),
+    )
+    assert stats["image_unresponsive"] == 1
+    assert stats["onboarding"] == 1
+    assert dict(assignments) == {1: "image"}
+
+
+def test_response_stats_do_not_follow_recycled_uid():
+    metagraph = SimpleNamespace(hotkeys=["replacement", "unchanged"])
+    by_hotkey = {
+        "old-owner": {"image": {"answered": 0, "no_answer": 9}},
+        "unchanged": {"image": {"answered": 3, "no_answer": 0}},
+    }
+    resolved = resolve_challenge_response_stats(by_hotkey, metagraph)
+    assert 0 not in resolved
+    assert resolved[1]["image"]["answered"] == 3
+    assert classify_modality_bucket(
+        None, "image", response_stats=resolved.get(0)
+    ) == "onboarding"

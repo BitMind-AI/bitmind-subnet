@@ -7,6 +7,7 @@ import pickle
 import tempfile
 import threading
 import time
+import uuid
 
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
@@ -21,7 +22,10 @@ from PIL import Image
 from typing import Dict, Optional
 
 from gas.cache.content_manager import ContentManager
-from gas.evaluation.challenge_allocation import allocate_challenge_slots
+from gas.evaluation.challenge_allocation import (
+    allocate_challenge_slots,
+    resolve_challenge_response_stats,
+)
 from gas.evaluation.resolution_tiers import sample_challenge_tier
 from gas.evaluation.rewards import GeneratorQualification, resolve_generator_qualification
 from gas.protocol.epistula import get_verifier
@@ -152,6 +156,14 @@ class GenerativeChallengeManager:
             resolve_generator_qualification(self.qualification, self.metagraph)
             if self.qualification_fresh and self.qualification is not None else None
         )
+        scoring = getattr(self.config, "scoring", None)
+        lookback_hours = float(getattr(scoring, "no_answer_lookback_hours", 24.0))
+        response_stats = resolve_challenge_response_stats(
+            self.content_manager.get_challenge_response_stats(
+                lookback_hours=lookback_hours
+            ),
+            self.metagraph,
+        )
         assignments, pool_stats = allocate_challenge_slots(
             miner_uids,
             available_names,
@@ -160,8 +172,10 @@ class GenerativeChallengeManager:
             qualified_slots=int(getattr(self.config.neuron, "qualified_slots", 36)),
             onboarding_slots=int(getattr(self.config.neuron, "onboarding_slots", 8)),
             probe_slots=int(getattr(self.config.neuron, "probe_slots", 6)),
-            min_fool_samples=int(
-                getattr(getattr(self.config, "scoring", None), "min_fool_samples", 20)
+            min_fool_samples=int(getattr(scoring, "min_fool_samples", 20)),
+            response_stats=response_stats,
+            min_no_answer_attempts=int(
+                getattr(scoring, "min_no_answer_attempts", 5)
             ),
         )
 
@@ -173,6 +187,8 @@ class GenerativeChallengeManager:
             f"Challenge pools: image_qualified={pool_stats['image_qualified']} "
             f"video_qualified={pool_stats['video_qualified']} "
             f"onboarding={pool_stats['onboarding']} probe={pool_stats['probe']} "
+            f"image_unresponsive={pool_stats['image_unresponsive']} "
+            f"video_unresponsive={pool_stats['video_unresponsive']} "
             f"rolled_onboarding={pool_stats['rolled_onboarding']}"
         )
         bt.logging.info(f"Issuing generative challenge to UIDs: {[uid for uid, _ in assignments]}")
@@ -243,7 +259,21 @@ class GenerativeChallengeManager:
             )
         else:
             error = response_data.get("error") if response_data else "Unknown error"
-            bt.logging.error(f"Failed to send challenge to UID {uid}. Error: {error}")
+            miner_hotkey = self.metagraph.hotkeys[uid]
+            self.content_manager.record_challenge_outcome(
+                task_id=f"no-answer-{uid}-{uuid.uuid4()}",
+                uid=uid,
+                hotkey=miner_hotkey,
+                prompt_id=prompt_entry.id,
+                modality=modality.value,
+                status="failed",
+                failure_reason="no_answer",
+                requested_resolution=requested_resolution,
+            )
+            bt.logging.error(
+                f"Failed to send challenge to UID {uid}. Error: {error} "
+                f"(recorded no_answer for {modality.value})"
+            )
 
     async def generative_callback(self, request: Request):
         """Callback endpoint for generative challenges.
