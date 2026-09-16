@@ -97,8 +97,11 @@ Each validator still sends `--neuron.sample-size` (default 50) requests per roun
 | Qualified | Over the bar for that modality | 36 |
 | Onboarding | $n < 20$ or no fool-rate row | 8 |
 | Probe | $n \ge 20$ but under the bar | 6 |
+| Unresponsive | This validator asked enough times and got no answer | 0 |
 
-Onboarding and probe miners still receive prompts; they do not earn until they clear. If the onboarding set is empty, the unused 8 slots split 4+4 (40 qualified / 10 probe). Leftover slots overflow qualified → probe → qualified, then any remaining live generator, so the round never goes out under-filled when miners exist. A missing or stale generator-results cache treats everyone as onboarding so sampling does not freeze on the last qualified set.
+Onboarding and probe miners still receive prompts; they do not earn until they clear. If the onboarding set is empty, the unused 8 slots split 4+4 (40 qualified / 10 probe). Leftover slots overflow qualified → probe → qualified, then any remaining live generator who still answers that modality, so the round never goes out under-filled when miners exist. A missing or stale generator-results cache treats everyone as onboarding so sampling does not freeze on the last qualified set.
+
+Unresponsive is local to each validator: refused challenge POSTs (`no_answer`) and accepted tasks that never deliver (`challenge_timeout`). After `--scoring.min-no-answer-attempts` (default 5) in `--scoring.no-answer-lookback-hours` (default 24) with zero answers in that modality, the miner is skipped for that modality. A video-only miner who ignores image is not image-onboarding. One real answer (media or a miner-reported failure) clears the flag.
 
 This design incentivizes generators to:
 1. Produce valid, C2PA-signed content (base reward)

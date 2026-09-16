@@ -161,7 +161,9 @@ class ChallengeStore:
                     SELECT o.*, m.resolution AS media_resolution, m.has_audio AS media_has_audio
                     FROM generator_challenge_outcomes o
                     LEFT JOIN media m ON o.media_id = m.id
-                    WHERE o.status IN ('verified', 'failed') AND o.updated_at >= ?
+                    WHERE o.status IN ('verified', 'failed')
+                      AND o.updated_at >= ?
+                      AND COALESCE(o.failure_reason, '') != 'no_answer'
                     ORDER BY o.updated_at DESC LIMIT ?
                     """,
                     (cutoff, int(limit)),
@@ -200,6 +202,9 @@ class ChallengeStore:
         outcomes = self.get_outcomes_last_n_hours(lookback_hours, limit)
         miner_stats: Dict[str, Dict[str, Any]] = {}
         for outcome in outcomes:
+            if outcome.status == "failed" and (outcome.failure_reason or "") == "no_answer":
+                # Refused POSTs are sampling signal, not a verification miss.
+                continue
             hotkey = outcome.hotkey
             if hotkey not in miner_stats:
                 miner_stats[hotkey] = {
@@ -280,3 +285,65 @@ class ChallengeStore:
                 "last_timestamp": stats["last_timestamp"],
             }
         return result
+
+    def get_challenge_response_stats(
+        self, lookback_hours: float = 24.0
+    ) -> Dict[str, Dict[str, Dict[str, int]]]:
+        """Count answers vs no-answers per hotkey and modality.
+
+        Keyed by hotkey so a replacement at a recycled UID does not inherit
+        the previous occupant's totals. Callers resolve against the current
+        metagraph the same way qualification does.
+
+        An answer is stored/verified media, or a failed attempt that still
+        engaged (miner-reported failure, C2PA, CLIP, etc.). ``no_answer`` is
+        a refused/unreached POST or an accepted task that never delivered.
+        In-flight ``pending`` rows are ignored so a live challenge cannot
+        mark a miner unresponsive.
+        """
+        try:
+            cutoff = time.time() - (lookback_hours * 3600)
+            with self.db.connect() as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT hotkey, modality,
+                        SUM(
+                            CASE
+                                WHEN status IN ('stored', 'verified') THEN 1
+                                WHEN status = 'failed'
+                                     AND COALESCE(failure_reason, '')
+                                         NOT IN ('no_answer', 'challenge_timeout')
+                                THEN 1
+                                ELSE 0
+                            END
+                        ) AS answered,
+                        SUM(
+                            CASE
+                                WHEN status = 'failed'
+                                     AND failure_reason IN ('no_answer', 'challenge_timeout')
+                                THEN 1
+                                ELSE 0
+                            END
+                        ) AS no_answer
+                    FROM generator_challenge_outcomes
+                    WHERE created_at >= ?
+                    GROUP BY hotkey, modality
+                    """,
+                    (cutoff,),
+                )
+                stats: Dict[str, Dict[str, Dict[str, int]]] = {}
+                for hotkey, modality, answered, no_answer in cursor.fetchall():
+                    if not hotkey:
+                        continue
+                    mod = str(modality or "").strip().lower()
+                    if mod not in ("image", "video"):
+                        continue
+                    row = stats.setdefault(str(hotkey), {})
+                    row[mod] = {
+                        "answered": int(answered or 0),
+                        "no_answer": int(no_answer or 0),
+                    }
+                return stats
+        except Exception as e:
+            bt.logging.error(f"Error getting challenge response stats: {e}")
+            return {}
