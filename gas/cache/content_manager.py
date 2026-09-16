@@ -652,6 +652,12 @@ class ContentManager:
             media_id=media_id,
         )
 
+    def get_challenge_response_stats(
+        self, lookback_hours: float = 24.0
+    ) -> Dict[int, Dict[str, Dict[str, int]]]:
+        """Per-UID answer / no-answer counts for challenge slot allocation."""
+        return self.challenges.get_challenge_response_stats(lookback_hours=lookback_hours)
+
     def store_clip_embedding(self, media_id: str, embedding_blob: bytes) -> bool:
         """Store a CLIP embedding for a media entry (deep-feature duplicate detection)."""
         return self.media.update_media_embedding(media_id, embedding_blob)

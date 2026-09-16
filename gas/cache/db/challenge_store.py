@@ -280,3 +280,59 @@ class ChallengeStore:
                 "last_timestamp": stats["last_timestamp"],
             }
         return result
+
+    def get_challenge_response_stats(
+        self, lookback_hours: float = 24.0
+    ) -> Dict[int, Dict[str, Dict[str, int]]]:
+        """Count answers vs no-answers per UID and modality.
+
+        An answer is stored/verified media, or a failed attempt that still
+        engaged (miner-reported failure, C2PA, CLIP, etc.). ``no_answer`` is
+        a refused/unreached POST or an accepted task that never delivered.
+        In-flight ``pending`` rows are ignored so a live challenge cannot
+        mark a miner unresponsive.
+        """
+        try:
+            cutoff = time.time() - (lookback_hours * 3600)
+            with self.db.connect() as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT uid, modality,
+                        SUM(
+                            CASE
+                                WHEN status IN ('stored', 'verified') THEN 1
+                                WHEN status = 'failed'
+                                     AND COALESCE(failure_reason, '')
+                                         NOT IN ('no_answer', 'challenge_timeout')
+                                THEN 1
+                                ELSE 0
+                            END
+                        ) AS answered,
+                        SUM(
+                            CASE
+                                WHEN status = 'failed'
+                                     AND failure_reason IN ('no_answer', 'challenge_timeout')
+                                THEN 1
+                                ELSE 0
+                            END
+                        ) AS no_answer
+                    FROM generator_challenge_outcomes
+                    WHERE created_at >= ?
+                    GROUP BY uid, modality
+                    """,
+                    (cutoff,),
+                )
+                stats: Dict[int, Dict[str, Dict[str, int]]] = {}
+                for uid, modality, answered, no_answer in cursor.fetchall():
+                    mod = str(modality or "").strip().lower()
+                    if mod not in ("image", "video"):
+                        continue
+                    row = stats.setdefault(int(uid), {})
+                    row[mod] = {
+                        "answered": int(answered or 0),
+                        "no_answer": int(no_answer or 0),
+                    }
+                return stats
+        except Exception as e:
+            bt.logging.error(f"Error getting challenge response stats: {e}")
+            return {}

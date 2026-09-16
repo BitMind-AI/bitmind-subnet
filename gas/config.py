@@ -365,6 +365,23 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--scoring.min-no-answer-attempts",
+        type=int,
+        help=(
+            "Local unanswered challenges (this validator) before a modality is "
+            "treated as unresponsive instead of onboarding"
+        ),
+        default=5,
+    )
+
+    parser.add_argument(
+        "--scoring.no-answer-lookback-hours",
+        type=float,
+        help="Window for no-answer / answer counts used in challenge sampling",
+        default=24.0,
+    )
+
+    parser.add_argument(
         "--benchmark-api-url",
         type=str,
         help="Base URL for the benchmark API",

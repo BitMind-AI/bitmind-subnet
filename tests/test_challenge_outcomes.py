@@ -68,6 +68,41 @@ class ChallengeOutcomeStatsTest(unittest.TestCase):
             self.assertEqual(stats["hotkey-1"]["image_model_names"], [])
             self.assertEqual(stats["hotkey-1"]["video_model_names"], [])
 
+            challenges.record_outcome(
+                task_id="task-no-answer",
+                uid=2,
+                hotkey="hotkey-2",
+                prompt_id=prompt_id,
+                modality="image",
+                status="failed",
+                failure_reason="no_answer",
+            )
+            challenges.record_outcome(
+                task_id="task-timeout",
+                uid=2,
+                hotkey="hotkey-2",
+                prompt_id=prompt_id,
+                modality="image",
+                status="failed",
+                failure_reason="challenge_timeout",
+            )
+            challenges.record_outcome(
+                task_id="task-video-ok",
+                uid=2,
+                hotkey="hotkey-2",
+                prompt_id=prompt_id,
+                modality="video",
+                status="verified",
+                media_id=media_id,
+            )
+            response = challenges.get_challenge_response_stats(lookback_hours=1)
+            self.assertEqual(response[1]["image"]["answered"], 2)
+            self.assertEqual(response[1]["image"]["no_answer"], 0)
+            self.assertEqual(response[2]["image"]["answered"], 0)
+            self.assertEqual(response[2]["image"]["no_answer"], 2)
+            self.assertEqual(response[2]["video"]["answered"], 1)
+            self.assertEqual(response[2]["video"]["no_answer"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
