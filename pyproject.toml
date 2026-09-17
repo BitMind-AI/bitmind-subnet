@@ -15,7 +15,7 @@ urls = { homepage = "http://bitmind.ai" }
 dependencies = [
     "bittensor==10.4.0",
     "bittensor-cli==9.22.0",
-    "pillow==12.2.0",
+    "pillow==12.3.0",  # 12.3.0 closes GHSA heap/DoS alerts
     "numpy==2.0.1",
     "pandas==2.3.0",
     "torch==2.7.1",
@@ -23,6 +23,10 @@ dependencies = [
     "flash-attn>=2.7.0",
     "httpcore==1.0.9",  # >=1.0.9 required for h11 0.16 (CVE: malformed chunked-encoding)
     "httpx==0.28.1",
+    "GitPython>=3.1.62",  # 3.1.62 closes CRITICAL GHSA-284h-m62q-gf8w and later HIGH git option/RCE advisories
+    "cryptography>=50.0.0",  # 50.0.0 closes HIGH PKCS#7 Bleichenbacher oracle
+    "fastapi>=0.115.14",
+    "starlette>=1.3.1",  # 1.3.1 closes HIGH multipart/form DoS and StaticFiles SSRF
     "pyarrow==23.0.1",
     "ffmpeg-python==0.2.0",
     "imageio-ffmpeg==0.6.0",
@@ -36,7 +40,7 @@ dependencies = [
     "uvicorn==0.27.1",
     "httptools>=0.6.0",
     "peft==0.17.0",
-    "aiohttp>=3.10.2",
+    "aiohttp>=3.14.3",  # 3.14.3 closes HIGH C parser OOB read
     "hf_xet==1.1.7",
     "python-dotenv==1.2.2",
     "accelerate==1.8.1",
