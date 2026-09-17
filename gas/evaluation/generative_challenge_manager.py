@@ -24,6 +24,7 @@ from typing import Dict, Optional
 from gas.cache.content_manager import ContentManager
 from gas.evaluation.challenge_allocation import (
     allocate_challenge_slots,
+    allocate_random_slots,
     resolve_challenge_response_stats,
 )
 from gas.evaluation.resolution_tiers import sample_challenge_tier
@@ -164,33 +165,48 @@ class GenerativeChallengeManager:
             ),
             self.metagraph,
         )
-        assignments, pool_stats = allocate_challenge_slots(
-            miner_uids,
-            available_names,
-            qualification,
-            sample_size=sample_size,
-            qualified_slots=int(getattr(self.config.neuron, "qualified_slots", 36)),
-            onboarding_slots=int(getattr(self.config.neuron, "onboarding_slots", 8)),
-            probe_slots=int(getattr(self.config.neuron, "probe_slots", 6)),
-            min_fool_samples=int(getattr(scoring, "min_fool_samples", 20)),
-            response_stats=response_stats,
-            min_no_answer_attempts=int(
-                getattr(scoring, "min_no_answer_attempts", 5)
-            ),
-        )
+        allocation = str(
+            getattr(self.config.neuron, "challenge_allocation", "random")
+        ).strip().lower()
+        if allocation == "random":
+            assignments, pool_stats = allocate_random_slots(
+                miner_uids,
+                available_names,
+                sample_size=sample_size,
+            )
+        else:
+            assignments, pool_stats = allocate_challenge_slots(
+                miner_uids,
+                available_names,
+                qualification,
+                sample_size=sample_size,
+                qualified_slots=int(getattr(self.config.neuron, "qualified_slots", 36)),
+                onboarding_slots=int(getattr(self.config.neuron, "onboarding_slots", 8)),
+                probe_slots=int(getattr(self.config.neuron, "probe_slots", 6)),
+                min_fool_samples=int(getattr(scoring, "min_fool_samples", 20)),
+                response_stats=response_stats,
+                min_no_answer_attempts=int(
+                    getattr(scoring, "min_no_answer_attempts", 5)
+                ),
+            )
 
         if not assignments:
             bt.logging.trace("No generative miners found to challenge.")
             return
 
-        bt.logging.info(
-            f"Challenge pools: image_qualified={pool_stats['image_qualified']} "
-            f"video_qualified={pool_stats['video_qualified']} "
-            f"onboarding={pool_stats['onboarding']} probe={pool_stats['probe']} "
-            f"image_unresponsive={pool_stats['image_unresponsive']} "
-            f"video_unresponsive={pool_stats['video_unresponsive']} "
-            f"rolled_onboarding={pool_stats['rolled_onboarding']}"
-        )
+        if pool_stats.get("mode") == "random":
+            bt.logging.info(
+                f"Challenge allocation: random {len(assignments)}/{pool_stats.get('pool', 0)} generators"
+            )
+        else:
+            bt.logging.info(
+                f"Challenge pools: image_qualified={pool_stats['image_qualified']} "
+                f"video_qualified={pool_stats['video_qualified']} "
+                f"onboarding={pool_stats['onboarding']} probe={pool_stats['probe']} "
+                f"image_unresponsive={pool_stats['image_unresponsive']} "
+                f"video_unresponsive={pool_stats['video_unresponsive']} "
+                f"rolled_onboarding={pool_stats['rolled_onboarding']}"
+            )
         bt.logging.info(f"Issuing generative challenge to UIDs: {[uid for uid, _ in assignments]}")
 
         modality_for = {Modality.IMAGE.value: Modality.IMAGE, Modality.VIDEO.value: Modality.VIDEO}
