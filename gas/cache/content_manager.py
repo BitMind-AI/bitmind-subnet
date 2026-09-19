@@ -709,7 +709,7 @@ class ContentManager:
         return self.media.get_recent_failed_miner_media(lookback_hours=lookback_hours, limit=limit)
 
     def get_verification_stats_last_n_hours(
-        self, lookback_hours: float = 2.0, limit: int = None
+        self, lookback_hours: float = 2.0, limit: Optional[int] = None
     ) -> Dict[str, Dict[str, Any]]:
         """
         Get verification statistics from challenge outcomes table only (hard cutover).
@@ -717,15 +717,15 @@ class ContentManager:
 
         Args:
             lookback_hours: Number of hours to look back (default 2.0).
-            limit: Maximum number of entries per type to consider (default 1000).
+            limit: Optional maximum number of terminal outcomes across all miners.
+                None (default) includes the full window for reward scoring.
 
         Returns:
             Dict mapping miner hotkey to verification stats, with per-modality breakdown.
         """
         try:
-            limit_val = limit or 1000
             return self.challenges.get_outcome_stats_last_n_hours(
-                lookback_hours=lookback_hours, limit=limit_val
+                lookback_hours=lookback_hours, limit=limit
             )
         except Exception as e:
             bt.logging.error(f"Error getting verification stats for last {lookback_hours}h: {e}")
