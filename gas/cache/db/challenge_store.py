@@ -147,27 +147,31 @@ class ChallengeStore:
     # ------------------------------------------------------------------
 
     def get_outcomes_last_n_hours(
-        self, lookback_hours: float = 2.0, limit: int = 1000
+        self, lookback_hours: float = 2.0, limit: Optional[int] = None
     ) -> List[ChallengeOutcome]:
-        """Get terminal generation challenge outcomes from the last N hours."""
+        """Get all terminal outcomes in the window unless explicitly limited.
+
+        Reward scoring must not let other miners' newer outcomes displace
+        eligible work within the requested time window.
+        """
         try:
             cutoff = time.time() - (lookback_hours * 3600)
-            if limit is None:
-                limit = 1000
+            query = """
+                SELECT o.*, m.resolution AS media_resolution, m.has_audio AS media_has_audio
+                FROM generator_challenge_outcomes o
+                LEFT JOIN media m ON o.media_id = m.id
+                WHERE o.status IN ('verified', 'failed')
+                  AND o.updated_at >= ?
+                  AND COALESCE(o.failure_reason, '') != 'no_answer'
+                ORDER BY o.updated_at DESC
+            """
+            params = [cutoff]
+            if limit is not None:
+                query += " LIMIT ?"
+                params.append(int(limit))
             with self.db.connect() as conn:
                 conn.row_factory = sqlite3.Row
-                cursor = conn.execute(
-                    """
-                    SELECT o.*, m.resolution AS media_resolution, m.has_audio AS media_has_audio
-                    FROM generator_challenge_outcomes o
-                    LEFT JOIN media m ON o.media_id = m.id
-                    WHERE o.status IN ('verified', 'failed')
-                      AND o.updated_at >= ?
-                      AND COALESCE(o.failure_reason, '') != 'no_answer'
-                    ORDER BY o.updated_at DESC LIMIT ?
-                    """,
-                    (cutoff, int(limit)),
-                )
+                cursor = conn.execute(query, params)
                 return [
                     ChallengeOutcome(
                         task_id=row["task_id"],
@@ -189,16 +193,16 @@ class ChallengeStore:
                         created_at=row["created_at"],
                         updated_at=row["updated_at"],
                     )
-                    for row in cursor.fetchall()
+                    for row in cursor
                 ]
         except Exception as e:
             bt.logging.error(f"Error getting recent challenge outcomes: {e}")
             return []
 
     def get_outcome_stats_last_n_hours(
-        self, lookback_hours: float = 2.0, limit: int = 1000
+        self, lookback_hours: float = 2.0, limit: Optional[int] = None
     ) -> Dict[str, Dict[str, Any]]:
-        """Build reward stats from terminal challenge outcomes, split by modality."""
+        """Build reward stats over the full time window, unless explicitly limited."""
         outcomes = self.get_outcomes_last_n_hours(lookback_hours, limit)
         miner_stats: Dict[str, Dict[str, Any]] = {}
         for outcome in outcomes:
