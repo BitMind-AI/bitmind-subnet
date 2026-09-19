@@ -97,6 +97,38 @@ def _slot_targets(
     )
 
 
+def allocate_random_slots(
+    miner_uids: Sequence[int],
+    available_modalities: Sequence[str],
+    *,
+    sample_size: int = 50,
+    rng: Optional[np.random.Generator] = None,
+) -> Tuple[List[Tuple[int, str]], Dict[str, object]]:
+    """Pick unique generators uniformly, each with a random image/video modality."""
+    rng = rng or np.random.default_rng()
+    uids = [int(u) for u in dict.fromkeys(miner_uids)]
+    mods = [str(m).strip().lower() for m in available_modalities]
+    mods = [m for m in mods if m in ("image", "video")]
+    stats = {
+        "mode": "random",
+        "pool": len(uids),
+        "image_qualified": 0,
+        "video_qualified": 0,
+        "onboarding": 0,
+        "probe": 0,
+        "image_unresponsive": 0,
+        "video_unresponsive": 0,
+        "rolled_onboarding": False,
+    }
+    if not uids or not mods or sample_size <= 0:
+        return [], stats
+    n = min(int(sample_size), len(uids))
+    chosen = rng.choice(np.array(uids, dtype=int), size=n, replace=False)
+    slot_mods = [mods[int(i)] for i in rng.integers(0, len(mods), size=n)]
+    assignments = [(int(uid), slot_mods[i]) for i, uid in enumerate(chosen)]
+    return assignments, stats
+
+
 def allocate_challenge_slots(
     miner_uids: Sequence[int],
     available_modalities: Sequence[str],

@@ -139,6 +139,9 @@ if (config.startValidator) {
   if (process.env.EPOCH_LENGTH) {
     validatorArgs.push('--epoch-length', process.env.EPOCH_LENGTH);
   }
+  if (process.env.CHALLENGE_ALLOCATION) {
+    validatorArgs.push('--neuron.challenge-allocation', process.env.CHALLENGE_ALLOCATION);
+  }
 
   // Add external callback port if provided
   if (config.externalCallbackPort) {

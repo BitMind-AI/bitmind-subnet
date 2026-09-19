@@ -309,6 +309,14 @@ def add_validator_args(parser):
     )
 
     parser.add_argument(
+        "--neuron.challenge-allocation",
+        type=str,
+        choices=["random", "buckets"],
+        default="random",
+        help="Pick challenge targets uniformly at random, or via qualified/onboarding/probe buckets",
+    )
+
+    parser.add_argument(
         "--neuron.qualified-slots",
         type=int,
         help="Challenge slots reserved for generators over the fool-rate bar in that modality",

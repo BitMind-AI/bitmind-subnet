@@ -90,7 +90,11 @@ Scores use separate image and video exponential moving averages (50% current rew
 
 ### Challenge slots
 
-Each validator still sends `--neuron.sample-size` (default 50) requests per round — one UID, one modality, no replacement. Slots are filled from three buckets **for the chosen modality**:
+Each validator still sends `--neuron.sample-size` (default 50) requests per round — one UID, one modality, no replacement.
+
+The default `--neuron.challenge-allocation random` draws those UIDs uniformly from every registered generator and assigns image or video at random. Qualification, onboarding, and unresponsive status still gate **pay**; they do not change who gets asked.
+
+`--neuron.challenge-allocation buckets` is the older slot fill. Slots are filled from three buckets **for the chosen modality**:
 
 | Bucket | Who | Default slots |
 |---|---|---|
