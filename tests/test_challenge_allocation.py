@@ -8,6 +8,7 @@ import pytest
 from gas.config import validate_config_and_neuron_path
 from gas.evaluation.challenge_allocation import (
     allocate_challenge_slots,
+    allocate_random_slots,
     classify_modality_bucket,
     resolve_challenge_response_stats,
     summarize_assignment_buckets,
@@ -21,6 +22,31 @@ from gas.evaluation.rewards import (
 
 def _q(**kwargs):
     return GeneratorQualification(**kwargs)
+
+
+def test_allocate_random_slots_picks_unique_uids_uniformly():
+    assignments, stats = allocate_random_slots(
+        list(range(80)),
+        ["image", "video"],
+        sample_size=50,
+        rng=np.random.default_rng(0),
+    )
+    assert stats["mode"] == "random"
+    assert stats["pool"] == 80
+    assert len(assignments) == 50
+    assert len({uid for uid, _ in assignments}) == 50
+    assert {mod for _, mod in assignments} <= {"image", "video"}
+
+
+def test_allocate_random_slots_includes_every_generator():
+    assignments, stats = allocate_random_slots(
+        [7],
+        ["image"],
+        sample_size=50,
+        rng=np.random.default_rng(1),
+    )
+    assert stats["pool"] == 1
+    assert assignments == [(7, "image")]
 
 
 def test_classify_missing_and_short_samples_are_onboarding():

@@ -1,5 +1,6 @@
 from .challenge_allocation import (
     allocate_challenge_slots,
+    allocate_random_slots,
     classify_modality_bucket,
     resolve_challenge_response_stats,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "MinerTypeTracker",
     "GeneratorQualification",
     "allocate_challenge_slots",
+    "allocate_random_slots",
     "classify_modality_bucket",
     "resolve_challenge_response_stats",
     "combine_generator_rewards",
