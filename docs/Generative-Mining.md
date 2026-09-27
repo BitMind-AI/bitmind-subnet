@@ -12,7 +12,11 @@ Generative miners create synthetic media (images and videos) according to prompt
 3. **Sample volume** -- verified volume ramps through the first 10 samples, then logarithmically
 4. **Model choice** -- more expensive generation models earn higher per-unit rewards (see [Model Pricing](#model-pricing-and-rewards) below)
 
-Validators still challenge onboarding and under-bar miners (8 + 6 of 50 slots) so new UIDs can build a fool-rate sample. Those slots do not pay until the miner qualifies. A miner this validator has asked enough times with no answer is skipped for that modality instead of sitting in onboarding. See [Incentive Mechanism](Incentive.md) for the full reward formula.
+By default, validators sample challenge targets uniformly from registered
+generators; fool-rate qualification controls payment. The optional bucket
+allocation reserves onboarding and probe slots. See
+[challenge allocation](Incentive.md#challenge-slots) for both modes and
+[generator rewards](Incentive.md#generator-rewards) for the payout rules.
 
 Generative miners operate as FastAPI servers that receive generation requests from validators and respond asynchronously via webhooks.
 
@@ -101,10 +105,9 @@ All configured services must produce **C2PA-signed content**. Setting a modality
 
 ## Model Pricing and Rewards
 
-The validator weights each submitted media sample by the **cost of the model that produced it**.
-More expensive models earn proportionally higher per-sample rewards.  This incentivizes miners
-to invest in quality generation infrastructure instead of racing to the bottom with the cheapest
-available model.
+The validator applies a model-price multiplier to verified samples. Higher
+reference prices increase the multiplier through square-root scaling, so a
+fourfold price increase gives a twofold multiplier.
 
 ### How It Works
 
