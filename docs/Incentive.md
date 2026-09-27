@@ -1,61 +1,24 @@
 # Incentive Mechanism
 
 ## Benchmark Runs
-Submitted discriminator miners are evaluated against a subset of the data sources listed below. Miners do not need to host hardware for inference. A portion of the evaluation data comes from generative miners, who are rewarded based on their ability to submit data that both pass validator sanity checks (prompt alignment, etc.) and fool discriminators in benchmark runs.
 
-Each modality (image, video, audio) is scored independently using the `sn34_score` metric, which combines classification performance (MCC) with probability calibration (Brier score). The active round selects binary or multiclass scoring per modality.
+Submitted classifiers are evaluated separately for image, video, and audio.
+Miners do not need to host inference hardware. The competition uses each run's
+final `sn34_score`, including any configured augmentation blend.
 
-<details>
-<summary><strong>Evaluation Datasets</strong></summary>
+Image and video use `[real, synthetic, semisynthetic]`; audio uses
+`[real, synthetic]`. Non-AI rendered media belongs to `real`. See GASBench's
+[classification and scoring guide](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md)
+for the class definitions and scoring rules.
 
-Benchmark datasets are regularly expanded. Image uses real, synthetic, and semisynthetic classes; video additionally includes rendered media; audio remains binary. The experimental visual taxonomy is defined in GASBench's [Classification Taxonomy and Scoring](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md). Datasets include continuously updated [GAS-Station](https://huggingface.co/gasstation) data from generative miners.
+The [GASBench dataset registry](https://github.com/BitMind-AI/gasbench/tree/main/src/gasbench/dataset/configs)
+lists public datasets. Full evaluations also use private holdouts to measure
+generalization, alongside fresh [GAS-Station](https://huggingface.co/gasstation)
+data from generative miners. Holdouts may be released for future training when
+licensing permits.
 
-**Public datasets** (available for training via gasbench):
-- **Image**: [`image_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/image_datasets.yaml)
-- **Video**: [`video_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/video_datasets.yaml)
-- **Audio**: [`audio_datasets.yaml`](https://github.com/BitMind-AI/gasbench/blob/main/src/gasbench/dataset/configs/audio_datasets.yaml)
-
-**Holdout datasets**: In addition to the public datasets above, each benchmark round includes holdout datasets that are not publicly available during the round. Holdout data is critical to ensure models generalize well and to mitigate overfitting. At the end of each round, many of the holdout datasets are released and added to the public gasbench datasets for future training. Some holdout datasets cannot be released publicly due to licensing or other restrictions.
-
-</details>
-
-<details>
-<summary><strong>Generative Models</strong></summary>
-
-The following models are run by validators to produce a continual, fresh stream of synthetic and semisynthetic data. The outputs of these models are uploaded at regular intervals to public datasets in the [GAS-Station](https://huggingface.co/gasstation) Hugging Face org for miner training and evaluation.
-
-### Text-to-Image Models
-
-- [stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
-- [SG161222/RealVisXL_V4.0](https://huggingface.co/SG161222/RealVisXL_V4.0)
-- [Corcelio/mobius](https://huggingface.co/Corcelio/mobius)
-- [prompthero/openjourney-v4](https://huggingface.co/prompthero/openjourney-v4)
-- [cagliostrolab/animagine-xl-3.1](https://huggingface.co/cagliostrolab/animagine-xl-3.1)
-- [runwayml/stable-diffusion-v1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5) + [Kvikontent/midjourney-v6](https://huggingface.co/Kvikontent/midjourney-v6) LoRA
-- [black-forest-labs/FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev)
-- [DeepFloyd/IF](https://huggingface.co/DeepFloyd/IF)
-- [deepseek-ai/Janus-Pro-7B](https://huggingface.co/deepseek-ai/Janus-Pro-7B)
-- [THUDM/CogView4-6B](https://huggingface.co/THUDM/CogView4-6B)
-
-### Image-to-Image Models
-
-- [diffusers/stable-diffusion-xl-1.0-inpainting-0.1](https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1)
-- [Lykon/dreamshaper-8-inpainting](https://huggingface.co/Lykon/dreamshaper-8-inpainting)
-
-### Text-to-Video Models
-
-- [tencent/HunyuanVideo](https://huggingface.co/tencent/HunyuanVideo)
-- [genmo/mochi-1-preview](https://huggingface.co/genmo/mochi-1-preview)
-- [THUDM/CogVideoX-5b](https://huggingface.co/THUDM/CogVideoX-5b)
-- [ByteDance/AnimateDiff-Lightning](https://huggingface.co/ByteDance/AnimateDiff-Lightning)
-- [Wan-AI/Wan2.2-TI2V-5B-Diffusers](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers)
-
-### Image-to-Video Models
-
-- [THUDM/CogVideoX1.5-5B-I2V](https://huggingface.co/THUDM/CogVideoX1.5-5B-I2V) 
-
-</details> 
-
+For generation services and model choices, see the
+[Generative Mining Guide](Generative-Mining.md#generation-services).
 
 ## Generator Rewards
 
@@ -118,36 +81,29 @@ This design incentivizes generators to:
 
 ### Scoring: `sn34_score`
 
-Each discriminator model is scored per modality using two components:
+Each evaluation pass combines MCC (classification performance) and Brier error
+(probability accuracy). The round configuration selects binary or multiclass
+scoring and target weights for public, holdout, and GAS-Station samples.
 
-1. **MCC** measures classification quality. Binary mode uses ordinary MCC after collapsing every non-real class into synthetic. Multiclass mode uses Gorodkin's $R_K$, the multiclass generalization of MCC.
-2. **Brier score** measures calibration. Binary mode uses the mean squared error of $p_{\text{not real}}$, whose constant-guess baseline is $0.25$. Multiclass mode uses the mean of $\sum_k(p_k-y_k)^2$, whose uniform-guess baseline for $K$ classes is $B_0=(K-1)/K$.
+When an augmentation pass contributes to the score:
 
-For the selected mode, let $M$ be MCC, $B$ be Brier score, and $B_0$ be the corresponding random baseline:
+```text
+sn34_score = (1 - aug_weight) * base_sn34_score + aug_weight * aug_sn34_score
+```
 
-$$M_{norm} = \operatorname{clip}\left(\frac{M+1}{2},0,1\right)^{1.2}$$
+Use the final `sn34_score` for competition comparisons. `benchmark_score` is
+accuracy, while `binary_sn34_score` and `multiclass_sn34_score` describe the base
+pass. The round configuration controls the scoring mode, dataset shares,
+augmentation sample count, and blend weight.
 
-$$B_{norm} = \max\left(0,\frac{B_0-B}{B_0}\right)^{1.8}$$
-
-$$sn34_{score} = \sqrt{M_{norm} \cdot B_{norm}}$$
-
-Image and video currently use multiclass scoring. Audio uses binary scoring; with two classes, the normalized multiclass calculation is mathematically identical. Every run also reports `binary_sn34_score` and `multiclass_sn34_score` so the two views can be compared.
-
-### Dataset composition and augmentation robustness
-
-The round configuration assigns target score shares to public, private holdout, and GAS-Station samples. Those shares are converted into per-sample weights and applied consistently to accuracy, MCC, Brier, cross-entropy, and the resulting SN34 score.
-
-When the robustness pass is enabled, the final score is:
-
-$$sn34_{final} = (1-w)\,sn34_{base} + w\,sn34_{aug}$$
-
-The benchmark records `base_sn34_score`, `aug_sn34_score`, and robustness diagnostics. Exact composition shares, augmentation sample counts, and $w$ are round configuration, so they may change between benchmark versions rather than being permanent protocol constants.
-
-The normative implementation details and complete metric field glossary live in GASBench's [Classification Taxonomy and Scoring](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md).
+GASBench's [classification and scoring guide](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md)
+defines the score calculation and result fields.
 
 ### King of the Hill
 
-Discriminator emission is King of the Hill. Each modality has one reigning model. Validators set that lane's weight on registered hotkeys every tempo — not on an escrow wallet. Each hotkey may land **one counted submission** for the life of that registration (any modality; exam failures do not count; a new model needs a new key).
+Each modality has one reigning model. Validators assign that lane's emissions
+to registered hotkeys every tempo. See [Submission Limits](Discriminative-Mining.md#submission-limits)
+for the free submission allowance and the same-hotkey resubmission process.
 
 Current split:
 

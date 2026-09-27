@@ -31,14 +31,14 @@ GAS runs two parallel competition tracks on Bittensor Subnet 34:
 
 | Track | What You Do | How You're Scored |
 |-------|-------------|-------------------|
-| **Discriminative Mining** | Submit media-provenance classifiers (image, video, audio) | `sn34_score` -- geometric mean of normalized MCC and Brier performance, using the active round's binary or multiclass scoring mode |
-| **Generative Mining** | Run a server that generates synthetic media on demand | Base reward for valid content × multiplier for fooling discriminators |
+| **Discriminative Mining** | Submit media-provenance classifiers (image, video, audio) | `sn34_score`: classification performance and probability accuracy, with the active round's weights and robustness blend |
+| **Generative Mining** | Run a server that generates synthetic media on demand | Verified content, volume, and model pricing in modalities that clear the fool-rate gate |
 
 **Key facts:**
 - **Three modalities**: Image, video, and audio detection are all scored independently
 - **Model format**: Safetensors only (ONNX submissions are not accepted)
 - **Datasets refresh weekly** with fresh GAS-Station data alongside static benchmarks
-- **One model per hotkey** for discriminative miners
+- **Submission allowances** are shared across modalities; see [submission limits](docs/Discriminative-Mining.md#submission-limits) for free and repeat submissions
 
 See [Incentive Mechanism](docs/Incentive.md) for full scoring details.
 
@@ -70,10 +70,10 @@ gascli validator start
 # Miners: Start or restart generative miner
 gascli generator start
 
-# Miners: Push one discriminator model per hotkey
+# Miners: Submit a discriminator model
 gascli d push --image-model image_detector.zip \
   --wallet-name default --wallet-hotkey default
-# Video or audio: use --video-model or --audio-model on a different hotkey
+# For video or audio, use --video-model or --audio-model
 
 # Miners: Check your benchmark performance (epistula-authenticated)
 gascli d perf --wallet-name default --wallet-hotkey default
@@ -96,7 +96,7 @@ pm2 start validator.config.js
 # Miners: Start or restart generative miner
 pm2 start gen_miner.config.js
 
-# Miners: Push one discriminator model per hotkey
+# Miners: Submit a discriminator model
 source .venv/bin/activate
 python neurons/discriminator/push_model.py \
   --image-model image_detector.zip \

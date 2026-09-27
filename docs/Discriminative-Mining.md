@@ -6,20 +6,21 @@ Follow the [Installation Guide](Installation.md) to set up your environment befo
 
 ## Discriminative Mining Overview
 
-- Miners submit media-provenance classifiers across three modalities: **image**, **video**, and **audio**.
-- Image models classify `[real, synthetic, semisynthetic]`; video models classify `[real, synthetic, semisynthetic, rendered]`; audio remains `[real, synthetic]`.
-- The visual taxonomy is experimental. Semisynthetic media retains materially captured visual content alongside spatially localized generated or replaced content. Fully synthesized output remains synthetic even when captured media conditions generation.
-- Miners do not need to host hardware for inference.
+Submit an image, video, or audio classifier. Evaluation runs on subnet
+infrastructure; miners do not need to host inference hardware.
 
 Class order is part of the submission contract:
 
 | Modality | `num_classes` | Logit indices |
 | --- | ---: | --- |
 | Image | 3 | `0=real`, `1=synthetic`, `2=semisynthetic` |
-| Video | 4 | `0=real`, `1=synthetic`, `2=semisynthetic`, `3=rendered` |
+| Video | 3 | `0=real`, `1=synthetic`, `2=semisynthetic` |
 | Audio | 2 | `0=real`, `1=synthetic` |
 
-See GASBench's [Classification Taxonomy and Scoring](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md) for the normative class definitions, metric formulas, and binary compatibility collapse.
+Non-AI rendering, such as CGI and game footage, belongs to `real` for both image
+and video. Audio metadata labeled `semisynthetic` maps to `synthetic`.
+See GASBench's [classification and scoring guide](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md)
+for class definitions and how probabilities contribute to the score.
 
 ## Model Preparation
 
@@ -31,12 +32,12 @@ Discriminative miners must submit models in **safetensors format**:
 
 **📖 [Safetensors Model Specification](https://github.com/bitmind-ai/gasbench/blob/main/docs/Safetensors.md)** - Requirements for model submission
 
-Each hotkey can submit **one** model, in one of these modalities:
+Choose one modality per upload:
 - `image_detector.zip` - Image classification model
 - `video_detector.zip` - Video classification model
 - `audio_detector.zip` - Audio classification model
 
-A second modality needs a second registered hotkey.
+Submissions share the hotkey's allowance across modalities; see [Submission Limits](#submission-limits) for repeat submissions.
 
 ## Pushing Your Model
 
@@ -45,7 +46,7 @@ First, activate the virtual environment:
 source .venv/bin/activate
 ```
 
-Push one model per hotkey using the `push` command:
+Upload a model using the `push` command:
 
 ```bash
 gascli d push \
@@ -53,7 +54,7 @@ gascli d push \
   --wallet-name your_wallet_name \
   --wallet-hotkey your_hotkey_name
 
-# Video or audio (same or another hotkey):
+# Use --video-model or --audio-model for other modalities:
 # gascli d push --video-model video_detector.zip --wallet-hotkey video_key
 # gascli d push --audio-model audio_detector.zip --wallet-hotkey audio_key
 ```
@@ -104,16 +105,19 @@ Each registered hotkey gets **one free counted submission** (image, video, or au
 
 ### Scoring
 
-Each model is scored per modality using `sn34_score`, a geometric mean of normalized MCC and Brier performance:
+`sn34_score` is the competition score. It combines classification performance
+(MCC) with probability accuracy (Brier error), using the active round's scoring
+mode, dataset weights, and augmentation settings. `benchmark_score` is class
+accuracy, which is used for the entrance exam.
 
-$$sn34_{score} = \sqrt{M_{norm} \cdot B_{norm}}$$
-
-The normalized terms apply exponents $1.2$ to MCC performance and $1.8$ to Brier performance. Image and video currently use multiclass Gorodkin MCC and multiclass Brier, rewarding correct distinctions between provenance classes. Audio uses the equivalent two-class calculation. Binary real-versus-not-real metrics are still reported for compatibility and diagnosis. See [Incentive Mechanism](Incentive.md) for the full formula.
+See GASBench's [classification and scoring guide](https://github.com/BitMind-AI/gasbench/blob/main/docs/Classification-and-Scoring.md)
+for the formula and result fields, and [Incentive Mechanism](Incentive.md#discriminator-rewards)
+for how the score affects rewards.
 
 ### Model Requirements
 
 - **Format**: Safetensors only (ONNX is no longer accepted)
-- **Submission cap**: one counted model per hotkey (see [Submission Limits](#submission-limits))
+- **Submission allowance**: see [Submission Limits](#submission-limits) for the free allowance and repeat submissions
 
 ### Sandbox and Import Restrictions
 
@@ -171,9 +175,9 @@ After a successful push, your model goes through a two-stage evaluation process 
 
 Before your model is ever scored on the network, it must pass an **entrance exam** — a fast sanity check run against a reduced sample of the benchmark datasets.
 
-- Internally this runs `gasbench run --small`, which downloads one archive per dataset and evaluates roughly 100 samples per dataset
-- Your model must achieve **≥ 80% accuracy** averaged across all submitted modalities to pass
-- The exam has a **maximum wall-clock timeout of 1 hour 25 minutes** (5,100 seconds); models that exceed this are treated as failed
+- The exam uses GASBench `small` mode on datasets selected for the submitted modality and vertical
+- The submitted model must achieve **≥ 80% class accuracy** (`benchmark_score`) to pass
+- The evaluator enforces a time budget; models that exhaust it fail the exam
 - The exam runs in an **isolated sandbox** — your code has no network access and cannot interact with the host environment
 - Submissions are statically analyzed and executed in an isolated sandbox; prohibited code or imports result in rejection
 
@@ -186,7 +190,8 @@ Before your model is ever scored on the network, it must pass an **entrance exam
 | `exam_failed` | Accuracy below 80% — model will not be scored |
 | `blocked` | Cheat pattern detected — model is permanently blocked |
 
-You can use `gasbench run --small` locally to replicate exam conditions before pushing:
+Use `gasbench run --small` as a local preflight before pushing. The hosted exam
+also applies its own dataset selection, sandbox, and resource limits:
 
 ```bash
 gasbench run --image-model ./my_image_model/ --small
@@ -196,25 +201,32 @@ gasbench run --audio-model ./my_audio_model/ --small
 
 ### Stage 2: Full Benchmark (`--full` mode)
 
-Models that pass the entrance exam are benchmarked against the **complete dataset suite**, which includes:
+Models that pass the entrance exam are evaluated on a larger sample of the
+datasets selected for their modality and vertical, including:
 
-- All public benchmark datasets across image, video, and audio modalities
+- Public benchmark datasets
 - **Private holdout datasets** — curated datasets not visible to miners, used to prevent overfitting to the public benchmark set
 - Refreshed weekly with new data from the GAS-Station pipeline
 
-The full benchmark has a **maximum wall-clock timeout of 5 hours** (18,000 seconds) per modality. This `sn34_score` is what the King of the Hill competition uses: a high enough score can take or keep a lane, and emissions then follow the 85/10/5 split on the current king plus the previous two. The active round configuration selects provenance weighting, multiclass scoring, and augmentation robustness parameters; see [Incentive Mechanism](Incentive.md).
+The evaluator enforces a time budget for the full run. The resulting
+`sn34_score`, including any configured robustness blend, is used in the King of
+the Hill competition. See [Incentive Mechanism](Incentive.md#king-of-the-hill) for
+challenge margins and emission shares.
 
-You can simulate a full benchmark run locally (without holdouts) to get a sense of your model's performance:
+For a local image run with multiclass scoring:
 
 ```bash
-gasbench run --image-model ./my_image_model/ --full
+gasbench run --image-model ./my_image_model/ --full --multiclass-scoring
 ```
 
-> **Note**: Local full runs will not include the private holdout datasets used in the actual network evaluation.
+Local runs use the public datasets available to you. Their scores are not
+directly comparable to a hosted round unless the datasets, sampling, scoring
+mode, weights, and augmentation settings match.
 
 ### Checking Your Performance
 
-Once your model has been benchmarked, you can query your scores directly from the CLI. This is authenticated with your hotkey so you can only see your own results — including the active round that isn't shown on the public leaderboard.
+Query your runs from the CLI. Requests are authenticated with your hotkey and
+return your own results:
 
 ```bash
 # View all your benchmark runs
