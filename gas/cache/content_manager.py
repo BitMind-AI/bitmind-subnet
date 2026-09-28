@@ -722,6 +722,10 @@ class ContentManager:
 
         Returns:
             Dict mapping miner hotkey to verification stats, with per-modality breakdown.
+
+        Raises:
+            Exception: If reward data cannot be read or aggregated. Callers must
+                not interpret unavailable data as a successfully read empty window.
         """
         try:
             return self.challenges.get_outcome_stats_last_n_hours(
@@ -731,7 +735,7 @@ class ContentManager:
             bt.logging.error(f"Error getting verification stats for last {lookback_hours}h: {e}")
             import traceback
             bt.logging.error(traceback.format_exc())
-            return {}
+            raise
 
     def upload_batch_to_huggingface(
         self, 

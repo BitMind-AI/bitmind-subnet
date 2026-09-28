@@ -4,6 +4,7 @@ import ast
 import asyncio
 from dataclasses import asdict
 import json
+import sqlite3
 from pathlib import Path
 import time
 import traceback
@@ -21,7 +22,10 @@ from gas.evaluation.rewards import (
     resolve_generator_qualification,
 )
 from gas.utils.state_manager import load_validator_state, save_validator_state
-from gas.koth_weights import build_koth_weights
+from gas.koth_weights import (
+    build_koth_weights, chains_by_modality, discriminator_emissions_enabled,
+    kings_by_modality,
+)
 
 
 def _qualified(image=True, video=True):
@@ -115,10 +119,18 @@ def validator(tmp_path):
     tree = ast.parse(source.read_text())
     cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Validator")
     methods = [node for node in cls.body if isinstance(node, ast.AsyncFunctionDef)
-               and node.name in {"update_scores", "save_state", "load_state"}]
+               and node.name in {"update_scores", "save_state", "load_state", "set_weights"}]
+    for method in methods:
+        method.decorator_list = []
     namespace = {
         "np": np, "time": time, "traceback": traceback,
-        "bt": SimpleNamespace(logging=Mock()),
+        "bt": SimpleNamespace(logging=Mock(), Subtensor=Mock()),
+        "BURN_PERCENTAGE": 0.0, "BURN_SS58": "burn",
+        "get_current_kings": AsyncMock(return_value={"kings": []}),
+        "kings_by_modality": kings_by_modality,
+        "chains_by_modality": chains_by_modality,
+        "discriminator_emissions_enabled": discriminator_emissions_enabled,
+        "build_koth_weights": build_koth_weights,
         "get_benchmark_results": AsyncMock(),
         "get_generator_base_rewards": lambda stats: (stats, []),
         "get_generator_qualification": get_generator_qualification,
@@ -147,11 +159,76 @@ def validator(tmp_path):
     instance.generative_challenge_manager.get_all_generator_last_seen.return_value = {}
     instance.kings_state = Mock()
     instance.api = namespace["get_benchmark_results"]
+    instance.weight_globals = namespace
+    instance.set_weights_fn = Mock()
     instance.api.return_value = [
         {"ss58_address": "A", "modality": modality, "fooled_count": 10, "not_fooled_count": 10}
         for modality in ("image", "video")
     ]
     return instance
+
+
+def prepare_weight_submission(validator):
+    validator.metagraph.hotkeys = ["A", "burn"]
+    validator.metagraph.n = 2
+    validator.config.netuid = 34
+    validator.config.subtensor = SimpleNamespace(chain_endpoint="unused")
+    validator.weight_globals["bt"].Subtensor.return_value.get_uid_for_hotkey_on_subnet.return_value = 1
+
+
+@pytest.mark.parametrize("message", [
+    "database disk image is malformed", "disk I/O error", "database is locked",
+])
+def test_database_outage_skips_weights_preserves_state_and_recovers(validator, message):
+    prepare_weight_submission(validator)
+    assert asyncio.run(validator.set_weights(100)) is True
+    previous_scores = validator.scores.copy()
+    previous_history = json.loads(json.dumps(validator.generator_score_state.by_hotkey))
+    previous_qualification = dict(validator.generator_qualification)
+    validator.set_weights_fn.reset_mock()
+    validator.api.reset_mock()
+    kings = validator.weight_globals["get_current_kings"]
+    kings.reset_mock()
+    validator.content_manager.get_verification_stats_last_n_hours.side_effect = sqlite3.DatabaseError(message)
+
+    assert asyncio.run(validator.set_weights(460)) is False
+    validator.set_weights_fn.assert_not_called()
+    validator.api.assert_not_awaited()
+    kings.assert_not_awaited()
+    assert np.array_equal(validator.scores, previous_scores)
+    assert validator.generator_score_state.by_hotkey == previous_history
+    assert validator.generator_qualification == previous_qualification
+
+    validator.content_manager.get_verification_stats_last_n_hours.side_effect = None
+    assert asyncio.run(validator.set_weights(820)) is True
+    validator.set_weights_fn.assert_called_once()
+    _, weights = validator.set_weights_fn.call_args.args[3]
+    assert weights[0] == pytest.approx(0.16)
+
+
+def test_missing_score_result_skips_weights(validator):
+    validator.update_scores = AsyncMock(return_value=None)
+    assert asyncio.run(validator.set_weights(100)) is False
+    validator.set_weights_fn.assert_not_called()
+    validator.weight_globals["get_current_kings"].assert_not_awaited()
+
+
+def test_real_empty_window_retains_intended_burn_behavior(validator):
+    prepare_weight_submission(validator)
+    validator.content_manager.get_verification_stats_last_n_hours.return_value = {}
+    assert asyncio.run(validator.set_weights(100)) is True
+    _, weights = validator.set_weights_fn.call_args.args[3]
+    assert weights.tolist() == [0.0, 1.0]
+
+
+def test_full_burn_does_not_require_generator_database(validator):
+    prepare_weight_submission(validator)
+    validator.weight_globals["BURN_PERCENTAGE"] = 1.0
+    validator.content_manager.get_verification_stats_last_n_hours.side_effect = sqlite3.DatabaseError("disk I/O error")
+    assert asyncio.run(validator.set_weights(100)) is True
+    validator.content_manager.get_verification_stats_last_n_hours.assert_not_called()
+    _, weights = validator.set_weights_fn.call_args.args[3]
+    assert weights.tolist() == [0.0, 1.0]
 
 
 def test_validator_outage_uses_cached_gates_then_clears_lost_lane(validator):

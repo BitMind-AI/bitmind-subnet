@@ -203,11 +203,23 @@ class Validator(BaseNeuron):
         """Set burn weights, or calculate rewards when full burn is disabled."""
         if BURN_PERCENTAGE < 1.0:
             bt.logging.info(f"Updating scores at block {block}")
-            generator_uids = await self.update_scores()
-        
+            try:
+                generator_uids = await self.update_scores()
+            except Exception:
+                # Keep the last on-chain weights when scoring data is unavailable.
+                # A failed database read must never burn the generator allocation.
+                bt.logging.error(
+                    "Skipping weight submission: generator scoring failed; "
+                    "preserving previous on-chain weights.\n" + traceback.format_exc()
+                )
+                return False
+
             if generator_uids is None:
-                generator_uids = []
-                bt.logging.warning("No generator rewards available; using empty generator_uids")
+                bt.logging.error(
+                    "Skipping weight submission: generator scoring returned no result; "
+                    "preserving previous on-chain weights."
+                )
+                return False
 
             kings_payload = await get_current_kings(
                 self.wallet.hotkey, base_url=self.config.benchmark_api_url
