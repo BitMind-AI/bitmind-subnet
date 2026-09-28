@@ -898,8 +898,12 @@ def info():
 @click.option("--modality", type=click.Choice(["image", "video", "audio"]), default=None, help="Filter fool-rate aggregate by modality")
 @click.option("--lookback-days", default=7, type=click.IntRange(1, 90), show_default=True, help="Chart/aggregate lookback; qualification always uses 7 days")
 @click.option("--api-url", default=None, help="GAS API base URL (default: GAS_API_URL env or production)")
+@click.option("--chain/--no-chain", default=True, help="Show current incentive and latest validator submissions (text output only)")
+@click.option("--netuid", type=click.IntRange(0, 65535), default=None, help="Chain subnet (default: BT_NETUID or 34)")
+@click.option("--chain-endpoint", default=None, help="Chain network/endpoint (default: BT_CHAIN_ENDPOINT or finney)")
+@click.option("--chain-timeout", type=click.IntRange(1, 120), default=30, show_default=True, help="Maximum seconds for the optional chain lookup")
 @click.option("--json", "as_json", is_flag=True, help="Print raw API JSON")
-def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_json):
+def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, chain, netuid, chain_endpoint, chain_timeout, as_json):
     """Query your generator verification stats + aggregated fool rate (Epistula-authenticated GAS API).
 
     The request is signed with your hotkey (same Epistula flow as discriminator ``d perf``).
@@ -936,9 +940,19 @@ def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_js
         click.echo(json_lib.dumps(data, indent=2, default=str))
         return
 
-    from gas.utils.generator_performance import render_fool_history
-    if render_fool_history(data, modality, hotkey=addr, lookback_days=lookback_days):
+    chain_data = {"status": "disabled"}
+    if chain:
+        from gas.protocol.generator_chain import fetch_generator_chain
+        selected_netuid = netuid if netuid is not None else click.IntRange(0, 65535).convert(
+            os.environ.get("BT_NETUID", "34"), None, click.get_current_context())
+        chain_data = fetch_generator_chain(
+            addr, network=chain_endpoint or os.environ.get("BT_CHAIN_ENDPOINT") or "finney",
+            netuid=selected_netuid, timeout=chain_timeout)
+
+    from gas.utils.generator_performance import render_fool_history, render_chain_context
+    if render_fool_history(data, modality, hotkey=addr, lookback_days=lookback_days, chain=chain_data):
         return
+    render_chain_context(chain_data)
     click.echo()
     click.echo(f"  ⛽  generator  {addr}")
     click.echo("  History unavailable from this API; showing aggregate only.")

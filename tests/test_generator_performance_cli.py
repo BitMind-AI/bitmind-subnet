@@ -38,6 +38,9 @@ def run(monkeypatch):
         hotkey=SimpleNamespace(ss58_address="test-hotkey")))
     fetch = Mock(return_value=dict(success=True, data=payload()))
     monkeypatch.setattr(miner_requests, "fetch_generator_performance", fetch)
+    chain = Mock(return_value={"status": "disabled"})
+    monkeypatch.setattr("gas.protocol.generator_chain.fetch_generator_chain", chain)
+    fetch.chain = chain
     return lambda *args: CliRunner().invoke(cli, ["g", "perf", *args]), fetch
 
 
@@ -60,6 +63,7 @@ def test_json_is_pure_json_with_new_api(run):
     assert result.exit_code == 0
     assert json.loads(result.output) == payload()
     assert "⛽" not in result.output
+    fetch.chain.assert_not_called()
 
 
 def test_old_api_keeps_aggregate_and_json(run):
@@ -191,3 +195,52 @@ def test_external_text_is_not_rich_markup():
     render_fool_history(payload(), hotkey="[red]not markup[/red]",
                         console=Console(file=output, width=100, color_system=None))
     assert "[red]not markup[/red]" in output.getvalue()
+
+
+def test_chain_options_and_skip(run):
+    invoke, fetch = run
+    assert invoke("--netuid", "379", "--chain-endpoint", "test", "--chain-timeout", "10").exit_code == 0
+    fetch.chain.assert_called_once_with("test-hotkey", network="test", netuid=379, timeout=10)
+    fetch.chain.reset_mock()
+    assert invoke("--no-chain").exit_code == 0
+    fetch.chain.assert_not_called()
+
+
+def test_chain_environment_defaults(run, monkeypatch):
+    invoke, fetch = run
+    monkeypatch.setenv("BT_NETUID", "379")
+    monkeypatch.setenv("BT_CHAIN_ENDPOINT", "test")
+    assert invoke().exit_code == 0
+    assert fetch.chain.call_args.kwargs["netuid"] == 379
+    assert fetch.chain.call_args.kwargs["network"] == "test"
+
+
+def test_chain_failure_does_not_hide_charts(run):
+    invoke, fetch = run
+    fetch.chain.return_value = dict(status="unavailable", incentive=None, warning="Chain lookup timed out")
+    output = invoke().output
+    assert "Incentive  —  unavailable" in output
+    assert "2.72%" in output and "Chain lookup timed out" in output
+
+
+def test_positive_incentive_is_separate_from_weight_and_submission(run):
+    invoke, fetch = run
+    fetch.chain.return_value = dict(status="ok", incentive=.000123, uid=239, netuid=34,
+        block=12345, as_of="2026-09-28T16:00:00Z", commit_reveal_enabled=True,
+        positive_weight_count=1, validator_count=2, validators=[dict(uid=135,
+        weight=.001, submitted_block=12300, submitted_at="2026-09-28T15:00:00Z")])
+    output = invoke().output
+    assert "0.000123" in output and "0.0123%" in output
+    assert "Revealed weight" in output and "0.1000%" in output
+    assert "submission ≠ reveal" in output
+
+
+def test_submission_markers_are_deduplicated_and_clipped(monkeypatch):
+    from gas.utils import generator_performance as renderer
+    rule = Mock(wraps=renderer.plt.vertical_line)
+    monkeypatch.setattr(renderer.plt, "vertical_line", rule)
+    sample = points([.01, .02, .03])
+    markers = [dict(submitted_at=sample[1]["at"])] * 2 + [
+        dict(submitted_at="2026-09-01T00:00:00Z"), dict(submitted_at=None)]
+    line_chart(sample, .02, submissions=markers)
+    assert rule.call_count == 1

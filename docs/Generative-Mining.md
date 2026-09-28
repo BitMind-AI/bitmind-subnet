@@ -219,6 +219,8 @@ gascli g perf                         # Image/video charts and verification stat
 gascli g perf --modality image         # Image only
 gascli g perf --lookback-days 14       # Two weeks of chart history
 gascli g perf --json                   # Raw API response, without terminal formatting
+gascli g perf --no-chain               # Skip chain RPC; keep benchmark charts
+gascli g perf --netuid 379 --chain-endpoint test  # Explicit testnet chain context
 ```
 
 Rich panels and Plotext's high-resolution curves show **sample-weighted rolling
@@ -236,7 +238,24 @@ not a record of what validators knew or paid at that time.
 Fool-rate eligibility is **not a guarantee of on-chain incentive**. Verified
 activity, validator updates, and weight reveal/epoch timing also affect rewards.
 Not participating in video does not disqualify an image miner. The CLI does not
-infer participation or check chain incentives from missing benchmark data.
+infer participation from missing benchmark data.
+
+The on-chain panel reads the selected hotkey's current normalized incentive
+score (not a token amount), current revealed weights toward it, and the latest
+submission block/time for the five largest permitted validators by stake.
+Amber vertical chart markers match those submission timestamps. These are the
+**latest submission per validator, not a complete event history**. On commit-reveal
+subnets, `LastUpdate` records commits, not reveals; the currently revealed weight
+may belong to an earlier commit. No pending-payment or reveal ETA is inferred.
+
+Chain values are read at one metagraph block, with its timestamp shown separately
+from the benchmark snapshot. Timestamp lookups older than 7,200 blocks are skipped
+to avoid archive-node delays; their exact submission blocks remain visible.
+Missing/failed RPC data is shown as unknown, not zero. `--chain-timeout` bounds the
+lookup (default 30 seconds); partial snapshots remain useful on timeout.
+`--netuid` / `--chain-endpoint` override `BT_NETUID` / `BT_CHAIN_ENDPOINT`, falling
+back to subnet 34 on finney. Select the correct network when using a non-production
+API. `--json` remains the raw API response and does not perform chain queries.
 
 The API supplies the chart history. Older API deployments still work, displaying
 the aggregate summary until the history addition is deployed. Existing CLI

@@ -32,6 +32,18 @@ def demo_data():
         total_failed=3, total_evaluated=120, by_validator=[]))
 
 
+def demo_chain():
+    return dict(status="ok", netuid=34, network="finney", block=9167400,
+                uid=239, incentive=.000183108, as_of="2026-09-28T16:00:00Z",
+                commit_reveal_enabled=True, validator_count=7, positive_weight_count=5,
+                validators=[
+                    dict(uid=135, weight=.0002966, submitted_block=9167100,
+                         submitted_at="2026-09-28T15:00:00Z"),
+                    dict(uid=134, weight=.0012634, submitted_block=9167090,
+                         submitted_at="2026-09-28T14:58:00Z"),
+                ])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--width", type=int, default=100)
@@ -40,7 +52,7 @@ if __name__ == "__main__":
     console = Console(width=args.width, height=60, record=True, force_terminal=True,
                       color_system="truecolor", no_color=False)
     console.print("$ gascli g perf   [dim]# illustrative demo data[/dim]")
-    render_fool_history(demo_data(), hotkey="5GKGN7…DmWuGS  ·  DEMO", console=console)
+    render_fool_history(demo_data(), hotkey="5GKGN7…DmWuGS  ·  DEMO", console=console, chain=demo_chain())
     if args.svg:
         theme = TerminalTheme((15, 23, 42), (226, 232, 240),
                               [(0, 0, 0), (255, 85, 85), (134, 239, 172), (252, 211, 77),

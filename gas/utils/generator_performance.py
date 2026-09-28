@@ -47,7 +47,7 @@ def _segments(points):
         yield segment
 
 
-def line_chart(points, threshold, width=80, height=12, modality="image"):
+def line_chart(points, threshold, width=80, height=12, modality="image", submissions=()):
     """Build colored text without printing ANSI codes directly to stdout."""
     segments = list(_segments(points))
     if not segments or width < 24:
@@ -83,6 +83,10 @@ def line_chart(points, threshold, width=80, height=12, modality="image"):
         plt.xticks(positions, [datetime.fromtimestamp(t, timezone.utc).strftime(fmt) for t in positions])
         if threshold is not None:
             plt.horizontal_line(threshold * 100, color=(100, 116, 139))
+        for at in sorted({row.get("submitted_at") for row in submissions if row.get("submitted_at")}):
+            timestamp = _datetime(at).timestamp()
+            if left <= timestamp <= right:
+                plt.vertical_line(timestamp, color=(251, 191, 36))
         for segment in segments:
             xs, ys = zip(*segment)
             plt.plot(list(xs), list(ys), marker="braille",
@@ -92,7 +96,7 @@ def line_chart(points, threshold, width=80, height=12, modality="image"):
         plt.clear_figure()
 
 
-def _modality_panel(lane, entry, width):
+def _modality_panel(lane, entry, width, submissions=()):
     accent = ACCENTS.get(lane, ACCENTS["image"])
     current = entry["current"]
     rate = current.get("fool_rate")
@@ -108,7 +112,7 @@ def _modality_panel(lane, entry, width):
     gate = (f"Gate >{threshold:.0%}  +  {entry['minimum_samples']} evaluations minimum"
             if threshold is not None else "No generator reward gate for this modality")
     points = entry.get("points") or []
-    chart = line_chart(points, threshold, width=max(0, width - 6), modality=lane)
+    chart = line_chart(points, threshold, width=max(0, width - 6), modality=lane, submissions=submissions)
     body = [heading, counts, Text("")]
     if chart is not None:
         body.extend([chart, Text("")])
@@ -122,6 +126,8 @@ def _modality_panel(lane, entry, width):
     legend.append("    UTC", style=MUTED)
     if chart is not None:
         body.append(legend)
+        if any(row.get("submitted_at") and _datetime(points[0]["at"]) <= _datetime(row["submitted_at"]) <= _datetime(points[-1]["at"]) for row in submissions):
+            body.append(Text("│ latest validator submissions · not incentive changes", style="#fbbf24"))
     body.append(Text(gate, style=MUTED))
     return Panel(Group(*body), title=Text(f" {lane.upper()} ", style=f"bold {accent}"),
                  subtitle=Text(f"Last eval: {_date(entry.get('last_evaluated_at'))}", style=MUTED),
@@ -153,17 +159,58 @@ def _verification_panel(verification):
                  border_style="#475569", box=box.ROUNDED, padding=(0, 2))
 
 
-def render_fool_history(data, modality=None, *, hotkey=None, lookback_days=7, console=None):
+def _console():
+    import click
+    context = click.get_current_context(silent=True)
+    color = context.color if context is not None else None
+    return Console(no_color="NO_COLOR" in os.environ or color is False, force_terminal=color)
+
+
+def render_chain_context(chain, console=None):
+    console = console or _console()
+    chain = chain or {"status": "disabled"}
+    if chain.get("status") == "disabled":
+        return
+    incentive = chain.get("incentive")
+    parts = []
+    if incentive is not None:
+        color = "#86efac" if incentive > 0 else "#fcd34d"
+        parts.append(Text(f"Incentive  {incentive:.6g}  ({incentive:.4%})   ·   UID {chain['uid']}", style=f"bold {color}"))
+        network = chain.get("network") if chain.get("network") in ("finney", "test", "local") else "custom RPC"
+        at = _date(chain["as_of"]) if chain.get("as_of") else "timestamp unavailable"
+        parts.append(Text(f"{network} / SN{chain['netuid']} · block {chain['block']:,} · {at}", style=MUTED))
+    else:
+        parts.append(Text("Incentive  —  not registered" if chain.get("status") == "not_registered"
+                          else "Incentive  —  unavailable", style="#fcd34d"))
+    if "positive_weight_count" in chain:
+        parts.append(Text(f"{chain['positive_weight_count']}/{chain['validator_count']} permitted validators have positive revealed weight for you.", style=MUTED))
+    validators = chain.get("validators") or []
+    if validators:
+        parts.extend([Text(""), Text("Latest submission per validator · largest validators by stake", style=MUTED)])
+        table = Table(box=None, expand=True, padding=(0, 1), header_style=MUTED)
+        for heading in ("Validator UID", "Revealed weight", "Submitted UTC", "Block"):
+            table.add_column(heading, overflow="fold")
+        for row in validators:
+            table.add_row(str(row["uid"]), f"{row['weight']:.4%}",
+                          _date(row.get("submitted_at")) if row.get("submitted_at") else row.get("timing_note") or "unknown",
+                          str(row.get("submitted_block") or "—"))
+        parts.append(table)
+        parts.append(Text("Weights are row-normalized shares, not incentive. Latest submissions only—not full history.", style=MUTED))
+    if chain.get("commit_reveal_enabled"):
+        parts.append(Text("Commit-reveal enabled: submission ≠ reveal. Revealed weights may be from an earlier commit.", style="#fbbf24"))
+    if chain.get("warning"):
+        parts.append(Text(chain["warning"], style="#fcd34d"))
+    console.print(Panel(Group(*parts), title=" ON-CHAIN SNAPSHOT ", title_align="left",
+                        box=box.ROUNDED, border_style="#475569", padding=(1, 2)))
+    console.print()
+
+
+def render_fool_history(data, modality=None, *, hotkey=None, lookback_days=7, console=None, chain=None):
     """Old APIs return False; JSON callers bypass this renderer entirely."""
     history = data.get("history") or {}
     if not history:
         return False
-    if console is None:
-        import click
-        context = click.get_current_context(silent=True)
-        color = context.color if context is not None else None
-        console = Console(no_color="NO_COLOR" in os.environ or color is False,
-                          force_terminal=color)
+    console = console or _console()
     console.print()
     console.print(Text.assemble(("GAS", "bold #5eead4"), ("  /  GENERATOR PERFORMANCE", "bold")))
     if hotkey:
@@ -175,9 +222,11 @@ def render_fool_history(data, modality=None, *, hotkey=None, lookback_days=7, co
     if all_points:
         console.print(Text(f"History: {_date(all_points[0]['at'])} → {_date(all_points[-1]['at'])}", style=MUTED))
     console.print()
+    render_chain_context(chain, console)
+    submissions = (chain or {}).get("validators") or []
     for lane in lanes:
         if lane in history:
-            console.print(_modality_panel(lane, history[lane], console.width))
+            console.print(_modality_panel(lane, history[lane], console.width, submissions))
             console.print()
     console.print(_verification_panel(data.get("verification") or {}))
     if lookback_days != 7:
@@ -189,6 +238,9 @@ def render_fool_history(data, modality=None, *, hotkey=None, lookback_days=7, co
     console.print()
     console.print(Text("Counts are evaluations, not unique media. Missing data is not zero.", style=MUTED))
     console.print(Text("Eligibility is per modality; no video data does not block image rewards.", style=MUTED))
-    console.print(Text("On-chain incentive is not checked here; verified activity and weight reveal/epoch timing also matter.", style=MUTED))
+    note = ("Chain snapshot shown above; fool-rate eligibility does not guarantee payment."
+            if (chain or {}).get("incentive") is not None else
+            "On-chain incentive is not checked or unavailable; verified activity and weight reveal/epoch timing also matter.")
+    console.print(Text(note, style=MUTED))
     console.print()
     return True
