@@ -237,27 +237,45 @@ def test_positive_incentive_is_separate_from_weight_and_submission(run):
     assert "Reveal  unknown" in output
 
 
-def test_submission_markers_are_deduplicated_and_clipped(monkeypatch):
-    from gas.utils import generator_performance as renderer
-    rule = Mock(wraps=renderer.plt.vertical_line)
-    monkeypatch.setattr(renderer.plt, "vertical_line", rule)
+def test_submission_markers_are_deduplicated_and_clipped():
     sample = points([.01, .02, .03])
     markers = [dict(submitted_at=sample[1]["at"])] * 2 + [
         dict(submitted_at="2026-09-01T00:00:00Z"), dict(submitted_at=None)]
-    line_chart(sample, .02, submissions=markers)
-    assert rule.call_count == 1
+    chart = line_chart(sample, .02, submissions=markers)
+    track = next(line for line in chart.plain.splitlines() if line.lstrip().startswith("S "))
+    assert track.count("│") == 1
 
 
-def test_reveal_markers_are_distinct_deduplicated_and_clipped(monkeypatch):
-    from gas.utils import generator_performance as renderer
-    rule = Mock(wraps=renderer.plt.vertical_line)
-    monkeypatch.setattr(renderer.plt, "vertical_line", rule)
+def test_reveal_markers_are_distinct_deduplicated_and_clipped():
     sample = points([.01, .02, .03])
     markers = [dict(submitted_at=sample[1]["at"], revealed_at=sample[2]["at"])] * 2 + [
         dict(revealed_at="2026-09-01T00:00:00Z")]
-    line_chart(sample, .02, submissions=markers)
-    assert rule.call_count == 2
-    assert [call.kwargs["color"] for call in rule.call_args_list] == [(251, 191, 36), (96, 165, 250)]
+    chart = line_chart(sample, .02, submissions=markers)
+    tracks = [line for line in chart.plain.splitlines() if line.lstrip().startswith(("S ", "R "))]
+    assert len(tracks) == 2
+    assert all(line.count("│") == 1 for line in tracks)
+    assert tracks[0].index("│") < tracks[1].index("│")
+
+
+@pytest.mark.parametrize("width", [40, 80, 94, 160])
+def test_colliding_demo_markers_keep_both_colors_and_aligned_tracks(width):
+    from scripts.preview_generator_performance import demo_data, demo_chain
+    chart = line_chart(demo_data()["history"]["image"]["points"], .02,
+                       width=width, submissions=demo_chain()["validators"])
+    tracks = [line for line in chart.plain.splitlines() if line.lstrip().startswith(("S ", "R "))]
+    assert len(tracks) == 2
+    assert all("│" in line for line in tracks)
+    styles = {str(span.style) for span in chart.spans}
+    assert {"#fbbf24", "#60a5fa"} <= styles
+    assert all(len(line) <= width for line in tracks)
+
+
+def test_coincident_events_stay_at_the_same_time_in_separate_tracks():
+    sample = points([.01, .02, .03])
+    chart = line_chart(sample, .02, submissions=[dict(submitted_at=sample[1]["at"], revealed_at=sample[1]["at"])])
+    tracks = [line for line in chart.plain.splitlines() if line.lstrip().startswith(("S ", "R "))]
+    assert len(tracks) == 2
+    assert tracks[0].index("│") == tracks[1].index("│")
 
 
 def test_demo_shows_recent_commit_and_reveal_without_pairing():

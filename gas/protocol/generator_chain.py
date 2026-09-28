@@ -185,7 +185,9 @@ def _main():
     hotkey, network, netuid = sys.argv[1:]
 
     def publish(snapshot):
-        print(PREFIX + json.dumps(snapshot, allow_nan=False), flush=True)
+        # Child-process protocol, not user-facing logging.
+        sys.stdout.write(PREFIX + json.dumps(snapshot, allow_nan=False) + "\n")
+        sys.stdout.flush()
 
     chain = None
     try:

@@ -83,16 +83,30 @@ def line_chart(points, threshold, width=80, height=12, modality="image", submiss
         plt.xticks(positions, [datetime.fromtimestamp(t, timezone.utc).strftime(fmt) for t in positions])
         if threshold is not None:
             plt.horizontal_line(threshold * 100, color=(100, 116, 139))
-        for field, color in (("submitted_at", (251, 191, 36)), ("revealed_at", (96, 165, 250))):
-            for at in sorted({row.get(field) for row in submissions if row.get(field)}):
-                timestamp = _datetime(at).timestamp()
-                if left <= timestamp <= right:
-                    plt.vertical_line(timestamp, color=color)
         for segment in segments:
             xs, ys = zip(*segment)
             plt.plot(list(xs), list(ys), marker="braille",
                      color=PLOT_COLORS.get(modality, PLOT_COLORS["image"]))
-        return Text.from_ansi(plt.build().rstrip("\n"))
+        chart = Text.from_ansi(plt.build().rstrip("\n"))
+        # Separate event tracks preserve both types even when their timestamps
+        # round to the same terminal column. Align to the rendered plot axis,
+        # whose left margin varies with the percentage tick labels.
+        axis = next((line for line in chart.plain.splitlines() if "└" in line), None)
+        if axis is not None:
+            first = axis.index("└") + 1
+            last = len(axis.rstrip()) - 1
+            for field, label, color in (("submitted_at", "S", "#fbbf24"),
+                                        ("revealed_at", "R", "#60a5fa")):
+                columns = set()
+                for row in submissions:
+                    if row.get(field):
+                        timestamp = _datetime(row[field]).timestamp()
+                        if left <= timestamp <= right:
+                            columns.add(round((timestamp - left) / (right - left) * (last - first)))
+                if columns:
+                    track = "".join("│" if i in columns else " " for i in range(last - first + 1))
+                    chart.append("\n" + (label + " ").rjust(first) + track, style=color)
+        return chart
     finally:
         plt.clear_figure()
 
@@ -128,14 +142,14 @@ def _modality_panel(lane, entry, width, submissions=()):
     if chart is not None:
         body.append(legend)
         events = Text()
-        for field, label, color in (("submitted_at", "│ latest submissions", "#fbbf24"),
-                                    ("revealed_at", "│ recent reveals", "#60a5fa")):
+        for field, label, color in (("submitted_at", "S latest submissions", "#fbbf24"),
+                                    ("revealed_at", "R recent reveals", "#60a5fa")):
             if any(row.get(field) and _datetime(points[0]["at"]) <= _datetime(row[field]) <= _datetime(points[-1]["at"]) for row in submissions):
                 if events.plain:
                     events.append("    ")
                 events.append(label, style=color)
         if events.plain:
-            body.extend([events, Text("Latest events only, not 7-day event history; nearby markers may overlap.", style=MUTED)])
+            body.extend([events, Text("Latest events only, not 7-day event history; separate tracks share the chart's time axis.", style=MUTED)])
     body.append(Text(gate, style=MUTED))
     return Panel(Group(*body), title=Text(f" {lane.upper()} ", style=f"bold {accent}"),
                  subtitle=Text(f"Last eval: {_date(entry.get('last_evaluated_at'))}", style=MUTED),
