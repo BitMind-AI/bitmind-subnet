@@ -14,17 +14,15 @@ def _date(value):
 
 
 def line_chart(points, threshold, width=48, height=7):
-    """Evenly spaced rolling points; missing observations remain gaps, not zeros."""
+    """Spread observations across the plot, connecting only consecutive known points."""
     if not points or not any(p.get("fool_rate") is not None for p in points):
         return []
-    width = max(2, min(width, len(points)))
-    selected = [points[round(i * (len(points) - 1) / (width - 1))]
-                for i in range(width)]
-    values = [p.get("fool_rate") for p in selected]
+    width = max(2, width)
+    values = [p.get("fool_rate") for p in points]
     ceiling = max([.01, (threshold or 0) * 1.25] +
                   [v for v in values if v is not None])
     ceiling = math.ceil(ceiling * 100) / 100
-    grid = [[" " for _ in values] for _ in range(height)]
+    grid = [[" " for _ in range(width)] for _ in range(height)]
 
     def level(value):
         return max(0, min(height - 1, round((1 - value / ceiling) * (height - 1))))
@@ -32,20 +30,54 @@ def line_chart(points, threshold, width=48, height=7):
     if threshold is not None:
         grid[level(threshold)] = ["┄"] * width
     previous = None
-    for x, value in enumerate(values):
+    markers = []
+    for i, value in enumerate(values):
+        x = round(i * (width - 1) / (len(values) - 1)) if len(values) > 1 else width - 1
         if value is None:
             previous = None
             continue
         y = level(value)
         if previous is not None:
-            for between in range(min(previous, y) + 1, max(previous, y)):
-                grid[between][x] = "│"
+            px, py = previous
+            last_y = py
+            for column in range(px + 1, x):
+                row = round(py + (y - py) * (column - px) / (x - px))
+                grid[row][column] = "─" if row == last_y else "╱" if row < last_y else "╲"
+                for between in range(min(last_y, row) + 1, max(last_y, row)):
+                    grid[between][column] = "│"
+                last_y = row
+        markers.append((x, y))
+        previous = (x, y)
+    for x, y in markers:
         grid[y][x] = "●"
-        previous = y
     lines = [f"  {ceiling * (1 - y / (height - 1)) * 100:5.1f}% │{''.join(row)}"
              for y, row in enumerate(grid)]
-    lines.append("         └" + "─" * width)
+    if points[0].get("at") and points[-1].get("at"):
+        lines.extend(time_axis(points[0]["at"], points[-1]["at"], width))
+    else:
+        lines.append("         └" + "─" * width)
     return lines
+
+
+def time_axis(start, end, width):
+    """Aligned date and time ticks, with labels kept inside the plot width."""
+    start = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    end = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    count = min(8, max(1, (width - 1) // 9 + 1))
+    if start == end:
+        count = 1
+    positions = ([width - 1] if count == 1 else
+                 [round(i * (width - 1) / (count - 1)) for i in range(count)])
+    axis, dates, times = ["─"] * width, [" "] * width, [" "] * width
+    for i, x in enumerate(positions):
+        at = end if count == 1 else start + (end - start) * (i / (count - 1))
+        axis[x] = "┬"
+        for target, label in ((dates, at.strftime("%b %d")), (times, at.strftime("%H:%M"))):
+            label = label[:width]
+            left = max(0, min(width - len(label), x - len(label) // 2))
+            target[left:left + len(label)] = label
+    return ["         └" + "".join(axis), "          " + "".join(dates),
+            "          " + "".join(times)]
 
 
 def render_fool_history(data, modality=None):
@@ -53,7 +85,7 @@ def render_fool_history(data, modality=None):
     history = data.get("history") or {}
     if not history:
         return False
-    width = max(12, min(60, shutil.get_terminal_size((80, 24)).columns - 14))
+    width = max(2, shutil.get_terminal_size((80, 24)).columns - 12)
     labels = {
         "qualified": ("Fool-rate eligible", "green"),
         "below_threshold": ("Below threshold", "yellow"),
@@ -83,10 +115,10 @@ def render_fool_history(data, modality=None):
         chart = line_chart(points, threshold, width)
         for line in chart:
             click.echo(click.style(line, fg="cyan" if lane == "image" else "magenta"))
-        if points:
+        if points and not chart:
             click.echo(f"  {_date(points[0]['at'])} → {_date(points[-1]['at'])} UTC")
         if chart and threshold is not None:
-            click.echo(f"  ┄ threshold {threshold:.0%}  ·  ● rolling fool rate")
+            click.echo(f"  UTC  ·  ┄ threshold {threshold:.0%}  ·  ● rolling fool rate")
         latest = entry.get("last_evaluated_at")
         click.echo(f"  Last evaluation: {_date(latest) + ' UTC' if latest else 'none in available history'}")
         click.echo()

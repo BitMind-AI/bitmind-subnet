@@ -6,7 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from gas.cli import cli
-from gas.utils.generator_performance import line_chart, render_fool_history
+from gas.utils.generator_performance import line_chart, render_fool_history, time_axis
 
 
 def payload():
@@ -107,3 +107,37 @@ def test_single_point_and_narrow_terminal(monkeypatch, capsys):
     render_fool_history(payload())
     assert max(len(line) for line in capsys.readouterr().out.splitlines() if "│" in line) <= 40
     assert line_chart([dict(fool_rate=.05)], .02)
+
+
+@pytest.mark.parametrize("width", [28, 68, 108, 148])
+def test_sparse_points_use_full_width_with_connected_lines(width):
+    chart = line_chart([dict(fool_rate=.01), dict(fool_rate=.03)], .02, width=width)
+    assert all(len(line) == width + 10 for line in chart)
+    assert any(line[10] == "●" for line in chart[:-1])
+    assert any(line[-1] == "●" for line in chart[:-1])
+    assert any("─" in line[11:-1] for line in chart[:-1])
+
+
+def test_missing_point_leaves_a_gap_even_on_wide_plot():
+    chart = line_chart([dict(fool_rate=.01), dict(fool_rate=None), dict(fool_rate=.03)], None, width=80)
+    assert all(line[11:-1].strip() == "" for line in chart[:-1])
+
+
+@pytest.mark.parametrize("width", [2, 12, 28, 68, 108])
+def test_time_axis_fits_and_has_aligned_ticks(width):
+    axis = time_axis("2026-09-21T16:00:00Z", "2026-09-28T16:00:00Z", width)
+    assert all(len(line) == width + 10 for line in axis)
+    if width >= 20:
+        assert "Sep 21" in axis[1] and "Sep 28" in axis[1]
+        assert axis[0][10] == "┬" and axis[0][-1] == "┬"
+        assert "16:00" in axis[2]
+    if width == 68:
+        assert axis[2].count("16:00") == 8
+
+
+def test_wide_terminal_is_not_capped_at_sixty_columns(monkeypatch, capsys):
+    monkeypatch.setattr("gas.utils.generator_performance.shutil.get_terminal_size",
+                        lambda _: SimpleNamespace(columns=120))
+    render_fool_history(payload())
+    chart_rows = [line for line in capsys.readouterr().out.splitlines() if "│" in line]
+    assert all(len(line) == 118 for line in chart_rows)
