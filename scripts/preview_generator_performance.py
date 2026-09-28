@@ -36,11 +36,22 @@ def demo_chain():
     return dict(status="ok", netuid=34, network="finney", block=9167400,
                 uid=239, incentive=.000183108, as_of="2026-09-28T16:00:00Z",
                 commit_reveal_enabled=True, validator_count=7, positive_weight_count=5,
+                reveal_note="Recent indexed reveals only (Metagraphed), verified on chain; unknown ≠ not revealed.",
                 validators=[
                     dict(uid=135, weight=.0002966, submitted_block=9167100,
-                         submitted_at="2026-09-28T15:00:00Z"),
+                         submitted_at="2026-09-28T15:00:00Z", revealed_block=9167250,
+                         revealed_at="2026-09-28T15:30:00Z"),
                     dict(uid=134, weight=.0012634, submitted_block=9167090,
-                         submitted_at="2026-09-28T14:58:00Z"),
+                         submitted_at="2026-09-28T14:58:00Z", revealed_block=9167250,
+                         revealed_at="2026-09-28T15:30:00Z"),
+                    dict(uid=19, weight=.0013733, submitted_block=9167089,
+                         submitted_at="2026-09-28T14:57:48Z", revealed_block=9167250,
+                         revealed_at="2026-09-28T15:30:00Z"),
+                    dict(uid=72, weight=.0001978, submitted_block=9167160,
+                         submitted_at="2026-09-28T15:12:00Z", revealed_block=9167040,
+                         revealed_at="2026-09-28T14:48:00Z"),
+                    dict(uid=5, weight=0, submitted_block=8656798, submitted_at=None,
+                         timing_note=">7200 blocks ago"),
                 ])
 
 

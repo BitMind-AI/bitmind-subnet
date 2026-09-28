@@ -232,7 +232,9 @@ def test_positive_incentive_is_separate_from_weight_and_submission(run):
     output = invoke().output
     assert "0.000123" in output and "0.0123%" in output
     assert "Revealed weight" in output and "0.1000%" in output
-    assert "submission ≠ reveal" in output
+    assert "Submission ≠ reveal" in output
+    assert "showing 1/2 validators" in output
+    assert "Reveal  unknown" in output
 
 
 def test_submission_markers_are_deduplicated_and_clipped(monkeypatch):
@@ -244,3 +246,30 @@ def test_submission_markers_are_deduplicated_and_clipped(monkeypatch):
         dict(submitted_at="2026-09-01T00:00:00Z"), dict(submitted_at=None)]
     line_chart(sample, .02, submissions=markers)
     assert rule.call_count == 1
+
+
+def test_reveal_markers_are_distinct_deduplicated_and_clipped(monkeypatch):
+    from gas.utils import generator_performance as renderer
+    rule = Mock(wraps=renderer.plt.vertical_line)
+    monkeypatch.setattr(renderer.plt, "vertical_line", rule)
+    sample = points([.01, .02, .03])
+    markers = [dict(submitted_at=sample[1]["at"], revealed_at=sample[2]["at"])] * 2 + [
+        dict(revealed_at="2026-09-01T00:00:00Z")]
+    line_chart(sample, .02, submissions=markers)
+    assert rule.call_count == 2
+    assert [call.kwargs["color"] for call in rule.call_args_list] == [(251, 191, 36), (96, 165, 250)]
+
+
+def test_demo_shows_recent_commit_and_reveal_without_pairing():
+    import io
+    from rich.console import Console
+    from scripts.preview_generator_performance import demo_chain
+    from gas.utils.generator_performance import render_chain_context
+    out = io.StringIO()
+    render_chain_context(demo_chain(), Console(file=out, width=100, no_color=True))
+    text = out.getvalue()
+    assert "showing 5/7 validators" in text
+    assert "Commit  Sep 28 15:12 UTC" in text
+    assert "Reveal  Sep 28 14:48 UTC" in text
+    assert "different commits" in text
+    assert "unknown ≠ not revealed" in text

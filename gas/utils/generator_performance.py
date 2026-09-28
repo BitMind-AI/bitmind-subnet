@@ -83,10 +83,11 @@ def line_chart(points, threshold, width=80, height=12, modality="image", submiss
         plt.xticks(positions, [datetime.fromtimestamp(t, timezone.utc).strftime(fmt) for t in positions])
         if threshold is not None:
             plt.horizontal_line(threshold * 100, color=(100, 116, 139))
-        for at in sorted({row.get("submitted_at") for row in submissions if row.get("submitted_at")}):
-            timestamp = _datetime(at).timestamp()
-            if left <= timestamp <= right:
-                plt.vertical_line(timestamp, color=(251, 191, 36))
+        for field, color in (("submitted_at", (251, 191, 36)), ("revealed_at", (96, 165, 250))):
+            for at in sorted({row.get(field) for row in submissions if row.get(field)}):
+                timestamp = _datetime(at).timestamp()
+                if left <= timestamp <= right:
+                    plt.vertical_line(timestamp, color=color)
         for segment in segments:
             xs, ys = zip(*segment)
             plt.plot(list(xs), list(ys), marker="braille",
@@ -126,8 +127,15 @@ def _modality_panel(lane, entry, width, submissions=()):
     legend.append("    UTC", style=MUTED)
     if chart is not None:
         body.append(legend)
-        if any(row.get("submitted_at") and _datetime(points[0]["at"]) <= _datetime(row["submitted_at"]) <= _datetime(points[-1]["at"]) for row in submissions):
-            body.append(Text("│ latest validator submissions · not incentive changes", style="#fbbf24"))
+        events = Text()
+        for field, label, color in (("submitted_at", "│ latest submissions", "#fbbf24"),
+                                    ("revealed_at", "│ recent reveals", "#60a5fa")):
+            if any(row.get(field) and _datetime(points[0]["at"]) <= _datetime(row[field]) <= _datetime(points[-1]["at"]) for row in submissions):
+                if events.plain:
+                    events.append("    ")
+                events.append(label, style=color)
+        if events.plain:
+            body.extend([events, Text("Latest events only, not 7-day event history; nearby markers may overlap.", style=MUTED)])
     body.append(Text(gate, style=MUTED))
     return Panel(Group(*body), title=Text(f" {lane.upper()} ", style=f"bold {accent}"),
                  subtitle=Text(f"Last eval: {_date(entry.get('last_evaluated_at'))}", style=MUTED),
@@ -186,18 +194,27 @@ def render_chain_context(chain, console=None):
         parts.append(Text(f"{chain['positive_weight_count']}/{chain['validator_count']} permitted validators have positive revealed weight for you.", style=MUTED))
     validators = chain.get("validators") or []
     if validators:
-        parts.extend([Text(""), Text("Latest submission per validator · largest validators by stake", style=MUTED)])
+        count = chain.get("validator_count", len(validators))
+        parts.extend([Text(""), Text(f"Most recent observed events · showing {len(validators)}/{count} validators, largest by stake", style=MUTED)])
         table = Table(box=None, expand=True, padding=(0, 1), header_style=MUTED)
-        for heading in ("Validator UID", "Revealed weight", "Submitted UTC", "Block"):
+        for heading in ("Validator UID", "Revealed weight", "Latest event UTC", "Block"):
             table.add_column(heading, overflow="fold")
         for row in validators:
+            submitted = _date(row["submitted_at"]) if row.get("submitted_at") else row.get("timing_note") or "unknown"
+            label = "Commit" if chain.get("commit_reveal_enabled") else "Submit"
             table.add_row(str(row["uid"]), f"{row['weight']:.4%}",
-                          _date(row.get("submitted_at")) if row.get("submitted_at") else row.get("timing_note") or "unknown",
+                          Text(f"{label}  {submitted}", style="#fbbf24"),
                           str(row.get("submitted_block") or "—"))
+            if chain.get("commit_reveal_enabled"):
+                revealed = _date(row["revealed_at"]) if row.get("revealed_at") else "unknown"
+                table.add_row("", "", Text(f"Reveal  {revealed}", style="#60a5fa"),
+                              str(row.get("revealed_block") or "—"))
         parts.append(table)
-        parts.append(Text("Weights are row-normalized shares, not incentive. Latest submissions only—not full history.", style=MUTED))
+        parts.append(Text("Weights are current row-normalized shares, not incentive. Events are validator-wide, not miner-specific.", style=MUTED))
     if chain.get("commit_reveal_enabled"):
-        parts.append(Text("Commit-reveal enabled: submission ≠ reveal. Revealed weights may be from an earlier commit.", style="#fbbf24"))
+        parts.append(Text("Submission ≠ reveal: these may belong to different commits. Neither marks an incentive change.", style="#fbbf24"))
+    if chain.get("reveal_note"):
+        parts.append(Text(chain["reveal_note"], style=MUTED))
     if chain.get("warning"):
         parts.append(Text(chain["warning"], style="#fcd34d"))
     console.print(Panel(Group(*parts), title=" ON-CHAIN SNAPSHOT ", title_align="left",

@@ -13,6 +13,84 @@ PREFIX = "GAS_CHAIN_SNAPSHOT "
 MAX_VALIDATORS = 5
 # Avoid archive fallbacks for stale validators. Their exact block is still shown.
 MAX_TIMESTAMP_AGE_BLOCKS = 7200
+REVEAL_INDEX_URL = "https://api.metagraph.sh/api/v1/chain-events"
+MAX_REVEAL_PAGES = 8
+
+
+def add_recent_reveals(subtensor, snapshot, publish=lambda snapshot: None, get=None):
+    """Use a bounded public index as a locator; verify events/times on chain.
+
+    This is latest *observed* reveal context, not a complete history or proof
+    that a particular commit has revealed. No wallet/miner address is sent to
+    the index. Only Finney's modern timelock events are indexed here.
+    """
+    if not snapshot.get("commit_reveal_enabled") or not snapshot.get("validators"):
+        return
+    if snapshot["network"] != "finney":
+        snapshot["reveal_note"] = "Recent reveal lookup is available on Finney only."
+        return
+    import requests
+    get = get or requests.get
+    snapshot["reveal_note"] = "Recent indexed reveals only (Metagraphed), verified on chain; unknown ≠ not revealed."
+    publish(snapshot)
+    rows = {row["hotkey"]: row for row in snapshot["validators"]}
+    active = {key for key, row in rows.items() if row.get("submitted_block") and
+              snapshot["block"] - row["submitted_block"] <= MAX_TIMESTAMP_AGE_BLOCKS}
+    if not active:
+        return
+    params = dict(pallet="SubtensorModule", method="TimelockedWeightsRevealed", limit=100)
+    checked = set()
+    cursors = set()
+    try:
+        for _ in range(MAX_REVEAL_PAGES):
+            response = get(REVEAL_INDEX_URL, params=dict(params), timeout=3)
+            response.raise_for_status()
+            body = response.json()
+            if (response.headers.get("x-metagraph-degraded") or not body.get("ok") or
+                    body.get("meta", {}).get("source") == "data-worker-unavailable"):
+                raise ValueError("Reveal index unavailable")
+            data = body["data"]
+            for event in data["events"]:
+                block = int(event["block_number"])
+                if not 0 <= snapshot["block"] - block <= MAX_TIMESTAMP_AGE_BLOCKS:
+                    continue
+                args = event.get("args") or []
+                if (event.get("pallet") != "SubtensorModule" or
+                        event.get("method") != "TimelockedWeightsRevealed" or len(args) != 2):
+                    continue
+                netuid = args[0]
+                if isinstance(netuid, (list, tuple)) and len(netuid) == 1:
+                    netuid = netuid[0]
+                if netuid != snapshot["netuid"] or args[1] not in rows or block in checked:
+                    continue
+                checked.add(block)
+                # A locator cannot fabricate a reveal or substitute index ingestion
+                # time for the actual chain timestamp. Decode all reveals in this block.
+                events = subtensor.substrate.get_events(block_hash=subtensor.get_block_hash(block))
+                verified = []
+                for record in events:
+                    raw = record.get("event", record)
+                    values = raw.get("attributes") or []
+                    if (raw.get("module_id") == "SubtensorModule" and
+                            raw.get("event_id") == "TimelockedWeightsRevealed" and
+                            len(values) == 2 and values[0] == snapshot["netuid"] and values[1] in rows):
+                        verified.append(values[1])
+                if verified:
+                    at = subtensor.get_timestamp(block=block).isoformat()
+                    for key in verified:
+                        if block > (rows[key].get("revealed_block") or 0):
+                            rows[key].update(revealed_block=block, revealed_at=at)
+                    publish(snapshot)
+            if all(rows[key].get("revealed_block") for key in active):
+                break
+            cursor = data.get("next_cursor")
+            if not cursor or cursor in cursors:
+                break
+            cursors.add(cursor)
+            params["cursor"] = cursor
+    except Exception:
+        snapshot["reveal_note"] = "Reveal lookup incomplete/unavailable; verified events retained. Unknown ≠ not revealed."
+    publish(snapshot)
 
 
 def _last_snapshot(output):
@@ -112,7 +190,10 @@ def _main():
     chain = None
     try:
         chain = bt.Subtensor(network=network, retry_forever=False)
-        publish(collect_snapshot(chain, hotkey, int(netuid), network, publish))
+        snapshot = collect_snapshot(chain, hotkey, int(netuid), network, publish)
+        publish(snapshot)
+        add_recent_reveals(chain, snapshot, publish)
+        publish(snapshot)
     except Exception:
         publish(dict(status="unavailable", network=network, netuid=int(netuid),
                      incentive=None, validators=[], warning="Chain lookup unavailable; incentive is unknown, not zero."))
