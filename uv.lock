@@ -1207,9 +1207,11 @@ dependencies = [
     { name = "pandas" },
     { name = "peft" },
     { name = "pillow" },
+    { name = "plotext" },
     { name = "pyarrow" },
     { name = "python-dotenv" },
     { name = "qwen-vl-utils" },
+    { name = "rich" },
     { name = "runwayml" },
     { name = "starlette" },
     { name = "torch" },
@@ -1258,9 +1260,11 @@ requires-dist = [
     { name = "pandas", specifier = "==2.3.0" },
     { name = "peft", specifier = "==0.17.0" },
     { name = "pillow", specifier = "==12.3.0" },
+    { name = "plotext", specifier = "==5.3.2" },
     { name = "pyarrow", specifier = "==23.0.1" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "qwen-vl-utils", specifier = ">=0.0.14" },
+    { name = "rich", specifier = "==15.0.0" },
     { name = "runwayml", specifier = ">=4.13.0" },
     { name = "starlette", specifier = "==1.6.0" },
     { name = "torch", specifier = "==2.7.1" },
@@ -2316,6 +2320,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d7/47/e4501f49c178ae1d9f4a75073fda4204f52647993f075a9db4d14930e0c5/platformdirs-4.10.0.tar.gz", hash = "sha256:31e761a6a0ca04faf7353ea759bdba55652be214725111e5aac52dfa29d4bef7", size = 31224, upload-time = "2026-05-28T03:32:53.587Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/e6/cd9575ac904136b3cbf7aa7ee819ef86eedb7274e46f230e94ea4342e729/platformdirs-4.10.0-py3-none-any.whl", hash = "sha256:fb516cdb12eb0d857d0cd85a7c57cea4d060bee4578d6cf5a14dfdf8cbf8784a", size = 22743, upload-time = "2026-05-28T03:32:52.175Z" },
+]
+
+[[package]]
+name = "plotext"
+version = "5.3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c9/d7/f75f397af966fe252d0d34ffd3cae765317fce2134f925f95e7d6725d1ce/plotext-5.3.2.tar.gz", hash = "sha256:52d1e932e67c177bf357a3f0fe6ce14d1a96f7f7d5679d7b455b929df517068e", size = 61967, upload-time = "2024-09-24T15:13:37.728Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/1e/12fe7c40cd2099a1f454518754ed229b01beaf3bbb343127f0cc13ce6c22/plotext-5.3.2-py3-none-any.whl", hash = "sha256:394362349c1ddbf319548cfac17ca65e6d5dfc03200c40dfdc0503b3e95a2283", size = 64047, upload-time = "2024-09-24T15:13:36.296Z" },
 ]
 
 [[package]]
