@@ -153,6 +153,8 @@ class ChallengeStore:
 
         Reward scoring must not let other miners' newer outcomes displace
         eligible work within the requested time window.
+
+        Read failures propagate: an unavailable window is not an empty window.
         """
         try:
             cutoff = time.time() - (lookback_hours * 3600)
@@ -197,7 +199,7 @@ class ChallengeStore:
                 ]
         except Exception as e:
             bt.logging.error(f"Error getting recent challenge outcomes: {e}")
-            return []
+            raise
 
     def get_outcome_stats_last_n_hours(
         self, lookback_hours: float = 2.0, limit: Optional[int] = None
