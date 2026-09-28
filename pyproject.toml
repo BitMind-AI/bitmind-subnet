@@ -45,6 +45,8 @@ dependencies = [
     "python-dotenv==1.2.2",
     "accelerate==1.8.1",
     "click>=8.0.0",
+    "rich==15.0.0",
+    "plotext==5.3.2",
     "datasets==4.0.0",
     "async-substrate-interface==2.2.1",
     "ftfy==6.3.1",

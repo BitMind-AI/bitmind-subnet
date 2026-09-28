@@ -221,8 +221,9 @@ gascli g perf --lookback-days 14       # Two weeks of chart history
 gascli g perf --json                   # Raw API response, without terminal formatting
 ```
 
-The charts show **sample-weighted rolling seven-day fool rates**, with dotted
-threshold lines. Each modality needs at least 20 benchmark evaluations and a
+Rich panels and Plotext's high-resolution curves show **sample-weighted rolling
+seven-day fool rates**, with muted threshold lines and dated axes. Each modality
+needs at least 20 benchmark evaluations and a
 rate strictly above its threshold: 2% for images, 1% for videos. Changing
 `--lookback-days` changes the chart span (and the legacy aggregate window), not
 the seven-day qualification window.
@@ -240,6 +241,11 @@ infer participation or check chain incentives from missing benchmark data.
 The API supplies the chart history. Older API deployments still work, displaying
 the aggregate summary until the history addition is deployed. Existing CLI
 versions continue to read the unchanged verification and aggregate fields.
+
+Charts use the available terminal width; very narrow terminals show the numbers
+without a plot. Redirected output remains free of color escape sequences, and
+`NO_COLOR` disables colors. To preview the layout without a wallet or API call,
+run `python -m scripts.preview_generator_performance --width 100` (demo data).
 
 ### API Endpoints
 

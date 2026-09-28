@@ -1,4 +1,6 @@
 import json
+from datetime import datetime, timedelta, timezone
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -6,7 +8,8 @@ import pytest
 from click.testing import CliRunner
 
 from gas.cli import cli
-from gas.utils.generator_performance import line_chart, render_fool_history, time_axis
+from rich.console import Console
+from gas.utils.generator_performance import line_chart, render_fool_history, _segments
 
 
 def payload():
@@ -42,11 +45,11 @@ def test_default_charts_and_eligibility_caveat(run):
     invoke, fetch = run
     result = invoke()
     assert result.exit_code == 0, result.output
-    assert "IMAGE  2.72%" in result.output
+    assert "IMAGE" in result.output and "2.72%" in result.output
     assert "Fool-rate eligible" in result.output
-    assert "VIDEO  —" in result.output
+    assert "VIDEO" in result.output and "—" in result.output
     assert "No recent data" in result.output
-    assert "●" in result.output and "┄" in result.output
+    assert "●" in result.output and "threshold" in result.output
     assert "On-chain incentive is not checked" in result.output
     assert fetch.call_args.kwargs["lookback_days"] == 7
 
@@ -95,49 +98,96 @@ def test_api_failure_has_no_fake_chart(run):
     assert "eligible" not in result.output
 
 
-def test_missing_data_is_not_zero_and_zero_is_plotted():
-    assert line_chart([dict(fool_rate=None)] * 3, .02) == []
-    chart = line_chart([dict(fool_rate=0), dict(fool_rate=None), dict(fool_rate=.01)], .02)
-    assert sum(line.count("●") for line in chart) == 2
+def points(rates):
+    now = datetime(2026, 9, 28, 16, tzinfo=timezone.utc)
+    return [dict(at=(now-timedelta(days=len(rates)-i-1)).isoformat(), fool_rate=rate)
+            for i, rate in enumerate(rates)]
 
 
-def test_single_point_and_narrow_terminal(monkeypatch, capsys):
-    monkeypatch.setattr("gas.utils.generator_performance.shutil.get_terminal_size",
-                        lambda _: SimpleNamespace(columns=40))
-    render_fool_history(payload())
-    assert max(len(line) for line in capsys.readouterr().out.splitlines() if "│" in line) <= 40
-    assert line_chart([dict(fool_rate=.05)], .02)
+def test_missing_data_is_not_zero_and_splits_lines():
+    sample = points([0, None, .01])
+    assert line_chart(points([None] * 3), .02) is None
+    segments = list(_segments(sample))
+    assert len(segments) == 2
+    assert segments[0][0][1] == 0
+    assert segments[1][0][1] == 1
+
+
+def test_plot_calls_do_not_bridge_missing_samples(monkeypatch):
+    from gas.utils import generator_performance as renderer
+    plot = Mock(wraps=renderer.plt.plot)
+    monkeypatch.setattr(renderer.plt, "plot", plot)
+    line_chart(points([.01, .02, None, .03, .04]), .02)
+    assert plot.call_count == 2
+    assert plot.call_args_list[0].args[1] == [1, 2]
+    assert plot.call_args_list[1].args[1] == [3, 4]
+    assert all(call.kwargs["marker"] == "braille" for call in plot.call_args_list)
 
 
 @pytest.mark.parametrize("width", [28, 68, 108, 148])
-def test_sparse_points_use_full_width_with_connected_lines(width):
-    chart = line_chart([dict(fool_rate=.01), dict(fool_rate=.03)], .02, width=width)
-    assert all(len(line) == width + 10 for line in chart)
-    assert any(line[10] == "●" for line in chart[:-1])
-    assert any(line[-1] == "●" for line in chart[:-1])
-    assert any("─" in line[11:-1] for line in chart[:-1])
+def test_plot_fills_requested_width(width):
+    chart = line_chart(points([.01, .03]), .02, width=width)
+    lines = chart.plain.splitlines()
+    assert max(len(line) for line in lines) == width
+    assert all(len(line) <= width for line in lines)
+    assert "\x1b" not in chart.plain
 
 
-def test_missing_point_leaves_a_gap_even_on_wide_plot():
-    chart = line_chart([dict(fool_rate=.01), dict(fool_rate=None), dict(fool_rate=.03)], None, width=80)
-    assert all(line[11:-1].strip() == "" for line in chart[:-1])
+@pytest.mark.parametrize("width", [20, 40, 80, 120])
+def test_dashboard_fits_terminal(width):
+    output = StringIO()
+    render_fool_history(payload(), console=Console(file=output, width=width, color_system=None))
+    lines = output.getvalue().splitlines()
+    assert all(len(line) <= width for line in lines)
+    assert any(len(line) == width for line in lines)
 
 
-@pytest.mark.parametrize("width", [2, 12, 28, 68, 108])
-def test_time_axis_fits_and_has_aligned_ticks(width):
-    axis = time_axis("2026-09-21T16:00:00Z", "2026-09-28T16:00:00Z", width)
-    assert all(len(line) == width + 10 for line in axis)
-    if width >= 20:
-        assert "Sep 21" in axis[1] and "Sep 28" in axis[1]
-        assert axis[0][10] == "┬" and axis[0][-1] == "┬"
-        assert "16:00" in axis[2]
-    if width == 68:
-        assert axis[2].count("16:00") == 8
+def test_short_window_has_time_ticks_and_long_window_has_dates():
+    sample = points([.01, .02])
+    assert "16:00" in line_chart(sample, .02).plain
+    sample = points([.01, .02, .03, .02, .04, .02, .03, .04])
+    chart = line_chart(sample, .02, width=100).plain
+    assert "Sep 21" in chart and "Sep 28" in chart
 
 
-def test_wide_terminal_is_not_capped_at_sixty_columns(monkeypatch, capsys):
-    monkeypatch.setattr("gas.utils.generator_performance.shutil.get_terminal_size",
-                        lambda _: SimpleNamespace(columns=120))
-    render_fool_history(payload())
-    chart_rows = [line for line in capsys.readouterr().out.splitlines() if "│" in line]
-    assert all(len(line) == 118 for line in chart_rows)
+def test_repeated_render_has_no_state_leakage():
+    first = line_chart(points([.01, .03]), .02).plain
+    line_chart(points([.5, .9]), .01, modality="video")
+    assert line_chart(points([.01, .03]), .02).plain == first
+    assert line_chart(points([.05]), .02) is not None
+
+
+def test_redirected_cli_has_no_ansi(run):
+    result = run[0]()
+    assert result.exit_code == 0
+    assert "\x1b" not in result.output
+
+
+@pytest.mark.parametrize("status,label", [
+    ("below_threshold", "Below threshold"),
+    ("insufficient_samples", "Insufficient samples"),
+    ("not_applicable", "No generator reward gate"),
+])
+def test_status_labels(run, status, label):
+    invoke, fetch = run
+    fetch.return_value["data"]["history"]["image"]["status"] = status
+    assert label in invoke().output
+
+
+def test_verification_details_are_preserved(run):
+    invoke, fetch = run
+    fetch.return_value["data"]["verification"] = dict(
+        validator_count=1, aggregate_pass_rate=.9, total_verified=9,
+        total_failed=1, total_evaluated=10, by_validator=[dict(
+            validator_hotkey="validator-123456", pass_rate=.9,
+            total_verified=9, total_failed=1, lookback_hours=24)])
+    output = invoke().output
+    assert "VERIFICATION" in output and "90.0%" in output
+    assert "validator-12" in output and "24h" in output
+
+
+def test_external_text_is_not_rich_markup():
+    output = StringIO()
+    render_fool_history(payload(), hotkey="[red]not markup[/red]",
+                        console=Console(file=output, width=100, color_system=None))
+    assert "[red]not markup[/red]" in output.getvalue()

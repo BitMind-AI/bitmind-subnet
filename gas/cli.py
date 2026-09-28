@@ -936,15 +936,13 @@ def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_js
         click.echo(json_lib.dumps(data, indent=2, default=str))
         return
 
+    from gas.utils.generator_performance import render_fool_history
+    if render_fool_history(data, modality, hotkey=addr, lookback_days=lookback_days):
+        return
     click.echo()
     click.echo(f"  ⛽  generator  {addr}")
+    click.echo("  History unavailable from this API; showing aggregate only.")
     click.echo()
-
-    from gas.utils.generator_performance import render_fool_history
-    has_history = render_fool_history(data, modality)
-    if not has_history:
-        click.echo("  History unavailable from this API; showing aggregate only.")
-        click.echo()
 
     ver = data.get("verification") or {}
     fool = data.get("fool_aggregate") or {}
@@ -972,9 +970,6 @@ def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_js
     else:
         click.echo("    (no verification rows yet)")
     click.echo()
-
-    if has_history and lookback_days == 7:
-        return
 
     click.echo(f"  Fool rate aggregate (benchmark evaluations, last {lookback_days}d)")
     ts = fool.get("total_samples", 0)
