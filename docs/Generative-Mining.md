@@ -212,6 +212,35 @@ gascli generator restart
 gascli generator delete
 ```
 
+### Checking Your Performance
+
+```bash
+gascli g perf                         # Image/video charts and verification stats
+gascli g perf --modality image         # Image only
+gascli g perf --lookback-days 14       # Two weeks of chart history
+gascli g perf --json                   # Raw API response, without terminal formatting
+```
+
+The charts show **sample-weighted rolling seven-day fool rates**, with dotted
+threshold lines. Each modality needs at least 20 benchmark evaluations and a
+rate strictly above its threshold: 2% for images, 1% for videos. Changing
+`--lookback-days` changes the chart span (and the legacy aggregate window), not
+the seven-day qualification window.
+
+Counts are evaluations, not unique media: the same media can be evaluated in
+multiple benchmark runs. Missing data is shown as a gap, not a zero. Historical
+points are reconstructed from currently available benchmark results; they are
+not a record of what validators knew or paid at that time.
+
+Fool-rate eligibility is **not a guarantee of on-chain incentive**. Verified
+activity, validator updates, and weight reveal/epoch timing also affect rewards.
+Not participating in video does not disqualify an image miner. The CLI does not
+infer participation or check chain incentives from missing benchmark data.
+
+The API supplies the chart history. Older API deployments still work, displaying
+the aggregate summary until the history addition is deployed. Existing CLI
+versions continue to read the unchanged verification and aggregate fields.
+
 ### API Endpoints
 
 Your miner exposes these endpoints for validators:

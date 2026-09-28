@@ -896,7 +896,7 @@ def info():
     help="Bittensor hotkey name (default: BT_WALLET_HOTKEY from .env.gen_miner, else 'default')",
 )
 @click.option("--modality", type=click.Choice(["image", "video", "audio"]), default=None, help="Filter fool-rate aggregate by modality")
-@click.option("--lookback-days", default=7, type=int, show_default=True, help="Fool-rate parquet lookback (days)")
+@click.option("--lookback-days", default=7, type=click.IntRange(1, 90), show_default=True, help="Chart/aggregate lookback; qualification always uses 7 days")
 @click.option("--api-url", default=None, help="GAS API base URL (default: GAS_API_URL env or production)")
 @click.option("--json", "as_json", is_flag=True, help="Print raw API JSON")
 def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_json):
@@ -920,10 +920,6 @@ def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_js
         sys.exit(1)
 
     addr = wallet.hotkey.ss58_address
-    click.echo()
-    click.echo(f"  ⛽  generator  {addr}")
-    click.echo()
-
     result = fetch_generator_performance(
         wallet,
         modality=modality,
@@ -939,6 +935,16 @@ def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_js
     if as_json:
         click.echo(json_lib.dumps(data, indent=2, default=str))
         return
+
+    click.echo()
+    click.echo(f"  ⛽  generator  {addr}")
+    click.echo()
+
+    from gas.utils.generator_performance import render_fool_history
+    has_history = render_fool_history(data, modality)
+    if not has_history:
+        click.echo("  History unavailable from this API; showing aggregate only.")
+        click.echo()
 
     ver = data.get("verification") or {}
     fool = data.get("fool_aggregate") or {}
@@ -967,7 +973,10 @@ def gen_perf(wallet_name, wallet_hotkey, modality, lookback_days, api_url, as_js
         click.echo("    (no verification rows yet)")
     click.echo()
 
-    click.echo(f"  Fool rate aggregate (benchmark parquets, last {lookback_days}d)")
+    if has_history and lookback_days == 7:
+        return
+
+    click.echo(f"  Fool rate aggregate (benchmark evaluations, last {lookback_days}d)")
     ts = fool.get("total_samples", 0)
     if ts:
         click.echo(
