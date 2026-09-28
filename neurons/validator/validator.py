@@ -203,11 +203,27 @@ class Validator(BaseNeuron):
         """Set burn weights, or calculate rewards when full burn is disabled."""
         if BURN_PERCENTAGE < 1.0:
             bt.logging.info(f"Updating scores at block {block}")
-            generator_uids = await self.update_scores()
-        
+            generator_uids = None
+            try:
+                generator_uids = await self.update_scores()
+            except Exception:
+                bt.logging.error(
+                    "Generator scoring failed; attempting last-good payout fallback.\n"
+                    + traceback.format_exc()
+                )
+
             if generator_uids is None:
-                generator_uids = []
-                bt.logging.warning("No generator rewards available; using empty generator_uids")
+                bt.logging.warning(
+                    "Generator scoring unavailable; keeping scores unchanged and "
+                    "using the last-good payout snapshot."
+                )
+            else:
+                # Persist eligibility with scores so restart-time outages can use it.
+                await self.save_state()
+
+            if self.generator_score_state.last_payout is None:
+                bt.logging.error("Skipping weight submission: no last-good generator payout snapshot")
+                return False
 
             kings_payload = await get_current_kings(
                 self.wallet.hotkey, base_url=self.config.benchmark_api_url
@@ -261,10 +277,19 @@ class Validator(BaseNeuron):
                 if BURN_PERCENTAGE == 1.0:
                     normed_weights = np.zeros(int(self.metagraph.n), dtype=np.float64)
                 else:
+                    # Re-resolve identities even after a successful update: UID slots
+                    # may have changed. Do not reuse positive but ineligible EMA tails.
+                    payout = self.generator_score_state.resolve_last_payout(self.metagraph.hotkeys)
+                    if payout is None:
+                        bt.logging.error("Skipping weight submission: generator payout snapshot unavailable")
+                        return False
+                    payout_scores = np.zeros(int(self.metagraph.n), dtype=np.float64)
+                    for uid, score in payout.items():
+                        payout_scores[uid] = score
                     normed_weights = build_koth_weights(
                         n=int(self.metagraph.n),
-                        scores=self.scores,
-                        generator_uids=generator_uids,
+                        scores=payout_scores,
+                        generator_uids=list(payout),
                         kings=kings,
                         uid_for_hotkey=uid_for_hotkey,
                         burn_uid=burn_uid,
@@ -377,6 +402,11 @@ class Validator(BaseNeuron):
             self.scores = np.zeros(len(hotkeys), dtype=np.float64)
             for uid, score in scores.items():
                 self.scores[uid] = score
+            self.generator_score_state.last_payout = {
+                hotkeys[uid]: scores[uid]
+                for uid in rewards
+                if scores.get(uid, 0.0) > 0
+            }
 
         bt.logging.info(
             f"Updated scores for {len(rewards)} miners with EMA (alpha={alpha})"
@@ -468,8 +498,8 @@ class Validator(BaseNeuron):
                 self.generator_qualification = self.generator_score_state.qualification
                 # scores.npy is retained for snapshot compatibility, not as EMA
                 # input: legacy scalars cannot be split by modality or hotkey.
-                # Rebuild the payout vector after qualification/liveness checks
-                # in update_scores; a restored gate is fallback during outages.
+                # Fresh scoring rebuilds this vector; database outages use the
+                # separate last_payout snapshot, not unfiltered EMA history.
                 self.scores = np.zeros(len(self.metagraph.hotkeys), dtype=np.float64)
                 bt.logging.info(
                     f"Loaded modality EMA histories for {len(self.generator_score_state.by_hotkey)} hotkeys; "

@@ -10,11 +10,24 @@ from .rewards import GeneratorQualification
 
 
 class GeneratorScoreState:
-    """Persist modality EMAs and their hotkey qualification fallback together."""
+    """Persist modality EMAs, qualification, and the last payable hotkey scores."""
 
     def __init__(self):
         self.by_hotkey: Dict[str, Dict[str, float]] = {}
         self.qualification: Dict[str, GeneratorQualification] = {}
+        # None means no safe fallback exists; {} means a successful empty payout.
+        # Unlike the EMA history, this contains only miners eligible for payout.
+        self.last_payout: Optional[Dict[str, float]] = None
+
+    def resolve_last_payout(self, hotkeys: Sequence[str]) -> Optional[Dict[int, float]]:
+        """Resolve the last good payout against current identities, never old UIDs."""
+        if self.last_payout is None:
+            return None
+        return {
+            uid: self.last_payout[hotkey]
+            for uid, hotkey in enumerate(hotkeys)
+            if hotkey in self.last_payout
+        }
 
     def update(
         self,
@@ -62,12 +75,14 @@ class GeneratorScoreState:
                 "version": 1,
                 "by_hotkey": self.by_hotkey,
                 "qualification": {hotkey: asdict(q) for hotkey, q in self.qualification.items()},
+                "last_payout": self.last_payout,
             }, stream, allow_nan=False)
 
     def load_state(self, save_dir: str, filename: str) -> bool:
         # Missing/invalid new-format state must never reuse legacy scalar EMA.
         self.by_hotkey = {}
         self.qualification = {}
+        self.last_payout = None
         path = Path(save_dir) / filename
         if not path.exists():
             return False
@@ -104,8 +119,19 @@ class GeneratorScoreState:
                     if not 0 <= fooled <= n or (qualified and n == 0):
                         return False
                 qualification[hotkey] = GeneratorQualification(**row)
+            # Older snapshots cannot establish payout eligibility from EMA alone.
+            payout = payload.get("last_payout")
+            if payout is not None:
+                if not isinstance(payout, dict):
+                    return False
+                for hotkey, score in payout.items():
+                    if (not isinstance(hotkey, str) or not hotkey
+                            or type(score) not in (int, float)
+                            or not math.isfinite(score) or score <= 0):
+                        return False
             self.by_hotkey = restored
             self.qualification = qualification
+            self.last_payout = payout
             return True
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             return False

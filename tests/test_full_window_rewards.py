@@ -1,6 +1,7 @@
 """The reward lookback is time-bounded, not a global newest-N sample."""
 
 import ast
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -120,3 +121,38 @@ def test_shorter_lookback_still_excludes_older_work(store):
     stats = manager_for(store).get_verification_stats_last_n_hours(lookback_hours=2)
     assert set(stats) == {"busy"}
     assert stats["busy"]["total_verified"] == 1100
+
+
+@pytest.mark.parametrize("message", [
+    "database disk image is malformed", "disk I/O error", "database is locked",
+])
+def test_unavailable_database_is_not_an_empty_reward_window(store, monkeypatch, message):
+    error = sqlite3.DatabaseError(message)
+    monkeypatch.setattr(store.db, "connect", Mock(side_effect=error))
+    for query in (
+        store.get_outcomes_last_n_hours,
+        store.get_outcome_stats_last_n_hours,
+        manager_for(store).get_verification_stats_last_n_hours,
+    ):
+        with pytest.raises(sqlite3.DatabaseError, match=message):
+            query(24)
+
+
+def test_partial_cursor_failure_does_not_return_partial_rewards(store, monkeypatch):
+    def broken_cursor():
+        yield dict(task_id="partial", uid=1, hotkey="busy", prompt_id="prompt",
+                   modality="video", status="verified", failure_reason=None,
+                   media_id=None, media_resolution=None, media_has_audio=None,
+                   created_at=NOW, updated_at=NOW)
+        raise sqlite3.DatabaseError("disk I/O error")
+
+    from unittest.mock import MagicMock
+    connection = MagicMock()
+    connection.__enter__.return_value.execute.return_value = broken_cursor()
+    monkeypatch.setattr(store.db, "connect", Mock(return_value=connection))
+    with pytest.raises(sqlite3.DatabaseError, match="disk I/O error"):
+        manager_for(store).get_verification_stats_last_n_hours(24)
+
+
+def test_successfully_read_empty_window_is_still_empty(store):
+    assert manager_for(store).get_verification_stats_last_n_hours(0) == {}

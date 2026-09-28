@@ -212,6 +212,60 @@ gascli generator restart
 gascli generator delete
 ```
 
+### Checking Your Performance
+
+```bash
+gascli g perf                         # Image/video charts and verification stats
+gascli g perf --modality image         # Image only
+gascli g perf --lookback-days 14       # Two weeks of chart history
+gascli g perf --json                   # Raw API response, without terminal formatting
+gascli g perf --no-chain               # Skip chain RPC; keep benchmark charts
+gascli g perf --netuid 379 --chain-endpoint test  # Explicit testnet chain context
+```
+
+Rich panels and Plotext's high-resolution curves show **sample-weighted rolling
+seven-day fool rates**, with muted threshold lines and dated axes. Each modality
+needs at least 20 benchmark evaluations and a
+rate strictly above its threshold: 2% for images, 1% for videos. Changing
+`--lookback-days` changes the chart span (and the legacy aggregate window), not
+the seven-day qualification window.
+
+Counts are evaluations, not unique media: the same media can be evaluated in
+multiple benchmark runs. Missing data is shown as a gap, not a zero. Historical
+points are reconstructed from currently available benchmark results; they are
+not a record of what validators knew or paid at that time.
+
+Fool-rate eligibility is **not a guarantee of on-chain incentive**. Verified
+activity, validator updates, and weight reveal/epoch timing also affect rewards.
+Not participating in video does not disqualify an image miner. The CLI does not
+infer participation from missing benchmark data.
+
+The on-chain panel reads the selected hotkey's current normalized incentive
+score (not a token amount), current revealed weights toward it, and the latest
+submission block/time for the five largest permitted validators by stake.
+Amber vertical chart markers match those submission timestamps. These are the
+**latest submission per validator, not a complete event history**. On commit-reveal
+subnets, `LastUpdate` records commits, not reveals; the currently revealed weight
+may belong to an earlier commit. No pending-payment or reveal ETA is inferred.
+
+Chain values are read at one metagraph block, with its timestamp shown separately
+from the benchmark snapshot. Timestamp lookups older than 7,200 blocks are skipped
+to avoid archive-node delays; their exact submission blocks remain visible.
+Missing/failed RPC data is shown as unknown, not zero. `--chain-timeout` bounds the
+lookup (default 30 seconds); partial snapshots remain useful on timeout.
+`--netuid` / `--chain-endpoint` override `BT_NETUID` / `BT_CHAIN_ENDPOINT`, falling
+back to subnet 34 on finney. Select the correct network when using a non-production
+API. `--json` remains the raw API response and does not perform chain queries.
+
+The API supplies the chart history. Older API deployments still work, displaying
+the aggregate summary until the history addition is deployed. Existing CLI
+versions continue to read the unchanged verification and aggregate fields.
+
+Charts use the available terminal width; very narrow terminals show the numbers
+without a plot. Redirected output remains free of color escape sequences, and
+`NO_COLOR` disables colors. To preview the layout without a wallet or API call,
+run `python -m scripts.preview_generator_performance --width 100` (demo data).
+
 ### API Endpoints
 
 Your miner exposes these endpoints for validators:
