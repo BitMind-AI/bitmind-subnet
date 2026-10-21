@@ -6,6 +6,7 @@
 # Build stage: install all Python dependencies
 # ---------------------------------------------------------------------------
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -58,6 +59,7 @@ RUN uv pip install setuptools && \
 # Runtime stage: slim image with only what's needed to run
 # ---------------------------------------------------------------------------
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1

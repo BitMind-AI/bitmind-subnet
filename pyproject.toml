@@ -13,6 +13,7 @@ license = { text = "" }
 urls = { homepage = "http://bitmind.ai" }
 
 dependencies = [
+    "certifi>=2026.10.19",
     "bittensor==10.4.0",
     "bittensor-cli==9.22.0",
     "pillow==12.3.0",  # 12.3.0 closes GHSA heap/DoS alerts
